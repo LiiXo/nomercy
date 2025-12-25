@@ -1,0 +1,112 @@
+import express from 'express';
+import passport from 'passport';
+import jwt from 'jsonwebtoken';
+import { verifyToken } from '../middleware/auth.middleware.js';
+
+const router = express.Router();
+
+// Generate JWT token
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+};
+
+// Discord OAuth login
+router.get('/discord', passport.authenticate('discord'));
+
+// Discord OAuth callback
+router.get('/discord/callback', 
+  passport.authenticate('discord', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed` }),
+  (req, res) => {
+    const token = generateToken(req.user);
+    
+    // Set HTTP-only cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    // Redirect based on profile completion
+    if (!req.user.isProfileComplete) {
+      res.redirect(`${process.env.CLIENT_URL}/setup-profile`);
+    } else {
+      res.redirect(`${process.env.CLIENT_URL}/`);
+    }
+  }
+);
+
+// Get current user
+router.get('/me', verifyToken, (req, res) => {
+  res.json({
+    success: true,
+    user: {
+      id: req.user._id,
+      discordId: req.user.discordId,
+      discordUsername: req.user.discordUsername,
+      username: req.user.username,
+      bio: req.user.bio,
+      avatar: req.user.avatarUrl,
+      roles: req.user.roles,
+      isProfileComplete: req.user.isProfileComplete,
+      goldCoins: req.user.goldCoins,
+      stats: req.user.stats,
+      createdAt: req.user.createdAt
+    }
+  });
+});
+
+// Logout
+router.post('/logout', (req, res) => {
+  res.clearCookie('token');
+  res.json({ success: true, message: 'Logged out successfully' });
+});
+
+// Check auth status (no error if not logged in)
+router.get('/status', async (req, res) => {
+  try {
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.json({ success: true, isAuthenticated: false });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const User = (await import('../models/User.js')).default;
+    const user = await User.findById(decoded.id);
+
+    if (!user) {
+      return res.json({ success: true, isAuthenticated: false });
+    }
+
+    res.json({
+      success: true,
+      isAuthenticated: true,
+      user: {
+        id: user._id,
+        discordId: user.discordId,
+        discordUsername: user.discordUsername,
+        username: user.username,
+        bio: user.bio,
+        avatar: user.avatarUrl,
+        roles: user.roles,
+        isProfileComplete: user.isProfileComplete,
+        goldCoins: user.goldCoins,
+        stats: user.stats,
+        isBanned: user.isBanned,
+        banReason: user.banReason,
+        banExpiresAt: user.banExpiresAt,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    res.json({ success: true, isAuthenticated: false });
+  }
+});
+
+export default router;
+

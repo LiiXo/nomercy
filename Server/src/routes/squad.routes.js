@@ -1,0 +1,1336 @@
+import express from 'express';
+import Squad from '../models/Squad.js';
+import User from '../models/User.js';
+import { verifyToken, requireAdmin } from '../middleware/auth.middleware.js';
+
+const router = express.Router();
+
+// Regex for validating squad names and tags (no special characters)
+// Allows letters (including accented), numbers, spaces, hyphens, underscores
+const VALID_NAME_REGEX = /^[a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF\s\-_]+$/;
+const VALID_TAG_REGEX = /^[a-zA-Z0-9]+$/;
+
+// Function to validate squad name/tag
+const isValidSquadName = (name) => {
+  if (!name) return false;
+  return VALID_NAME_REGEX.test(name);
+};
+
+const isValidSquadTag = (tag) => {
+  if (!tag) return false;
+  return VALID_TAG_REGEX.test(tag);
+};
+
+// Get user's current squad
+router.get('/my-squad', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    if (!user.squad) {
+      return res.json({ success: true, squad: null });
+    }
+    
+    const squad = await Squad.findById(user.squad)
+      .populate('members.user', 'username avatar avatarUrl discordAvatar discordId platform')
+      .populate('leader', 'username avatar avatarUrl discordAvatar discordId platform')
+      .populate('joinRequests.user', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ success: true, squad });
+  } catch (error) {
+    console.error('Get my squad error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get join requests count for leaders/officers
+router.get('/my-squad/requests-count', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    if (!user.squad) {
+      return res.json({ success: true, count: 0 });
+    }
+    
+    const squad = await Squad.findById(user.squad);
+    
+    // Only leader and officers can see requests count
+    const isLeader = squad.leader.toString() === user._id.toString();
+    const isOfficer = squad.members.some(
+      m => m.user.toString() === user._id.toString() && m.role === 'officer'
+    );
+    
+    if (!isLeader && !isOfficer) {
+      return res.json({ success: true, count: 0 });
+    }
+    
+    res.json({ success: true, count: squad.joinRequests?.length || 0 });
+  } catch (error) {
+    console.error('Get requests count error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Create a new squad
+router.post('/create', verifyToken, async (req, res) => {
+  try {
+    const { name, tag, description, mode, isPublic, color } = req.body;
+    const userId = req.user._id;
+    
+    // Check if user already has a squad
+    const user = await User.findById(userId);
+    if (user.squad) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade. Quittez-la d\'abord.' 
+      });
+    }
+    
+    // Validate squad name (no special characters)
+    if (!name || name.trim().length < 3) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Le nom d\'escouade doit faire au moins 3 caractères.' 
+      });
+    }
+    
+    if (!isValidSquadName(name.trim())) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Le nom d\'escouade ne peut contenir que des lettres, chiffres, espaces, tirets et underscores.' 
+      });
+    }
+    
+    // Validate squad tag (no special characters)
+    if (!tag || tag.trim().length < 2 || tag.trim().length > 5) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Le tag doit faire entre 2 et 5 caractères.' 
+      });
+    }
+    
+    if (!isValidSquadTag(tag.trim())) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Le tag ne peut contenir que des lettres et chiffres (pas de caractères spéciaux).' 
+      });
+    }
+    
+    // Check if name or tag already exists
+    const existingSquad = await Squad.findOne({
+      $or: [
+        { name: { $regex: new RegExp(`^${name}$`, 'i') } },
+        { tag: tag.toUpperCase() }
+      ]
+    });
+    
+    if (existingSquad) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ce nom ou tag d\'escouade existe déjà.' 
+      });
+    }
+    
+    // Create squad
+    const squad = new Squad({
+      name,
+      tag: tag.toUpperCase(),
+      description: description || '',
+      leader: userId,
+      members: [{
+        user: userId,
+        role: 'leader',
+        joinedAt: new Date()
+      }],
+      mode: mode || 'both',
+      isPublic: isPublic !== false,
+      color: color || '#ef4444'
+    });
+    
+    await squad.save();
+    
+    // Update user's squad reference
+    user.squad = squad._id;
+    await user.save();
+    
+    // Populate and return
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ success: true, squad });
+  } catch (error) {
+    console.error('Create squad error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get squad by ID
+// Get squad by name (for public profile)
+router.get('/by-name/:name', async (req, res) => {
+  try {
+    const squadName = decodeURIComponent(req.params.name);
+    const squad = await Squad.findOne({ name: { $regex: new RegExp(`^${squadName}$`, 'i') } })
+      .populate('members.user', 'username avatar avatarUrl discordAvatar discordId')
+      .populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    // Allow viewing deleted squads (for historical purposes)
+    res.json({ success: true, squad });
+  } catch (error) {
+    console.error('Get squad by name error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+router.get('/:squadId', async (req, res) => {
+  try {
+    const squad = await Squad.findById(req.params.squadId)
+      .populate('members.user', 'username avatar avatarUrl discordAvatar discordId')
+      .populate('leader', 'username avatar avatarUrl discordAvatar discordId')
+      .populate('trophies.trophy');
+    
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    // Allow viewing deleted squads (for historical purposes)
+    res.json({ success: true, squad });
+  } catch (error) {
+    console.error('Get squad error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Search squads
+router.get('/search/:query', async (req, res) => {
+  try {
+    const query = req.params.query;
+    const squads = await Squad.find({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { tag: { $regex: query, $options: 'i' } }
+      ],
+      isPublic: true
+    })
+    .populate('leader', 'username')
+    .limit(20)
+    .select('name tag description memberCount color logo mode');
+    
+    res.json({ success: true, squads });
+  } catch (error) {
+    console.error('Search squads error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Request to join a squad
+router.post('/:squadId/join-request', verifyToken, async (req, res) => {
+  try {
+    const { message } = req.body;
+    const userId = req.user._id;
+    const squadId = req.params.squadId;
+    
+    // Check if user already has a squad
+    const user = await User.findById(userId);
+    if (user.squad) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade.' 
+      });
+    }
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.isPublic) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cette escouade est sur invitation uniquement.' 
+      });
+    }
+    
+    if (squad.members.length >= squad.maxMembers) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cette escouade est pleine.' 
+      });
+    }
+    
+    // Check if already requested
+    const alreadyRequested = squad.joinRequests.some(
+      r => r.user.toString() === userId.toString()
+    );
+    if (alreadyRequested) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous avez déjà envoyé une demande.' 
+      });
+    }
+    
+    // Add join request
+    squad.joinRequests.push({
+      user: userId,
+      message: message || '',
+      requestedAt: new Date()
+    });
+    
+    await squad.save();
+    
+    res.json({ success: true, message: 'Demande envoyée avec succès' });
+  } catch (error) {
+    console.error('Join request error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Accept join request (leader/officer only)
+router.post('/:squadId/accept/:userId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, userId } = req.params;
+    const managerId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.canManage(managerId)) {
+      return res.status(403).json({ success: false, message: 'Permission refusée' });
+    }
+    
+    // Find and remove the request
+    const requestIndex = squad.joinRequests.findIndex(
+      r => r.user.toString() === userId
+    );
+    if (requestIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Demande non trouvée' });
+    }
+    
+    squad.joinRequests.splice(requestIndex, 1);
+    
+    // Add member
+    squad.members.push({
+      user: userId,
+      role: 'member',
+      joinedAt: new Date()
+    });
+    
+    await squad.save();
+    
+    // Update user's squad
+    await User.findByIdAndUpdate(userId, { squad: squadId });
+    
+    res.json({ success: true, message: 'Membre accepté' });
+  } catch (error) {
+    console.error('Accept request error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reject join request (leader/officer only)
+router.post('/:squadId/reject/:userId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, userId } = req.params;
+    const managerId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.canManage(managerId)) {
+      return res.status(403).json({ success: false, message: 'Permission refusée' });
+    }
+    
+    // Remove request
+    squad.joinRequests = squad.joinRequests.filter(
+      r => r.user.toString() !== userId
+    );
+    
+    await squad.save();
+    
+    res.json({ success: true, message: 'Demande rejetée' });
+  } catch (error) {
+    console.error('Reject request error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Leave squad
+router.post('/leave', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    const user = await User.findById(userId);
+    if (!user.squad) {
+      return res.status(400).json({ success: false, message: 'Vous n\'êtes dans aucune escouade' });
+    }
+    
+    const squad = await Squad.findById(user.squad);
+    if (!squad) {
+      user.squad = null;
+      await user.save();
+      return res.json({ success: true, message: 'Escouade quittée' });
+    }
+    
+    // If user is leader - they cannot leave, must transfer or disband
+    if (squad.isLeader(userId)) {
+      if (squad.members.length > 1) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'En tant que leader, vous devez transférer le leadership ou dissoudre l\'escouade.' 
+        });
+      } else {
+        // Mark squad as deleted if last member (leader alone)
+        squad.isDeleted = true;
+        squad.deletedAt = new Date();
+        await squad.save();
+        user.squad = null;
+        await user.save();
+        return res.json({ success: true, message: 'Escouade dissoute' });
+      }
+    }
+    
+    // Remove member
+    squad.members = squad.members.filter(
+      m => m.user.toString() !== userId.toString()
+    );
+    
+    await squad.save();
+    
+    user.squad = null;
+    await user.save();
+    
+    res.json({ success: true, message: 'Escouade quittée' });
+  } catch (error) {
+    console.error('Leave squad error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Promote member to officer (leader only)
+router.post('/:squadId/promote/:userId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, userId } = req.params;
+    const leaderId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.isLeader(leaderId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut promouvoir' });
+    }
+    
+    const member = squad.members.find(m => m.user.toString() === userId);
+    if (!member) {
+      return res.status(404).json({ success: false, message: 'Membre non trouvé' });
+    }
+    
+    if (member.role === 'leader') {
+      return res.status(400).json({ success: false, message: 'Impossible de promouvoir le leader' });
+    }
+    
+    if (member.role === 'officer') {
+      return res.status(400).json({ success: false, message: 'Ce membre est déjà officier' });
+    }
+    
+    member.role = 'officer';
+    await squad.save();
+    
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ success: true, squad, message: 'Membre promu officier' });
+  } catch (error) {
+    console.error('Promote member error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Demote officer to member (leader only)
+router.post('/:squadId/demote/:userId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, userId } = req.params;
+    const leaderId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.isLeader(leaderId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut rétrograder' });
+    }
+    
+    const member = squad.members.find(m => m.user.toString() === userId);
+    if (!member) {
+      return res.status(404).json({ success: false, message: 'Membre non trouvé' });
+    }
+    
+    if (member.role !== 'officer') {
+      return res.status(400).json({ success: false, message: 'Ce membre n\'est pas officier' });
+    }
+    
+    member.role = 'member';
+    await squad.save();
+    
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ success: true, squad, message: 'Officier rétrogradé membre' });
+  } catch (error) {
+    console.error('Demote member error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// DEV: Add fake player to squad (squad leaders/officers only)
+router.post('/:squadId/dev/add-fake-player', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    // Verify user is a leader or officer of this squad
+    const member = squad.members.find(m => m.user.toString() === req.user._id.toString());
+    if (!member || (member.role !== 'leader' && member.role !== 'officer')) {
+      return res.status(403).json({ success: false, message: 'Seuls les leaders et officiers peuvent ajouter des membres' });
+    }
+    
+    // Generate random fake player data
+    const fakeNames = ['Shadow', 'Phoenix', 'Viper', 'Ghost', 'Blaze', 'Storm', 'Raven', 'Wolf', 'Hawk', 'Thunder', 'Nova', 'Frost', 'Ace', 'Demon', 'Sniper', 'Reaper', 'Titan', 'Fury', 'Legend', 'Ninja'];
+    const fakeSuffixes = ['_X', '_Pro', '123', '_TTV', '_YT', 'Gaming', '_Elite', '_GG', '2K', '_Sniper', '_COD', '_MW', '_WZ', '_BO6', ''];
+    const randomName = fakeNames[Math.floor(Math.random() * fakeNames.length)];
+    const randomSuffix = fakeSuffixes[Math.floor(Math.random() * fakeSuffixes.length)];
+    const randomNumber = Math.floor(Math.random() * 999);
+    const fakeUsername = `${randomName}${randomSuffix}${randomNumber}`;
+    
+    // Generate random profile data
+    const platforms = ['PC', 'PlayStation', 'Xbox'];
+    const randomPlatform = platforms[Math.floor(Math.random() * platforms.length)];
+    const fakeActivisionId = `${randomName}#${Math.floor(1000000 + Math.random() * 9000000)}`;
+    
+    const bios = [
+      '🎮 Joueur compétitif | Toujours prêt pour la ranked',
+      'Ex-semi-pro | Main AR | 🏆',
+      'Grind 24/7 💪 | Objectif : Top 100',
+      'Casual player devenu tryhard | GG only',
+      'SMG enjoyer | Sniper en second',
+      '⚡ Fast & Furious gameplay | No camping',
+      'Veteran COD depuis MW2 OG',
+      '🔥 Clutch master | 1v4 specialist',
+      'Team player | Callouts on point',
+      'Ranked grinder | Diamond lobbies'
+    ];
+    const randomBio = bios[Math.floor(Math.random() * bios.length)];
+    
+    // Generate avatar URL using ui-avatars
+    const avatarColors = ['7c3aed', 'ec4899', '3b82f6', '10b981', 'f59e0b', 'ef4444', '8b5cf6', '06b6d4'];
+    const randomColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
+    const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(fakeUsername)}&background=${randomColor}&color=fff&size=256&bold=true`;
+    
+    // Create fake user with full profile
+    const fakeUser = new User({
+      discordId: `fake_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      discordUsername: fakeUsername,
+      username: fakeUsername,
+      discordEmail: `${fakeUsername.toLowerCase()}@fake.nomercy.gg`,
+      avatar: avatarUrl,
+      bio: randomBio,
+      platform: randomPlatform,
+      activisionId: fakeActivisionId,
+      isProfileComplete: true,
+      isFakeUser: true,
+      squad: squadId,
+      goldCoins: Math.floor(100 + Math.random() * 900), // 100-999 coins
+      stats: {
+        points: 0,
+        wins: 0,
+        losses: 0,
+        rank: 0
+      }
+    });
+    
+    await fakeUser.save();
+    
+    // Add to squad
+    squad.members.push({
+      user: fakeUser._id,
+      role: 'member',
+      joinedAt: new Date()
+    });
+    
+    await squad.save();
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ 
+      success: true, 
+      squad, 
+      fakePlayer: { 
+        _id: fakeUser._id,
+        username: fakeUsername, 
+        platform: randomPlatform,
+        activisionId: fakeActivisionId,
+        avatar: avatarUrl,
+        bio: randomBio
+      },
+      message: `Joueur fictif "${fakeUsername}" ajouté avec profil complet` 
+    });
+  } catch (error) {
+    console.error('Add fake player error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Transfer leadership (leader only)
+router.post('/:squadId/transfer/:userId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, userId } = req.params;
+    const leaderId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.isLeader(leaderId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut transférer le leadership' });
+    }
+    
+    const newLeader = squad.members.find(m => m.user.toString() === userId);
+    if (!newLeader) {
+      return res.status(404).json({ success: false, message: 'Membre non trouvé' });
+    }
+    
+    if (newLeader.user.toString() === leaderId.toString()) {
+      return res.status(400).json({ success: false, message: 'Vous êtes déjà le leader' });
+    }
+    
+    // Update old leader to officer
+    const oldLeader = squad.members.find(m => m.user.toString() === leaderId.toString());
+    if (oldLeader) oldLeader.role = 'officer';
+    
+    // Update new leader
+    newLeader.role = 'leader';
+    squad.leader = userId;
+    
+    await squad.save();
+    
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ success: true, squad, message: 'Leadership transféré' });
+  } catch (error) {
+    console.error('Transfer leadership error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Disband squad (leader only) - HARD DELETE
+router.delete('/:squadId/disband', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const leaderId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.isLeader(leaderId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut dissoudre l\'escouade' });
+    }
+    
+    // Check if there are other members besides the leader
+    const otherMembers = squad.members.filter(m => m.user?.toString() !== leaderId.toString());
+    if (otherMembers.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous devez d\'abord retirer tous les membres ou transférer le lead avant de dissoudre l\'escouade.' 
+      });
+    }
+    
+    // Remove squad reference from the leader
+    await User.findByIdAndUpdate(leaderId, { $unset: { squad: 1 } });
+    
+    // HARD DELETE - Delete all squad data from DB (EXCEPT match history)
+    // Delete squad from database completely
+    await Squad.findByIdAndDelete(squadId);
+    
+    res.json({ success: true, message: 'Escouade dissoute et supprimée définitivement' });
+  } catch (error) {
+    console.error('Disband squad error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Kick member (leader/officer only)
+router.post('/:squadId/kick/:userId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, userId } = req.params;
+    const managerId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.canManage(managerId)) {
+      return res.status(403).json({ success: false, message: 'Permission refusée' });
+    }
+    
+    // Can't kick the leader
+    if (squad.isLeader(userId)) {
+      return res.status(400).json({ success: false, message: 'Impossible d\'expulser le leader' });
+    }
+    
+    // Remove member
+    squad.members = squad.members.filter(
+      m => m.user.toString() !== userId
+    );
+    
+    await squad.save();
+    
+    // Update user
+    await User.findByIdAndUpdate(userId, { squad: null });
+    
+    res.json({ success: true, message: 'Membre expulsé' });
+  } catch (error) {
+    console.error('Kick member error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update squad settings (leader only)
+router.put('/:squadId', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const userId = req.user._id;
+    const { description, isPublic, color, logo } = req.body;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.isLeader(userId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut modifier l\'escouade' });
+    }
+    
+    if (description !== undefined) squad.description = description;
+    if (isPublic !== undefined) squad.isPublic = isPublic;
+    if (color) squad.color = color;
+    if (logo !== undefined) squad.logo = logo;
+    
+    await squad.save();
+    
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ success: true, squad });
+  } catch (error) {
+    console.error('Update squad error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Generate invite code (leader/officer only)
+router.post('/:squadId/generate-invite', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const userId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.canManage(userId)) {
+      return res.status(403).json({ success: false, message: 'Permission refusée' });
+    }
+    
+    // Generate a unique invite code
+    const generateCode = () => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let code = '';
+      for (let i = 0; i < 8; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return code;
+    };
+    
+    let inviteCode;
+    let isUnique = false;
+    
+    // Make sure the code is unique
+    while (!isUnique) {
+      inviteCode = generateCode();
+      const existing = await Squad.findOne({ inviteCode });
+      if (!existing) isUnique = true;
+    }
+    
+    // Set expiration to 7 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    
+    squad.inviteCode = inviteCode;
+    squad.inviteCodeExpiresAt = expiresAt;
+    await squad.save();
+    
+    res.json({ 
+      success: true, 
+      inviteCode,
+      expiresAt,
+      message: 'Code d\'invitation généré'
+    });
+  } catch (error) {
+    console.error('Generate invite error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Join squad via invite code
+router.post('/join/:inviteCode', verifyToken, async (req, res) => {
+  try {
+    const { inviteCode } = req.params;
+    const userId = req.user._id;
+    
+    // Check if user already has a squad
+    const user = await User.findById(userId);
+    if (user.squad) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade.' 
+      });
+    }
+    
+    // Find squad by invite code
+    const squad = await Squad.findOne({ inviteCode: inviteCode.toUpperCase() });
+    if (!squad) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Code d\'invitation invalide.' 
+      });
+    }
+    
+    // Check if code has expired
+    if (squad.inviteCodeExpiresAt && new Date() > squad.inviteCodeExpiresAt) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ce code d\'invitation a expiré.' 
+      });
+    }
+    
+    // Check if squad is full
+    if (squad.members.length >= squad.maxMembers) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cette escouade est pleine.' 
+      });
+    }
+    
+    // Add member
+    squad.members.push({
+      user: userId,
+      role: 'member',
+      joinedAt: new Date()
+    });
+    
+    await squad.save();
+    
+    // Update user's squad reference
+    user.squad = squad._id;
+    await user.save();
+    
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+    
+    res.json({ 
+      success: true, 
+      squad,
+      message: 'Vous avez rejoint l\'escouade !'
+    });
+  } catch (error) {
+    console.error('Join by invite error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Revoke invite code (leader/officer only)
+router.delete('/:squadId/revoke-invite', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const userId = req.user._id;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    if (!squad.canManage(userId)) {
+      return res.status(403).json({ success: false, message: 'Permission refusée' });
+    }
+    
+    squad.inviteCode = null;
+    squad.inviteCodeExpiresAt = null;
+    await squad.save();
+    
+    res.json({ success: true, message: 'Code d\'invitation révoqué' });
+  } catch (error) {
+    console.error('Revoke invite error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Check if name/tag is available
+router.get('/check/:type/:value', async (req, res) => {
+  try {
+    const { type, value } = req.params;
+    
+    let query;
+    if (type === 'name') {
+      query = { name: { $regex: new RegExp(`^${value}$`, 'i') } };
+    } else if (type === 'tag') {
+      query = { tag: value.toUpperCase() };
+    } else {
+      return res.status(400).json({ success: false, message: 'Type invalide' });
+    }
+    
+    const exists = await Squad.findOne(query);
+    
+    res.json({ success: true, available: !exists });
+  } catch (error) {
+    console.error('Check availability error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get public squads list
+router.get('/', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, mode } = req.query;
+    
+    const query = { isPublic: true, isDeleted: false }; // Exclude deleted squads
+    if (mode && mode !== 'all') {
+      query.$or = [{ mode }, { mode: 'both' }];
+    }
+    
+    const squads = await Squad.find(query)
+      .populate('leader', 'username')
+      .sort({ 'stats.totalPoints': -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .select('name tag description color logo mode members stats');
+    
+    const total = await Squad.countDocuments(query);
+    
+    res.json({
+      success: true,
+      squads,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get squads error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get squads leaderboard for a specific mode
+router.get('/leaderboard/:mode', async (req, res) => {
+  try {
+    const { mode } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+    
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'Invalid mode' });
+    }
+    
+    const query = {
+      $or: [{ mode }, { mode: 'both' }],
+      isDeleted: false // Exclude deleted squads
+    };
+    
+    const squads = await Squad.find(query)
+      .populate({
+        path: 'leader',
+        select: 'username avatarUrl discordAvatar discordId isBanned isDeleted',
+        match: { isBanned: false, isDeleted: { $ne: true } } // Exclude squads with banned/deleted leaders
+      })
+      .populate({
+        path: 'members.user',
+        select: 'username avatarUrl discordAvatar discordId isDeleted',
+        match: { isDeleted: { $ne: true } } // Exclude deleted members
+      })
+      .sort({ 'stats.totalPoints': -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
+      .select('name tag description color logo mode members stats');
+    
+    // Filter out squads with banned/deleted leaders
+    const validSquads = squads.filter(s => s.leader !== null);
+    
+    // Count total valid squads
+    const allSquads = await Squad.find(query)
+      .populate({
+        path: 'leader',
+        select: 'isBanned isDeleted',
+        match: { isBanned: false, isDeleted: { $ne: true } }
+      });
+    const total = allSquads.filter(s => s.leader !== null).length;
+    
+    // Add rank numbers and calculate total matches
+    const startRank = (parseInt(page) - 1) * parseInt(limit);
+    const rankedSquads = validSquads.map((squad, index) => {
+      const squadData = squad.toJSON();
+      const totalWins = squadData.stats?.totalWins || 0;
+      const totalLosses = squadData.stats?.totalLosses || 0;
+      return {
+        ...squadData,
+        rank: startRank + index + 1,
+        totalMatches: totalWins + totalLosses,
+        totalWins,
+        totalLosses
+      };
+    });
+    
+    res.json({
+      success: true,
+      squads: rankedSquads,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get squads leaderboard error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== LADDER REGISTRATION ====================
+
+// Register squad to a ladder
+router.post('/:squadId/register-ladder', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const { ladderId, ladderName } = req.body;
+    const userId = req.user._id;
+
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    // Check if user is leader or officer
+    if (!squad.canManage(userId)) {
+      return res.status(403).json({ success: false, message: 'Seuls le leader et les officiers peuvent gérer les inscriptions' });
+    }
+
+    // Check if already registered
+    const alreadyRegistered = squad.registeredLadders.some(l => l.ladderId === ladderId);
+    if (alreadyRegistered) {
+      return res.status(400).json({ success: false, message: 'Escouade déjà inscrite à ce classement' });
+    }
+
+    // Add to registered ladders
+    squad.registeredLadders.push({
+      ladderId,
+      ladderName,
+      registeredAt: new Date(),
+      points: 0,
+      wins: 0,
+      losses: 0
+    });
+
+    await squad.save();
+
+    res.json({ success: true, message: 'Inscription réussie', squad });
+  } catch (error) {
+    console.error('Register ladder error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Unregister squad from a ladder
+router.post('/:squadId/unregister-ladder', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const { ladderId } = req.body;
+    const userId = req.user._id;
+
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    // Check if user is leader
+    if (!squad.isLeader(userId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut désinscrire l\'escouade' });
+    }
+
+    // Remove from registered ladders
+    squad.registeredLadders = squad.registeredLadders.filter(l => l.ladderId !== ladderId);
+
+    await squad.save();
+
+    res.json({ success: true, message: 'Désinscription réussie', squad });
+  } catch (error) {
+    console.error('Unregister ladder error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get ladder leaderboard (top 100 squads for a specific ladder)
+router.get('/ladder/:ladderId/leaderboard', async (req, res) => {
+  try {
+    const { ladderId } = req.params;
+    const { limit = 100, page = 1 } = req.query;
+
+    const squads = await Squad.find({
+      'registeredLadders.ladderId': ladderId,
+      isDeleted: false // Exclude deleted squads
+    })
+      .populate({
+        path: 'leader',
+        select: 'username avatarUrl discordAvatar discordId isBanned isDeleted',
+        match: { isBanned: false, isDeleted: { $ne: true } } // Exclude squads with banned/deleted leaders
+      })
+      .populate({
+        path: 'members.user',
+        select: 'username avatarUrl discordAvatar discordId isDeleted',
+        match: { isDeleted: { $ne: true } } // Exclude deleted members
+      })
+      .select('name tag color logo members registeredLadders');
+
+    // Filter out squads with banned/deleted leaders
+    const validSquads = squads.filter(s => s.leader !== null);
+
+    // Sort by ladder points
+    const sortedSquads = validSquads
+      .map(squad => {
+        const ladderData = squad.registeredLadders.find(l => l.ladderId === ladderId);
+        return {
+          ...squad.toJSON(),
+          ladderPoints: ladderData?.points || 0,
+          ladderWins: ladderData?.wins || 0,
+          ladderLosses: ladderData?.losses || 0,
+          registeredAt: ladderData?.registeredAt
+        };
+      })
+      .sort((a, b) => b.ladderPoints - a.ladderPoints)
+      .slice(0, parseInt(limit));
+
+    // Add ranks
+    const rankedSquads = sortedSquads.map((squad, index) => ({
+      ...squad,
+      rank: index + 1
+    }));
+
+    res.json({ success: true, squads: rankedSquads, total: squads.length });
+  } catch (error) {
+    console.error('Get ladder leaderboard error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== TROPHY ASSIGNMENT (ADMIN) ====================
+
+// Assign trophy to squad (admin only)
+router.post('/:squadId/assign-trophy', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const { trophyId, reason } = req.body;
+
+    // Check if admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs' });
+    }
+
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    // Check if trophy already assigned
+    const alreadyHas = squad.trophies.some(t => t.trophy?.toString() === trophyId);
+    if (alreadyHas) {
+      return res.status(400).json({ success: false, message: 'Cette escouade possède déjà ce trophée' });
+    }
+
+    // Add trophy
+    squad.trophies.push({
+      trophy: trophyId,
+      earnedAt: new Date(),
+      reason: reason || 'Attribué par un administrateur'
+    });
+
+    await squad.save();
+
+    // Populate and return
+    await squad.populate('trophies.trophy');
+
+    res.json({ success: true, message: 'Trophée attribué', squad });
+  } catch (error) {
+    console.error('Assign trophy error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Remove trophy from squad (admin only)
+router.delete('/:squadId/remove-trophy/:trophyId', verifyToken, async (req, res) => {
+  try {
+    const { squadId, trophyId } = req.params;
+
+    // Check if admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs' });
+    }
+
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    // Remove trophy
+    squad.trophies = squad.trophies.filter(t => t.trophy?.toString() !== trophyId);
+
+    await squad.save();
+
+    res.json({ success: true, message: 'Trophée retiré', squad });
+  } catch (error) {
+    console.error('Remove trophy error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get all squads (for admin trophy assignment)
+router.get('/admin/all-trophies', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+      return res.status(403).json({ success: false, message: 'Accès réservé' });
+    }
+
+    const squads = await Squad.find()
+      .populate('leader', 'username')
+      .populate('trophies.trophy')
+      .select('name tag color logo trophies members')
+      .sort({ name: 1 });
+
+    res.json({ success: true, squads });
+  } catch (error) {
+    console.error('Get all squads error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== ADMIN ROUTES ====================
+
+// Get all squads (admin)
+router.get('/admin/all', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, search = '' } = req.query;
+    
+    const query = {};
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { tag: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const squads = await Squad.find(query)
+      .populate('leader', 'username discordUsername')
+      .populate('members.user', 'username discordUsername')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await Squad.countDocuments(query);
+    
+    res.json({
+      success: true,
+      squads,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get all squads error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reset squad progression (admin)
+router.post('/admin/:squadId/reset-progression', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const { ladderId } = req.body; // Optional: specific ladder, or all if not provided
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Squad not found.'
+      });
+    }
+    
+    if (ladderId) {
+      // Reset specific ladder
+      const ladderIndex = squad.registeredLadders.findIndex(l => l.ladderId === ladderId);
+      if (ladderIndex !== -1) {
+        squad.registeredLadders[ladderIndex].points = 0;
+        squad.registeredLadders[ladderIndex].wins = 0;
+        squad.registeredLadders[ladderIndex].losses = 0;
+      }
+    } else {
+      // Reset all ladders
+      squad.registeredLadders.forEach(ladder => {
+        ladder.points = 0;
+        ladder.wins = 0;
+        ladder.losses = 0;
+      });
+      // Reset general stats
+      squad.stats.totalPoints = 0;
+      squad.stats.totalWins = 0;
+      squad.stats.totalLosses = 0;
+    }
+    
+    await squad.save();
+    
+    res.json({
+      success: true,
+      message: ladderId ? `Progression du ladder ${ladderId} réinitialisée.` : 'Progression complète réinitialisée.'
+    });
+  } catch (error) {
+    console.error('Reset squad progression error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while resetting progression.'
+    });
+  }
+});
+
+export default router;
+
+
+
