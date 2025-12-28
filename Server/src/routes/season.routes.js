@@ -2,7 +2,7 @@ import express from 'express';
 import Season from '../models/Season.js';
 import Ranking from '../models/Ranking.js';
 import User from '../models/User.js';
-import { verifyToken, requireAdmin } from '../middleware/auth.middleware.js';
+import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
@@ -144,8 +144,8 @@ router.get('/:seasonId/leaderboard', async (req, res) => {
 
 // ==================== ADMIN ROUTES ====================
 
-// Get all seasons for admin
-router.get('/admin/all', verifyToken, requireAdmin, async (req, res) => {
+// Get all seasons for admin/staff
+router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   try {
     const { mode, status, page = 1, limit = 20 } = req.query;
     
@@ -446,8 +446,8 @@ router.post('/admin/:seasonId/end', verifyToken, requireAdmin, async (req, res) 
   }
 });
 
-// Get season statistics
-router.get('/admin/:seasonId/stats', verifyToken, requireAdmin, async (req, res) => {
+// Get season statistics (admin/staff)
+router.get('/admin/:seasonId/stats', verifyToken, requireStaff, async (req, res) => {
   try {
     const { seasonId } = req.params;
     

@@ -12,6 +12,17 @@ const VALID_SUBTYPES = {
 
 // ==================== PUBLIC ROUTES ====================
 
+// Get all rules (for admin editor)
+router.get('/', async (req, res) => {
+  try {
+    const rules = await GameModeRules.find().sort({ mode: 1, location: 1, subType: 1 });
+    res.json({ success: true, rules });
+  } catch (error) {
+    console.error('Error fetching all rules:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Get rules for a specific mode, location and subType
 router.get('/:mode/:location/:subType', async (req, res) => {
   try {
@@ -323,14 +334,14 @@ router.delete('/admin/:mode/:location/:subType/section/:sectionId', verifyToken,
   try {
     const { mode, location, subType, sectionId } = req.params;
     
-    const rules = await GameModeRules.findOne({ mode, location, subType });
+    let rules = await GameModeRules.findOne({ mode, location, subType });
     
     if (!rules) {
       return res.status(404).json({ success: false, message: 'Rules not found' });
     }
     
     // Use findOneAndUpdate to remove the section
-    rules = await GameModeRules.findOneAndUpdate(
+    const updatedRules = await GameModeRules.findOneAndUpdate(
       { mode, location, subType },
       {
         $pull: { sections: { _id: sectionId } },
@@ -342,7 +353,7 @@ router.delete('/admin/:mode/:location/:subType/section/:sectionId', verifyToken,
     res.json({
       success: true,
       message: 'Section deleted',
-      rules
+      rules: updatedRules
     });
   } catch (error) {
     console.error('Error deleting section:', error);

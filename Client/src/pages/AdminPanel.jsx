@@ -2,124 +2,156 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
+import GameModeRulesEditor from '../components/GameModeRulesEditor';
 import { 
   ArrowLeft, Shield, Package, Users, BarChart3, Plus, Edit2, Trash2, 
   Save, X, Loader2, Search, ChevronDown, Eye, EyeOff, Coins, TrendingUp,
   ShoppingBag, Crown, Star, Zap, Gift, Award, Image, Ban, UserCheck,
   Trophy, Medal, Target, RefreshCw, Megaphone, Bell, AlertTriangle,
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
-  CheckCircle
+  CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
+  MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
+  ShieldAlert, Link, ExternalLink
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
-const CATEGORIES = [
-  { value: 'avatar_frame', label: 'Cadre Avatar', icon: Crown },
-  { value: 'badge', label: 'Badge', icon: Award },
-  { value: 'title', label: 'Titre', icon: Star },
-  { value: 'boost', label: 'Boost', icon: Zap },
-  { value: 'cosmetic', label: 'Cosmétique', icon: Gift },
-  { value: 'other', label: 'Autre', icon: Package }
-];
-
-const RARITIES = [
-  { value: 'common', label: 'Commun', color: 'gray' },
-  { value: 'rare', label: 'Rare', color: 'blue' },
-  { value: 'epic', label: 'Épique', color: 'purple' },
-  { value: 'legendary', label: 'Légendaire', color: 'yellow' }
-];
-
-const MODES = [
-  { value: 'all', label: 'Tous les modes' },
-  { value: 'hardcore', label: 'Hardcore uniquement' },
-  { value: 'cdl', label: 'CDL uniquement' }
-];
-
-const ROLES = [
-  { value: 'user', label: 'Membre', color: 'gray' },
-  { value: 'staff', label: 'Staff', color: 'purple' },
-  { value: 'gerant_cdl', label: 'Gérant CDL', color: 'cyan' },
-  { value: 'gerant_hardcore', label: 'Gérant Hardcore', color: 'orange' },
-  { value: 'admin', label: 'Admin', color: 'red' }
-];
-
-const DIVISIONS = [
-  { value: 'bronze', label: 'Bronze', color: 'orange' },
-  { value: 'silver', label: 'Argent', color: 'gray' },
-  { value: 'gold', label: 'Or', color: 'yellow' },
-  { value: 'platinum', label: 'Platine', color: 'cyan' },
-  { value: 'diamond', label: 'Diamant', color: 'blue' },
-  { value: 'master', label: 'Master', color: 'purple' },
-  { value: 'elite', label: 'Élite', color: 'red' }
-];
-
-const ANNOUNCEMENT_TYPES = [
-  { value: 'patch_note', label: 'Patch Note', icon: FileText, color: 'purple' },
-  { value: 'announcement', label: 'Annonce', icon: Megaphone, color: 'blue' },
-  { value: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'orange' },
-  { value: 'event', label: 'Événement', icon: Calendar, color: 'green' },
-  { value: 'rules', label: 'Règlement', icon: FileText, color: 'gray' },
-  { value: 'important', label: 'Important', icon: AlertTriangle, color: 'red' }
-];
-
-const PRIORITIES = [
-  { value: 'low', label: 'Basse', color: 'gray' },
-  { value: 'normal', label: 'Normale', color: 'blue' },
-  { value: 'high', label: 'Haute', color: 'orange' },
-  { value: 'critical', label: 'Critique', color: 'red' }
-];
-
 const AdminPanel = () => {
   const navigate = useNavigate();
-  const { user, isStaff, isAdmin, refreshUser } = useAuth();
+  const { user, isAdmin, isStaff, refreshUser } = useAuth();
   const { language } = useLanguage();
   
-  const [activeTab, setActiveTab] = useState('shop');
-  const [items, setItems] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [rankings, setRankings] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
-  const [ladders, setLadders] = useState([]);
-  const [trophies, setTrophies] = useState([]);
-  const [allSquads, setAllSquads] = useState([]);
-  const [disputes, setDisputes] = useState([]);
-  const [stats, setStats] = useState(null);
-  const [rankingStats, setRankingStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Check if user is admin (full access) or staff (limited access)
+  const userIsAdmin = user?.roles?.includes('admin') || false;
+  const userIsStaff = user?.roles?.includes('staff') || user?.roles?.includes('admin') || false;
+  
+  // États principaux
+  const [activeTab, setActiveTab] = useState('overview');
+  const [activeSubTab, setActiveSubTab] = useState('');
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  
-  // Search & filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [rankingMode, setRankingMode] = useState('hardcore');
-  const [shopCategory, setShopCategory] = useState('all');
-  const [shopPage, setShopPage] = useState(1);
-  const SHOP_ITEMS_PER_PAGE = 12;
-  
-  // Modal states
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState(''); // 'shop', 'user', 'ranking', 'addPoints', 'announcement', 'userStats', 'assignTrophy', 'banDetails'
-  const [editingItem, setEditingItem] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [userGameStats, setUserGameStats] = useState(null);
-  const [loadingStats, setLoadingStats] = useState(false);
-  
-  // Trophy assignment
-  const [assignTrophySearch, setAssignTrophySearch] = useState('');
-  const [selectedSquadForTrophy, setSelectedSquadForTrophy] = useState(null);
-  const [assigningTrophy, setAssigningTrophy] = useState(false);
-  
-  // Ban details
-  const [banDetails, setBanDetails] = useState(null);
-  
-  // Form states
-  const [formData, setFormData] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Données
+  const [users, setUsers] = useState([]);
+  const [squads, setSquads] = useState([]);
+  const [shopItems, setShopItems] = useState([]);
+  const [trophies, setTrophies] = useState([]);
+  const [matches, setMatches] = useState([]);
+  const [rankedMatches, setRankedMatches] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+  const [seasons, setSeasons] = useState([]);
+  const [rankings, setRankings] = useState([]);
+  const [hubPosts, setHubPosts] = useState([]);
+  const [maps, setMaps] = useState([]);
+  const [config, setConfig] = useState(null);
+  const [stats, setStats] = useState(null);
+  
+  // Filtres et recherche
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterMode, setFilterMode] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const ITEMS_PER_PAGE = 20;
+  
+  // Modales
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState('');
+  const [editingItem, setEditingItem] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  
+  // System reset states
+  const [confirmText, setConfirmText] = useState('');
+  const [resetting, setResetting] = useState(false);
+  
+  // Config edit states
+  const [editedConfig, setEditedConfig] = useState(null);
+  
+  // App settings states (must be declared before tabGroups)
+  const [appSettings, setAppSettings] = useState(null);
+  
+  // Disputes states
+  const [disputedMatches, setDisputedMatches] = useState([]);
+  const [disputedRankedMatches, setDisputedRankedMatches] = useState([]);
+  
+  // Update editedConfig when config changes
+  useEffect(() => {
+    if (config) {
+      setEditedConfig(config);
+    }
+  }, [config]);
 
-  // Set page title
+  // Navigation tabs configuration grouped by category
+  // Staff has limited access based on appSettings.staffAdminAccess
+  const tabGroups = [
+    {
+      name: 'Général',
+      tabs: [
+        { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3, adminOnly: false },
+      ]
+    },
+    {
+      name: 'Gestion',
+      tabs: [
+        { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false },
+        { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false },
+        { id: 'disputes', label: 'Litiges', icon: AlertTriangle, adminOnly: false },
+      ]
+    },
+    {
+      name: 'Contenu',
+      tabs: [
+        { id: 'shop', label: 'Boutique', icon: ShoppingBag, adminOnly: true },
+        { id: 'announcements', label: 'Annonces', icon: Megaphone, adminOnly: false },
+        { id: 'hub', label: 'Hub', icon: Users, adminOnly: false },
+        { id: 'maps', label: 'Cartes', icon: MapPin, adminOnly: false },
+        { id: 'gamerules', label: 'Règles', icon: FileText, adminOnly: false },
+      ]
+    },
+    {
+      name: 'Système',
+      adminOnly: true,
+      tabs: [
+        { id: 'application', label: 'Application', icon: Power, adminOnly: true },
+        { id: 'config', label: 'Config', icon: Settings, adminOnly: true },
+        { id: 'system', label: 'Système', icon: Database, adminOnly: true },
+      ]
+    }
+  ];
+
+  // Flatten all tabs for compatibility
+  const allTabs = tabGroups.flatMap(group => group.tabs);
+  
+  // Filter tabs based on user role and staff access settings
+  const getStaffAccess = (tabId) => {
+    if (userIsAdmin) return true;
+    // Admin-only tabs are never accessible to staff
+    const tab = allTabs.find(t => t.id === tabId);
+    if (tab?.adminOnly) return false;
+    // Check appSettings for staff access
+    return appSettings?.staffAdminAccess?.[tabId] !== false;
+  };
+  
+  const tabs = userIsAdmin 
+    ? allTabs 
+    : allTabs.filter(tab => !tab.adminOnly && getStaffAccess(tab.id));
+
+  // Ban modal states
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [banData, setBanData] = useState({
+    userId: null,
+    username: '',
+    reason: '',
+    duration: 'permanent', // 'permanent', '1h', '1d', '7d', '30d', 'custom'
+    customDays: 7
+  });
+
   useEffect(() => {
     const titles = {
-      fr: 'NoMercy - Administration',
+      fr: 'NoMercy - Panel Admin',
       en: 'NoMercy - Admin Panel',
       it: 'NoMercy - Pannello Admin',
       de: 'NoMercy - Admin-Panel',
@@ -127,59 +159,87 @@ const AdminPanel = () => {
     document.title = titles[language] || titles.en;
   }, [language]);
 
-  // Check admin access
   useEffect(() => {
-    if (!isStaff()) {
+    // Allow both admin and staff to access the panel
+    if (!userIsAdmin && !userIsStaff) {
       navigate('/');
     }
-  }, [isStaff, navigate]);
+  }, [userIsAdmin, userIsStaff, navigate]);
 
-  // Fetch data based on active tab
   useEffect(() => {
-    if (activeTab === 'shop') {
-      fetchItems();
-      fetchShopStats();
-    } else if (activeTab === 'users') {
-      fetchUsers();
-    } else if (activeTab === 'rankings') {
-      fetchRankings();
-      fetchRankingStats();
-    } else if (activeTab === 'announcements') {
-      fetchAnnouncements();
-    } else if (activeTab === 'purchases') {
-      fetchShopStats();
-    } else if (activeTab === 'ladders') {
-      fetchLadders();
-    } else if (activeTab === 'trophies') {
-      fetchTrophies();
-      fetchAllSquads();
-    } else if (activeTab === 'disputes') {
-      fetchDisputes();
+    loadTabData();
+  }, [activeTab, searchTerm, filterMode, filterStatus, page]);
+
+  // Load appSettings on mount for staff access control
+  useEffect(() => {
+    fetchAppSettings();
+  }, []);
+
+  useEffect(() => {
+    if (success || error) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+        setError('');
+      }, 5000);
+      return () => clearTimeout(timer);
     }
-  }, [activeTab, searchTerm, rankingMode]);
+  }, [success, error]);
 
-  // ==================== API CALLS ====================
-
-  const fetchItems = async () => {
+  const loadTabData = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/shop/admin/items`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setItems(data.items);
+      switch (activeTab) {
+        case 'overview':
+          await fetchOverviewStats();
+          break;
+        case 'users':
+          await fetchUsers();
+          break;
+        case 'squads':
+          await fetchSquads();
+          break;
+        case 'shop':
+          await fetchShopItems();
+          await fetchTrophies();
+          break;
+        case 'disputes':
+          await fetchDisputedMatches();
+          break;
+        case 'application':
+          await fetchAppSettings();
+          break;
+        case 'announcements':
+          await fetchAnnouncements();
+          break;
+        case 'hub':
+          await fetchHubPosts();
+          break;
+        case 'maps':
+          await fetchMaps();
+          break;
+        case 'gamerules':
+          await fetchGameRules();
+          break;
+        case 'config':
+          await fetchConfig();
+          break;
+        case 'system':
+          // No fetch needed for system tab
+          break;
       }
     } catch (err) {
-      console.error('Error fetching items:', err);
+      console.error('Error loading tab data:', err);
+      setError('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchShopStats = async () => {
+  // ==================== FETCH FUNCTIONS ====================
+
+  const fetchOverviewStats = async () => {
     try {
-      const response = await fetch(`${API_URL}/shop/admin/stats`, {
+      const response = await fetch(`${API_URL}/users/admin/stats`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -192,3150 +252,3567 @@ const AdminPanel = () => {
   };
 
   const fetchUsers = async () => {
-    setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/users/admin/all?search=${searchTerm}`, {
+      const params = new URLSearchParams({
+        search: searchTerm,
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      
+      const response = await fetch(`${API_URL}/users/admin/all?${params}`, {
         credentials: 'include'
       });
       const data = await response.json();
       if (data.success) {
         setUsers(data.users);
+        // Use pagination data from API response
+        setTotalPages(data.pagination?.pages || Math.ceil((data.pagination?.total || data.total || data.users.length) / ITEMS_PER_PAGE));
       }
     } catch (err) {
       console.error('Error fetching users:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const fetchRankings = async () => {
-    setLoading(true);
+  const fetchSquads = async () => {
     try {
-      const response = await fetch(`${API_URL}/rankings/admin/all?mode=${rankingMode}&search=${searchTerm}`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setRankings(data.rankings);
-      }
-    } catch (err) {
-      console.error('Error fetching rankings:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchRankingStats = async () => {
-    try {
-      const response = await fetch(`${API_URL}/rankings/admin/stats`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setRankingStats(data.stats);
-      }
-    } catch (err) {
-      console.error('Error fetching ranking stats:', err);
-    }
-  };
-
-  const fetchAnnouncements = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/announcements/admin/all`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAnnouncements(data.announcements);
-      }
-    } catch (err) {
-      console.error('Error fetching announcements:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchLadders = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/ladders/admin/all`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setLadders(data.ladders);
-      }
-    } catch (err) {
-      console.error('Error fetching ladders:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchTrophies = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/trophies/admin/all`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setTrophies(data.trophies);
-      }
-    } catch (err) {
-      console.error('Error fetching trophies:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchDisputes = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/matches/disputes/pending`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setDisputes(data.disputes);
-      }
-    } catch (err) {
-      console.error('Error fetching disputes:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Résoudre un litige en donnant la victoire à une équipe
-  const handleResolveDispute = async (matchId, winnerId) => {
-    if (!confirm('Êtes-vous sûr de vouloir attribuer la victoire à cette équipe ?')) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/resolve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ winnerId, resolution: 'Résolu par un administrateur' })
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchDisputes();
-      } else {
-        alert(data.message || 'Erreur lors de la résolution du litige');
-      }
-    } catch (err) {
-      console.error('Error resolving dispute:', err);
-      alert('Erreur lors de la résolution du litige');
-    }
-  };
-
-  // Annuler un litige et remettre le match en état normal
-  const handleCancelDispute = async (matchId) => {
-    if (!confirm('Êtes-vous sûr de vouloir annuler ce litige et remettre le match en cours ?')) return;
-    
-    try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/cancel-dispute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        fetchDisputes();
-      } else {
-        alert(data.message || 'Erreur lors de l\'annulation du litige');
-      }
-    } catch (err) {
-      console.error('Error canceling dispute:', err);
-      alert('Erreur lors de l\'annulation du litige');
-    }
-  };
-
-  // ==================== TROPHY HANDLERS ====================
-
-  const TROPHY_ICONS = [
-    { value: 'Trophy', label: 'Trophée' },
-    { value: 'Award', label: 'Prix' },
-    { value: 'Medal', label: 'Médaille' },
-    { value: 'Star', label: 'Étoile' },
-    { value: 'Crown', label: 'Couronne' },
-    { value: 'Shield', label: 'Bouclier' },
-    { value: 'Zap', label: 'Éclair' },
-    { value: 'Target', label: 'Cible' },
-    { value: 'Flame', label: 'Flamme' },
-    { value: 'Gem', label: 'Gemme' },
-    { value: 'Heart', label: 'Cœur' },
-    { value: 'Sword', label: 'Épée' }
-  ];
-
-  const TROPHY_COLORS = [
-    { value: 'amber', label: 'Ambre', hex: '#f59e0b' },
-    { value: 'yellow', label: 'Jaune', hex: '#eab308' },
-    { value: 'orange', label: 'Orange', hex: '#f97316' },
-    { value: 'red', label: 'Rouge', hex: '#ef4444' },
-    { value: 'pink', label: 'Rose', hex: '#ec4899' },
-    { value: 'purple', label: 'Violet', hex: '#a855f7' },
-    { value: 'blue', label: 'Bleu', hex: '#3b82f6' },
-    { value: 'cyan', label: 'Cyan', hex: '#06b6d4' },
-    { value: 'green', label: 'Vert', hex: '#22c55e' },
-    { value: 'emerald', label: 'Émeraude', hex: '#10b981' },
-    { value: 'gray', label: 'Gris', hex: '#6b7280' }
-  ];
-
-  const TROPHY_RARITIES = [
-    { value: 1, name: 'common', label: 'Commun', color: 'gray' },
-    { value: 2, name: 'uncommon', label: 'Peu commun', color: 'green' },
-    { value: 3, name: 'rare', label: 'Rare', color: 'blue' },
-    { value: 4, name: 'epic', label: 'Épique', color: 'purple' },
-    { value: 5, name: 'legendary', label: 'Légendaire', color: 'yellow' }
-  ];
-
-  const openTrophyModal = (trophy = null) => {
-    setModalType('trophy');
-    setEditingItem(trophy);
-    setFormData(trophy ? {
-      name: trophy.name,
-      description: trophy.description,
-      translations: trophy.translations || {
-        fr: { name: '', description: '' },
-        en: { name: '', description: '' },
-        de: { name: '', description: '' },
-        it: { name: '', description: '' }
-      },
-      icon: trophy.icon || 'Trophy',
-      color: trophy.color || 'amber',
-      rarity: trophy.rarity || 1,
-      rarityName: trophy.rarityName || 'common',
-      isDefault: trophy.isDefault || false,
-      isActive: trophy.isActive !== undefined ? trophy.isActive : true
-    } : {
-      name: '',
-      description: '',
-      translations: {
-        fr: { name: '', description: '' },
-        en: { name: '', description: '' },
-        de: { name: '', description: '' },
-        it: { name: '', description: '' }
-      },
-      icon: 'Trophy',
-      color: 'amber',
-      rarity: 1,
-      rarityName: 'common',
-      isDefault: false,
-      isActive: true
-    });
-    setShowModal(true);
-  };
-
-  const saveTrophy = async () => {
-    setSaving(true);
-    setError('');
-    
-    try {
-      const url = editingItem 
-        ? `${API_URL}/trophies/${editingItem._id}`
-        : `${API_URL}/trophies`;
-      
-      const response = await fetch(url, {
-        method: editingItem ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(formData)
+      const params = new URLSearchParams({
+        search: searchTerm,
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString()
       });
       
-      const data = await response.json();
-      
-      if (data.success) {
-        setShowModal(false);
-        fetchTrophies();
-        setSuccess(editingItem ? 'Trophée modifié !' : 'Trophée créé !');
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Erreur serveur');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const deleteTrophy = async (trophyId) => {
-    try {
-      const response = await fetch(`${API_URL}/trophies/${trophyId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        fetchTrophies();
-        setSuccess('Trophée supprimé !');
-        setDeleteConfirm(null);
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Erreur serveur');
-    }
-  };
-
-  const seedDefaultTrophies = async () => {
-    try {
-      const response = await fetch(`${API_URL}/trophies/seed-defaults`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        fetchTrophies();
-        setSuccess(data.message);
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Erreur serveur');
-    }
-  };
-
-  const fetchAllSquads = async () => {
-    try {
-      const response = await fetch(`${API_URL}/squads/admin/all`, {
+      const response = await fetch(`${API_URL}/squads/admin/all?${params}`, {
         credentials: 'include'
       });
       const data = await response.json();
       if (data.success) {
-        setAllSquads(data.squads);
+        setSquads(data.squads);
+        // Use pagination data from API response
+        setTotalPages(data.pagination?.pages || Math.ceil((data.pagination?.total || data.total || data.squads.length) / ITEMS_PER_PAGE));
       }
     } catch (err) {
       console.error('Error fetching squads:', err);
     }
   };
 
-  const openAssignTrophyModal = (trophy) => {
-    setModalType('assignTrophy');
-    setEditingItem(trophy);
-    setSelectedSquadForTrophy(null);
-    setAssignTrophySearch('');
-    setShowModal(true);
+  const fetchShopItems = async () => {
+    try {
+      const response = await fetch(`${API_URL}/shop/admin/items`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setShopItems(data.items || []);
+      }
+    } catch (err) {
+      console.error('Error fetching shop items:', err);
+    }
   };
 
-  const assignTrophyToSquad = async () => {
-    if (!selectedSquadForTrophy || !editingItem) return;
-    
-    setAssigningTrophy(true);
+  const fetchTrophies = async () => {
     try {
-      const response = await fetch(`${API_URL}/squads/${selectedSquadForTrophy._id}/assign-trophy`, {
+      const response = await fetch(`${API_URL}/trophies/admin/all`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTrophies(data.trophies || []);
+      }
+    } catch (err) {
+      console.error('Error fetching trophies:', err);
+    }
+  };
+
+  const fetchMatches = async () => {
+    try {
+      const params = new URLSearchParams({
+        status: filterStatus !== 'all' ? filterStatus : '',
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      
+      const response = await fetch(`${API_URL}/matches/admin/all?${params}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMatches(data.matches || []);
+        setTotalPages(Math.ceil((data.total || 0) / ITEMS_PER_PAGE));
+      }
+    } catch (err) {
+      console.error('Error fetching matches:', err);
+    }
+  };
+
+  const fetchRankedMatches = async () => {
+    try {
+      const params = new URLSearchParams({
+        status: filterStatus !== 'all' ? filterStatus : '',
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      
+      const response = await fetch(`${API_URL}/ranked-matches/admin/all?${params}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRankedMatches(data.matches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching ranked matches:', err);
+    }
+  };
+
+  const fetchDisputedMatches = async () => {
+    try {
+      // Fetch squad matches in dispute
+      const squadResponse = await fetch(`${API_URL}/matches/admin/all?status=disputed`, {
+        credentials: 'include'
+      });
+      const squadData = await squadResponse.json();
+      if (squadData.success) {
+        setDisputedMatches(squadData.matches || []);
+      }
+      
+      // Fetch ranked matches in dispute
+      const rankedResponse = await fetch(`${API_URL}/ranked-matches/admin/all?status=disputed`, {
+        credentials: 'include'
+      });
+      const rankedData = await rankedResponse.json();
+      if (rankedData.success) {
+        setDisputedRankedMatches(rankedData.matches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching disputed matches:', err);
+    }
+  };
+
+  const fetchAppSettings = async () => {
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAppSettings(data.settings);
+      }
+    } catch (err) {
+      console.error('Error fetching app settings:', err);
+    }
+  };
+
+  const fetchRankings = async () => {
+    try {
+      const params = new URLSearchParams({
+        mode: filterMode !== 'all' ? filterMode : 'hardcore',
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      
+      const response = await fetch(`${API_URL}/rankings/admin/all?${params}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRankings(data.rankings || []);
+        setTotalPages(Math.ceil((data.total || 0) / ITEMS_PER_PAGE));
+      }
+    } catch (err) {
+      console.error('Error fetching rankings:', err);
+    }
+  };
+
+  const fetchAnnouncements = async () => {
+    try {
+      const response = await fetch(`${API_URL}/announcements/admin/all`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAnnouncements(data.announcements || []);
+      }
+    } catch (err) {
+      console.error('Error fetching announcements:', err);
+    }
+  };
+
+  const fetchSeasons = async () => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/all`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSeasons(data.seasons || []);
+      }
+    } catch (err) {
+      console.error('Error fetching seasons:', err);
+    }
+  };
+
+  const fetchHubPosts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/hub/admin/posts`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setHubPosts(data.posts || []);
+      }
+    } catch (err) {
+      console.error('Error fetching hub posts:', err);
+    }
+  };
+
+  const fetchMaps = async () => {
+    try {
+      const response = await fetch(`${API_URL}/maps/admin/all`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMaps(data.maps || []);
+      }
+    } catch (err) {
+      console.error('Error fetching maps:', err);
+    }
+  };
+
+  const fetchConfig = async () => {
+    try {
+      const response = await fetch(`${API_URL}/config/admin`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setConfig(data.config);
+      }
+    } catch (err) {
+      console.error('Error fetching config:', err);
+    }
+  };
+
+  const fetchGameRules = async () => {
+    try {
+      const response = await fetch(`${API_URL}/game-mode-rules`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Store game rules if needed
+      }
+    } catch (err) {
+      console.error('Error fetching game rules:', err);
+    }
+  };
+
+  // ==================== CRUD OPERATIONS ====================
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      let endpoint = '';
+      let method = 'POST';
+      let body = { ...formData };
+
+      switch (modalType) {
+        case 'user':
+          endpoint = '/users/admin/create';
+          break;
+        case 'squad':
+          endpoint = '/squads/admin/create';
+          break;
+        case 'shopItem':
+          endpoint = '/shop/admin/items';
+          break;
+        case 'trophy':
+          endpoint = '/trophies/admin/create';
+          break;
+        case 'announcement':
+          endpoint = '/announcements/admin';
+          break;
+        case 'season':
+          endpoint = '/seasons/admin/create';
+          break;
+        case 'map':
+          endpoint = '/maps/admin/create';
+          break;
+        default:
+          throw new Error('Type de création inconnu');
+      }
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Élément créé avec succès!');
+      setShowModal(false);
+        setFormData({});
+        loadTabData();
+      } else {
+        setError(data.message || 'Erreur lors de la création');
+      }
+    } catch (err) {
+      console.error('Error creating item:', err);
+      setError(err.message || 'Erreur lors de la création');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      let endpoint = '';
+      let body = { ...formData };
+
+      switch (modalType) {
+        case 'user':
+          endpoint = `/users/admin/${editingItem._id}`;
+          break;
+        case 'squad':
+          endpoint = `/squads/admin/${editingItem._id}`;
+          break;
+        case 'shopItem':
+          endpoint = `/shop/admin/items/${editingItem._id}`;
+          break;
+        case 'trophy':
+          endpoint = `/trophies/admin/${editingItem._id}`;
+          break;
+        case 'announcement':
+          endpoint = `/announcements/admin/${editingItem._id}`;
+          break;
+        case 'season':
+          endpoint = `/seasons/admin/${editingItem._id}`;
+          break;
+        case 'map':
+          endpoint = `/maps/admin/${editingItem._id}`;
+          break;
+        default:
+          throw new Error('Type de mise à jour inconnu');
+      }
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Élément mis à jour avec succès!');
+      setShowModal(false);
+        setEditingItem(null);
+        setFormData({});
+        loadTabData();
+      } else {
+        setError(data.message || 'Erreur lors de la mise à jour');
+      }
+    } catch (err) {
+      console.error('Error updating item:', err);
+      setError(err.message || 'Erreur lors de la mise à jour');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (type, id) => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      let endpoint = '';
+
+      switch (type) {
+        case 'user':
+          endpoint = `/users/admin/${id}`;
+          break;
+        case 'squad':
+          endpoint = `/squads/admin/${id}`;
+          break;
+        case 'shopItem':
+          endpoint = `/shop/admin/items/${id}`;
+          break;
+        case 'trophy':
+          endpoint = `/trophies/admin/${id}`;
+          break;
+        case 'announcement':
+          endpoint = `/announcements/admin/${id}`;
+          break;
+        case 'season':
+          endpoint = `/seasons/admin/${id}`;
+          break;
+        case 'match':
+          endpoint = `/matches/admin/${id}`;
+          break;
+        case 'rankedMatch':
+          endpoint = `/ranked-matches/admin/${id}`;
+          break;
+        case 'hubPost':
+          endpoint = `/hub/admin/posts/${id}`;
+          break;
+        case 'map':
+          endpoint = `/maps/admin/${id}`;
+          break;
+        default:
+          throw new Error('Type de suppression inconnu');
+      }
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Élément supprimé avec succès!');
+        setDeleteConfirm(null);
+        loadTabData();
+      } else {
+        setError(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      console.error('Error deleting item:', err);
+      setError(err.message || 'Erreur lors de la suppression');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleKickMember = async (squadId, memberId) => {
+    if (!window.confirm('Voulez-vous vraiment kick ce membre de l\'escouade ?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/squads/admin/${squadId}/kick/${memberId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          trophyId: editingItem._id,
-          reason: `Trophée "${editingItem.name}" attribué par un administrateur`
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setShowModal(false);
-        fetchAllSquads();
-        setSuccess('Trophée attribué !');
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      setError('Erreur serveur');
-    } finally {
-      setAssigningTrophy(false);
-    }
-  };
-
-  const removeTrophyFromSquad = async (squadId, trophyId) => {
-    try {
-      const response = await fetch(`${API_URL}/squads/${squadId}/remove-trophy/${trophyId}`, {
-        method: 'DELETE',
         credentials: 'include'
       });
-      
+
       const data = await response.json();
-      
+
       if (data.success) {
-        fetchAllSquads();
-        setSuccess('Trophée retiré !');
-        setTimeout(() => setSuccess(''), 3000);
+        setSuccess('Membre expulsé avec succès');
+        loadTabData();
       } else {
-        setError(data.message);
+        setError(data.message || 'Erreur lors de l\'expulsion');
       }
     } catch (err) {
-      setError('Erreur serveur');
+      console.error('Kick member error:', err);
+      setError('Erreur lors de l\'expulsion');
     }
   };
 
-  // ==================== SHOP HANDLERS ====================
+  // ==================== HELPER FUNCTIONS ====================
 
-  const openShopModal = (item = null) => {
-    setModalType('shop');
+  const openCreateModal = (type) => {
+    setModalType(type);
+    setEditingItem(null);
+    setFormData(getDefaultFormData(type));
+    setShowModal(true);
+    setError('');
+    setSuccess('');
+  };
+
+  const openEditModal = (type, item) => {
+    setModalType(type);
     setEditingItem(item);
-    setFormData(item ? {
-      name: item.name,
-      description: item.description,
-      category: item.category,
-      price: item.price,
-      originalPrice: item.originalPrice || '',
-      image: item.image || '',
-      icon: item.icon || 'Package',
-      color: item.color || 'cyan',
-      rarity: item.rarity,
-      isActive: item.isActive,
-      stock: item.stock,
-      mode: item.mode,
-      sortOrder: item.sortOrder || 0
-    } : {
-      name: '',
-      description: '',
-      category: 'cosmetic',
-      price: 100,
-      originalPrice: '',
-      image: '',
-      icon: 'Package',
-      color: 'cyan',
-      rarity: 'common',
-      isActive: true,
-      stock: -1,
-      mode: 'all',
-      sortOrder: 0
-    });
+    setFormData({ ...item });
     setShowModal(true);
     setError('');
+    setSuccess('');
   };
 
-  const handleShopSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-
-    try {
-      const url = editingItem 
-        ? `${API_URL}/shop/admin/items/${editingItem._id}`
-        : `${API_URL}/shop/admin/items`;
-      
-      const response = await fetch(url, {
-        method: editingItem ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          ...formData,
-          originalPrice: formData.originalPrice || undefined,
-          stock: parseInt(formData.stock)
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Error saving item');
-      }
-
-      setSuccess(editingItem ? 'Article modifié !' : 'Article créé !');
-      setShowModal(false);
-      fetchItems();
-      fetchShopStats();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
+  const getDefaultFormData = (type) => {
+    switch (type) {
+      case 'user':
+        return {
+          username: '',
+          discordId: '',
+          discordUsername: '',
+          roles: ['user'],
+          goldCoins: 500
+        };
+      case 'squad':
+        return {
+          name: '',
+          tag: '',
+          description: '',
+          mode: 'both',
+          color: '#ef4444',
+          maxMembers: 10
+        };
+      case 'shopItem':
+        return {
+          name: '',
+          description: '',
+          category: 'other',
+          price: 0,
+          rarity: 'common',
+          mode: 'all',
+          isActive: true,
+          stock: -1
+        };
+      case 'trophy':
+        return {
+          name: '',
+          description: '',
+          icon: 'Trophy',
+          color: 'amber',
+          rarity: 1,
+          rarityName: 'common',
+          isActive: true
+        };
+      case 'announcement':
+        return {
+      title: '',
+      content: '',
+      type: 'announcement',
+      priority: 'normal',
+      targetMode: 'all',
+      requiresAcknowledgment: true,
+      isActive: true
+        };
+      case 'season':
+        return {
+          number: 1,
+          name: '',
+          mode: 'hardcore',
+          status: 'upcoming',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        };
+      case 'map':
+        return {
+          name: '',
+          image: '',
+          mode: 'hardcore',
+          gameMode: 'Search & Destroy',
+          isActive: true
+        };
+      default:
+        return {};
     }
   };
 
-  const handleDeleteItem = async (itemId) => {
-    try {
-      await fetch(`${API_URL}/shop/admin/items/${itemId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      setSuccess('Article supprimé !');
-      setDeleteConfirm(null);
-      fetchItems();
-      fetchShopStats();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const toggleItemActive = async (item) => {
-    try {
-      await fetch(`${API_URL}/shop/admin/items/${item._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ isActive: !item.isActive })
-      });
-      fetchItems();
-    } catch (err) {
-      console.error('Error toggling item:', err);
-    }
-  };
-
-  // ==================== USER HANDLERS ====================
-
-  const openUserModal = (userItem) => {
-    setModalType('user');
-    setEditingItem(userItem);
-    setFormData({
-      roles: userItem.roles || ['user'],
-      goldCoins: userItem.goldCoins || 0
-    });
-    setShowModal(true);
-    setError('');
-  };
-
-  const openGoldModal = (userItem) => {
-    setModalType('gold');
-    setEditingItem(userItem);
-    setFormData({
-      goldAmount: 0,
-      goldReason: ''
-    });
-    setShowModal(true);
-    setError('');
-  };
-
-  const openBanModal = (userItem) => {
-    setModalType('ban');
-    setEditingItem(userItem);
-    const now = new Date();
-    setFormData({
-      banReason: '',
-      banStartDate: now.toISOString().slice(0, 16),
-      banEndDate: ''
-    });
-    setShowModal(true);
-    setError('');
-  };
-
-  const openBanDetailsModal = async (userId) => {
-    try {
-      const response = await fetch(`${API_URL}/users/admin/${userId}`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        setBanDetails(data.user);
-        setModalType('banDetails');
-        setShowModal(true);
-      }
-    } catch (err) {
-      console.error('Error fetching ban details:', err);
-    }
-  };
-
-  const handleUserSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-
-    try {
-      // Update roles
-      await fetch(`${API_URL}/users/admin/${editingItem._id}/roles`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ roles: formData.roles })
-      });
-
-      setSuccess('Utilisateur modifié !');
-      setShowModal(false);
-      fetchUsers();
-      
-      // Refresh current user if we modified our own roles
-      if (editingItem._id === user?.id) {
-        refreshUser();
-      }
-      
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleGoldSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-
-    try {
-      const response = await fetch(`${API_URL}/users/admin/${editingItem._id}/gold`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          amount: parseInt(formData.goldAmount),
-          reason: formData.goldReason 
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message);
-
-      setSuccess(`${formData.goldAmount > 0 ? '+' : ''}${formData.goldAmount} gold pour ${editingItem.username || editingItem.discordUsername} !`);
-      setShowModal(false);
-      fetchUsers();
-      
-      // Refresh current user if we modified our own gold
-      if (editingItem._id === user?.id) {
-        refreshUser();
-      }
-      
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleBanSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-
-    try {
-      const payload = { 
-        ban: true, 
-        reason: formData.banReason,
-        startDate: formData.banStartDate || new Date().toISOString(),
-        endDate: formData.banEndDate || null
-      };
-      
-      await fetch(`${API_URL}/users/admin/${editingItem._id}/ban`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(payload)
-      });
-      
-      const durationText = formData.banEndDate 
-        ? `jusqu'au ${new Date(formData.banEndDate).toLocaleDateString('fr-FR', { 
+  const formatDate = (date) => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('fr-FR', {
             day: '2-digit', 
             month: '2-digit', 
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit'
-          })}` 
-        : 'de façon permanente';
-      setSuccess(`${editingItem.username || editingItem.discordUsername} a été banni ${durationText} !`);
-      setShowModal(false);
-      fetchUsers();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleUnbanUser = async (userId) => {
-    try {
-      await fetch(`${API_URL}/users/admin/${userId}/ban`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ ban: false })
-      });
-      setSuccess('Utilisateur débanni !');
-      fetchUsers();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const handleBanUser = async (userId, ban, reason = '') => {
-    try {
-      await fetch(`${API_URL}/users/admin/${userId}/ban`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ ban, reason })
-      });
-      setSuccess(ban ? 'Utilisateur banni !' : 'Utilisateur débanni !');
-      fetchUsers();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ==================== USER STATS HANDLER ====================
-
-  const openUserStatsModal = async (userItem) => {
-    setModalType('userStats');
-    setEditingItem(userItem);
-    setUserGameStats(null);
-    setLoadingStats(true);
-    setShowModal(true);
-
-    try {
-      // Fetch both hardcore and cdl rankings for this user
-      const [hardcoreRes, cdlRes] = await Promise.all([
-        fetch(`${API_URL}/rankings/user/${userItem._id}/hardcore`, { credentials: 'include' }),
-        fetch(`${API_URL}/rankings/user/${userItem._id}/cdl`, { credentials: 'include' })
-      ]);
-
-      const hardcoreData = await hardcoreRes.json();
-      const cdlData = await cdlRes.json();
-
-      setUserGameStats({
-        hardcore: hardcoreData.success ? hardcoreData.ranking : null,
-        cdl: cdlData.success ? cdlData.ranking : null,
-        userStats: userItem.stats || {}
-      });
-    } catch (err) {
-      console.error('Error fetching user stats:', err);
-      setUserGameStats({ hardcore: null, cdl: null, userStats: userItem.stats || {} });
-    } finally {
-      setLoadingStats(false);
-    }
-  };
-
-  // ==================== ANNOUNCEMENT HANDLERS ====================
-
-  const openAnnouncementModal = (announcement = null) => {
-    setModalType('announcement');
-    setEditingItem(announcement);
-    setFormData(announcement ? {
-      title: announcement.title,
-      content: announcement.content,
-      type: announcement.type,
-      version: announcement.version || '',
-      priority: announcement.priority,
-      targetMode: announcement.targetMode,
-      requiresAcknowledgment: announcement.requiresAcknowledgment,
-      isActive: announcement.isActive
-    } : {
-      title: '',
-      content: '',
-      type: 'announcement',
-      version: '',
-      priority: 'normal',
-      targetMode: 'all',
-      requiresAcknowledgment: true,
-      isActive: true
     });
-    setShowModal(true);
-    setError('');
   };
 
-  const handleAnnouncementSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
+  const openBanModal = (user) => {
+    if (user.isBanned) {
+      // Direct unban
+      handleUnban(user);
+    } else {
+      // Open ban modal
+      setBanData({
+        userId: user._id,
+        username: user.username,
+        reason: '',
+        duration: 'permanent',
+        customDays: 7
+      });
+      setShowBanModal(true);
+    }
+  };
+
+  const handleUnban = async (user) => {
+    if (!window.confirm(`Voulez-vous vraiment débannir ${user.username} ?`)) {
+      return;
+    }
 
     try {
-      const url = editingItem 
-        ? `${API_URL}/announcements/admin/${editingItem._id}`
-        : `${API_URL}/announcements/admin`;
-      
-      const response = await fetch(url, {
-        method: editingItem ? 'PUT' : 'POST',
+      const response = await fetch(`${API_URL}/users/admin/${user._id}/ban`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ban: false,
+          reason: '',
+          startDate: null,
+          endDate: null
+        })
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Error saving announcement');
+      if (data.success) {
+        setSuccess(`${user.username} a été débanni`);
+      fetchUsers();
+      } else {
+        setError(data.message || 'Erreur lors du débannissement');
+      }
+    } catch (err) {
+      console.error('Unban error:', err);
+      setError('Erreur lors du débannissement');
+    }
+  };
+
+  const handleBan = async () => {
+    if (!banData.reason.trim()) {
+      setError('Veuillez entrer une raison pour le ban');
+      return;
+    }
+
+    try {
+      let endDate = null;
+      const now = new Date();
+
+      switch (banData.duration) {
+        case '1h':
+          endDate = new Date(now.getTime() + 1 * 60 * 60 * 1000);
+          break;
+        case '1d':
+          endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+          break;
+        case 'custom':
+          endDate = new Date(now.getTime() + banData.customDays * 24 * 60 * 60 * 1000);
+          break;
+        default: // permanent
+          endDate = null;
       }
 
-      setSuccess(editingItem ? 'Annonce modifiée !' : 'Annonce créée !');
-      setShowModal(false);
-      fetchAnnouncements();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteAnnouncement = async (announcementId) => {
-    try {
-      await fetch(`${API_URL}/announcements/admin/${announcementId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      setSuccess('Annonce supprimée !');
-      setDeleteConfirm(null);
-      fetchAnnouncements();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const toggleAnnouncementActive = async (announcement) => {
-    try {
-      await fetch(`${API_URL}/announcements/admin/${announcement._id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ isActive: !announcement.isActive })
-      });
-      fetchAnnouncements();
-    } catch (err) {
-      console.error('Error toggling announcement:', err);
-    }
-  };
-
-  const resetAnnouncementReads = async (announcementId) => {
-    try {
-      await fetch(`${API_URL}/announcements/admin/${announcementId}/reset-reads`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      setSuccess('Lectures réinitialisées !');
-      fetchAnnouncements();
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  // ==================== RANKING HANDLERS ====================
-
-  const openRankingModal = (ranking = null) => {
-    setModalType('ranking');
-    setEditingItem(ranking);
-    setFormData(ranking ? {
-      points: ranking.points,
-      wins: ranking.wins,
-      losses: ranking.losses,
-      kills: ranking.kills || 0,
-      deaths: ranking.deaths || 0,
-      division: ranking.division,
-      team: ranking.team || ''
-    } : {
-      userId: '',
-      mode: rankingMode,
-      points: 0,
-      wins: 0,
-      losses: 0,
-      kills: 0,
-      deaths: 0,
-      division: 'bronze',
-      team: ''
-    });
-    setShowModal(true);
-    setError('');
-  };
-
-  const openAddPointsModal = (ranking) => {
-    setModalType('addPoints');
-    setEditingItem(ranking);
-    setFormData({
-      points: 0,
-      reason: ''
-    });
-    setShowModal(true);
-    setError('');
-  };
-
-  const handleRankingSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-
-    try {
-      const userId = editingItem?.user?._id || editingItem?.userInfo?._id || formData.userId;
-      
-      await fetch(`${API_URL}/rankings/admin/${userId}`, {
+      const response = await fetch(`${API_URL}/users/admin/${banData.userId}/ban`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          mode: editingItem?.mode || formData.mode,
-          ...formData
+          ban: true,
+          reason: banData.reason,
+          startDate: now.toISOString(),
+          endDate: endDate ? endDate.toISOString() : null
         })
       });
 
-      setSuccess('Classement mis à jour !');
-      setShowModal(false);
-      fetchRankings();
-      fetchRankingStats();
-      setTimeout(() => setSuccess(''), 3000);
+      const data = await response.json();
+
+      if (data.success) {
+        const durationText = banData.duration === 'permanent' ? 'définitivement' : 
+          banData.duration === 'custom' ? `pour ${banData.customDays} jours` :
+          `pour ${banData.duration}`;
+        setSuccess(`${banData.username} a été banni ${durationText}`);
+        setShowBanModal(false);
+        fetchUsers();
+      } else {
+        setError(data.message || 'Erreur lors du bannissement');
+      }
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
+      console.error('Ban error:', err);
+      setError('Erreur lors du bannissement');
     }
   };
 
-  const handleAddPoints = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSaving(true);
-
+  const toggleFeature = async (featureKey, enabled) => {
     try {
-      const userId = editingItem?.user?._id || editingItem?.userInfo?._id;
-      
-      await fetch(`${API_URL}/rankings/admin/${userId}/add-points`, {
-        method: 'POST',
+      const response = await fetch(`${API_URL}/app-settings/admin/feature/${featureKey}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          mode: editingItem.mode,
-          points: parseInt(formData.points),
-          reason: formData.reason
-        })
+        body: JSON.stringify({ enabled })
       });
 
-      setSuccess(`${formData.points > 0 ? '+' : ''}${formData.points} points !`);
-      setShowModal(false);
-      fetchRankings();
-      setTimeout(() => setSuccess(''), 3000);
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`Fonctionnalité ${enabled ? 'activée' : 'désactivée'}`);
+        fetchAppSettings();
+      } else {
+        setError(data.message || 'Erreur');
+      }
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
+      console.error('Toggle feature error:', err);
+      setError('Erreur lors de la modification');
     }
   };
 
-  // ==================== HELPERS ====================
+  const updateFeatureMessage = async (featureKey, message) => {
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/feature/${featureKey}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ disabledMessage: message })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Message mis à jour');
+        fetchAppSettings();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      console.error('Update message error:', err);
+      setError('Erreur lors de la modification');
+    }
+  };
+
+  const getRoleColor = (role) => {
+    const colors = {
+      admin: 'red',
+      staff: 'purple',
+      gerant_cdl: 'cyan',
+      gerant_hardcore: 'orange',
+      user: 'gray'
+    };
+    return colors[role] || 'gray';
+  };
 
   const getRarityColor = (rarity) => {
     const colors = {
-      common: 'text-gray-400 bg-gray-500/20 border-gray-500/30',
-      rare: 'text-blue-400 bg-blue-500/20 border-blue-500/30',
-      epic: 'text-purple-400 bg-purple-500/20 border-purple-500/30',
-      legendary: 'text-yellow-400 bg-yellow-500/20 border-yellow-500/30'
+      common: 'gray',
+      rare: 'blue',
+      epic: 'purple',
+      legendary: 'yellow'
     };
-    return colors[rarity] || colors.common;
+    return colors[rarity] || 'gray';
   };
 
-  const getCategoryIcon = (category) => {
-    const cat = CATEGORIES.find(c => c.value === category);
-    return cat?.icon || Package;
-  };
+  // ==================== RENDER FUNCTIONS ====================
 
-  const getDivisionColor = (division) => {
-    const div = DIVISIONS.find(d => d.value === division);
-    return div?.color || 'gray';
-  };
+  const renderOverview = () => {
+    if (!stats) return <div className="text-gray-400">Chargement des statistiques...</div>;
 
-  if (loading && activeTab === 'shop' && items.length === 0) {
+    const statCards = [
+      { label: 'Utilisateurs', value: stats.totalUsers || 0, icon: Users, color: 'blue' },
+      { label: 'Escouades', value: stats.totalSquads || 0, icon: Shield, color: 'purple' },
+      { label: 'Matchs Totaux', value: stats.totalMatches || 0, icon: Swords, color: 'green' },
+    ];
+
+    // Use real registration data from API or empty array
+    const registrationsData = stats.registrationsLast30Days || [];
+    const hasVisitorsData = stats.visitorsLast30Days && stats.visitorsLast30Days.length > 0;
+    const visitorsData = stats.visitorsLast30Days || [];
+
+    const maxRegistrations = registrationsData.length > 0 ? Math.max(...registrationsData.map(d => d.value), 1) : 1;
+    const maxVisitors = visitorsData.length > 0 ? Math.max(...visitorsData.map(d => d.value), 1) : 1;
+
     return (
-      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-white">Vue d'ensemble</h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {statCards.map((stat, index) => {
+            const Icon = stat.icon;
+            return (
+              <div
+                key={index}
+                className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-400 text-sm mb-1">{stat.label}</p>
+                    <p className="text-3xl font-bold text-white">{stat.value}</p>
+                  </div>
+                  <div className={`w-14 h-14 rounded-xl bg-${stat.color}-500/20 flex items-center justify-center`}>
+                    <Icon className={`w-7 h-7 text-${stat.color}-400`} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Visitors Chart - Last 30 Days */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Eye className="w-5 h-5 text-cyan-400" />
+            Visiteurs - 30 derniers jours
+          </h3>
+          {!hasVisitorsData ? (
+            <div className="h-48 flex items-center justify-center">
+              <div className="text-center">
+                <Activity className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">Suivi des visiteurs non configuré</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="h-48 flex items-end gap-1">
+                {visitorsData.map((day, index) => (
+                  <div key={index} className="flex-1 flex flex-col items-center group">
+                    <div className="relative w-full">
+                      <div
+                        className="w-full bg-cyan-500/30 hover:bg-cyan-500/50 rounded-t transition-all cursor-pointer"
+                        style={{ height: `${(day.value / maxVisitors) * 160}px`, minHeight: '4px' }}
+                      />
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-dark-900 px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                        {day.value} visiteurs
+                      </div>
+                    </div>
+                    {index % 5 === 0 && (
+                      <span className="text-[9px] text-gray-500 mt-1 rotate-45 origin-left">{day.date}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-gray-400">Total: <span className="text-cyan-400 font-bold">{visitorsData.reduce((a, b) => a + b.value, 0)}</span> visiteurs</span>
+                <span className="text-gray-400">Moyenne: <span className="text-cyan-400 font-bold">{Math.round(visitorsData.reduce((a, b) => a + b.value, 0) / 30)}</span>/jour</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Registrations Chart - Last 30 Days */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-green-400" />
+            Inscriptions - 30 derniers jours
+          </h3>
+          {registrationsData.length === 0 ? (
+            <div className="h-48 flex items-center justify-center">
+              <div className="text-center">
+                <UserPlus className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">Aucune donnée d'inscription disponible</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="h-48 flex items-end gap-1">
+                {registrationsData.map((day, index) => (
+                  <div key={index} className="flex-1 flex flex-col items-center group">
+                    <div className="relative w-full">
+                      <div
+                        className="w-full bg-green-500/30 hover:bg-green-500/50 rounded-t transition-all cursor-pointer"
+                        style={{ height: `${(day.value / maxRegistrations) * 160}px`, minHeight: '4px' }}
+                      />
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-dark-900 px-2 py-1 rounded text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                        {day.value} inscription{day.value > 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    {index % 5 === 0 && (
+                      <span className="text-[9px] text-gray-500 mt-1 rotate-45 origin-left">{day.date}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-gray-400">Total: <span className="text-green-400 font-bold">{registrationsData.reduce((a, b) => a + b.value, 0)}</span> inscriptions</span>
+                <span className="text-gray-400">Moyenne: <span className="text-green-400 font-bold">{(registrationsData.reduce((a, b) => a + b.value, 0) / 30).toFixed(1)}</span>/jour</span>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     );
-  }
+  };
 
-  return (
-    <div className="min-h-screen bg-dark-950 relative">
-      {/* Background */}
-      <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 20% 20%, rgba(139, 92, 246, 0.08) 0%, transparent 50%)' }}></div>
-      <div className="absolute inset-0 grid-pattern pointer-events-none opacity-20"></div>
-
-      <div className="relative z-10 py-4 sm:py-8">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+  const renderUsers = () => {
+    return (
+      <div className="space-y-4">
           {/* Header */}
-          <div className="flex items-center justify-between mb-4 sm:mb-8">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <button 
-                onClick={() => navigate(-1)} 
-                className="flex items-center space-x-2 text-gray-400 hover:text-purple-400 transition-colors"
-              >
-                <ArrowLeft className="w-4 sm:w-5 h-4 sm:h-5" />
-              </button>
-              <div className="flex items-center space-x-2 sm:space-x-3">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg sm:rounded-xl flex items-center justify-center">
-                  <Shield className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                </div>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Utilisateurs</h2>
+          <div className="text-gray-400 text-sm">
+            {users.length} utilisateur(s) • Page {page}/{totalPages || 1}
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Rechercher un utilisateur..."
+            className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+          />
+        </div>
+
+        {/* Users Table */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-900/50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Utilisateur</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Discord</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Rôles</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Coins</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {users.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
+                      Aucun utilisateur trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  users.map((user) => (
+                    <tr key={user._id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={user.avatarUrl || '/avatar.jpg'}
+                            alt=""
+                            className="w-10 h-10 rounded-full"
+                          />
                 <div>
-                  <h1 className="text-lg sm:text-2xl font-bold text-white">Admin</h1>
-                  <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Gestion de la plateforme</p>
+                            <p className="text-white font-medium">{user.username || 'Sans pseudo'}</p>
+                            <p className="text-gray-500 text-sm">{user._id}</p>
                 </div>
               </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-white text-sm">{user.discordUsername}</p>
+                        <p className="text-gray-500 text-xs">{user.discordId}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {user.roles?.map((role) => (
+                            <span
+                              key={role}
+                              className={`px-2 py-1 text-xs font-medium rounded bg-${getRoleColor(role)}-500/20 text-${getRoleColor(role)}-400`}
+                            >
+                              {role}
+                            </span>
+                          ))}
             </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1 text-yellow-400">
+                          <Coins className="w-4 h-4" />
+                          <span className="font-medium">{user.goldCoins || 0}</span>
+          </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {user.isBanned ? (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-red-500/20 text-red-400">
+                            Banni
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
+                            Actif
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-400 text-sm">
+                        {formatDate(user.createdAt)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+            <button
+                            onClick={() => openEditModal('user', user)}
+                            className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                            title="Modifier"
+                          >
+                            <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+                            onClick={() => openBanModal(user)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              user.isBanned 
+                                ? 'text-green-400 hover:bg-green-500/20' 
+                                : 'text-orange-400 hover:bg-orange-500/20'
+                            }`}
+                            title={user.isBanned ? 'Débannir' : 'Bannir'}
+                          >
+                            <Ban className="w-4 h-4" />
+            </button>
+            <button
+                            onClick={() => setDeleteConfirm({ type: 'user', id: user._id })}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+            </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
           </div>
 
-          {/* Success/Error Messages */}
-          {success && (
-            <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
-              <p className="text-green-400 text-center">{success}</p>
-            </div>
-          )}
-
-          {/* Tabs */}
-          <div className="flex flex-wrap gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-white/10 pb-3 sm:pb-4 overflow-x-auto">
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2">
             <button
-              onClick={() => setActiveTab('shop')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === 'shop' 
-                  ? 'bg-purple-500 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Boutique</span>
+              Précédent
             </button>
-            <button
-              onClick={() => setActiveTab('users')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === 'users' 
-                  ? 'bg-purple-500 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Utilisateurs</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('announcements')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === 'announcements' 
-                  ? 'bg-purple-500 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Megaphone className="w-4 h-4" />
-              <span>Annonces</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('purchases')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === 'purchases' 
-                  ? 'bg-purple-500 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>Achats</span>
-            </button>
-            {isAdmin() && (
-              <button
-                onClick={() => setActiveTab('trophies')}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                  activeTab === 'trophies' 
-                    ? 'bg-purple-500 text-white' 
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Trophy className="w-4 h-4" />
-                <span>Trophées</span>
-              </button>
-            )}
-            <button
-              onClick={() => setActiveTab('disputes')}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-all ${
-                activeTab === 'disputes' 
-                  ? 'bg-orange-500 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <AlertTriangle className="w-4 h-4" />
-              <span>Litiges</span>
-              {disputes.length > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.5 bg-red-500 text-white text-xs rounded-full">
-                  {disputes.length}
-                </span>
-              )}
-            </button>
-          </div>
-
-          {/* ==================== SHOP TAB ==================== */}
-          {activeTab === 'shop' && (
-            <div>
-              {/* Header avec filtres */}
-              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-                <h2 className="text-lg font-semibold text-white">Articles ({items.length})</h2>
-                <div className="flex items-center gap-3">
-                  {/* Filtre par catégorie */}
-                  <select
-                    value={shopCategory}
-                    onChange={(e) => { setShopCategory(e.target.value); setShopPage(1); }}
-                    className="px-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50"
-                  >
-                    <option value="all">Toutes les catégories</option>
-                    {CATEGORIES.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
-                  {isAdmin() && (
+            <span className="text-gray-400">
+              Page {page} sur {totalPages}
+            </span>
                     <button
-                      onClick={() => openShopModal()}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <Plus className="w-4 h-4" />
-                      <span>Nouvel Article</span>
+              Suivant
                     </button>
+          </div>
                   )}
                 </div>
-              </div>
+    );
+  };
 
-              {/* Catégories rapides */}
-              <div className="flex flex-wrap gap-2 mb-6">
-                <button
-                  onClick={() => { setShopCategory('all'); setShopPage(1); }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    shopCategory === 'all' 
-                      ? 'bg-purple-500 text-white' 
-                      : 'bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-700'
-                  }`}
-                >
-                  Tous ({items.length})
-                </button>
-                {CATEGORIES.map(cat => {
-                  const count = items.filter(i => i.category === cat.value).length;
-                  if (count === 0) return null;
-                  const CatIcon = cat.icon;
+  const renderSquads = () => {
                   return (
-                    <button
-                      key={cat.value}
-                      onClick={() => { setShopCategory(cat.value); setShopPage(1); }}
-                      className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        shopCategory === cat.value 
-                          ? 'bg-purple-500 text-white' 
-                          : 'bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-700'
-                      }`}
-                    >
-                      <CatIcon className="w-3.5 h-3.5" />
-                      <span>{cat.label}</span>
-                      <span className="text-xs opacity-70">({count})</span>
-                    </button>
-                  );
-                })}
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Escouades</h2>
               </div>
 
-              {/* Items filtrés et paginés */}
-              {(() => {
-                const filteredItems = shopCategory === 'all' 
-                  ? items 
-                  : items.filter(i => i.category === shopCategory);
-                const totalPages = Math.ceil(filteredItems.length / SHOP_ITEMS_PER_PAGE);
-                const paginatedItems = filteredItems.slice(
-                  (shopPage - 1) * SHOP_ITEMS_PER_PAGE,
-                  shopPage * SHOP_ITEMS_PER_PAGE
-                );
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Rechercher une escouade..."
+            className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+          />
+        </div>
 
-                return (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {paginatedItems.map((item) => {
-                      const CategoryIcon = getCategoryIcon(item.category);
-                      return (
-                        <div 
-                          key={item._id}
-                          className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${
-                            item.isActive ? 'border-purple-500/20' : 'border-red-500/20 opacity-60'
-                          } p-4 relative`}
-                        >
-                          <div className="absolute top-3 right-3">
-                            <button
-                              onClick={() => toggleItemActive(item)}
-                              className={`p-1.5 rounded-lg transition-colors ${
-                                item.isActive 
-                                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
-                                  : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                              }`}
-                            >
-                              {item.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                            </button>
+        {/* Squads Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {squads.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-8">
+              Aucune escouade trouvée
+            </div>
+          ) : (
+            squads.map((squad) => (
+              <div
+                key={squad._id}
+                className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-lg flex items-center justify-center"
+                      style={{ backgroundColor: squad.color + '30' }}
+                    >
+                      {squad.logo ? (
+                        <img src={squad.logo} alt="" className="w-8 h-8 object-contain" />
+                      ) : (
+                        <Shield className="w-6 h-6" style={{ color: squad.color }} />
+                      )}
                           </div>
-
-                          <div className="flex items-start space-x-3 mb-3">
-                            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getRarityColor(item.rarity)}`}>
-                              <CategoryIcon className="w-6 h-6" />
+                    <div>
+                      <h3 className="text-white font-bold">{squad.name}</h3>
+                      <p className="text-gray-400 text-sm">[{squad.tag}]</p>
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <h3 className="text-white font-semibold truncate">{item.name}</h3>
-                              <p className="text-gray-500 text-xs truncate">{item.description}</p>
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getRarityColor(item.rarity)}`}>
-                              {RARITIES.find(r => r.value === item.rarity)?.label}
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-white/5 text-gray-400 border border-white/10">
-                              {CATEGORIES.find(c => c.value === item.category)?.label}
-                            </span>
-                            {item.mode !== 'all' && (
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                item.mode === 'hardcore' ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/20 text-cyan-400'
-                              }`}>
-                                {item.mode}
-                              </span>
-                            )}
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Membres</span>
+                    <span className="text-white font-medium">{squad.members?.length || 0}/{squad.maxMembers}</span>
+                          </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Mode</span>
+                    <span className="text-white font-medium">{squad.mode}</span>
+                            </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Level</span>
+                    <span className="text-white font-medium">{squad.level || 1}</span>
+                  </div>
                           </div>
 
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-1.5">
-                              <Coins className="w-4 h-4 text-yellow-400" />
-                              <span className="text-yellow-400 font-bold">{item.price}</span>
-                              {item.originalPrice > item.price && (
-                                <span className="text-gray-500 text-xs line-through">{item.originalPrice}</span>
+                {/* Members list */}
+                {squad.members && squad.members.length > 0 && (
+                  <div className="mb-4 p-3 bg-dark-900/50 rounded-lg">
+                    <p className="text-xs text-gray-400 mb-2">Membres :</p>
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                      {squad.members.map((member, idx) => {
+                        const userId = member.user?._id || member.user;
+                        const username = member.user?.username || member.user?.discordUsername || 'Inconnu';
+                        const avatarUrl = member.user?.avatarUrl || '/avatar.jpg';
+                        const isLeader = userId?.toString() === squad.leader?._id?.toString() || userId?.toString() === squad.leader?.toString();
+                        
+                        return (
+                          <div key={userId || idx} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <img 
+                                src={avatarUrl} 
+                                alt="" 
+                                className="w-6 h-6 rounded-full object-cover border border-white/10"
+                              />
+                              <span className="text-white text-xs truncate max-w-[100px]">{username}</span>
+                              {isLeader && (
+                                <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />
+                              )}
+                              {member.role === 'officer' && !isLeader && (
+                                <Star className="w-3 h-3 text-purple-400 flex-shrink-0" />
                               )}
                             </div>
-                            <span className="text-xs text-gray-500">{item.totalSold || 0} vendus</span>
-                          </div>
-
-                          {isAdmin() && (
-                            <div className="flex space-x-2 mt-4 pt-4 border-t border-white/10">
+                            {!isLeader && (
                               <button
-                                onClick={() => openShopModal(item)}
-                                className="flex-1 flex items-center justify-center space-x-1 px-3 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                                onClick={() => handleKickMember(squad._id, userId)}
+                                className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
+                                title="Kick"
                               >
-                                <Edit2 className="w-4 h-4" />
-                                <span className="text-sm">Modifier</span>
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                              <button
+                    onClick={() => openEditModal('squad', squad)}
+                    className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
+                              >
+                    Modifier
                               </button>
                               <button
-                                onClick={() => setDeleteConfirm({ type: 'shop', id: item._id })}
-                                className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                    onClick={() => setDeleteConfirm({ type: 'squad', id: squad._id })}
+                    className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
+              </div>
+            ))
                           )}
-                        </div>
-                      );
-                    })}
                     </div>
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                      <div className="flex items-center justify-center space-x-2 mt-6">
+          <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={() => setShopPage(Math.max(1, shopPage - 1))}
-                          disabled={shopPage === 1}
-                          className="px-3 py-2 bg-dark-800 text-gray-400 rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <ChevronDown className="w-4 h-4 rotate-90" />
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Précédent
                         </button>
-                        
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+            <span className="text-gray-400">
+              Page {page} sur {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Suivant
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderShop = () => {
+    const currentSubTab = activeSubTab || 'items';
+
+    return (
+      <div className="space-y-4">
+        {/* Sub-tabs */}
+        <div className="flex items-center gap-4 border-b border-white/10 pb-4">
                           <button
-                            key={page}
-                            onClick={() => setShopPage(page)}
-                            className={`w-10 h-10 rounded-lg font-medium transition-colors ${
-                              shopPage === page
-                                ? 'bg-purple-500 text-white'
-                                : 'bg-dark-800 text-gray-400 hover:bg-dark-700 hover:text-white'
-                            }`}
-                          >
-                            {page}
+            onClick={() => setActiveSubTab('items')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              currentSubTab === 'items' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Items Boutique
                           </button>
-                        ))}
-                        
                         <button
-                          onClick={() => setShopPage(Math.min(totalPages, shopPage + 1))}
-                          disabled={shopPage === totalPages}
-                          className="px-3 py-2 bg-dark-800 text-gray-400 rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          <ChevronDown className="w-4 h-4 -rotate-90" />
+            onClick={() => setActiveSubTab('trophies')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              currentSubTab === 'trophies' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Trophées
                         </button>
                       </div>
-                    )}
 
-                    {/* Message si aucun article */}
-                    {filteredItems.length === 0 && (
-                      <div className="text-center py-12">
-                        <Package className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                        <p className="text-gray-500">
-                          {shopCategory === 'all' 
-                            ? 'Aucun article dans la boutique' 
-                            : `Aucun article dans la catégorie "${CATEGORIES.find(c => c.value === shopCategory)?.label}"`}
-                        </p>
-                        {isAdmin() && shopCategory === 'all' && (
+        {currentSubTab === 'items' ? (
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Items de la Boutique</h2>
                           <button
-                            onClick={() => openShopModal()}
-                            className="mt-4 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                onClick={() => openCreateModal('shopItem')}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
                           >
-                            Créer le premier article
+                <Plus className="w-5 h-5" />
+                Nouvel Item
                           </button>
-                        )}
                       </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
 
-          {/* ==================== USERS TAB ==================== */}
-          {activeTab === 'users' && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-white">Utilisateurs ({users.length})</h2>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Rechercher..."
-                    className="pl-10 pr-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 w-64"
-                  />
-                </div>
-              </div>
-
-              {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+            {/* Items Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {shopItems.length === 0 ? (
+                <div className="col-span-full text-center text-gray-400 py-8">
+                  Aucun item trouvé
                 </div>
               ) : (
-                <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Utilisateur</th>
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Rôles</th>
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Gold</th>
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Status</th>
-                        <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {users.map((u) => (
-                        <tr key={u._id} className="hover:bg-white/5">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center space-x-3">
-                              <img 
-                                src={u.discordAvatar ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'}
-                                alt=""
-                                className="w-8 h-8 rounded-full"
-                              />
-                              <div>
-                                <p className="text-white font-medium">{u.username || u.discordUsername}</p>
-                                <p className="text-gray-500 text-xs">{u.discordUsername}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {u.roles?.map(role => (
-                                <span key={role} className={`px-2 py-0.5 rounded text-xs font-medium bg-${ROLES.find(r => r.value === role)?.color || 'gray'}-500/20 text-${ROLES.find(r => r.value === role)?.color || 'gray'}-400`}>
-                                  {ROLES.find(r => r.value === role)?.label || role}
+                shopItems.map((item) => (
+                  <div
+                    key={item._id}
+                    className={`bg-dark-800/50 border rounded-xl p-4 hover:border-white/20 transition-all ${
+                      item.isActive ? 'border-white/10' : 'border-gray-700/50 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className={`px-2 py-1 text-xs font-medium rounded bg-${getRarityColor(item.rarity)}-500/20 text-${getRarityColor(item.rarity)}-400`}>
+                        {item.rarity}
                                 </span>
-                              ))}
+                      {!item.isActive && (
+                        <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
+                          Inactif
+                        </span>
+                      )}
                             </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center space-x-1 text-yellow-400">
+
+                    <h3 className="text-white font-bold mb-2">{item.name}</h3>
+                    <p className="text-gray-400 text-sm mb-3 line-clamp-2">{item.description}</p>
+
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1 text-yellow-400">
                               <Coins className="w-4 h-4" />
-                              <span>{u.goldCoins || 0}</span>
+                        <span className="font-bold">{item.price}</span>
                             </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            {u.isBanned ? (
-                              <div className="flex flex-col gap-1">
-                                <span className="px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400">Banni</span>
-                                {u.banExpiresAt && (
-                                  <span className="text-xs text-gray-500">
-                                    Expire: {new Date(u.banExpiresAt).toLocaleDateString('fr-FR', { 
-                                      day: '2-digit', 
-                                      month: '2-digit', 
-                                      year: 'numeric',
-                                      hour: '2-digit',
-                                      minute: '2-digit'
-                                    })}
-                                  </span>
-                                )}
+                      <span className="text-xs text-gray-500">{item.category}</span>
                               </div>
-                            ) : u.isProfileComplete ? (
-                              <span className="px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-400">Actif</span>
-                            ) : (
-                              <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">Incomplet</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <div className="flex items-center justify-end space-x-2">
-                              {u.isProfileComplete && (
+
+                    <div className="flex items-center gap-2">
                                 <button
-                                  onClick={() => navigate(`/player/${u.username}`)}
-                                  className="p-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
-                                  title="Voir le profil public"
+                        onClick={() => openEditModal('shopItem', item)}
+                        className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
                                 >
-                                  <Eye className="w-4 h-4" />
+                        Modifier
                                 </button>
-                              )}
-                              {isAdmin() && (
-                                <>
                                   <button
-                                    onClick={() => openGoldModal(u)}
-                                    className="p-2 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-colors"
-                                    title="Gérer les gold"
+                        onClick={() => setDeleteConfirm({ type: 'shopItem', id: item._id })}
+                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
                                   >
-                                    <Coins className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" />
                                   </button>
-                                  <button
-                                    onClick={() => openUserModal(u)}
-                                    className="p-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
-                                    title="Modifier les rôles"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  {!u.roles?.includes('admin') && (
-                                    u.isBanned ? (
-                                      <>
-                                        <button
-                                          onClick={() => openBanDetailsModal(u._id)}
-                                          className="p-2 bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors"
-                                          title="Voir détails du ban"
-                                        >
-                                          <AlertTriangle className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                          onClick={() => handleUnbanUser(u._id)}
-                                          className="p-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors"
-                                          title="Débannir"
-                                        >
-                                          <UserCheck className="w-4 h-4" />
-                                        </button>
-                                      </>
-                                    ) : (
-                                      <button
-                                        onClick={() => openBanModal(u)}
-                                        className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                                        title="Bannir"
-                                      >
-                                        <Ban className="w-4 h-4" />
-                                      </button>
-                                    )
-                                  )}
-                                </>
-                              )}
                             </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
+                ))
               )}
             </div>
-          )}
-
-          {/* ==================== ANNOUNCEMENTS TAB ==================== */}
-          {activeTab === 'announcements' && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-white">Annonces ({announcements.length})</h2>
-                {isAdmin() && (
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Trophées</h2>
                   <button
-                    onClick={() => openAnnouncementModal()}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-lg hover:opacity-90 transition-opacity"
+                onClick={() => openCreateModal('trophy')}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Nouvelle Annonce</span>
+                <Plus className="w-5 h-5" />
+                Nouveau Trophée
                   </button>
-                )}
               </div>
 
-              {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+            {/* Trophies Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {trophies.length === 0 ? (
+                <div className="col-span-full text-center text-gray-400 py-8">
+                  Aucun trophée trouvé
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {announcements.map((announcement) => {
-                    const TypeIcon = ANNOUNCEMENT_TYPES.find(t => t.value === announcement.type)?.icon || Bell;
-                    const typeColor = ANNOUNCEMENT_TYPES.find(t => t.value === announcement.type)?.color || 'gray';
-                    const priorityColor = PRIORITIES.find(p => p.value === announcement.priority)?.color || 'blue';
+                trophies.map((trophy) => {
+                  const IconComp = { Trophy, Award, Medal, Star, Crown, Shield, Zap, Target }[trophy.icon] || Trophy;
                     
                     return (
                       <div 
-                        key={announcement._id}
-                        className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${
-                          announcement.isActive ? 'border-purple-500/20' : 'border-red-500/20 opacity-60'
-                        } p-5`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start space-x-4 flex-1">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-${typeColor}-500/20`}>
-                              <TypeIcon className={`w-6 h-6 text-${typeColor}-400`} />
+                      key={trophy._id}
+                      className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div
+                          className="w-14 h-14 rounded-xl flex items-center justify-center"
+                          style={{ 
+                            backgroundColor: trophy.color ? `var(--color-${trophy.color}-500, #f59e0b)30` : '#f59e0b30',
+                          }}
+                        >
+                          <IconComp className="w-7 h-7" style={{ color: `var(--color-${trophy.color}-500, #f59e0b)` }} />
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <h3 className="text-white font-semibold">{announcement.title}</h3>
-                                {announcement.version && (
-                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
-                                    v{announcement.version}
-                                  </span>
-                                )}
-                                <span className={`px-2 py-0.5 rounded text-xs font-medium bg-${typeColor}-500/20 text-${typeColor}-400`}>
-                                  {ANNOUNCEMENT_TYPES.find(t => t.value === announcement.type)?.label}
-                                </span>
-                                {announcement.priority !== 'normal' && (
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium bg-${priorityColor}-500/20 text-${priorityColor}-400`}>
-                                    {PRIORITIES.find(p => p.value === announcement.priority)?.label}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-gray-400 text-sm line-clamp-2">{announcement.content}</p>
-                              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                                <span>Créée le {new Date(announcement.createdAt).toLocaleDateString('fr-FR')}</span>
-                                <span className="flex items-center gap-1">
-                                  <Eye className="w-3 h-3" />
-                                  {announcement.readCount} lectures
-                                </span>
-                                {announcement.requiresAcknowledgment && (
-                                  <span className="text-yellow-400">Accusé requis</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => toggleAnnouncementActive(announcement)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                announcement.isActive 
-                                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' 
-                                  : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                              }`}
-                              title={announcement.isActive ? 'Désactiver' : 'Activer'}
-                            >
-                              {announcement.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                            </button>
-                            {isAdmin() && (
-                              <>
-                                <button
-                                  onClick={() => resetAnnouncementReads(announcement._id)}
-                                  className="p-2 bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors"
-                                  title="Réinitialiser les lectures"
-                                >
-                                  <RotateCcw className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => openAnnouncementModal(announcement)}
-                                  className="p-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
-                                  title="Modifier"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setDeleteConfirm({ type: 'announcement', id: announcement._id })}
-                                  className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                                  title="Supprimer"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
-                          </div>
+                        <div className="flex-1">
+                          <h3 className="text-white font-bold mb-1">{trophy.name}</h3>
+                          <p className="text-gray-400 text-sm">{trophy.description}</p>
                         </div>
                       </div>
-                    );
-                  })}
 
-                  {announcements.length === 0 && (
-                    <div className="text-center py-12">
-                      <Megaphone className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-500">Aucune annonce</p>
+                      <div className="flex items-center justify-between mb-4">
+                        <span className="text-xs text-gray-500">Rareté: {trophy.rarity}/5</span>
+                        {trophy.isActive ? (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
+                            Actif
+                                  </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
+                            Inactif
+                                  </span>
+                                )}
+                              </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal('trophy', trophy)}
+                          className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
+                        >
+                          Modifier
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm({ type: 'trophy', id: trophy._id })}
+                          className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+                                )}
+                              </div>
+                            </div>
+        )}
+                          </div>
+    );
+  };
+
+const renderDisputes = () => {
+    const currentSubTab = activeSubTab || 'squad';
+    const totalDisputes = disputedMatches.length + disputedRankedMatches.length;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <AlertTriangle className="w-7 h-7 text-orange-400" />
+              Litiges en cours
+            </h2>
+            <p className="text-gray-400 mt-1">
+              {totalDisputes} match{totalDisputes > 1 ? 's' : ''} en litige nécessitant une intervention
+            </p>
+          </div>
+          <button
+            onClick={fetchDisputedMatches}
+            className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 text-white rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Actualiser
+          </button>
+        </div>
+
+        {/* Sub-tabs */}
+        <div className="flex items-center gap-4 border-b border-white/10 pb-4">
+          <button
+            onClick={() => setActiveSubTab('squad')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              currentSubTab === 'squad' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Matchs Squad ({disputedMatches.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('ranked')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              currentSubTab === 'ranked' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Swords className="w-4 h-4" />
+            Matchs Classés ({disputedRankedMatches.length})
+          </button>
+        </div>
+
+        {currentSubTab === 'squad' ? (
+          <div className="space-y-4">
+            {disputedMatches.length === 0 ? (
+              <div className="bg-dark-800/50 border border-white/10 rounded-xl p-8 text-center">
+                <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+                <p className="text-gray-400">Aucun match squad en litige</p>
+              </div>
+            ) : (
+              disputedMatches.map((match) => (
+                <div key={match._id} className="bg-dark-800/50 border border-orange-500/30 rounded-xl p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs font-medium rounded">
+                          EN LITIGE
+                        </span>
+                        <code className="text-gray-500 text-xs">{match._id}</code>
+                      </div>
+                      <h3 className="text-white font-bold text-lg">
+                        {match.challengerInfo?.name} [{match.challengerInfo?.tag}] vs {match.opponentInfo?.name} [{match.opponentInfo?.tag}]
+                      </h3>
+                      <p className="text-gray-400 text-sm">
+                        Mode: {match.mode} • Ladder: {match.ladder} • {formatDate(match.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/match/${match._id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Voir le match
+                      </a>
+                      <button
+                        onClick={() => setDeleteConfirm({ type: 'match', id: match._id })}
+                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {match.dispute && (
+                    <div className="bg-dark-900/50 rounded-lg p-4 mt-4">
+                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-orange-400" />
+                        Détails du litige
+                      </h4>
+                      <p className="text-gray-300 text-sm">{match.dispute.reason || 'Aucune raison fournie'}</p>
+                      {match.dispute.initiatedBy && (
+                        <p className="text-gray-500 text-xs mt-2">
+                          Initié par: {match.dispute.initiatedBy}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {disputedRankedMatches.length === 0 ? (
+              <div className="bg-dark-800/50 border border-white/10 rounded-xl p-8 text-center">
+                <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+                <p className="text-gray-400">Aucun match classé en litige</p>
+              </div>
+            ) : (
+              disputedRankedMatches.map((match) => (
+                <div key={match._id} className="bg-dark-800/50 border border-orange-500/30 rounded-xl p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs font-medium rounded">
+                          EN LITIGE
+                        </span>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          match.mode === 'hardcore' ? 'bg-orange-500/20 text-orange-400' : 'bg-cyan-500/20 text-cyan-400'
+                        }`}>
+                          {match.mode?.toUpperCase()}
+                        </span>
+                        <code className="text-gray-500 text-xs">{match._id}</code>
+                      </div>
+                      <h3 className="text-white font-bold text-lg">
+                        {match.gameMode} • {match.players?.length || 0} joueurs
+                      </h3>
+                      <p className="text-gray-400 text-sm">
+                        Map: {match.map || 'N/A'} • {formatDate(match.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`/ranked-match/${match._id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Voir le match
+                      </a>
+                      <button
+                        onClick={() => setDeleteConfirm({ type: 'rankedMatch', id: match._id })}
+                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {match.dispute && (
+                    <div className="bg-dark-900/50 rounded-lg p-4 mt-4">
+                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-orange-400" />
+                        Détails du litige
+                      </h4>
+                      <p className="text-gray-300 text-sm">{match.dispute.reason || 'Aucune raison fournie'}</p>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderApplication = () => {
+    if (!appSettings) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        </div>
+      );
+    }
+
+    const featureLabels = {
+      rankedMatchmaking: { label: 'Matchmaking Classé', desc: 'Recherche de parties classées' },
+      rankedPosting: { label: 'Création de matchs classés', desc: 'Poster des matchs classés' },
+      ladderMatchmaking: { label: 'Matchmaking Ladder', desc: 'Recherche de parties ladder' },
+      ladderPosting: { label: 'Création de matchs Ladder', desc: 'Poster des matchs ladder' },
+      squadCreation: { label: 'Création d\'escouades', desc: 'Créer de nouvelles escouades' },
+      squadInvites: { label: 'Invitations escouade', desc: 'Envoyer des invitations' },
+      hubPosting: { label: 'Publication Hub', desc: 'Poster sur le hub' },
+      shopPurchases: { label: 'Achats boutique', desc: 'Effectuer des achats' },
+      profileEditing: { label: 'Modification de profil', desc: 'Modifier son profil' },
+      hardcoreMode: { label: 'Mode Hardcore', desc: 'Accès au mode Hardcore' },
+      cdlMode: { label: 'Mode CDL', desc: 'Accès au mode CDL' },
+      registration: { label: 'Inscriptions', desc: 'Nouvelles inscriptions' }
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <Power className="w-7 h-7 text-purple-400" />
+              Gestion de l'Application
+            </h2>
+            <p className="text-gray-400 mt-1">
+              Activez ou désactivez les fonctionnalités de l'application
+            </p>
+          </div>
+        </div>
+
+        {/* Maintenance Mode */}
+        <div className="bg-dark-800/50 border border-red-500/30 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-500/20 rounded-lg">
+                <AlertTriangle className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold">Mode Maintenance</h3>
+                <p className="text-gray-400 text-sm">Désactiver temporairement toute l'application</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_URL}/app-settings/admin/maintenance`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ enabled: !appSettings.maintenance?.enabled })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess(`Mode maintenance ${!appSettings.maintenance?.enabled ? 'activé' : 'désactivé'}`);
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur');
+                }
+              }}
+              className={`relative w-14 h-8 rounded-full transition-colors ${
+                appSettings.maintenance?.enabled ? 'bg-red-500' : 'bg-dark-700'
+              }`}
+            >
+              <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
+                appSettings.maintenance?.enabled ? 'translate-x-6' : ''
+              }`} />
+            </button>
+          </div>
+          {appSettings.maintenance?.enabled && (
+            <div className="mt-4 p-4 bg-red-500/10 rounded-lg">
+              <p className="text-red-400 text-sm flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                L'application est actuellement en maintenance
+              </p>
             </div>
           )}
+        </div>
 
-          {/* ==================== PURCHASES TAB ==================== */}
-          {activeTab === 'purchases' && (
-            <div>
-              <h2 className="text-lg font-semibold text-white mb-6">Historique des achats</h2>
+        {/* Feature Toggles */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Fonctionnalités
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(featureLabels).map(([key, { label, desc }]) => {
+              const feature = appSettings.features?.[key];
+              const isEnabled = feature?.enabled !== false;
               
-              {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+              return (
+                <div key={key} className="bg-dark-900/50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h4 className="text-white font-medium">{label}</h4>
+                      <p className="text-gray-500 text-xs">{desc}</p>
+                    </div>
+                    <button
+                      onClick={() => toggleFeature(key, !isEnabled)}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        isEnabled ? 'bg-green-500' : 'bg-dark-700'
+                      }`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                        isEnabled ? 'translate-x-6' : ''
+                      }`} />
+                    </button>
+                  </div>
+                  {!isEnabled && (
+                    <input
+                      type="text"
+                      placeholder="Message quand désactivé..."
+                      defaultValue={feature?.disabledMessage || ''}
+                      onBlur={(e) => {
+                        if (e.target.value !== feature?.disabledMessage) {
+                          updateFeatureMessage(key, e.target.value);
+                        }
+                      }}
+                      className="w-full mt-2 px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    />
+                  )}
                 </div>
-              ) : stats?.recentPurchases?.length > 0 ? (
-                <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 overflow-hidden">
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Global Alerts */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Bell className="w-5 h-5" />
+              Alertes Globales
+            </h3>
+            <button
+              onClick={() => {
+                const message = prompt('Message de l\'alerte:');
+                if (message) {
+                  fetch(`${API_URL}/app-settings/admin/alert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ type: 'info', message })
+                  }).then(r => r.json()).then(data => {
+                    if (data.success) {
+                      setSuccess('Alerte ajoutée');
+                      fetchAppSettings();
+                    }
+                  });
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Ajouter
+            </button>
+          </div>
+          
+          {appSettings.globalAlerts?.length > 0 ? (
+            <div className="space-y-3">
+              {appSettings.globalAlerts.map((alert) => (
+                <div key={alert.id} className={`p-4 rounded-lg flex items-center justify-between ${
+                  alert.type === 'error' ? 'bg-red-500/20 border border-red-500/30' :
+                  alert.type === 'warning' ? 'bg-orange-500/20 border border-orange-500/30' :
+                  alert.type === 'success' ? 'bg-green-500/20 border border-green-500/30' :
+                  'bg-blue-500/20 border border-blue-500/30'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className={`w-5 h-5 ${
+                      alert.type === 'error' ? 'text-red-400' :
+                      alert.type === 'warning' ? 'text-orange-400' :
+                      alert.type === 'success' ? 'text-green-400' :
+                      'text-blue-400'
+                    }`} />
+                    <span className="text-white">{alert.message}</span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const response = await fetch(`${API_URL}/app-settings/admin/alert/${alert.id}`, {
+                        method: 'DELETE',
+                        credentials: 'include'
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        fetchAppSettings();
+                      }
+                    }}
+                    className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-400 text-center py-4">Aucune alerte active</p>
+          )}
+        </div>
+
+        {/* Fixed Banner */}
+        <div className="bg-dark-800/50 border border-purple-500/30 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-500/20 rounded-lg">
+                <Megaphone className="w-6 h-6 text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold">Bannière Fixe</h3>
+                <p className="text-gray-400 text-sm">Affiche une bannière en haut de toutes les pages</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_URL}/app-settings/admin`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ 
+                      banner: { 
+                        ...appSettings.banner,
+                        enabled: !appSettings.banner?.enabled 
+                      }
+                    })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess(`Bannière ${!appSettings.banner?.enabled ? 'activée' : 'désactivée'}`);
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur');
+                }
+              }}
+              className={`relative w-14 h-8 rounded-full transition-colors ${
+                appSettings.banner?.enabled ? 'bg-purple-500' : 'bg-dark-700'
+              }`}
+            >
+              <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
+                appSettings.banner?.enabled ? 'translate-x-6' : ''
+              }`} />
+            </button>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Message de la bannière</label>
+              <input
+                type="text"
+                value={appSettings.banner?.message || ''}
+                onChange={(e) => setAppSettings({
+                  ...appSettings,
+                  banner: { ...appSettings.banner, message: e.target.value }
+                })}
+                placeholder="Ex: 🎉 Nouvelle saison disponible !"
+                className="w-full px-4 py-3 bg-dark-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Couleur de fond</label>
+                <select
+                  value={appSettings.banner?.bgColor || 'purple'}
+                  onChange={(e) => setAppSettings({
+                    ...appSettings,
+                    banner: { ...appSettings.banner, bgColor: e.target.value }
+                  })}
+                  className="w-full px-4 py-3 bg-dark-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="purple">Violet</option>
+                  <option value="blue">Bleu</option>
+                  <option value="green">Vert</option>
+                  <option value="orange">Orange</option>
+                  <option value="red">Rouge</option>
+                  <option value="cyan">Cyan</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Lien (optionnel)</label>
+                <input
+                  type="text"
+                  value={appSettings.banner?.link || ''}
+                  onChange={(e) => setAppSettings({
+                    ...appSettings,
+                    banner: { ...appSettings.banner, link: e.target.value }
+                  })}
+                  placeholder="/hardcore ou https://..."
+                  className="w-full px-4 py-3 bg-dark-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_URL}/app-settings/admin`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ banner: appSettings.banner })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess('Bannière mise à jour');
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur');
+                }
+              }}
+              className="w-full py-3 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              <Save className="w-5 h-5" />
+              Sauvegarder la bannière
+            </button>
+          </div>
+          
+          {appSettings.banner?.enabled && appSettings.banner?.message && (
+            <div className="mt-4">
+              <p className="text-gray-400 text-sm mb-2">Aperçu:</p>
+              <div className={`w-full py-2 px-4 rounded-lg text-center text-white font-medium ${
+                appSettings.banner?.bgColor === 'blue' ? 'bg-blue-500' :
+                appSettings.banner?.bgColor === 'green' ? 'bg-green-500' :
+                appSettings.banner?.bgColor === 'orange' ? 'bg-orange-500' :
+                appSettings.banner?.bgColor === 'red' ? 'bg-red-500' :
+                appSettings.banner?.bgColor === 'cyan' ? 'bg-cyan-500' :
+                'bg-purple-500'
+              }`}>
+                {appSettings.banner.message}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderRankings = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Classements</h2>
+          <select
+            value={filterMode}
+            onChange={(e) => {
+              setFilterMode(e.target.value);
+              setPage(1);
+            }}
+            className="px-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50"
+          >
+            <option value="hardcore">Hardcore</option>
+            <option value="cdl">CDL</option>
+          </select>
+                </div>
+
+        {/* Rankings Table */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Joueur</th>
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Produit</th>
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Prix</th>
-                        <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-4 py-3">Date</th>
+              <thead className="bg-dark-900/50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Rang</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Joueur</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Points</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Division</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">V/D</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">K/D</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Série</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                      {stats.recentPurchases.map((purchase) => (
-                        <tr key={purchase._id} className="hover:bg-white/5">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center space-x-3">
-                              <img 
-                                src={purchase.user?.discordAvatar ? `https://cdn.discordapp.com/avatars/${purchase.user?.discordId}/${purchase.user?.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'}
+                {rankings.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
+                      Aucun classement trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  rankings.map((ranking, index) => (
+                    <tr key={ranking._id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-white font-bold">#{(page - 1) * ITEMS_PER_PAGE + index + 1}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={ranking.user?.avatarUrl || '/avatar.jpg'}
                                 alt=""
-                                className="w-8 h-8 rounded-full"
+                            className="w-10 h-10 rounded-full"
                               />
-                              <span className="text-white font-medium">{purchase.user?.username || 'Unknown'}</span>
+                          <div>
+                            <p className="text-white font-medium">{ranking.user?.username || 'Inconnu'}</p>
+                          </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3">
-                            <span className="text-white">{purchase.item?.name || purchase.itemSnapshot?.name || 'N/A'}</span>
+                      <td className="px-6 py-4">
+                        <span className="text-white font-bold">{ranking.points || 0}</span>
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center space-x-1 text-yellow-400">
-                              <Coins className="w-4 h-4" />
-                              <span>{purchase.pricePaid}</span>
-                            </div>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs font-medium rounded bg-${
+                          ranking.division === 'elite' ? 'red' :
+                          ranking.division === 'master' ? 'purple' :
+                          ranking.division === 'diamond' ? 'blue' :
+                          ranking.division === 'platinum' ? 'cyan' :
+                          ranking.division === 'gold' ? 'yellow' :
+                          ranking.division === 'silver' ? 'gray' : 'orange'
+                        }-500/20 text-${
+                          ranking.division === 'elite' ? 'red' :
+                          ranking.division === 'master' ? 'purple' :
+                          ranking.division === 'diamond' ? 'blue' :
+                          ranking.division === 'platinum' ? 'cyan' :
+                          ranking.division === 'gold' ? 'yellow' :
+                          ranking.division === 'silver' ? 'gray' : 'orange'
+                        }-400`}>
+                          {ranking.division}
+                        </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <span className="text-gray-400">
-                              {new Date(purchase.createdAt).toLocaleDateString('fr-FR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+                      <td className="px-6 py-4">
+                        <span className="text-white">{ranking.wins || 0} / {ranking.losses || 0}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-white">{ranking.kd || '0.00'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`${ranking.currentStreak > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {ranking.currentStreak > 0 ? '+' : ''}{ranking.currentStreak || 0}
                             </span>
                           </td>
                         </tr>
-                      ))}
+                  ))
+                )}
                     </tbody>
                   </table>
                 </div>
-              ) : (
-                <div className="text-center py-12 bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20">
-                  <ShoppingBag className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-500">Aucun achat pour le moment</p>
                 </div>
-              )}
-            </div>
-          )}
 
-          {/* ==================== TROPHIES TAB ==================== */}
-          {activeTab === 'trophies' && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-white">Trophées ({trophies.length})</h2>
-                <div className="flex gap-3">
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2">
                   <button
-                    onClick={seedDefaultTrophies}
-                    className="flex items-center space-x-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                    <span>Créer trophées par défaut</span>
+              Précédent
                   </button>
+            <span className="text-gray-400">
+              Page {page} sur {totalPages}
+            </span>
                   <button
-                    onClick={() => openTrophyModal()}
-                    className="flex items-center space-x-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors"
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Nouveau trophée</span>
+              Suivant
                   </button>
                 </div>
+        )}
               </div>
+    );
+  };
 
-              {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+  const renderAnnouncements = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Annonces</h2>
+          <button
+            onClick={() => openCreateModal('announcement')}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            Nouvelle Annonce
+          </button>
                 </div>
-              ) : trophies.length > 0 ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {trophies.map((trophy) => {
-                    const rarityInfo = TROPHY_RARITIES.find(r => r.value === trophy.rarity) || TROPHY_RARITIES[0];
-                    const colorInfo = TROPHY_COLORS.find(c => c.value === trophy.color) || TROPHY_COLORS[0];
-                    const IconComponent = {
-                      Trophy, Award, Medal, Star, Crown, Shield, Zap, Target
-                    }[trophy.icon] || Trophy;
-                    
-                    return (
-                      <div 
-                        key={trophy._id}
-                        className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${trophy.color}-500/30 p-6 hover:border-${trophy.color}-500/50 transition-all`}
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div 
-                            className="w-14 h-14 rounded-xl flex items-center justify-center"
-                            style={{ 
-                              backgroundColor: colorInfo.hex + '30',
-                              border: `2px solid ${colorInfo.hex}50`
-                            }}
-                          >
-                            <IconComponent className="w-7 h-7" style={{ color: colorInfo.hex }} />
-                          </div>
+
+        {/* Announcements Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {announcements.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-8">
+              Aucune annonce trouvée
+            </div>
+          ) : (
+            announcements.map((announcement) => (
+              <div
+                key={announcement._id}
+                className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
+              >
+                <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center gap-2">
-                            {trophy.isDefault && (
-                              <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-medium">
-                                Défaut
+                    <Megaphone className="w-5 h-5 text-purple-400" />
+                    <span className={`px-2 py-1 text-xs font-medium rounded bg-${
+                      announcement.priority === 'critical' ? 'red' :
+                      announcement.priority === 'high' ? 'orange' :
+                      announcement.priority === 'normal' ? 'blue' : 'gray'
+                    }-500/20 text-${
+                      announcement.priority === 'critical' ? 'red' :
+                      announcement.priority === 'high' ? 'orange' :
+                      announcement.priority === 'normal' ? 'blue' : 'gray'
+                    }-400`}>
+                      {announcement.priority}
                               </span>
-                            )}
-                            {!trophy.isActive && (
-                              <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs font-medium">
+                    {announcement.isActive ? (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
+                        Actif
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
                                 Inactif
                               </span>
                             )}
-                            <span className={`px-2 py-1 bg-${rarityInfo.color}-500/20 text-${rarityInfo.color}-400 rounded text-xs font-medium`}>
-                              {rarityInfo.label}
-                            </span>
                           </div>
                         </div>
                         
-                        <h3 className="text-white font-bold text-lg mb-1">{trophy.name}</h3>
-                        <p className="text-gray-400 text-sm mb-4">{trophy.description}</p>
-                        
-                        <div className="flex items-center gap-2 pt-4 border-t border-white/10">
+                <h3 className="text-white font-bold mb-2">{announcement.title}</h3>
+                <p className="text-gray-400 text-sm mb-3 line-clamp-3">{announcement.content}</p>
+
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-4">
+                  <span>{announcement.type}</span>
+                  <span>{formatDate(announcement.createdAt)}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
                           <button
-                            onClick={() => openAssignTrophyModal(trophy)}
-                            className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors text-sm"
+                    onClick={() => openEditModal('announcement', announcement)}
+                    className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
                           >
-                            <UserPlus className="w-4 h-4" />
-                            Attribuer
+                    Modifier
                           </button>
                           <button
-                            onClick={() => openTrophyModal(trophy)}
-                            className="flex items-center justify-center p-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirm({ type: 'trophy', id: trophy._id, name: trophy.name })}
-                            className="flex items-center justify-center p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                    onClick={() => setDeleteConfirm({ type: 'announcement', id: announcement._id })}
+                    className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20">
-                  <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-500 mb-4">Aucun trophée créé</p>
-                  <button
-                    onClick={seedDefaultTrophies}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 rounded-lg transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Créer le trophée "La Bravoure"
-                  </button>
-                </div>
+            ))
               )}
             </div>
-          )}
+      </div>
+    );
+  };
 
-          {/* ==================== DISPUTES TAB ==================== */}
-          {activeTab === 'disputes' && (
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-white">Litiges en cours ({disputes.length})</h2>
+  const renderSeasons = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Saisons</h2>
                 <button
-                  onClick={fetchDisputes}
-                  className="flex items-center space-x-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 text-gray-300 rounded-lg transition-colors"
+            onClick={() => openCreateModal('season')}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
                 >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>Actualiser</span>
+            <Plus className="w-5 h-5" />
+            Nouvelle Saison
                 </button>
               </div>
 
-              {loading ? (
-                <div className="flex justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />
+        {/* Seasons Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {seasons.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-8">
+              Aucune saison trouvée
                 </div>
-              ) : disputes.length > 0 ? (
-                <div className="space-y-4">
-                  {disputes.map((match) => (
+          ) : (
+            seasons.map((season) => (
                     <div 
-                      key={match._id}
-                      className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-orange-500/30 p-6"
+                key={season._id}
+                className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
                     >
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                        {/* Match Info */}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-4 mb-3">
+                <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
-                              {match.challenger?.logo ? (
-                                <img src={match.challenger.logo} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                              ) : (
-                                <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center">
-                                  <Shield className="w-4 h-4 text-gray-500" />
+                    <Calendar className="w-5 h-5 text-purple-400" />
+                    <span className="text-white font-bold">Saison {season.number}</span>
                                 </div>
-                              )}
-                              <span className="text-white font-medium">{match.challenger?.name}</span>
+                  <span className={`px-2 py-1 text-xs font-medium rounded ${
+                    season.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                    season.status === 'upcoming' ? 'bg-blue-500/20 text-blue-400' :
+                    'bg-gray-500/20 text-gray-400'
+                  }`}>
+                    {season.status}
+                  </span>
                             </div>
-                            <span className="text-orange-400 font-bold">VS</span>
-                            <div className="flex items-center gap-2">
-                              {match.opponent?.logo ? (
-                                <img src={match.opponent.logo} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                              ) : (
-                                <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center">
-                                  <Shield className="w-4 h-4 text-gray-500" />
+
+                <h3 className="text-white font-bold mb-2">{season.name}</h3>
+                <div className="space-y-2 mb-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Mode</span>
+                    <span className="text-white">{season.mode}</span>
                                 </div>
-                              )}
-                              <span className="text-white font-medium">{match.opponent?.name}</span>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Début</span>
+                    <span className="text-white">{new Date(season.startDate).toLocaleDateString('fr-FR')}</span>
                             </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Fin</span>
+                    <span className="text-white">{new Date(season.endDate).toLocaleDateString('fr-FR')}</span>
                           </div>
-                          
-                          <div className="flex flex-wrap gap-2 text-xs mb-3">
-                            <span className="px-2 py-1 bg-dark-700 rounded text-gray-400">{match.gameMode}</span>
-                            <span className="px-2 py-1 bg-dark-700 rounded text-gray-400">{match.teamSize}v{match.teamSize}</span>
-                            <span className="px-2 py-1 bg-dark-700 rounded text-gray-400">{match.ladderId}</span>
                           </div>
 
-                          {match.dispute?.reason && (
-                            <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-                              <p className="text-orange-400 text-xs font-medium mb-1">Raison du litige:</p>
-                              <p className="text-gray-300 text-sm">{match.dispute.reason}</p>
-                              {match.dispute.reportedAt && (
-                                <p className="text-gray-500 text-xs mt-2">
-                                  Signalé le {new Date(match.dispute.reportedAt).toLocaleString()}
-                                </p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex flex-col gap-2 lg:min-w-[200px]">
+                <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleResolveDispute(match._id, match.challenger?._id)}
-                            className="w-full py-2 px-4 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg text-sm font-medium transition-colors"
+                    onClick={() => openEditModal('season', season)}
+                    className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
                           >
-                            🏆 {match.challenger?.name} gagne
+                    Modifier
                           </button>
                           <button
-                            onClick={() => handleResolveDispute(match._id, match.opponent?._id)}
-                            className="w-full py-2 px-4 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm font-medium transition-colors"
+                    onClick={() => setDeleteConfirm({ type: 'season', id: season._id })}
+                    className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
                           >
-                            🏆 {match.opponent?.name} gagne
+                    <Trash2 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleCancelDispute(match._id)}
-                            className="w-full py-2 px-4 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm font-medium transition-colors"
-                          >
-                            ✓ Annuler le litige
-                          </button>
-                          <a
-                            href={`/match/${match._id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full py-2 px-4 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-sm font-medium transition-colors text-center"
-                          >
-                            Voir la feuille de match
-                          </a>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-dark-900/80 backdrop-blur-xl rounded-xl border border-orange-500/20">
-                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-                  <p className="text-gray-400">Aucun litige en cours</p>
-                </div>
-              )}
-            </div>
+            ))
           )}
+                    </div>
+                </div>
+    );
+  };
+
+  const renderHub = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Posts du Hub</h2>
+                </div>
+
+        {/* Hub Posts Table */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-900/50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Titre</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Auteur</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Escouade</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {hubPosts.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
+                      Aucun post trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  hubPosts.map((post) => (
+                    <tr key={post._id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          post.type === 'recruitment' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
+                        }`}>
+                          {post.type === 'recruitment' ? 'Recrutement' : 'Recherche escouade'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-white font-medium max-w-xs truncate">{post.title}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <p className="text-white">{post.author?.username || 'Inconnu'}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        {post.squad ? (
+                          <p className="text-white">{post.squad.name}</p>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {post.isActive ? (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
+                            Actif
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
+                            Inactif
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-400 text-sm">
+                        {formatDate(post.createdAt)}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => setDeleteConfirm({ type: 'hubPost', id: post._id })}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+            </div>
+                      </td>
+                    </tr>
+                  ))
+          )}
+              </tbody>
+            </table>
         </div>
       </div>
+      </div>
+    );
+  };
 
-      {/* ==================== MODALS ==================== */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-8 overflow-y-auto">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setShowModal(false)}></div>
-          
-          <div className="relative w-full max-w-2xl bg-dark-900 border border-purple-500/20 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-dark-900 border-b border-white/10 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">
-                {modalType === 'shop' && (editingItem ? 'Modifier l\'article' : 'Nouvel article')}
-                {modalType === 'user' && 'Modifier l\'utilisateur'}
-                {modalType === 'gold' && 'Gérer les gold coins'}
-                {modalType === 'ban' && 'Bannir l\'utilisateur'}
-                {modalType === 'banDetails' && 'Détails du bannissement'}
-                {modalType === 'userStats' && 'Stats de jeu'}
-                {modalType === 'ranking' && 'Modifier le classement'}
-                {modalType === 'addPoints' && 'Ajouter/Retirer des points'}
-                {modalType === 'ladder' && (editingItem ? 'Modifier le ladder' : 'Nouveau ladder')}
-                {modalType === 'trophy' && (editingItem ? 'Modifier le trophée' : 'Nouveau trophée')}
-                {modalType === 'assignTrophy' && 'Attribuer le trophée'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white">
-                <X className="w-5 h-5" />
+  const renderMaps = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Cartes</h2>
+          <button
+            onClick={() => openCreateModal('map')}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            Nouvelle Carte
               </button>
             </div>
 
-            {/* Shop Form */}
-            {modalType === 'shop' && (
-              <form onSubmit={handleShopSubmit} className="p-6 space-y-6">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
-                    <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
+        {/* Maps Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {maps.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-8">
+              Aucune carte trouvée
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Catégorie *</label>
-                    <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
-                      {CATEGORIES.map(cat => <option key={cat.value} value={cat.value}>{cat.label}</option>)}
-                    </select>
+          ) : (
+            maps.map((map) => (
+              <div
+                key={map._id}
+                className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-all"
+              >
+                {map.image && (
+                  <div className="h-32 bg-dark-900 flex items-center justify-center overflow-hidden">
+                    <img src={map.image} alt={map.name} className="w-full h-full object-cover" />
                   </div>
+                )}
+                <div className="p-4">
+<h3 className="text-white font-bold mb-2">{map.name}</h3>
+                  <div className="space-y-2 mb-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-gray-400 text-xs">Ladders</span>
+                      <div className="flex flex-wrap gap-1">
+                        {map.ladders?.length > 0 ? map.ladders.map((ladder, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
+                            {ladder}
+                          </span>
+                        )) : <span className="text-gray-500 text-xs">Aucun</span>}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
-                  <textarea value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} required rows={3} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 resize-none" />
                 </div>
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Prix (Gold) *</label>
-                    <input type="number" value={formData.price} onChange={(e) => setFormData({...formData, price: parseInt(e.target.value) || 0})} required min="0" className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
+                    <div className="flex flex-col gap-1">
+                      <span className="text-gray-400 text-xs">Modes de jeu</span>
+                      <div className="flex flex-wrap gap-1">
+                        {map.gameModes?.length > 0 ? map.gameModes.map((mode, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs">
+                            {mode}
+                          </span>
+                        )) : <span className="text-gray-500 text-xs">Aucun</span>}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Ancien prix</label>
-                    <input type="number" value={formData.originalPrice} onChange={(e) => setFormData({...formData, originalPrice: e.target.value ? parseInt(e.target.value) : ''})} min="0" className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Stock (-1 = illimité)</label>
-                    <input type="number" value={formData.stock} onChange={(e) => setFormData({...formData, stock: parseInt(e.target.value)})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
                   </div>
-                </div>
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Rareté</label>
-                    <select value={formData.rarity} onChange={(e) => setFormData({...formData, rarity: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
-                      {RARITIES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Mode</label>
-                    <select value={formData.mode} onChange={(e) => setFormData({...formData, mode: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
-                      {MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Ordre</label>
-                    <input type="number" value={formData.sortOrder} onChange={(e) => setFormData({...formData, sortOrder: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">URL de l'image</label>
-                  <input type="url" value={formData.image} onChange={(e) => setFormData({...formData, image: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" placeholder="https://..." />
-                </div>
-                <div className="flex items-center space-x-3">
-                  <button type="button" onClick={() => setFormData({...formData, isActive: !formData.isActive})} className={`w-12 h-6 rounded-full transition-colors relative ${formData.isActive ? 'bg-green-500' : 'bg-gray-600'}`}>
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.isActive ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                  </button>
-                  <span className="text-gray-300">Article actif</span>
-                </div>
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving} className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /><span>{editingItem ? 'Modifier' : 'Créer'}</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
 
-            {/* User Form */}
-            {modalType === 'user' && (
-              <form onSubmit={handleUserSubmit} className="p-6 space-y-6">
-                <div className="flex items-center space-x-4 p-4 bg-dark-800/50 rounded-xl">
-                  <img src={editingItem?.discordAvatar ? `https://cdn.discordapp.com/avatars/${editingItem.discordId}/${editingItem.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} alt="" className="w-12 h-12 rounded-full" />
-                  <div>
-                    <p className="text-white font-medium">{editingItem?.username || editingItem?.discordUsername}</p>
-                    <p className="text-gray-500 text-sm">{editingItem?.discordUsername}</p>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-3">Rôles</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {ROLES.map(role => (
+                  <div className="flex items-center gap-2">
                       <button
-                        key={role.value}
-                        type="button"
-                        onClick={() => {
-                          const newRoles = formData.roles.includes(role.value)
-                            ? formData.roles.filter(r => r !== role.value)
-                            : [...formData.roles, role.value];
-                          if (newRoles.length === 0) newRoles.push('user');
-                          setFormData({...formData, roles: newRoles});
-                        }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${
-                          formData.roles.includes(role.value)
-                            ? `bg-${role.color}-500/20 text-${role.color}-400 border-${role.color}-500/50`
-                            : 'bg-dark-800 text-gray-400 border-white/10 hover:border-white/30'
-                        }`}
-                      >
-                        {role.label}
+                      onClick={() => openEditModal('map', map)}
+                      className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
+                    >
+                      Modifier
                       </button>
-                    ))}
+                    <button
+                      onClick={() => setDeleteConfirm({ type: 'map', id: map._id })}
+                      className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving} className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /><span>Sauvegarder</span></>}
-                  </button>
                 </div>
-              </form>
-            )}
-
-            {/* Gold Form */}
-            {modalType === 'gold' && (
-              <form onSubmit={handleGoldSubmit} className="p-6 space-y-6">
-                <div className="flex items-center space-x-4 p-4 bg-dark-800/50 rounded-xl">
-                  <img src={editingItem?.discordAvatar ? `https://cdn.discordapp.com/avatars/${editingItem.discordId}/${editingItem.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} alt="" className="w-12 h-12 rounded-full" />
-                  <div className="flex-1">
-                    <p className="text-white font-medium">{editingItem?.username || editingItem?.discordUsername}</p>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <Coins className="w-4 h-4 text-yellow-400" />
-                      <span className="text-yellow-400 font-bold">{editingItem?.goldCoins || 0}</span>
-                      <span className="text-gray-500 text-sm">actuellement</span>
+            ))
+          )}
                     </div>
                   </div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Montant à ajouter/retirer</label>
-                  <div className="flex space-x-2">
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: -100})} className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">-100</button>
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: -50})} className="px-3 py-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30">-50</button>
-                    <input
-                      type="number"
-                      value={formData.goldAmount}
-                      onChange={(e) => setFormData({...formData, goldAmount: parseInt(e.target.value) || 0})}
-                      className="flex-1 px-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-center focus:outline-none focus:border-yellow-500/50"
-                      placeholder="0"
-                    />
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: 50})} className="px-3 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">+50</button>
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: 100})} className="px-3 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">+100</button>
+    );
+  };
+
+  const renderConfig = () => {
+    if (!config || !editedConfig) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
                   </div>
-                  <div className="flex space-x-2 mt-2">
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: 500})} className="flex-1 px-3 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">+500</button>
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: 1000})} className="flex-1 px-3 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30">+1000</button>
-                    <button type="button" onClick={() => setFormData({...formData, goldAmount: 5000})} className="flex-1 px-3 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30">+5000</button>
+      );
+    }
+
+    const handleSaveConfig = async () => {
+      try {
+        setSaving(true);
+        const response = await fetch(`${API_URL}/config/admin`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(editedConfig)
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setSuccess('Configuration sauvegardée avec succès');
+          setConfig(data.config);
+          setEditedConfig(data.config);
+        } else {
+          setError(data.message || 'Erreur lors de la sauvegarde');
+        }
+      } catch (err) {
+        console.error('Save config error:', err);
+        setError('Erreur lors de la sauvegarde');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const handleResetRankings = async (mode) => {
+      if (!window.confirm(`Voulez-vous vraiment réinitialiser tous les classements ${mode} ? Cette action est irréversible!`)) {
+        return;
+      }
+
+      try {
+        setSaving(true);
+        const response = await fetch(`${API_URL}/rankings/admin/reset/${mode}`, {
+          method: 'POST',
+          credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setSuccess(`Classements ${mode} réinitialisés avec succès`);
+        } else {
+          setError(data.message || 'Erreur lors de la réinitialisation');
+        }
+      } catch (err) {
+        console.error('Reset rankings error:', err);
+        setError('Erreur lors de la réinitialisation');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-white">Configuration Globale</h2>
+
+        {/* Reset Rankings */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <RefreshCw className="w-5 h-5" />
+            Réinitialisation des Classements
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Réinitialisez manuellement les classements (normalement fait automatiquement le 1er de chaque mois)
+          </p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => handleResetRankings('hardcore')}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className="w-5 h-5" />
+              Reset Hardcore
+            </button>
+            <button
+              onClick={() => handleResetRankings('cdl')}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className="w-5 h-5" />
+              Reset CDL
+            </button>
                   </div>
                 </div>
 
+        {/* Squad Match Rewards */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Settings className="w-5 h-5" />
+            Récompenses Matchs Squad (Ladder)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Raison (optionnel)</label>
-                  <input
-                    type="text"
-                    value={formData.goldReason}
-                    onChange={(e) => setFormData({...formData, goldReason: e.target.value})}
-                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-yellow-500/50"
-                    placeholder="Cadeau, compensation, événement..."
+              <label className="block text-sm font-medium text-gray-400 mb-2">Points Ladder (Victoire)</label>
+              <input
+                type="number"
+                value={editedConfig.squadMatchRewards?.ladderPointsWin || 0}
+                onChange={(e) => setEditedConfig({
+                  ...editedConfig,
+                  squadMatchRewards: {
+                    ...editedConfig.squadMatchRewards,
+                    ladderPointsWin: parseInt(e.target.value) || 0
+                  }
+                })}
+                className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:border-purple-500 focus:outline-none"
                   />
                 </div>
-
-                {formData.goldAmount !== 0 && (
-                  <div className={`p-4 rounded-xl ${formData.goldAmount > 0 ? 'bg-green-500/10 border border-green-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
-                    <p className={`text-center font-medium ${formData.goldAmount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      Nouveau solde: {Math.max(0, (editingItem?.goldCoins || 0) + formData.goldAmount)} gold
-                    </p>
-                  </div>
-                )}
-
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving || formData.goldAmount === 0} className="flex-1 py-3 px-4 bg-gradient-to-r from-yellow-500 to-amber-500 text-yellow-900 font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Coins className="w-5 h-5" /><span>Appliquer</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Ban Form */}
-            {modalType === 'ban' && (
-              <form onSubmit={handleBanSubmit} className="p-6 space-y-6">
-                <div className="flex items-center space-x-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                  <img src={editingItem?.discordAvatar ? `https://cdn.discordapp.com/avatars/${editingItem.discordId}/${editingItem.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} alt="" className="w-12 h-12 rounded-full" />
                   <div>
-                    <p className="text-white font-medium">{editingItem?.username || editingItem?.discordUsername}</p>
-                    <p className="text-red-400 text-sm">Sera banni de la plateforme</p>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                  <div className="flex items-start space-x-3">
-                    <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
-                    <div>
-                      <p className="text-red-400 font-medium">Attention</p>
-                      <p className="text-gray-400 text-sm">L'utilisateur ne pourra plus accéder à la plateforme. Cette action peut être annulée.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Raison du bannissement *</label>
-                  <textarea
-                    value={formData.banReason}
-                    onChange={(e) => setFormData({...formData, banReason: e.target.value})}
-                    required
-                    rows={3}
-                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-red-500/50 resize-none"
-                    placeholder="Décrivez la raison du bannissement..."
-                  />
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Date de début du ban</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Points Ladder (Défaite)</label>
                     <input
-                      type="datetime-local"
-                      value={formData.banStartDate || ''}
-                      onChange={(e) => setFormData({...formData, banStartDate: e.target.value})}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-red-500/50"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Par défaut : maintenant
-                    </p>
+                type="number"
+                value={editedConfig.squadMatchRewards?.ladderPointsLoss || 0}
+                onChange={(e) => setEditedConfig({
+                  ...editedConfig,
+                  squadMatchRewards: {
+                    ...editedConfig.squadMatchRewards,
+                    ladderPointsLoss: parseInt(e.target.value) || 0
+                  }
+                })}
+                className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:border-purple-500 focus:outline-none"
+              />
                   </div>
-                  
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Date de fin du ban</label>
+              <label className="block text-sm font-medium text-gray-400 mb-2">Coins (Victoire)</label>
                     <input
-                      type="datetime-local"
-                      value={formData.banEndDate || ''}
-                      onChange={(e) => setFormData({...formData, banEndDate: e.target.value})}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-red-500/50"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Laissez vide pour permanent
-                    </p>
+                type="number"
+                value={editedConfig.squadMatchRewards?.playerCoinsWin || 0}
+                onChange={(e) => setEditedConfig({
+                  ...editedConfig,
+                  squadMatchRewards: {
+                    ...editedConfig.squadMatchRewards,
+                    playerCoinsWin: parseInt(e.target.value) || 0
+                  }
+                })}
+                className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:border-purple-500 focus:outline-none"
+              />
                   </div>
                 </div>
-                
-                {/* Quick shortcuts */}
-                <div className="flex flex-wrap gap-2">
-                  <span className="text-xs text-gray-500">Raccourcis :</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      const end = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-                      setFormData({
-                        ...formData,
-                        banStartDate: now.toISOString().slice(0, 16),
-                        banEndDate: end.toISOString().slice(0, 16)
-                      });
-                    }}
-                    className="px-2 py-1 bg-dark-800 text-gray-300 text-xs rounded hover:bg-dark-700 transition-colors"
-                  >
-                    24h
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      const end = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                      setFormData({
-                        ...formData,
-                        banStartDate: now.toISOString().slice(0, 16),
-                        banEndDate: end.toISOString().slice(0, 16)
-                      });
-                    }}
-                    className="px-2 py-1 bg-dark-800 text-gray-300 text-xs rounded hover:bg-dark-700 transition-colors"
-                  >
-                    7 jours
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      const end = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-                      setFormData({
-                        ...formData,
-                        banStartDate: now.toISOString().slice(0, 16),
-                        banEndDate: end.toISOString().slice(0, 16)
-                      });
-                    }}
-                    className="px-2 py-1 bg-dark-800 text-gray-300 text-xs rounded hover:bg-dark-700 transition-colors"
-                  >
-                    30 jours
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const now = new Date();
-                      setFormData({
-                        ...formData,
-                        banStartDate: now.toISOString().slice(0, 16),
-                        banEndDate: ''
-                      });
-                    }}
-                    className="px-2 py-1 bg-dark-800 text-gray-300 text-xs rounded hover:bg-dark-700 transition-colors"
-                  >
-                    Permanent
-                  </button>
                 </div>
 
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving || !formData.banReason} className="flex-1 py-3 px-4 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Ban className="w-5 h-5" /><span>Bannir l'utilisateur</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Ban Details Modal */}
-            {modalType === 'banDetails' && banDetails && (
-              <div className="p-6 space-y-6">
-                {/* User info */}
-                <div className="flex items-center space-x-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                  <img 
-                    src={banDetails.discordAvatar ? `https://cdn.discordapp.com/avatars/${banDetails.discordId}/${banDetails.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} 
-                    alt="" 
-                    className="w-12 h-12 rounded-full"
-                  />
-                  <div>
-                    <p className="text-white font-medium">{banDetails.username || banDetails.discordUsername}</p>
-                    <p className="text-red-400 text-sm">Utilisateur banni</p>
-                  </div>
-                </div>
-
-                {/* Ban info grid */}
-                <div className="grid md:grid-cols-2 gap-4">
-                  {/* Raison */}
-                  <div className="md:col-span-2 p-4 bg-dark-800/50 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="w-4 h-4 text-red-400" />
-                      <p className="text-sm font-medium text-gray-400">Raison du bannissement</p>
-                    </div>
-                    <p className="text-white">{banDetails.banReason || 'Non spécifiée'}</p>
-                  </div>
-
-                  {/* Banni par */}
-                  <div className="p-4 bg-dark-800/50 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Shield className="w-4 h-4 text-purple-400" />
-                      <p className="text-sm font-medium text-gray-400">Banni par</p>
-                    </div>
-                    <p className="text-white">{banDetails.bannedBy?.username || 'Système'}</p>
-                  </div>
-
-                  {/* Date de début */}
-                  <div className="p-4 bg-dark-800/50 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Calendar className="w-4 h-4 text-blue-400" />
-                      <p className="text-sm font-medium text-gray-400">Date de début</p>
-                    </div>
-                    <p className="text-white">
-                      {banDetails.bannedAt ? new Date(banDetails.bannedAt).toLocaleDateString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      }) : 'Inconnue'}
-                    </p>
-                  </div>
-
-                  {/* Date de fin */}
-                  <div className="md:col-span-2 p-4 bg-dark-800/50 rounded-xl">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Clock className="w-4 h-4 text-orange-400" />
-                      <p className="text-sm font-medium text-gray-400">Date de fin</p>
-                    </div>
-                    {banDetails.banExpiresAt ? (
+        {/* Ranked Match Rewards */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5" />
+            Récompenses Matchs Classés (Ranked)
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">Configuration des points et coins par mode et type de jeu</p>
+          <div className="space-y-6">
+            {editedConfig.rankedMatchRewards && Object.keys(editedConfig.rankedMatchRewards).map((mode) => (
+              <div key={mode} className="bg-dark-900/50 rounded-lg p-4">
+                <h4 className="text-white font-medium mb-4 capitalize flex items-center gap-2">
+                  {mode === 'hardcore' ? '🔥' : '🎯'} {mode}
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {Object.keys(editedConfig.rankedMatchRewards[mode]).map((gameMode) => (
+                    <div key={gameMode} className="bg-dark-800 rounded-lg p-4 space-y-3">
+                      <p className="text-white font-medium mb-2 text-sm border-b border-white/10 pb-2">{gameMode}</p>
+                      
                       <div>
-                        <p className="text-white mb-1">
-                          {new Date(banDetails.banExpiresAt).toLocaleDateString('fr-FR', {
-                            weekday: 'long',
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(banDetails.banExpiresAt) > new Date() 
-                            ? `Expire dans ${Math.ceil((new Date(banDetails.banExpiresAt) - new Date()) / (1000 * 60 * 60 * 24))} jour(s)`
-                            : 'Expiré (déban automatique en attente)'}
-                        </p>
+                        <label className="text-gray-400 text-xs block mb-1">Points Victoire</label>
+                        <input
+                          type="number"
+                          value={editedConfig.rankedMatchRewards[mode][gameMode].pointsWin || 0}
+                          onChange={(e) => {
+                            const newConfig = { ...editedConfig };
+                            newConfig.rankedMatchRewards[mode][gameMode].pointsWin = parseInt(e.target.value) || 0;
+                            setEditedConfig(newConfig);
+                          }}
+                          className="w-full px-2 py-1 bg-dark-900 border border-green-500/30 rounded text-green-400 text-sm focus:border-green-500 focus:outline-none"
+                        />
                       </div>
-                    ) : (
-                      <p className="text-red-400 font-medium">Bannissement permanent</p>
-                    )}
+                      
+                      <div>
+                        <label className="text-gray-400 text-xs block mb-1">Points Défaite</label>
+                        <input
+                          type="number"
+                          value={editedConfig.rankedMatchRewards[mode][gameMode].pointsLoss || 0}
+                          onChange={(e) => {
+                            const newConfig = { ...editedConfig };
+                            newConfig.rankedMatchRewards[mode][gameMode].pointsLoss = parseInt(e.target.value) || 0;
+                            setEditedConfig(newConfig);
+                          }}
+                          className="w-full px-2 py-1 bg-dark-900 border border-red-500/30 rounded text-red-400 text-sm focus:border-red-500 focus:outline-none"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="text-gray-400 text-xs block mb-1">Coins Victoire</label>
+                        <input
+                          type="number"
+                          value={editedConfig.rankedMatchRewards[mode][gameMode].coinsWin || 0}
+                          onChange={(e) => {
+                            const newConfig = { ...editedConfig };
+                            newConfig.rankedMatchRewards[mode][gameMode].coinsWin = parseInt(e.target.value) || 0;
+                            setEditedConfig(newConfig);
+                          }}
+                          className="w-full px-2 py-1 bg-dark-900 border border-yellow-500/30 rounded text-yellow-400 text-sm focus:border-yellow-500 focus:outline-none"
+                        />
+                      </div>
+                </div>
+                  ))}
                   </div>
                 </div>
+            ))}
+                    </div>
+                  </div>
 
-                {/* Actions */}
-                <div className="flex space-x-3 pt-4">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowModal(false)} 
-                    className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
-                  >
-                    Fermer
-                  </button>
-                  <button 
-                    onClick={() => {
-                      handleUnbanUser(banDetails._id);
-                      setShowModal(false);
+        {/* Staff Admin Access Control */}
+        <div className="bg-dark-800/50 border border-purple-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-purple-400" />
+            Accès Staff au Panel Admin
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Contrôlez les onglets accessibles aux comptes avec le rôle "staff"
+          </p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { key: 'overview', label: 'Vue d\'ensemble' },
+              { key: 'users', label: 'Utilisateurs' },
+              { key: 'squads', label: 'Escouades' },
+              { key: 'disputes', label: 'Litiges' },
+              { key: 'announcements', label: 'Annonces' },
+              { key: 'hub', label: 'Hub' },
+              { key: 'maps', label: 'Cartes' },
+              { key: 'gamerules', label: 'Règles de Jeu' }
+            ].map(({ key, label }) => {
+              const isEnabled = appSettings?.staffAdminAccess?.[key] !== false;
+              return (
+                <div key={key} className="flex items-center justify-between bg-dark-900/50 rounded-lg p-3">
+                  <span className="text-white text-sm">{label}</span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`${API_URL}/app-settings/admin`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            staffAdminAccess: {
+                              ...appSettings?.staffAdminAccess,
+                              [key]: !isEnabled
+                            }
+                          })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                          setSuccess(`Accès ${label} ${!isEnabled ? 'activé' : 'désactivé'} pour le staff`);
+                          fetchAppSettings();
+                        }
+                      } catch (err) {
+                        setError('Erreur');
+                      }
                     }}
-                    className="flex-1 py-3 px-4 bg-green-500 text-white font-medium rounded-xl hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                    className={`relative w-10 h-5 rounded-full transition-colors ${
+                      isEnabled ? 'bg-purple-500' : 'bg-dark-700'
+                    }`}
                   >
-                    <UserCheck className="w-5 h-5" />
-                    <span>Débannir maintenant</span>
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                      isEnabled ? 'translate-x-5' : ''
+                    }`} />
                   </button>
                 </div>
-              </div>
-            )}
+              );
+            })}
+          </div>
+        </div>
 
-            {/* User Game Stats Modal */}
-            {modalType === 'userStats' && (
-              <div className="p-6 space-y-6">
-                {/* User info header */}
-                <div className="flex items-center space-x-4 p-4 bg-dark-800/50 rounded-xl">
-                  <img 
-                    src={editingItem?.discordAvatar ? `https://cdn.discordapp.com/avatars/${editingItem.discordId}/${editingItem.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} 
-                    alt="" 
-                    className="w-14 h-14 rounded-full border-2 border-cyan-500/50" 
-                  />
-                  <div>
-                    <p className="text-white font-bold text-lg">{editingItem?.username || editingItem?.discordUsername}</p>
-                    <p className="text-gray-500 text-sm">@{editingItem?.discordUsername}</p>
-                  </div>
-                </div>
-
-                {loadingStats ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
-                  </div>
+        {/* Info */}
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <Bell className="w-5 h-5 text-purple-400 mt-0.5" />
+                      <div className="flex-1">
+              <p className="text-purple-400 font-medium mb-1">Sauvegarde de configuration</p>
+              <p className="text-gray-400 text-sm">
+                N'oubliez pas de sauvegarder vos modifications après les avoir effectuées.
+                        </p>
+                      </div>
+              <button
+                onClick={handleSaveConfig}
+                disabled={saving}
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all disabled:opacity-50 font-medium"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Sauvegarde...
+                  </>
                 ) : (
-                  <div className="space-y-6">
-                    {/* Stats Hardcore */}
-                    <div className="p-4 bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-500/30 rounded-xl">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
-                          <Skull className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold">Mode Hardcore</h3>
-                          <p className="text-gray-500 text-xs">Saison 1</p>
-                        </div>
-                      </div>
-
-                      {userGameStats?.hardcore ? (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-red-400">#{userGameStats.hardcore.rank || '-'}</p>
-                            <p className="text-xs text-gray-500 uppercase">Rang</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-white">{userGameStats.hardcore.points || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Points</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-green-400">{userGameStats.hardcore.wins || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Victoires</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-red-400">{userGameStats.hardcore.losses || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Défaites</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-yellow-400">
-                              {userGameStats.hardcore.wins + userGameStats.hardcore.losses > 0 
-                                ? Math.round((userGameStats.hardcore.wins / (userGameStats.hardcore.wins + userGameStats.hardcore.losses)) * 100) + '%'
-                                : '0%'}
-                            </p>
-                            <p className="text-xs text-gray-500 uppercase">Win Rate</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-cyan-400">{userGameStats.hardcore.kills || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Kills</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-gray-400">{userGameStats.hardcore.deaths || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Deaths</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-purple-400">
-                              {userGameStats.hardcore.deaths > 0 
-                                ? (userGameStats.hardcore.kills / userGameStats.hardcore.deaths).toFixed(2)
-                                : userGameStats.hardcore.kills?.toFixed(2) || '0.00'}
-                            </p>
-                            <p className="text-xs text-gray-500 uppercase">K/D</p>
-                          </div>
-                          <div className="col-span-2 text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-orange-400 capitalize">{userGameStats.hardcore.division || 'Bronze'}</p>
-                            <p className="text-xs text-gray-500 uppercase">Division</p>
-                          </div>
-                          <div className="col-span-2 text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-amber-400">🔥 {userGameStats.hardcore.currentStreak || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Série actuelle (max: {userGameStats.hardcore.bestStreak || 0})</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-8">
-                          <Swords className="w-12 h-12 text-gray-600 mx-auto mb-2" />
-                          <p className="text-gray-500">Aucune donnée de classement</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Stats CDL */}
-                    <div className="p-4 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-xl">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
-                          <Trophy className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold">Mode CDL</h3>
-                          <p className="text-gray-500 text-xs">Saison 1</p>
-                        </div>
-                      </div>
-
-                      {userGameStats?.cdl ? (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-cyan-400">#{userGameStats.cdl.rank || '-'}</p>
-                            <p className="text-xs text-gray-500 uppercase">Rang</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-white">{userGameStats.cdl.points || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Points</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-green-400">{userGameStats.cdl.wins || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Victoires</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-red-400">{userGameStats.cdl.losses || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Défaites</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-yellow-400">
-                              {userGameStats.cdl.wins + userGameStats.cdl.losses > 0 
-                                ? Math.round((userGameStats.cdl.wins / (userGameStats.cdl.wins + userGameStats.cdl.losses)) * 100) + '%'
-                                : '0%'}
-                            </p>
-                            <p className="text-xs text-gray-500 uppercase">Win Rate</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-cyan-400">{userGameStats.cdl.kills || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Kills</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-gray-400">{userGameStats.cdl.deaths || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Deaths</p>
-                          </div>
-                          <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-purple-400">
-                              {userGameStats.cdl.deaths > 0 
-                                ? (userGameStats.cdl.kills / userGameStats.cdl.deaths).toFixed(2)
-                                : userGameStats.cdl.kills?.toFixed(2) || '0.00'}
-                            </p>
-                            <p className="text-xs text-gray-500 uppercase">K/D</p>
-                          </div>
-                          <div className="col-span-2 text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-blue-400 capitalize">{userGameStats.cdl.division || 'Bronze'}</p>
-                            <p className="text-xs text-gray-500 uppercase">Division</p>
-                          </div>
-                          <div className="col-span-2 text-center p-3 bg-dark-800/50 rounded-lg">
-                            <p className="text-2xl font-bold text-amber-400">🔥 {userGameStats.cdl.currentStreak || 0}</p>
-                            <p className="text-xs text-gray-500 uppercase">Série actuelle (max: {userGameStats.cdl.bestStreak || 0})</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-center py-8">
-                          <Swords className="w-12 h-12 text-gray-600 mx-auto mb-2" />
-                          <p className="text-gray-500">Aucune donnée de classement</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Infos supplémentaires */}
-                    <div className="p-4 bg-dark-800/50 rounded-xl">
-                      <h3 className="text-white font-bold mb-3 flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5 text-purple-400" />
-                        Informations du compte
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Gold Coins</span>
-                          <span className="text-yellow-400 font-bold">{editingItem?.goldCoins || 0}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Profil complet</span>
-                          <span className={editingItem?.isProfileComplete ? 'text-green-400' : 'text-red-400'}>
-                            {editingItem?.isProfileComplete ? 'Oui' : 'Non'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Membre depuis</span>
-                          <span className="text-white">
-                            {editingItem?.createdAt ? new Date(editingItem.createdAt).toLocaleDateString('fr-FR') : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Statut</span>
-                          <span className={editingItem?.isBanned ? 'text-red-400' : 'text-green-400'}>
-                            {editingItem?.isBanned ? 'Banni' : 'Actif'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <>
+                    <Save className="w-4 h-4" />
+                    Sauvegarder
+                  </>
                 )}
-
-                <div className="flex justify-end pt-4">
-                  <button 
-                    onClick={() => setShowModal(false)} 
-                    className="py-3 px-6 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
-                  >
-                    Fermer
-                  </button>
+              </button>
+                  </div>
                 </div>
+      </div>
+    );
+  };
+
+  const renderGameRules = () => {
+    // Integrated Game Mode Rules Editor
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Règles de Jeu</h2>
+        </div>
+        
+        {/* Integrated Game Mode Rules Editor */}
+        <GameModeRulesEditor />
+      </div>
+    );
+  };
+
+  const renderSystem = () => {
+    const handleFullReset = async () => {
+      if (confirmText !== 'RESET ALL') {
+        setError('Vous devez taper "RESET ALL" pour confirmer');
+        return;
+      }
+
+      if (!window.confirm('ATTENTION: Cette action supprimera TOUTES les données (utilisateurs, escouades, matchs, classements, etc.) sauf les règles de jeu, les cartes et la configuration. Êtes-vous absolument sûr ?')) {
+        return;
+      }
+
+      try {
+        setResetting(true);
+        const response = await fetch(`${API_URL}/system/admin/reset-all`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ confirmation: 'RESET ALL' })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setSuccess('Système réinitialisé avec succès');
+          setConfirmText('');
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else {
+          setError(data.message || 'Erreur lors de la réinitialisation');
+        }
+      } catch (err) {
+        console.error('System reset error:', err);
+        setError('Erreur lors de la réinitialisation');
+      } finally {
+        setResetting(false);
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-white">Gestion Système</h2>
+
+        {/* Danger Zone */}
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5" />
+            Zone Dangereuse
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <p className="text-white font-medium mb-2">Réinitialisation Complète du Système</p>
+              <p className="text-gray-400 text-sm mb-4">
+                Cette action supprimera TOUTES les données suivantes:
+              </p>
+              <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside mb-4">
+                <li>Tous les utilisateurs (sauf admins)</li>
+                <li>Toutes les escouades</li>
+                <li>Tous les matchs (ladder et classés)</li>
+                <li>Tous les classements</li>
+                <li>Tous les posts du hub</li>
+                <li>Toutes les annonces</li>
+                <li>Tous les achats et utilisations d'items</li>
+                <li>Toutes les saisons</li>
+              </ul>
+              <p className="text-yellow-400 text-sm font-medium mb-4">
+                ⚠️ Données PRÉSERVÉES: Règles de jeu, Cartes, Items de boutique, Trophées, Configuration (points/coins)
+              </p>
+                    </div>
+
+                        <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Tapez "RESET ALL" pour confirmer
+              </label>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="RESET ALL"
+                className="w-full px-4 py-3 bg-dark-800 border border-red-500/30 rounded-xl text-white focus:outline-none focus:border-red-500"
+              />
+                      </div>
+
+            <button
+              onClick={handleFullReset}
+              disabled={resetting || confirmText !== 'RESET ALL'}
+              className="w-full py-3 px-4 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              {resetting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Réinitialisation en cours...
+                </>
+              ) : (
+                <>
+                  <Skull className="w-5 h-5" />
+                  RÉINITIALISER TOUT LE SYSTÈME
+                </>
+              )}
+            </button>
+          </div>
+                    </div>
+
+        {/* System Info */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Database className="w-5 h-5" />
+            Informations Système
+                      </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-400">Version de la plateforme:</span>
+              <span className="text-white ml-2 font-medium">2.0.0</span>
+                        </div>
+            <div>
+              <span className="text-gray-400">Environnement:</span>
+              <span className="text-white ml-2 font-medium">Production</span>
+                        </div>
+                        </div>
+                        </div>
+                      </div>
+    );
+  };
+
+  const renderModalForm = () => {
+    switch (modalType) {
+      case 'user':
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Username *</label>
+              <input
+                type="text"
+                value={formData.username || ''}
+                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                required
+              />
+                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Gold Coins</label>
+              <input
+                type="number"
+                value={formData.goldCoins || 500}
+                onChange={(e) => setFormData({ ...formData, goldCoins: parseInt(e.target.value) })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              />
               </div>
-            )}
-
-            {/* Ranking Form */}
-            {modalType === 'ranking' && (
-              <form onSubmit={handleRankingSubmit} className="p-6 space-y-6">
-                <div className="flex items-center space-x-4 p-4 bg-dark-800/50 rounded-xl">
-                  <img src={editingItem?.user?.discordAvatar || editingItem?.userInfo?.discordAvatar ? `https://cdn.discordapp.com/avatars/${editingItem?.user?.discordId || editingItem?.userInfo?.discordId}/${editingItem?.user?.discordAvatar || editingItem?.userInfo?.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} alt="" className="w-12 h-12 rounded-full" />
                   <div>
-                    <p className="text-white font-medium">{editingItem?.user?.username || editingItem?.userInfo?.username}</p>
-                    <p className="text-gray-500 text-sm capitalize">{editingItem?.mode}</p>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Rôles</label>
+              <div className="space-y-2">
+                {['user', 'staff', 'gerant_cdl', 'gerant_hardcore', 'admin'].map((role) => (
+                  <label key={role} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={formData.roles?.includes(role) || false}
+                      onChange={(e) => {
+                        const currentRoles = formData.roles || ['user'];
+                        if (e.target.checked) {
+                          setFormData({ ...formData, roles: [...currentRoles, role] });
+                        } else {
+                          setFormData({ ...formData, roles: currentRoles.filter(r => r !== role) });
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-white capitalize">{role}</span>
+                  </label>
+                ))}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+          </>
+        );
+
+      case 'squad':
+        return (
+          <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Points</label>
-                    <input type="number" value={formData.points} onChange={(e) => setFormData({...formData, points: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
+              <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
+              <input
+                type="text"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                required
+              />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Division</label>
-                    <select value={formData.division} onChange={(e) => setFormData({...formData, division: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
-                      {DIVISIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              <label className="block text-sm font-medium text-gray-300 mb-2">Tag *</label>
+              <input
+                type="text"
+                value={formData.tag || ''}
+                onChange={(e) => setFormData({ ...formData, tag: e.target.value.toUpperCase() })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                maxLength={5}
+                required
+              />
+                  </div>
+                  <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+              <textarea
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                rows={3}
+              />
+                  </div>
+                  <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Mode</label>
+              <select
+                value={formData.mode || 'both'}
+                onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              >
+                <option value="hardcore">Hardcore</option>
+                <option value="cdl">CDL</option>
+                <option value="both">Les deux</option>
+              </select>
+                  </div>
+                  <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Couleur</label>
+              <input
+                type="color"
+                value={formData.color || '#ef4444'}
+                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                className="w-full h-12 px-4 py-2 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              />
+                  </div>
+                  <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Membres max</label>
+              <input
+                type="number"
+                value={formData.maxMembers || 10}
+                onChange={(e) => setFormData({ ...formData, maxMembers: parseInt(e.target.value) })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                min={2}
+                max={20}
+              />
+                  </div>
+          </>
+        );
+
+      case 'shopItem':
+        return (
+          <>
+                <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
+              <input
+                type="text"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                required
+              />
+                </div>
+                <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
+              <textarea
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                rows={3}
+                required
+              />
+                </div>
+            <div className="grid grid-cols-2 gap-4">
+                  <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Catégorie</label>
+                <select
+                  value={formData.category || 'other'}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="avatar_frame">Cadre Avatar</option>
+                  <option value="ornament">Ornement</option>
+                  <option value="badge">Badge</option>
+                  <option value="title">Titre</option>
+                  <option value="boost">Boost</option>
+                  <option value="cosmetic">Cosmétique</option>
+                  <option value="emote">Emote</option>
+                  <option value="other">Autre</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Victoires</label>
-                    <input type="number" value={formData.wins} onChange={(e) => setFormData({...formData, wins: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Défaites</label>
-                    <input type="number" value={formData.losses} onChange={(e) => setFormData({...formData, losses: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Kills</label>
-                    <input type="number" value={formData.kills} onChange={(e) => setFormData({...formData, kills: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Deaths</label>
-                    <input type="number" value={formData.deaths} onChange={(e) => setFormData({...formData, deaths: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" />
+                <label className="block text-sm font-medium text-gray-300 mb-2">Rareté</label>
+                <select
+                  value={formData.rarity || 'common'}
+                  onChange={(e) => setFormData({ ...formData, rarity: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="common">Commun</option>
+                  <option value="rare">Rare</option>
+                  <option value="epic">Épique</option>
+                  <option value="legendary">Légendaire</option>
+                </select>
                   </div>
                 </div>
+            <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Équipe</label>
-                  <input type="text" value={formData.team} onChange={(e) => setFormData({...formData, team: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" placeholder="Nom de l'équipe" />
+                <label className="block text-sm font-medium text-gray-300 mb-2">Prix</label>
+                <input
+                  type="number"
+                  value={formData.price || 0}
+                  onChange={(e) => setFormData({ ...formData, price: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  min={0}
+                  required
+                />
                 </div>
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving} className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /><span>Sauvegarder</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Announcement Form */}
-            {modalType === 'announcement' && (
-              <form onSubmit={handleAnnouncementSubmit} className="p-6 space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Titre *</label>
-                  <input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} required className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" placeholder="Titre de l'annonce" />
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Type</label>
-                    <select value={formData.type} onChange={(e) => setFormData({...formData, type: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
-                      {ANNOUNCEMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                    </select>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Stock (-1 = illimité)</label>
+                <input
+                  type="number"
+                  value={formData.stock !== undefined ? formData.stock : -1}
+                  onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Version (optionnel)</label>
-                    <input type="text" value={formData.version} onChange={(e) => setFormData({...formData, version: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" placeholder="Ex: 1.2.0" />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Contenu *</label>
-                  <textarea value={formData.content} onChange={(e) => setFormData({...formData, content: e.target.value})} required rows={8} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 resize-none font-mono text-sm" placeholder="Contenu de l'annonce...&#10;&#10;Utilise:&#10;## pour les titres&#10;### pour les sous-titres&#10;- pour les listes" />
-                  <p className="text-xs text-gray-500 mt-1">Supporte le formatage basique: ## Titre, ### Sous-titre, - liste</p>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Priorité</label>
-                    <select value={formData.priority} onChange={(e) => setFormData({...formData, priority: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
-                      {PRIORITIES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Mode cible</label>
-                    <select value={formData.targetMode} onChange={(e) => setFormData({...formData, targetMode: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50">
+              <label className="block text-sm font-medium text-gray-300 mb-2">Mode</label>
+              <select
+                value={formData.mode || 'all'}
+                onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              >
                       <option value="all">Tous les modes</option>
                       <option value="hardcore">Hardcore uniquement</option>
                       <option value="cdl">CDL uniquement</option>
                     </select>
                   </div>
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive !== undefined ? formData.isActive : true}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white">Actif</span>
+              </label>
                 </div>
+          </>
+        );
 
-                <div className="flex items-center space-x-6">
-                  <div className="flex items-center space-x-3">
-                    <button type="button" onClick={() => setFormData({...formData, requiresAcknowledgment: !formData.requiresAcknowledgment})} className={`w-12 h-6 rounded-full transition-colors relative ${formData.requiresAcknowledgment ? 'bg-yellow-500' : 'bg-gray-600'}`}>
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.requiresAcknowledgment ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                    </button>
-                    <span className="text-gray-300 text-sm">Accusé de lecture requis</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <button type="button" onClick={() => setFormData({...formData, isActive: !formData.isActive})} className={`w-12 h-6 rounded-full transition-colors relative ${formData.isActive ? 'bg-green-500' : 'bg-gray-600'}`}>
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.isActive ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                    </button>
-                    <span className="text-gray-300 text-sm">Active</span>
-                  </div>
-                </div>
-
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving} className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /><span>{editingItem ? 'Modifier' : 'Publier'}</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Ladder Form */}
-            {modalType === 'ladder' && (
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                setSaving(true);
-                try {
-                  const url = editingItem 
-                    ? `${API_URL}/ladders/admin/${editingItem._id}`
-                    : `${API_URL}/ladders/admin`;
-                  
-                  const response = await fetch(url, {
-                    method: editingItem ? 'PUT' : 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(formData)
-                  });
-
-                  const data = await response.json();
-                  if (!response.ok) throw new Error(data.message);
-
-                  setSuccess(editingItem ? 'Ladder modifié !' : 'Ladder créé !');
-                  setShowModal(false);
-                  fetchLadders();
-                  setTimeout(() => setSuccess(''), 3000);
-                } catch (err) {
-                  setError(err.message);
-                } finally {
-                  setSaving(false);
-                }
-              }} className="p-6 space-y-6">
+      case 'trophy':
+        return (
+          <>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
                   <input 
                     type="text" 
-                    value={formData.name} 
-                    onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                    required 
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
-                    placeholder="Classement Duo" 
+                required
                   />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Description</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
                   <textarea 
-                    value={formData.description} 
-                    onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                     rows={2} 
-                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 resize-none" 
-                    placeholder="Affronte les meilleurs duos..." 
+                required
                   />
                 </div>
-
-                <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Taille équipe *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Icône</label>
                     <select 
-                      value={formData.teamSize} 
-                      onChange={(e) => setFormData({...formData, teamSize: e.target.value})} 
+                  value={formData.icon || 'Trophy'}
+                  onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                     >
-                      <option value="2v2">2v2</option>
-                      <option value="3v3">3v3</option>
-                      <option value="4v4">4v4</option>
-                      <option value="5v5">5v5</option>
-                      <option value="3v3-5v5">3v3-5v5</option>
+                  <option value="Trophy">Trophy</option>
+                  <option value="Award">Award</option>
+                  <option value="Medal">Medal</option>
+                  <option value="Star">Star</option>
+                  <option value="Crown">Crown</option>
+                  <option value="Shield">Shield</option>
+                  <option value="Zap">Zap</option>
+                  <option value="Target">Target</option>
+                  <option value="Flame">Flame</option>
+                  <option value="Gem">Gem</option>
+                  <option value="Heart">Heart</option>
+                  <option value="Sword">Sword</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Mode cible</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Couleur</label>
                     <select 
-                      value={formData.mode} 
-                      onChange={(e) => setFormData({...formData, mode: e.target.value})} 
+                  value={formData.color || 'amber'}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                     >
-                      <option value="all">Tous</option>
-                      <option value="hardcore">Hardcore</option>
-                      <option value="cdl">CDL</option>
+                  <option value="amber">Amber</option>
+                  <option value="yellow">Yellow</option>
+                  <option value="orange">Orange</option>
+                  <option value="red">Red</option>
+                  <option value="pink">Pink</option>
+                  <option value="purple">Purple</option>
+                  <option value="blue">Blue</option>
+                  <option value="cyan">Cyan</option>
+                  <option value="green">Green</option>
+                  <option value="emerald">Emerald</option>
+                  <option value="gray">Gray</option>
                     </select>
+              </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Ordre</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Rareté (1-5)</label>
                     <input 
                       type="number" 
-                      value={formData.sortOrder} 
-                      onChange={(e) => setFormData({...formData, sortOrder: parseInt(e.target.value) || 0})} 
+                value={formData.rarity || 1}
+                onChange={(e) => setFormData({ ...formData, rarity: parseInt(e.target.value) })}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
+                min={1}
+                max={5}
                     />
                   </div>
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive !== undefined ? formData.isActive : true}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white">Actif</span>
+              </label>
                 </div>
+          </>
+        );
 
-                {/* Game Modes */}
+      case 'announcement':
+        return (
+          <>
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-300">Modes de jeu</label>
-                    <button 
-                      type="button"
-                      onClick={() => setFormData({
-                        ...formData, 
-                        gameModes: [...(formData.gameModes || []), { name: '', icon: 'Target', isActive: true }]
-                      })}
-                      className="text-xs text-purple-400 hover:text-purple-300"
-                    >
-                      + Ajouter un mode
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {(formData.gameModes || []).map((mode, idx) => (
-                      <div key={idx} className="flex items-center gap-2 p-3 bg-dark-800/50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-300 mb-2">Titre *</label>
                         <input 
                           type="text" 
-                          value={mode.name} 
-                          onChange={(e) => {
-                            const newModes = [...formData.gameModes];
-                            newModes[idx].name = e.target.value;
-                            setFormData({...formData, gameModes: newModes});
-                          }}
-                          placeholder="Search & Destroy"
-                          className="flex-1 px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50" 
-                        />
+                value={formData.title || ''}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Contenu *</label>
+              <textarea
+                value={formData.content || ''}
+                onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                rows={5}
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Type</label>
                         <select 
-                          value={mode.icon} 
-                          onChange={(e) => {
-                            const newModes = [...formData.gameModes];
-                            newModes[idx].icon = e.target.value;
-                            setFormData({...formData, gameModes: newModes});
-                          }}
-                          className="px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
-                        >
-                          <option value="Target">Target</option>
-                          <option value="Flag">Flag</option>
-                          <option value="Skull">Skull</option>
-                          <option value="Check">Check</option>
+                  value={formData.type || 'announcement'}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="patch_note">Patch Note</option>
+                  <option value="announcement">Annonce</option>
+                  <option value="maintenance">Maintenance</option>
+                  <option value="event">Événement</option>
+                  <option value="rules">Règlement</option>
+                  <option value="important">Important</option>
                         </select>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const newModes = [...formData.gameModes];
-                            newModes[idx].isActive = !newModes[idx].isActive;
-                            setFormData({...formData, gameModes: newModes});
-                          }}
-                          className={`p-2 rounded-lg ${mode.isActive ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}
-                        >
-                          {mode.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                        </button>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const newModes = formData.gameModes.filter((_, i) => i !== idx);
-                            setFormData({...formData, gameModes: newModes});
-                          }}
-                          className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Priorité</label>
+                <select
+                  value={formData.priority || 'normal'}
+                  onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="low">Basse</option>
+                  <option value="normal">Normale</option>
+                  <option value="high">Haute</option>
+                  <option value="critical">Critique</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Mode cible</label>
+              <select
+                value={formData.targetMode || 'all'}
+                onChange={(e) => setFormData({ ...formData, targetMode: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              >
+                <option value="all">Tous</option>
+                <option value="hardcore">Hardcore</option>
+                <option value="cdl">CDL</option>
+              </select>
                       </div>
-                    ))}
-                    {(!formData.gameModes || formData.gameModes.length === 0) && (
-                      <p className="text-gray-500 text-sm text-center py-4">Aucun mode de jeu configuré</p>
-                    )}
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.requiresAcknowledgment !== undefined ? formData.requiresAcknowledgment : true}
+                  onChange={(e) => setFormData({ ...formData, requiresAcknowledgment: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white">Requiert une confirmation</span>
+              </label>
                   </div>
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive !== undefined ? formData.isActive : true}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white">Actif</span>
+              </label>
                 </div>
+          </>
+        );
 
-                <div className="flex items-center space-x-3">
-                  <button 
-                    type="button" 
-                    onClick={() => setFormData({...formData, isActive: !formData.isActive})} 
-                    className={`w-12 h-6 rounded-full transition-colors relative ${formData.isActive ? 'bg-green-500' : 'bg-gray-600'}`}
-                  >
-                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.isActive ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                  </button>
-                  <span className="text-gray-300 text-sm">Ladder actif</span>
+      case 'season':
+        return (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Numéro *</label>
+                <input
+                  type="number"
+                  value={formData.number || 1}
+                  onChange={(e) => setFormData({ ...formData, number: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  min={1}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Mode</label>
+                <select
+                  value={formData.mode || 'hardcore'}
+                  onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="hardcore">Hardcore</option>
+                  <option value="cdl">CDL</option>
+                </select>
                 </div>
-
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving} className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /><span>{editingItem ? 'Modifier' : 'Créer'}</span></>}
-                  </button>
                 </div>
-              </form>
-            )}
-
-            {/* Trophy Form */}
-            {modalType === 'trophy' && (
-              <form onSubmit={(e) => { e.preventDefault(); saveTrophy(); }} className="p-6 space-y-6">
-                <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Nom (identifiant) *</label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
                     <input 
                       type="text" 
-                      value={formData.name} 
-                      onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                      required 
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
-                      placeholder="La Bravoure"
+                required
                     />
                   </div>
+            <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Date de début *</label>
                     <input 
-                      type="text" 
-                      value={formData.description} 
-                      onChange={(e) => setFormData({...formData, description: e.target.value})} 
+                  type="date"
+                  value={formData.startDate || ''}
+                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                       required 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Date de fin *</label>
+                <input
+                  type="date"
+                  value={formData.endDate || ''}
+                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
-                      placeholder="Création de l'escouade"
+                  required
                     />
                   </div>
                 </div>
-
-                {/* Translations */}
-                <div className="space-y-4">
-                  <h3 className="text-sm font-medium text-gray-300">Traductions</h3>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    {['fr', 'en', 'de', 'it'].map((lang) => (
-                      <div key={lang} className="p-4 bg-dark-800/50 rounded-xl space-y-3">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-bold text-gray-400 uppercase">{lang}</span>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Statut</label>
+              <select
+                value={formData.status || 'upcoming'}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              >
+                <option value="upcoming">À venir</option>
+                <option value="active">Active</option>
+                <option value="ended">Terminée</option>
+              </select>
                         </div>
-                        <input
-                          type="text"
-                          placeholder="Nom"
-                          value={formData.translations?.[lang]?.name || ''}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            translations: {
-                              ...formData.translations,
-                              [lang]: { ...formData.translations?.[lang], name: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Description"
-                          value={formData.translations?.[lang]?.description || ''}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            translations: {
-                              ...formData.translations,
-                              [lang]: { ...formData.translations?.[lang], description: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
+          </>
+        );
 
-                {/* Icon & Color */}
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Icône</label>
-                    <select
-                      value={formData.icon}
-                      onChange={(e) => setFormData({...formData, icon: e.target.value})}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    >
-                      {TROPHY_ICONS.map(icon => (
-                        <option key={icon.value} value={icon.value}>{icon.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Couleur</label>
-                    <select
-                      value={formData.color}
-                      onChange={(e) => setFormData({...formData, color: e.target.value})}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    >
-                      {TROPHY_COLORS.map(color => (
-                        <option key={color.value} value={color.value}>{color.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Rareté</label>
-                    <select
-                      value={formData.rarity}
-                      onChange={(e) => {
-                        const rarity = parseInt(e.target.value);
-                        const rarityInfo = TROPHY_RARITIES.find(r => r.value === rarity);
-                        setFormData({...formData, rarity, rarityName: rarityInfo?.name || 'common'});
-                      }}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    >
-                      {TROPHY_RARITIES.map(rarity => (
-                        <option key={rarity.value} value={rarity.value}>{rarity.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Options */}
-                <div className="flex flex-wrap gap-6">
-                  <div className="flex items-center space-x-3">
-                    <button 
-                      type="button" 
-                      onClick={() => setFormData({...formData, isDefault: !formData.isDefault})} 
-                      className={`w-12 h-6 rounded-full transition-colors relative ${formData.isDefault ? 'bg-green-500' : 'bg-gray-600'}`}
-                    >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.isDefault ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                    </button>
-                    <span className="text-gray-300 text-sm">Trophée par défaut (toutes les escouades)</span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <button 
-                      type="button" 
-                      onClick={() => setFormData({...formData, isActive: !formData.isActive})} 
-                      className={`w-12 h-6 rounded-full transition-colors relative ${formData.isActive ? 'bg-green-500' : 'bg-gray-600'}`}
-                    >
-                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${formData.isActive ? 'translate-x-7' : 'translate-x-1'}`}></div>
-                    </button>
-                    <span className="text-gray-300 text-sm">Trophée actif</span>
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div className="p-4 bg-dark-800/50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Aperçu</p>
-                  <div className="flex items-center gap-4">
-                    <div 
-                      className="w-14 h-14 rounded-xl flex items-center justify-center"
-                      style={{ 
-                        backgroundColor: (TROPHY_COLORS.find(c => c.value === formData.color)?.hex || '#f59e0b') + '30',
-                        border: `2px solid ${(TROPHY_COLORS.find(c => c.value === formData.color)?.hex || '#f59e0b')}50`
-                      }}
-                    >
-                      {(() => {
-                        const IconComp = { Trophy, Award, Medal, Star, Crown, Shield, Zap, Target }[formData.icon] || Trophy;
-                        return <IconComp className="w-7 h-7" style={{ color: TROPHY_COLORS.find(c => c.value === formData.color)?.hex || '#f59e0b' }} />;
-                      })()}
-                    </div>
-                    <div>
-                      <p className="text-white font-bold">{formData.translations?.fr?.name || formData.name || 'Nom du trophée'}</p>
-                      <p className="text-gray-400 text-sm">{formData.translations?.fr?.description || formData.description || 'Description'}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving} className="flex-1 py-3 px-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /><span>{editingItem ? 'Modifier' : 'Créer'}</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Add Points Form */}
-            {modalType === 'addPoints' && (
-              <form onSubmit={handleAddPoints} className="p-6 space-y-6">
-                <div className="flex items-center space-x-4 p-4 bg-dark-800/50 rounded-xl">
-                  <img src={editingItem?.user?.discordAvatar || editingItem?.userInfo?.discordAvatar ? `https://cdn.discordapp.com/avatars/${editingItem?.user?.discordId || editingItem?.userInfo?.discordId}/${editingItem?.user?.discordAvatar || editingItem?.userInfo?.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png'} alt="" className="w-12 h-12 rounded-full" />
-                  <div>
-                    <p className="text-white font-medium">{editingItem?.user?.username || editingItem?.userInfo?.username}</p>
-                    <p className="text-gray-500 text-sm">Actuellement: <span className="text-purple-400 font-bold">{editingItem?.points} points</span></p>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Points à ajouter/retirer</label>
-                  <input type="number" value={formData.points} onChange={(e) => setFormData({...formData, points: parseInt(e.target.value) || 0})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" placeholder="Ex: 50 ou -25" />
-                  <p className="text-xs text-gray-500 mt-1">Utilisez un nombre négatif pour retirer des points</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Raison (optionnel)</label>
-                  <input type="text" value={formData.reason} onChange={(e) => setFormData({...formData, reason: e.target.value})} className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" placeholder="Victoire en tournoi, bonus, pénalité..." />
-                </div>
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-                <div className="flex space-x-3 pt-4">
-                  <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-                  <button type="submit" disabled={saving || formData.points === 0} className="flex-1 py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2">
-                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Plus className="w-5 h-5" /><span>Appliquer</span></>}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Assign Trophy Form */}
-            {modalType === 'assignTrophy' && editingItem && (
-              <div className="p-6 space-y-6">
-                {/* Trophy Preview */}
-                <div className="flex items-center gap-4 p-4 bg-dark-800/50 rounded-xl">
-                  <div 
-                    className="w-14 h-14 rounded-xl flex items-center justify-center"
-                    style={{ 
-                      backgroundColor: (TROPHY_COLORS.find(c => c.value === editingItem.color)?.hex || '#f59e0b') + '30',
-                      border: `2px solid ${(TROPHY_COLORS.find(c => c.value === editingItem.color)?.hex || '#f59e0b')}50`
-                    }}
-                  >
-                    {(() => {
-                      const IconComp = { Trophy, Award, Medal, Star, Crown, Shield, Zap, Target }[editingItem.icon] || Trophy;
-                      return <IconComp className="w-7 h-7" style={{ color: TROPHY_COLORS.find(c => c.value === editingItem.color)?.hex || '#f59e0b' }} />;
-                    })()}
-                  </div>
-                  <div>
-                    <p className="text-white font-bold">{editingItem.name}</p>
-                    <p className="text-gray-400 text-sm">{editingItem.description}</p>
-                  </div>
-                </div>
-
-                {/* Search Squad */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Rechercher une escouade</label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+      case 'map':
+        return (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
+              <input
+                type="text"
+                value={formData.name || ''}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Image URL</label>
+              <input
+                type="text"
+                value={formData.image || ''}
+                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                placeholder="https://..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Ladders</label>
+              <div className="flex flex-wrap gap-3">
+                {['duo-trio', 'squad-team'].map((ladder) => (
+                  <label key={ladder} className="flex items-center gap-2 cursor-pointer">
                     <input
-                      type="text"
-                      value={assignTrophySearch}
-                      onChange={(e) => setAssignTrophySearch(e.target.value)}
-                      placeholder="Nom ou tag de l'escouade..."
-                      className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                      type="checkbox"
+                      checked={(formData.ladders || []).includes(ladder)}
+                      onChange={(e) => {
+                        const current = formData.ladders || [];
+                        if (e.target.checked) {
+                          setFormData({ ...formData, ladders: [...current, ladder] });
+                        } else {
+                          setFormData({ ...formData, ladders: current.filter(l => l !== ladder) });
+                        }
+                      }}
+                      className="w-4 h-4"
                     />
+                    <span className="text-white">{ladder}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Modes de jeu</label>
+              <div className="flex flex-wrap gap-3">
+                {['Search & Destroy', 'Domination', 'Team Deathmatch', 'Hardpoint', 'Control'].map((mode) => (
+                  <label key={mode} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={(formData.gameModes || []).includes(mode)}
+                      onChange={(e) => {
+                        const current = formData.gameModes || [];
+                        if (e.target.checked) {
+                          setFormData({ ...formData, gameModes: [...current, mode] });
+                        } else {
+                          setFormData({ ...formData, gameModes: current.filter(m => m !== mode) });
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-white text-sm">{mode}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.isActive !== undefined ? formData.isActive : true}
+                  onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white">Active</span>
+              </label>
+            </div>
+          </>
+        );
+
+      default:
+        return (
+          <p className="text-gray-400 text-center py-8">
+            Type de formulaire non reconnu: {modalType}
+          </p>
+        );
+    }
+  };
+
+  const renderContent = () => {
+    if (loading && (users.length === 0 && squads.length === 0 && shopItems.length === 0)) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+                </div>
+      );
+    }
+
+    switch (activeTab) {
+      case 'overview':
+        return renderOverview();
+      case 'users':
+        return renderUsers();
+      case 'squads':
+        return renderSquads();
+      case 'shop':
+        return renderShop();
+      case 'disputes':
+        return renderDisputes();
+      case 'announcements':
+        return renderAnnouncements();
+      case 'hub':
+        return renderHub();
+      case 'maps':
+        return renderMaps();
+      case 'gamerules':
+        return renderGameRules();
+      case 'application':
+        return renderApplication();
+      case 'config':
+        return renderConfig();
+      case 'system':
+        return renderSystem();
+      default:
+        return <div className="text-center text-gray-400 py-20">Section non trouvée</div>;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-dark-950">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+                    <button 
+                onClick={() => navigate('/')}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                    >
+                <ArrowLeft className="w-6 h-6 text-white" />
+                    </button>
+              <div>
+                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                  <Shield className="w-8 h-8 text-purple-400" />
+                  Panel Administrateur
+                </h1>
+                <p className="text-gray-400 mt-1">Gérez toutes les données de la plateforme</p>
+                  </div>
+                  </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <p className="text-white font-medium">{user?.username}</p>
+                <p className="text-sm text-purple-400">Administrateur</p>
+                </div>
+              <img
+                src={user?.avatarUrl || '/avatar.jpg'}
+                alt="Avatar"
+                className="w-12 h-12 rounded-full border-2 border-purple-500"
+              />
+                    </div>
+                    </div>
                   </div>
                 </div>
 
-                {/* Squad List */}
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {allSquads
-                    .filter(squad => 
-                      squad.name.toLowerCase().includes(assignTrophySearch.toLowerCase()) ||
-                      squad.tag.toLowerCase().includes(assignTrophySearch.toLowerCase())
-                    )
-                    .slice(0, 10)
-                    .map(squad => {
-                      const hasTrophy = squad.trophies?.some(t => t.trophy?._id === editingItem._id || t.trophy === editingItem._id);
-                      
-                      return (
-                        <div
-                          key={squad._id}
-                          onClick={() => !hasTrophy && setSelectedSquadForTrophy(squad)}
-                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
-                            selectedSquadForTrophy?._id === squad._id 
-                              ? 'bg-purple-500/30 border border-purple-500/50' 
-                              : hasTrophy
-                              ? 'bg-gray-800/30 opacity-50 cursor-not-allowed'
-                              : 'bg-dark-800/50 hover:bg-dark-800 border border-transparent'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div 
-                              className="w-10 h-10 rounded-lg flex items-center justify-center"
-                              style={{ backgroundColor: squad.color + '30' }}
-                            >
-                              {squad.logo ? (
-                                <img src={squad.logo} alt="" className="w-6 h-6 object-contain" />
-                              ) : (
-                                <Users className="w-5 h-5" style={{ color: squad.color }} />
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-white font-medium">{squad.name}</p>
-                              <p className="text-gray-500 text-xs">[{squad.tag}] • {squad.members?.length || 0} membres</p>
-                            </div>
-                          </div>
-                          {hasTrophy ? (
-                            <span className="text-xs text-green-400 px-2 py-1 bg-green-500/20 rounded">Possède déjà</span>
-                          ) : selectedSquadForTrophy?._id === squad._id ? (
-                            <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded">Sélectionné</span>
-                          ) : null}
-                        </div>
-                      );
-                    })
-                  }
+      {/* Notifications */}
+      {(success || error) && (
+        <div className="fixed top-4 right-4 z-50 max-w-md">
+          {success && (
+            <div className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 mb-2">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-green-400" />
+                <p className="text-green-400 font-medium">{success}</p>
                 </div>
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400" />
+                <p className="text-red-400 font-medium">{error}</p>
+                  </div>
+                </div>
+          )}
+                </div>
+      )}
 
-                {/* Squads with this trophy */}
-                {allSquads.filter(s => s.trophies?.some(t => t.trophy?._id === editingItem._id || t.trophy === editingItem._id)).length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Escouades ayant ce trophée</label>
-                    <div className="space-y-2">
-                      {allSquads
-                        .filter(s => s.trophies?.some(t => t.trophy?._id === editingItem._id || t.trophy === editingItem._id))
-                        .map(squad => (
-                          <div key={squad._id} className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div 
-                                className="w-8 h-8 rounded-lg flex items-center justify-center"
-                                style={{ backgroundColor: squad.color + '30' }}
-                              >
-                                <Users className="w-4 h-4" style={{ color: squad.color }} />
+      {/* Navigation Tabs - Grouped Layout */}
+      <div className="bg-dark-900/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-6 overflow-x-auto py-3 pb-4" style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#6b21a8 #1f2937'
+          }}>
+            {tabGroups.map((group) => {
+              // Skip admin-only groups for non-admin users
+              if (group.adminOnly && !userIsAdmin) return null;
+              
+              // Filter tabs within the group
+              const visibleTabs = group.tabs.filter(tab => {
+                if (tab.adminOnly && !userIsAdmin) return false;
+                if (!userIsAdmin && !getStaffAccess(tab.id)) return false;
+                return true;
+              });
+              
+              if (visibleTabs.length === 0) return null;
+              
+              return (
+                <div key={group.name} className="flex items-center gap-1">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-2 hidden sm:block">
+                    {group.name}
+                  </span>
+                  <div className="flex items-center gap-1 bg-dark-800/50 rounded-xl p-1 border border-white/5">
+                    {visibleTabs.map((tab) => {
+                      const Icon = tab.icon;
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            setActiveTab(tab.id);
+                            setActiveSubTab('');
+                            setSearchTerm('');
+                            setPage(1);
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium whitespace-nowrap transition-all ${
+                            isActive
+                              ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white shadow-lg shadow-purple-500/25'
+                              : 'text-gray-400 hover:text-white hover:bg-white/10'
+                          }`}
+                          title={tab.label}
+                        >
+                          <Icon className={`w-4 h-4 ${isActive ? '' : 'opacity-70'}`} />
+                          <span className="hidden md:inline text-sm">{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {renderContent()}
                               </div>
-                              <span className="text-white text-sm">{squad.name} [{squad.tag}]</span>
-                            </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowModal(false)}></div>
+          <div className="relative bg-dark-900 border border-white/10 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-dark-900 border-b border-white/10 p-6 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">
+                {editingItem ? 'Modifier' : 'Créer'} {modalType}
+              </h2>
                             <button
-                              onClick={() => removeTrophyFromSquad(squad._id, editingItem._id)}
-                              className="text-xs text-red-400 hover:text-red-300 px-2 py-1 bg-red-500/20 rounded hover:bg-red-500/30 transition-colors"
+                onClick={() => setShowModal(false)}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                             >
-                              Retirer
+                <X className="w-6 h-6 text-gray-400" />
                             </button>
                           </div>
-                        ))
-                      }
-                    </div>
+            
+            <form onSubmit={editingItem ? handleUpdate : handleCreate} className="p-6 space-y-4">
+              {/* Form content based on modalType */}
+              {renderModalForm()}
+
+              {error && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm">{error}</p>
                   </div>
                 )}
 
-                {error && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl"><p className="text-red-400 text-sm">{error}</p></div>}
-
-                <div className="flex space-x-3 pt-4">
+              <div className="flex gap-3 pt-4">
                   <button 
                     type="button" 
                     onClick={() => setShowModal(false)} 
@@ -3344,22 +3821,109 @@ const AdminPanel = () => {
                     Annuler
                   </button>
                   <button 
-                    onClick={assignTrophyToSquad}
-                    disabled={!selectedSquadForTrophy || assigningTrophy} 
-                    className="flex-1 py-3 px-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center space-x-2"
-                  >
-                    {assigningTrophy ? (
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {saving ? (
                       <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
                       <>
-                        <Trophy className="w-5 h-5" />
-                        <span>Attribuer</span>
+                      <Save className="w-5 h-5" />
+                      {editingItem ? 'Mettre à jour' : 'Créer'}
                       </>
                     )}
                   </button>
                 </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Ban Modal */}
+      {showBanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowBanModal(false)}></div>
+          <div className="relative bg-dark-900 border border-orange-500/20 rounded-2xl p-6 max-w-md w-full">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-orange-500/20 rounded-xl">
+                <Ban className="w-6 h-6 text-orange-400" />
               </div>
-            )}
+              <div>
+                <h3 className="text-xl font-bold text-white">Bannir {banData.username}</h3>
+                <p className="text-gray-400 text-sm">Configurez les paramètres du bannissement</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Raison du ban *</label>
+                <textarea
+                  value={banData.reason}
+                  onChange={(e) => setBanData({ ...banData, reason: e.target.value })}
+                  placeholder="Ex: Comportement toxique, triche, etc."
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50 resize-none"
+                  rows={3}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Durée</label>
+                <select
+                  value={banData.duration}
+                  onChange={(e) => setBanData({ ...banData, duration: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50"
+                >
+                  <option value="1h">1 heure</option>
+                  <option value="1d">1 jour</option>
+                  <option value="7d">7 jours</option>
+                  <option value="30d">30 jours</option>
+                  <option value="custom">Personnalisé</option>
+                  <option value="permanent">Permanent</option>
+                </select>
+              </div>
+
+              {banData.duration === 'custom' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Nombre de jours</label>
+                  <input
+                    type="number"
+                    value={banData.customDays}
+                    onChange={(e) => setBanData({ ...banData, customDays: parseInt(e.target.value) || 1 })}
+                    min={1}
+                    max={365}
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50"
+                  />
+                </div>
+              )}
+
+              {banData.duration === 'permanent' && (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Le bannissement permanent empêchera définitivement l'utilisateur d'accéder à l'application.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowBanModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleBan}
+                disabled={!banData.reason.trim()}
+                className="flex-1 py-3 px-4 bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Ban className="w-5 h-5" />
+                Bannir
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -3370,14 +3934,23 @@ const AdminPanel = () => {
           <div className="absolute inset-0 bg-black/70" onClick={() => setDeleteConfirm(null)}></div>
           <div className="relative bg-dark-900 border border-red-500/20 rounded-2xl p-6 max-w-md w-full">
             <h3 className="text-xl font-bold text-white mb-4">Confirmer la suppression</h3>
-            <p className="text-gray-400 mb-6">Es-tu sûr de vouloir supprimer cet élément ? Cette action est irréversible.</p>
-            <div className="flex space-x-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors">Annuler</button>
-              <button onClick={() => {
-                if (deleteConfirm.type === 'shop') handleDeleteItem(deleteConfirm.id);
-                if (deleteConfirm.type === 'announcement') handleDeleteAnnouncement(deleteConfirm.id);
-                if (deleteConfirm.type === 'trophy') deleteTrophy(deleteConfirm.id);
-              }} className="flex-1 py-3 px-4 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors">Supprimer</button>
+            <p className="text-gray-400 mb-6">
+              Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => handleDelete(deleteConfirm.type, deleteConfirm.id)}
+                disabled={saving}
+                className="flex-1 py-3 px-4 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Supprimer'}
+              </button>
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import express from 'express';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
-import { verifyToken, requireAdmin } from '../middleware/auth.middleware.js';
+import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
@@ -1242,8 +1242,8 @@ router.get('/admin/all-trophies', verifyToken, async (req, res) => {
 
 // ==================== ADMIN ROUTES ====================
 
-// Get all squads (admin)
-router.get('/admin/all', verifyToken, requireAdmin, async (req, res) => {
+// Get all squads (admin/staff)
+router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   try {
     const { page = 1, limit = 50, search = '' } = req.query;
     
@@ -1256,8 +1256,8 @@ router.get('/admin/all', verifyToken, requireAdmin, async (req, res) => {
     }
     
     const squads = await Squad.find(query)
-      .populate('leader', 'username discordUsername')
-      .populate('members.user', 'username discordUsername')
+      .populate('leader', 'username discordUsername avatarUrl')
+      .populate('members.user', 'username discordUsername avatarUrl')
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
@@ -1326,6 +1326,130 @@ router.post('/admin/:squadId/reset-progression', verifyToken, requireAdmin, asyn
     res.status(500).json({
       success: false,
       message: 'An error occurred while resetting progression.'
+    });
+  }
+});
+
+// Update squad (admin/staff)
+router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { name, tag, description, mode, color, maxMembers, experience, logo } = req.body;
+    
+    const squad = await Squad.findById(req.params.squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Update fields if provided
+    if (name !== undefined) squad.name = name;
+    if (tag !== undefined) squad.tag = tag;
+    if (description !== undefined) squad.description = description;
+    if (mode !== undefined) squad.mode = mode;
+    if (color !== undefined) squad.color = color;
+    if (maxMembers !== undefined) squad.maxMembers = maxMembers;
+    if (experience !== undefined) squad.experience = experience;
+    if (logo !== undefined) squad.logo = logo;
+
+    await squad.save();
+
+    res.json({
+      success: true,
+      message: 'Escouade mise à jour',
+      squad
+    });
+  } catch (error) {
+    console.error('Update squad error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Delete squad (admin/staff)
+router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const squad = await Squad.findById(req.params.squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Remove squad reference from all members
+    await User.updateMany(
+      { squad: squad._id },
+      { $unset: { squad: 1 } }
+    );
+
+    await Squad.findByIdAndDelete(req.params.squadId);
+
+    res.json({
+      success: true,
+      message: 'Escouade supprimée'
+    });
+  } catch (error) {
+    console.error('Delete squad error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Kick member from squad (admin/staff)
+router.post('/admin/:squadId/kick/:memberId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { squadId, memberId } = req.params;
+    
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Can't kick the leader
+    if (squad.leader.toString() === memberId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Impossible d\'expulser le leader de l\'escouade'
+      });
+    }
+
+    // Check if member exists in squad
+    const memberIndex = squad.members.findIndex(m => m.odId === memberId);
+    if (memberIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: 'Membre non trouvé dans l\'escouade'
+      });
+    }
+
+    // Remove member from squad
+    squad.members.splice(memberIndex, 1);
+    await squad.save();
+
+    // Update user's squad reference
+    await User.findOneAndUpdate(
+      { odId: memberId },
+      { $unset: { squad: 1 } }
+    );
+
+    res.json({
+      success: true,
+      message: 'Membre expulsé avec succès'
+    });
+  } catch (error) {
+    console.error('Kick member error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
     });
   }
 });

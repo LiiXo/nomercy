@@ -257,8 +257,8 @@ router.get('/admin/items', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Create new item - Admin
-router.post('/admin/items', verifyToken, requireAdmin, async (req, res) => {
+// Create new item - Admin/Staff
+router.post('/admin/items', verifyToken, requireStaff, async (req, res) => {
   try {
     const {
       name, description, category, price, originalPrice,
@@ -315,8 +315,8 @@ router.post('/admin/items', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Update item - Admin
-router.put('/admin/items/:id', verifyToken, requireAdmin, async (req, res) => {
+// Update item - Admin/Staff
+router.put('/admin/items/:id', verifyToken, requireStaff, async (req, res) => {
   try {
     const item = await ShopItem.findById(req.params.id);
 
@@ -351,8 +351,8 @@ router.put('/admin/items/:id', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Delete item - Admin
-router.delete('/admin/items/:id', verifyToken, requireAdmin, async (req, res) => {
+// Delete item - Admin/Staff
+router.delete('/admin/items/:id', verifyToken, requireStaff, async (req, res) => {
   try {
     const item = await ShopItem.findByIdAndDelete(req.params.id);
 

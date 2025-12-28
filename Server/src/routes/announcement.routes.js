@@ -154,8 +154,8 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Create announcement (admin)
-router.post('/admin', verifyToken, requireAdmin, async (req, res) => {
+// Create announcement (admin/staff)
+router.post('/admin', verifyToken, requireStaff, async (req, res) => {
   try {
     const {
       title,
@@ -204,8 +204,8 @@ router.post('/admin', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Update announcement (admin)
-router.put('/admin/:id', verifyToken, requireAdmin, async (req, res) => {
+// Update announcement (admin/staff)
+router.put('/admin/:id', verifyToken, requireStaff, async (req, res) => {
   try {
     const announcement = await Announcement.findById(req.params.id);
 
@@ -237,8 +237,8 @@ router.put('/admin/:id', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Delete announcement (admin)
-router.delete('/admin/:id', verifyToken, requireAdmin, async (req, res) => {
+// Delete announcement (admin/staff)
+router.delete('/admin/:id', verifyToken, requireStaff, async (req, res) => {
   try {
     const announcement = await Announcement.findByIdAndDelete(req.params.id);
 

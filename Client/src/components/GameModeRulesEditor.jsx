@@ -102,8 +102,6 @@ const LANGUAGES = [
 // Translations object
 const translations = {
   fr: {
-    title: 'Règles des Modes de Jeu',
-    description: 'Créez et gérez les règles avec formatage riche pour chaque mode',
     destinationTitle: '📍 Destination d\'affichage des règles',
     subTypeTitleRankings: '🎯 Type de Ladder',
     subTypeTitleRanked: '🎯 Mode de Jeu',
@@ -144,8 +142,6 @@ const translations = {
     paragraph: 'Paragraphe normal'
   },
   en: {
-    title: 'Game Mode Rules',
-    description: 'Create and manage rules with rich formatting for each mode',
     destinationTitle: '📍 Rules Display Destination',
     subTypeTitleRankings: '🎯 Ladder Type',
     subTypeTitleRanked: '🎯 Game Mode',
@@ -186,8 +182,6 @@ const translations = {
     paragraph: 'Normal paragraph'
   },
   it: {
-    title: 'Regole delle Modalità di Gioco',
-    description: 'Crea e gestisci le regole con formattazione avanzata per ogni modalità',
     destinationTitle: '📍 Destinazione di visualizzazione delle regole',
     subTypeTitleRankings: '🎯 Tipo di Classifica',
     subTypeTitleRanked: '🎯 Modalità di Gioco',
@@ -228,8 +222,6 @@ const translations = {
     paragraph: 'Paragrafo normale'
   },
   de: {
-    title: 'Spielmodus-Regeln',
-    description: 'Erstellen und verwalten Sie Regeln mit Rich-Formatierung für jeden Modus',
     destinationTitle: '📍 Regeln-Anzeigeziel',
     subTypeTitleRankings: '🎯 Ranglisten-Typ',
     subTypeTitleRanked: '🎯 Spielmodus',
@@ -478,22 +470,18 @@ const GameModeRulesEditor = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header with mode selector */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-2">{t('title')}</h2>
-            <p className="text-gray-400 text-sm">{t('description')}</p>
-          </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           
           {/* Mode selector */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 w-full sm:w-auto">
             {MODES.map(mode => (
               <button
                 key={mode.value}
                 onClick={() => setSelectedMode(mode.value)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm ${
                   selectedMode === mode.value
                     ? `bg-${mode.color}-500 text-white shadow-lg shadow-${mode.color}-500/50`
                     : 'bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-700'
@@ -506,16 +494,16 @@ const GameModeRulesEditor = () => {
         </div>
 
         {/* Location selector - Where rules will be displayed */}
-        <div className="bg-dark-800/50 rounded-xl p-4 border border-white/10">
-          <h3 className="text-sm font-medium text-gray-400 mb-3">{t('destinationTitle')}</h3>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="bg-dark-800/50 rounded-xl p-3 sm:p-4 border border-white/10">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-3">{t('destinationTitle')}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {['rankings', 'ranked'].map(locValue => {
               const locLabels = getLocationLabels(language)[locValue];
               return (
                 <button
                   key={locValue}
                   onClick={() => setSelectedLocation(locValue)}
-                  className={`p-4 rounded-xl text-left transition-all border-2 ${
+                  className={`p-3 sm:p-4 rounded-xl text-left transition-all border-2 ${
                     selectedLocation === locValue
                       ? locValue === 'rankings' 
                         ? 'bg-purple-500/20 border-purple-500 shadow-lg shadow-purple-500/20'
@@ -523,7 +511,7 @@ const GameModeRulesEditor = () => {
                       : 'bg-dark-900 border-white/10 hover:border-white/20'
                   }`}
                 >
-                  <div className={`font-medium ${
+                  <div className={`font-medium text-sm ${
                     selectedLocation === locValue
                       ? locValue === 'rankings' ? 'text-purple-400' : 'text-cyan-400'
                       : 'text-white'
@@ -538,16 +526,16 @@ const GameModeRulesEditor = () => {
         </div>
 
         {/* SubType selector - Specific game mode or ladder type */}
-        <div className="bg-dark-800/50 rounded-xl p-4 border border-white/10">
-          <h3 className="text-sm font-medium text-gray-400 mb-3">
+        <div className="bg-dark-800/50 rounded-xl p-3 sm:p-4 border border-white/10">
+          <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-3">
             {selectedLocation === 'rankings' ? t('subTypeTitleRankings') : t('subTypeTitleRanked')}
           </h3>
-          <div className={`grid ${selectedLocation === 'ranked' ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2'} gap-3`}>
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${selectedLocation === 'ranked' ? 'lg:grid-cols-4' : ''} gap-2 sm:gap-3`}>
             {getSubTypeLabels(language)[selectedLocation].map(sub => (
               <button
                 key={sub.value}
                 onClick={() => setSelectedSubType(sub.value)}
-                className={`p-3 rounded-xl text-left transition-all border-2 ${
+                className={`p-2 sm:p-3 rounded-xl text-left transition-all border-2 ${
                   selectedSubType === sub.value
                     ? selectedLocation === 'rankings'
                       ? 'bg-purple-500/20 border-purple-500 shadow-lg shadow-purple-500/20'
@@ -555,14 +543,14 @@ const GameModeRulesEditor = () => {
                     : 'bg-dark-900 border-white/10 hover:border-white/20'
                 }`}
               >
-                <div className={`font-medium text-sm ${
+                <div className={`font-medium text-xs sm:text-sm ${
                   selectedSubType === sub.value
                     ? selectedLocation === 'rankings' ? 'text-purple-400' : 'text-cyan-400'
                     : 'text-white'
                 }`}>
                   {sub.label}
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">{sub.sublabel}</div>
+                <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{sub.sublabel}</div>
               </button>
             ))}
           </div>
@@ -590,7 +578,7 @@ const GameModeRulesEditor = () => {
           {/* Existing sections */}
           {rules?.sections && rules.sections.length > 0 && (
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-base sm:text-lg font-semibold text-white">
                 {t('existingSections')} ({rules.sections.length})
               </h3>
               {rules.sections.sort((a, b) => a.order - b.order).map(section => (
@@ -598,50 +586,50 @@ const GameModeRulesEditor = () => {
                   key={section._id}
                   className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden"
                 >
-                  <div className="flex items-center justify-between p-4 bg-dark-800/50">
-                    <div className="flex items-center gap-3 flex-1">
+                  <div className="flex items-center justify-between p-3 sm:p-4 bg-dark-800/50 gap-2">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                       <button
                         onClick={() => toggleSection(section._id)}
-                        className="text-gray-400 hover:text-white transition-colors"
+                        className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
                       >
                         {expandedSections[section._id] ? (
-                          <ChevronUp className="w-5 h-5" />
+                          <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />
                         ) : (
-                          <ChevronDown className="w-5 h-5" />
+                          <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
                         )}
                       </button>
-                      <h4 className="text-white font-medium">
+                      <h4 className="text-white font-medium text-sm sm:text-base truncate">
                         {section.title.fr || section.title.en}
                       </h4>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-1 sm:gap-2 flex-shrink-0">
                       <button
                         onClick={() => startEditSection(section)}
-                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"
+                        className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteSection(section._id)}
-                        className="p-2 hover:bg-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-colors"
+                        className="p-1.5 sm:p-2 hover:bg-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-colors"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       </button>
                     </div>
                   </div>
                   
                   {expandedSections[section._id] && (
-                    <div className="p-4 space-y-3">
+                    <div className="p-3 sm:p-4 space-y-3">
                       {LANGUAGES.map(lang => (
                         <div key={lang.code} className="space-y-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-gray-500 font-medium">{lang.label}</span>
                           </div>
-                          <div className="text-sm text-gray-400">
+                          <div className="text-xs sm:text-sm text-gray-400">
                             <strong>{language === 'fr' ? 'Titre:' : language === 'en' ? 'Title:' : language === 'it' ? 'Titolo:' : 'Titel:'}</strong> {section.title[lang.code] || '-'}
                           </div>
                           <div 
-                            className="text-sm text-gray-300 prose prose-invert max-w-none"
+                            className="text-xs sm:text-sm text-gray-300 prose prose-invert prose-sm max-w-none"
                             dangerouslySetInnerHTML={{ __html: section.content[lang.code] || '-' }}
                           />
                         </div>
@@ -654,15 +642,15 @@ const GameModeRulesEditor = () => {
           )}
 
           {/* Section editor */}
-          <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-semibold text-white">
+          <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
+              <h3 className="text-lg sm:text-xl font-semibold text-white">
                 {editingSection ? t('editSection') : t('newSection')}
               </h3>
               {editingSection && (
                 <button
                   onClick={resetSectionForm}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm w-full sm:w-auto justify-center"
                 >
                   <X className="w-4 h-4" />
                   {t('cancel')}
@@ -671,12 +659,12 @@ const GameModeRulesEditor = () => {
             </div>
 
             {/* Language tabs */}
-            <div className="flex gap-2 mb-6 border-b border-white/10 pb-2">
+            <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-white/10 pb-2 overflow-x-auto">
               {LANGUAGES.map(lang => (
                 <button
                   key={lang.code}
                   onClick={() => setSelectedLang(lang.code)}
-                  className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${
+                  className={`px-3 sm:px-4 py-2 rounded-t-lg font-medium transition-colors text-sm whitespace-nowrap ${
                     selectedLang === lang.code
                       ? 'bg-purple-500 text-white'
                       : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -688,8 +676,8 @@ const GameModeRulesEditor = () => {
             </div>
 
             {/* Title input */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+            <div className="mb-4 sm:mb-6">
+              <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
                 {t('sectionTitle')} ({selectedLang.toUpperCase()})
                 {(selectedLang === 'fr' || selectedLang === 'en') && (
                   <span className="text-red-400 ml-1">*</span>
@@ -703,117 +691,117 @@ const GameModeRulesEditor = () => {
                   title: { ...sectionForm.title, [selectedLang]: e.target.value }
                 })}
                 placeholder={`${t('sectionTitle')} ${LANGUAGES.find(l => l.code === selectedLang)?.label ? 'in ' + LANGUAGES.find(l => l.code === selectedLang).label : ''}`}
-                className="w-full px-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500/50"
+                className="w-full px-3 sm:px-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:border-purple-500/50"
               />
             </div>
 
             {/* Rich text editor toolbar */}
             <div className="mb-2">
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
                 {t('content')} ({selectedLang.toUpperCase()})
                 {(selectedLang === 'fr' || selectedLang === 'en') && (
                   <span className="text-red-400 ml-1">*</span>
                 )}
               </label>
-              <div className="flex flex-wrap gap-1 p-2 bg-dark-800 border border-white/10 rounded-t-lg">
+              <div className="flex flex-wrap gap-0.5 sm:gap-1 p-1 sm:p-2 bg-dark-800 border border-white/10 rounded-t-lg overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => applyFormat('bold')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('bold')}
                 >
-                  <Bold className="w-4 h-4" />
+                  <Bold className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('italic')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('italic')}
                 >
-                  <Italic className="w-4 h-4" />
+                  <Italic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('underline')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('underline')}
                 >
-                  <Underline className="w-4 h-4" />
+                  <Underline className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-                <div className="w-px bg-white/10 mx-1"></div>
+                <div className="w-px bg-white/10 mx-0.5 sm:mx-1"></div>
                 <button
                   type="button"
                   onClick={() => applyFormat('justifyLeft')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('alignLeft')}
                 >
-                  <AlignLeft className="w-4 h-4" />
+                  <AlignLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('justifyCenter')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('alignCenter')}
                 >
-                  <AlignCenter className="w-4 h-4" />
+                  <AlignCenter className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('justifyRight')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('alignRight')}
                 >
-                  <AlignRight className="w-4 h-4" />
+                  <AlignRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-                <div className="w-px bg-white/10 mx-1"></div>
+                <div className="w-px bg-white/10 mx-0.5 sm:mx-1"></div>
                 <button
                   type="button"
                   onClick={() => applyFormat('insertUnorderedList')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('bulletList')}
                 >
-                  <List className="w-4 h-4" />
+                  <List className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('insertOrderedList')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('numberedList')}
                 >
-                  <ListOrdered className="w-4 h-4" />
+                  <ListOrdered className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
-                <div className="w-px bg-white/10 mx-1"></div>
+                <div className="w-px bg-white/10 mx-0.5 sm:mx-1"></div>
                 <button
                   type="button"
                   onClick={() => applyFormat('formatBlock', '<h1>')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('heading1')}
                 >
-                  <Heading1 className="w-4 h-4" />
+                  <Heading1 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('formatBlock', '<h2>')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('heading2')}
                 >
-                  <Heading2 className="w-4 h-4" />
+                  <Heading2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('formatBlock', '<h3>')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('heading3')}
                 >
-                  <Heading3 className="w-4 h-4" />
+                  <Heading3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
                 <button
                   type="button"
                   onClick={() => applyFormat('formatBlock', '<p>')}
-                  className="p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
                   title={t('paragraph')}
                 >
-                  <Type className="w-4 h-4" />
+                  <Type className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </div>
@@ -829,18 +817,17 @@ const GameModeRulesEditor = () => {
                   content: { ...sectionForm.content, [selectedLang]: e.currentTarget.innerHTML }
                 });
               }}
-              className="w-full min-h-[300px] p-4 bg-dark-800 border border-white/10 rounded-b-lg text-white focus:outline-none focus:border-purple-500/50 prose prose-invert max-w-none"
-              style={{ overflowY: 'auto' }}
+              className="w-full min-h-[200px] sm:min-h-[300px] p-3 sm:p-4 bg-dark-800 border border-white/10 rounded-b-lg text-white text-sm sm:text-base focus:outline-none focus:border-purple-500/50 prose prose-invert max-w-none overflow-y-auto"
             />
 
             {/* Preview toggle */}
-            <div className="mt-4 p-4 bg-dark-800/50 rounded-lg border border-white/10">
+            <div className="mt-4 p-3 sm:p-4 bg-dark-800/50 rounded-lg border border-white/10">
               <div className="flex items-center gap-2 mb-2">
-                <Eye className="w-4 h-4 text-gray-400" />
-                <span className="text-sm font-medium text-gray-300">{t('preview')}</span>
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
+                <span className="text-xs sm:text-sm font-medium text-gray-300">{t('preview')}</span>
               </div>
               <div 
-                className="prose prose-invert max-w-none text-sm"
+                className="prose prose-invert max-w-none text-xs sm:text-sm"
                 dangerouslySetInnerHTML={{ __html: sectionForm.content[selectedLang] || `<p class="text-gray-500">${t('previewPlaceholder')}</p>` }}
               />
             </div>
@@ -849,16 +836,16 @@ const GameModeRulesEditor = () => {
             <button
               onClick={handleSaveSection}
               disabled={saving}
-              className="w-full mt-6 flex items-center justify-center gap-2 px-6 py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium"
+              className="w-full mt-4 sm:mt-6 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium text-sm sm:text-base"
             >
               {saving ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
                   {t('saving')}
                 </>
               ) : (
                 <>
-                  <Save className="w-5 h-5" />
+                  <Save className="w-4 h-4 sm:w-5 sm:h-5" />
                   {editingSection ? t('updateSection') : t('addSection')}
                 </>
               )}

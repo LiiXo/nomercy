@@ -183,5 +183,82 @@ router.post('/seed', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
+// ==================== ADMIN ROUTES ====================
+
+// Get all maps (admin)
+router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const maps = await Map.find().sort({ name: 1 });
+    res.json({ success: true, maps });
+  } catch (error) {
+    console.error('Get all maps error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Create map (admin)
+router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { name, image, mode, gameMode, isActive } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ success: false, message: 'Nom requis' });
+    }
+    
+    const map = new Map({
+      name,
+      image: image || '',
+      mode: mode || 'hardcore',
+      gameMode: gameMode || 'Search & Destroy',
+      isActive: isActive !== undefined ? isActive : true
+    });
+    
+    await map.save();
+    res.status(201).json({ success: true, map });
+  } catch (error) {
+    console.error('Create map error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update map (admin)
+router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { name, image, mode, gameMode, isActive } = req.body;
+    
+    const map = await Map.findById(req.params.mapId);
+    if (!map) {
+      return res.status(404).json({ success: false, message: 'Map non trouvée' });
+    }
+    
+    if (name !== undefined) map.name = name;
+    if (image !== undefined) map.image = image;
+    if (mode !== undefined) map.mode = mode;
+    if (gameMode !== undefined) map.gameMode = gameMode;
+    if (isActive !== undefined) map.isActive = isActive;
+    
+    await map.save();
+    res.json({ success: true, map });
+  } catch (error) {
+    console.error('Update map error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Delete map (admin)
+router.delete('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const map = await Map.findByIdAndDelete(req.params.mapId);
+    if (!map) {
+      return res.status(404).json({ success: false, message: 'Map non trouvée' });
+    }
+    
+    res.json({ success: true, message: 'Map supprimée' });
+  } catch (error) {
+    console.error('Delete map error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 export default router;
 

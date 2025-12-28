@@ -681,7 +681,7 @@ const MySquad = () => {
                       <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
                         <Swords className={`w-5 h-5 text-${accentColor}-400`} />
                       </div>
-                      <p className="text-xs text-gray-500">Matchs 4v4</p>
+                      <p className="text-xs text-gray-500">Matchs 5v5</p>
                     </div>
                     <div className="text-center">
                       <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>

@@ -1,5 +1,10 @@
 import express from 'express';
 import User from '../models/User.js';
+import Squad from '../models/Squad.js';
+import Match from '../models/Match.js';
+import ShopItem from '../models/ShopItem.js';
+import Trophy from '../models/Trophy.js';
+import Announcement from '../models/Announcement.js';
 import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -337,6 +342,106 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
+// Admin: Get overall stats for dashboard (MUST be before :userId routes)
+router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalSquads = await Squad.countDocuments();
+    const totalMatches = await Match.countDocuments();
+    const totalShopItems = await ShopItem.countDocuments();
+    const totalTrophies = await Trophy.countDocuments();
+    const activeAnnouncements = await Announcement.countDocuments({ isActive: true });
+
+    // Get registrations for the last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const registrationsLast30Days = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const startOfDay = new Date(date.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(date.setHours(23, 59, 59, 999));
+      
+      const count = await User.countDocuments({
+        createdAt: { $gte: startOfDay, $lte: endOfDay }
+      });
+      
+      registrationsLast30Days.push({
+        date: startOfDay.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }),
+        value: count
+      });
+    }
+
+    // Note: For visitors data, you would need to implement actual tracking
+    // For now, we'll return empty array and let frontend handle it
+    const visitorsLast30Days = [];
+
+    res.json({
+      success: true,
+      stats: {
+        totalUsers,
+        totalSquads,
+        totalMatches,
+        totalShopItems,
+        totalTrophies,
+        activeAnnouncements,
+        registrationsLast30Days,
+        visitorsLast30Days
+      }
+    });
+  } catch (error) {
+    console.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Admin: Get user stats overview (MUST be before :userId routes)
+router.get('/admin/stats/overview', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ isProfileComplete: true, isBanned: false });
+    const bannedUsers = await User.countDocuments({ isBanned: true });
+    const newUsersToday = await User.countDocuments({
+      createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
+    });
+    const newUsersThisWeek = await User.countDocuments({
+      createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+    });
+
+    const roleStats = await User.aggregate([
+      { $unwind: '$roles' },
+      { $group: { _id: '$roles', count: { $sum: 1 } } }
+    ]);
+
+    const topGoldUsers = await User.find({ isProfileComplete: true })
+      .sort({ goldCoins: -1 })
+      .limit(5)
+      .select('username goldCoins');
+
+    res.json({
+      success: true,
+      stats: {
+        totalUsers,
+        activeUsers,
+        bannedUsers,
+        newUsersToday,
+        newUsersThisWeek,
+        roleStats,
+        topGoldUsers
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred.'
+    });
+  }
+});
+
 // Admin: Update user roles
 router.put('/admin/:userId/roles', verifyToken, requireAdmin, async (req, res) => {
   try {
@@ -378,8 +483,8 @@ router.put('/admin/:userId/roles', verifyToken, requireAdmin, async (req, res) =
   }
 });
 
-// Admin: Ban/Unban user
-router.put('/admin/:userId/ban', verifyToken, requireAdmin, async (req, res) => {
+// Admin: Ban/Unban user (staff can do this)
+router.put('/admin/:userId/ban', verifyToken, requireStaff, async (req, res) => {
   try {
     const { ban, reason, startDate, endDate } = req.body;
 
@@ -552,45 +657,73 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Admin: Get user stats
-router.get('/admin/stats/overview', verifyToken, requireStaff, async (req, res) => {
+// Admin: Update user
+router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ isProfileComplete: true, isBanned: false });
-    const bannedUsers = await User.countDocuments({ isBanned: true });
-    const newUsersToday = await User.countDocuments({
-      createdAt: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) }
-    });
-    const newUsersThisWeek = await User.countDocuments({
-      createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-    });
+    const { username, goldCoins, roles, platform, activisionId, bio } = req.body;
+    
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
 
-    const roleStats = await User.aggregate([
-      { $unwind: '$roles' },
-      { $group: { _id: '$roles', count: { $sum: 1 } } }
-    ]);
+    // Update fields if provided
+    if (username !== undefined) user.username = username;
+    if (goldCoins !== undefined) user.goldCoins = goldCoins;
+    if (roles !== undefined) user.roles = roles;
+    if (platform !== undefined) user.platform = platform;
+    if (activisionId !== undefined) user.activisionId = activisionId;
+    if (bio !== undefined) user.bio = bio;
 
-    const topGoldUsers = await User.find({ isProfileComplete: true })
-      .sort({ goldCoins: -1 })
-      .limit(5)
-      .select('username goldCoins');
+    await user.save();
 
     res.json({
       success: true,
-      stats: {
-        totalUsers,
-        activeUsers,
-        bannedUsers,
-        newUsersToday,
-        newUsersThisWeek,
-        roleStats,
-        topGoldUsers
-      }
+      message: 'Utilisateur mis à jour',
+      user
     });
   } catch (error) {
+    console.error('Update user error:', error);
     res.status(500).json({
       success: false,
-      message: 'An error occurred.'
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Admin: Delete user
+router.delete('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+
+    // Can't delete admins
+    if (user.roles.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Impossible de supprimer un administrateur'
+      });
+    }
+
+    await User.findByIdAndDelete(req.params.userId);
+
+    res.json({
+      success: true,
+      message: 'Utilisateur supprimé'
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
     });
   }
 });

@@ -157,6 +157,9 @@ export const translations = {
     availablePlural: 'disponibles',
     allUsed: 'Tous utilisés',
     deadlinePassed: 'Délai dépassé',
+    // Maintenance
+    maintenanceInProgress: 'Maintenance en cours',
+    estimatedEnd: 'Fin estimée',
   },
   en: {
     appName: 'NoMercy',
@@ -316,6 +319,9 @@ export const translations = {
     availablePlural: 'available',
     allUsed: 'All used',
     deadlinePassed: 'Deadline passed',
+    // Maintenance
+    maintenanceInProgress: 'Maintenance in progress',
+    estimatedEnd: 'Estimated end',
   },
   it: {
     appName: 'NoMercy',
@@ -475,6 +481,9 @@ export const translations = {
     availablePlural: 'disponibili',
     allUsed: 'Tutti usati',
     deadlinePassed: 'Termine scaduto',
+    // Maintenance
+    maintenanceInProgress: 'Manutenzione in corso',
+    estimatedEnd: 'Fine stimata',
   },
   de: {
     appName: 'NoMercy',
@@ -634,5 +643,8 @@ export const translations = {
     availablePlural: 'verfügbar',
     allUsed: 'Alle verwendet',
     deadlinePassed: 'Frist abgelaufen',
+    // Maintenance
+    maintenanceInProgress: 'Wartung läuft',
+    estimatedEnd: 'Geschätztes Ende',
   }
 };

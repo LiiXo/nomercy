@@ -632,12 +632,12 @@ const SquadManagement = () => {
     const file = event.target.files?.[0];
     if (!file) return;
     
-    // Check file size (max 2MB for GIFs, 5MB for images)
-    const maxSize = file.type === 'image/gif' ? 2 * 1024 * 1024 : 5 * 1024 * 1024;
+    // Check file size (max 10MB for all images including GIFs)
+    const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       setError(language === 'fr' 
-        ? `Le fichier est trop volumineux (max ${file.type === 'image/gif' ? '2MB pour les GIFs' : '5MB'})` 
-        : `File is too large (max ${file.type === 'image/gif' ? '2MB for GIFs' : '5MB'})`);
+        ? 'Le fichier est trop volumineux (max 10MB)' 
+        : 'File is too large (max 10MB)');
       return;
     }
     

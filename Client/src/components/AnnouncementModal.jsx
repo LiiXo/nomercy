@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useMode } from '../ModeContext';
 import { useLanguage } from '../LanguageContext';
@@ -13,6 +14,10 @@ const AnnouncementModal = () => {
   const { isAuthenticated, user } = useAuth();
   const { selectedMode } = useMode();
   const { language } = useLanguage();
+  const location = useLocation();
+  
+  // Only show announcements on dashboard pages (hardcore or cdl)
+  const isOnDashboard = location.pathname === '/hardcore' || location.pathname === '/cdl';
   
   const [announcements, setAnnouncements] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -21,10 +26,11 @@ const AnnouncementModal = () => {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated && selectedMode) {
+    // Only fetch announcements when on dashboard pages
+    if (isAuthenticated && selectedMode && isOnDashboard) {
       fetchPendingAnnouncements();
     }
-  }, [isAuthenticated, selectedMode]);
+  }, [isAuthenticated, selectedMode, isOnDashboard]);
 
   const fetchPendingAnnouncements = async () => {
     try {

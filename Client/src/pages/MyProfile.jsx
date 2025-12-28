@@ -6,8 +6,8 @@ import { useMode } from '../ModeContext';
 import { 
   ArrowLeft, User, FileText, Save, Loader2, Check, X, AlertCircle,
   Trophy, Medal, Target, TrendingUp, Calendar, Coins, Shield, Crown,
-  Edit3, LogOut, ShoppingBag, Package, Star, Zap, Gift, Award,
-  Eye
+  Edit3, LogOut, ShoppingBag, Package, Star, Zap, Gift, Award, Users,
+  Swords, Plus, Eye, Settings
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -33,6 +33,19 @@ const MyProfile = () => {
   // Ranking state from DB
   const [ranking, setRanking] = useState(null);
   const [loadingRanking, setLoadingRanking] = useState(true);
+  
+  // Squad state
+  const [squad, setSquad] = useState(null);
+  const [loadingSquad, setLoadingSquad] = useState(true);
+  const [showCreateSquad, setShowCreateSquad] = useState(false);
+  const [squadName, setSquadName] = useState('');
+  const [squadTag, setSquadTag] = useState('');
+  const [squadDescription, setSquadDescription] = useState('');
+  const [creatingSquad, setCreatingSquad] = useState(false);
+  const [squadError, setSquadError] = useState('');
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveError, setLeaveError] = useState('');
+  const [leavingSquad, setLeavingSquad] = useState(false);
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
@@ -50,10 +63,11 @@ const MyProfile = () => {
     document.title = titles[language] || titles.en;
   }, [language]);
 
-  // Fetch user purchases and ranking
+  // Fetch user purchases, ranking, and squad
   useEffect(() => {
     fetchPurchases();
     fetchRanking();
+    fetchSquad();
   }, [selectedMode]);
 
   const fetchPurchases = async () => {
@@ -86,6 +100,105 @@ const MyProfile = () => {
       console.error('Error fetching ranking:', err);
     } finally {
       setLoadingRanking(false);
+    }
+  };
+
+  const fetchSquad = async () => {
+    setLoadingSquad(true);
+    try {
+      const response = await fetch(`${API_URL}/squads/my-squad`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSquad(data.squad);
+      }
+    } catch (err) {
+      console.error('Error fetching squad:', err);
+    } finally {
+      setLoadingSquad(false);
+    }
+  };
+
+  const handleCreateSquad = async (e) => {
+    e.preventDefault();
+    setSquadError('');
+    
+    if (!squadName.trim() || squadName.length < 3) {
+      setSquadError(texts[language]?.nameTooShort || texts.en.nameTooShort);
+      return;
+    }
+    if (!squadTag.trim() || squadTag.length < 2 || squadTag.length > 5) {
+      setSquadError(texts[language]?.tagInvalid || texts.en.tagInvalid);
+      return;
+    }
+    
+    setCreatingSquad(true);
+    try {
+      const response = await fetch(`${API_URL}/squads/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: squadName.trim(),
+          tag: squadTag.trim().toUpperCase(),
+          description: squadDescription.trim(),
+          mode: selectedMode,
+          color: isHardcore ? '#ef4444' : '#06b6d4'
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSquad(data.squad);
+        setShowCreateSquad(false);
+        setSquadName('');
+        setSquadTag('');
+        setSquadDescription('');
+      } else {
+        setSquadError(data.message || 'Erreur lors de la création');
+      }
+    } catch (err) {
+      console.error('Error creating squad:', err);
+      setSquadError('Erreur serveur');
+    } finally {
+      setCreatingSquad(false);
+    }
+  };
+
+  const handleLeaveSquad = () => {
+    // Check if user is leader with other members
+    const isLeader = squad?.members?.some(m => 
+      (m.user?._id === user?.id || m.user === user?.id) && m.role === 'leader'
+    );
+    const hasOtherMembers = squad?.members?.length > 1;
+    
+    if (isLeader && hasOtherMembers) {
+      setLeaveError(texts[language]?.cannotLeaveAsLeader || texts.en.cannotLeaveAsLeader);
+    } else {
+      setLeaveError('');
+    }
+    setShowLeaveModal(true);
+  };
+
+  const confirmLeaveSquad = async () => {
+    setLeavingSquad(true);
+    try {
+      const response = await fetch(`${API_URL}/squads/leave`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSquad(null);
+        setShowLeaveModal(false);
+      } else {
+        setLeaveError(data.message);
+      }
+    } catch (err) {
+      console.error('Error leaving squad:', err);
+      setLeaveError(texts[language]?.errorOccurred || 'Une erreur est survenue');
+    } finally {
+      setLeavingSquad(false);
     }
   };
 
@@ -241,7 +354,34 @@ const MyProfile = () => {
       noPurchases: 'Aucun achat pour le moment',
       purchasedOn: 'Acheté le',
       viewShop: 'Voir la boutique',
+      mySquad: 'Mon Escouade',
+      noSquad: 'Aucune escouade',
+      rank: 'Rang',
+      winRate: 'Win Rate',
+      kd: 'K/D',
+      division: 'Division',
+      noRanking: 'Pas encore classé',
+      members: 'Membres',
+      manageSquad: 'Gérer l\'escouade',
+      leaveSquad: 'Quitter l\'escouade',
+      squadName: 'Nom de l\'escouade',
+      squadTag: 'Tag',
+      description: 'Description',
+      optional: 'optionnel',
+      characters: 'caractères',
+      create: 'Créer',
+      createSquad: 'Créer une escouade',
+      squadNamePlaceholder: 'Ex: Les Invincibles',
+      squadDescPlaceholder: 'Décrivez votre escouade...',
       noBio: 'Aucune bio',
+      viewRanking: 'Voir le classement',
+      playRanked: 'Jouer en classé',
+      confirmLeaveSquad: 'Voulez-vous vraiment quitter cette escouade ?',
+      cannotLeaveAsLeader: 'Vous ne pouvez pas quitter l\'escouade en tant que leader. Transférez d\'abord le leadership ou dissolvez l\'escouade.',
+      errorOccurred: 'Une erreur est survenue',
+      confirm: 'Confirmer',
+      nameTooShort: 'Le nom doit faire au moins 3 caractères',
+      tagInvalid: 'Le tag doit faire entre 2 et 5 caractères',
       usernameInvalid: 'Pseudo invalide ou déjà pris.',
       profileUpdated: 'Profil mis à jour !',
       items: 'articles'
@@ -273,7 +413,34 @@ const MyProfile = () => {
       noPurchases: 'No purchases yet',
       purchasedOn: 'Purchased on',
       viewShop: 'View Shop',
+      mySquad: 'My Squad',
+      noSquad: 'No squad',
+      rank: 'Rank',
+      winRate: 'Win Rate',
+      kd: 'K/D',
+      division: 'Division',
+      noRanking: 'Not ranked yet',
+      members: 'Members',
+      manageSquad: 'Manage squad',
+      leaveSquad: 'Leave squad',
+      squadName: 'Squad name',
+      squadTag: 'Tag',
+      description: 'Description',
+      optional: 'optional',
+      characters: 'characters',
+      create: 'Create',
+      createSquad: 'Create a squad',
+      squadNamePlaceholder: 'Ex: The Invincibles',
+      squadDescPlaceholder: 'Describe your squad...',
       noBio: 'No bio',
+      viewRanking: 'View ranking',
+      playRanked: 'Play ranked',
+      confirmLeaveSquad: 'Do you really want to leave this squad?',
+      cannotLeaveAsLeader: 'You cannot leave the squad as leader. Transfer leadership first or disband the squad.',
+      errorOccurred: 'An error occurred',
+      confirm: 'Confirm',
+      nameTooShort: 'Name must be at least 3 characters',
+      tagInvalid: 'Tag must be 2-5 characters',
       usernameInvalid: 'Invalid or taken username.',
       profileUpdated: 'Profile updated!',
       items: 'items'
@@ -305,7 +472,34 @@ const MyProfile = () => {
       noPurchases: 'Noch keine Käufe',
       purchasedOn: 'Gekauft am',
       viewShop: 'Shop anzeigen',
+      mySquad: 'Mein Squad',
+      noSquad: 'Kein Squad',
+      rank: 'Rang',
+      winRate: 'Siegquote',
+      kd: 'K/D',
+      division: 'Division',
+      noRanking: 'Noch nicht platziert',
+      members: 'Mitglieder',
+      manageSquad: 'Squad verwalten',
+      leaveSquad: 'Squad verlassen',
+      squadName: 'Squad-Name',
+      squadTag: 'Tag',
+      description: 'Beschreibung',
+      optional: 'optional',
+      characters: 'Zeichen',
+      create: 'Erstellen',
+      createSquad: 'Squad erstellen',
+      squadNamePlaceholder: 'Z.B.: Die Unbesiegbaren',
+      squadDescPlaceholder: 'Beschreibe dein Squad...',
       noBio: 'Keine Bio',
+      viewRanking: 'Rangliste anzeigen',
+      playRanked: 'Ranked spielen',
+      confirmLeaveSquad: 'Möchtest du dieses Squad wirklich verlassen?',
+      cannotLeaveAsLeader: 'Du kannst das Squad als Leader nicht verlassen. Übertrage zuerst die Führung oder löse das Squad auf.',
+      errorOccurred: 'Ein Fehler ist aufgetreten',
+      confirm: 'Bestätigen',
+      nameTooShort: 'Name muss mindestens 3 Zeichen haben',
+      tagInvalid: 'Tag muss 2-5 Zeichen haben',
       usernameInvalid: 'Ungültiger oder bereits verwendeter Benutzername.',
       profileUpdated: 'Profil aktualisiert!',
       items: 'Artikel'
@@ -337,7 +531,34 @@ const MyProfile = () => {
       noPurchases: 'Nessun acquisto ancora',
       purchasedOn: 'Acquistato il',
       viewShop: 'Vedi negozio',
+      mySquad: 'La mia squadra',
+      noSquad: 'Nessuna squadra',
+      rank: 'Grado',
+      winRate: 'Win Rate',
+      kd: 'K/D',
+      division: 'Divisione',
+      noRanking: 'Non ancora classificato',
+      members: 'Membri',
+      manageSquad: 'Gestisci squadra',
+      leaveSquad: 'Lascia squadra',
+      squadName: 'Nome squadra',
+      squadTag: 'Tag',
+      description: 'Descrizione',
+      optional: 'opzionale',
+      characters: 'caratteri',
+      create: 'Crea',
+      createSquad: 'Crea una squadra',
+      squadNamePlaceholder: 'Es: Gli Invincibili',
+      squadDescPlaceholder: 'Descrivi la tua squadra...',
       noBio: 'Nessuna bio',
+      viewRanking: 'Vedi classifica',
+      playRanked: 'Gioca classificato',
+      confirmLeaveSquad: 'Vuoi davvero lasciare questa squadra?',
+      cannotLeaveAsLeader: 'Non puoi lasciare la squadra come leader. Trasferisci prima la leadership o sciogli la squadra.',
+      errorOccurred: 'Si è verificato un errore',
+      confirm: 'Conferma',
+      nameTooShort: 'Il nome deve avere almeno 3 caratteri',
+      tagInvalid: 'Il tag deve avere 2-5 caratteri',
       usernameInvalid: 'Nome utente non valido o già in uso.',
       profileUpdated: 'Profilo aggiornato!',
       items: 'articoli'
@@ -538,6 +759,200 @@ const MyProfile = () => {
             </div>
           )}
 
+          {/* Squad Section */}
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-6 mb-6`}>
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+              <Users className={`w-5 h-5 text-${accentColor}-400`} />
+              <span>{t.mySquad}</span>
+            </h2>
+            
+            {loadingSquad ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className={`w-6 h-6 text-${accentColor}-400 animate-spin`} />
+              </div>
+            ) : squad ? (
+              /* Afficher l'escouade */
+              <div className="space-y-4">
+                <Link 
+                  to={`/squad/${squad._id}`}
+                  className="flex items-center gap-4 p-4 bg-dark-800/50 rounded-xl hover:bg-dark-800/70 transition-colors"
+                >
+                  <div 
+                    className="w-14 h-14 rounded-xl flex items-center justify-center border-2 overflow-hidden"
+                    style={{ backgroundColor: squad.color + '30', borderColor: squad.color }}
+                  >
+                    {squad.logo ? (
+                      <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Users className="w-7 h-7" style={{ color: squad.color }} />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-white font-bold text-lg hover:underline">{squad.name}</p>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-400">[{squad.tag}]</span>
+                    </div>
+                    <p className="text-gray-500 text-sm">{squad.members?.length || 1} {t.members}</p>
+                    {squad.description && (
+                      <p className="text-gray-400 text-xs mt-1">{squad.description}</p>
+                    )}
+                  </div>
+                </Link>
+                
+                {/* Membres de l'escouade */}
+                {squad.members && squad.members.length > 0 && (
+                  <div className="p-4 bg-dark-800/30 rounded-xl">
+                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">{t.members}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {squad.members.map((member) => (
+                        <Link
+                          to={`/player/${encodeURIComponent(member.user?.username || 'Unknown')}`}
+                          key={member.user?._id || member._id}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg hover:bg-dark-700/50 transition-colors"
+                        >
+                          <img 
+                            src={
+                              member.user?.avatarUrl 
+                                ? member.user.avatarUrl 
+                                : (member.user?.discordId && member.user?.discordAvatar)
+                                  ? `https://cdn.discordapp.com/avatars/${member.user.discordId}/${member.user.discordAvatar}.png`
+                                  : 'https://cdn.discordapp.com/embed/avatars/0.png'
+                            }
+                            alt=""
+                            className="w-6 h-6 rounded-full"
+                            onError={(e) => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png'; }}
+                          />
+                          <span className="text-sm text-white hover:underline">{member.user?.username || 'Unknown'}</span>
+                          {member.role === 'leader' && (
+                            <Crown className="w-3 h-3 text-yellow-400" />
+                          )}
+                          {member.role === 'officer' && (
+                            <Shield className="w-3 h-3 text-blue-400" />
+                          )}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {/* Boutons d'action */}
+                <div className="flex gap-2">
+                  {/* Bouton gérer - visible pour leader et officiers */}
+                  {squad.members?.some(m => 
+                    (m.user?._id === user?.id || m.user === user?.id) && 
+                    (m.role === 'leader' || m.role === 'officer')
+                  ) && (
+                    <Link
+                      to="/squad-management"
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 rounded-lg transition-colors font-medium`}
+                    >
+                      <Settings className="w-4 h-4" />
+                      {t.manageSquad}
+                    </Link>
+                  )}
+                  
+                  {/* Bouton quitter */}
+                  <button
+                    onClick={handleLeaveSquad}
+                    className={`${squad.members?.some(m => 
+                      (m.user?._id === user?.id || m.user === user?.id) && 
+                      (m.role === 'leader' || m.role === 'officer')
+                    ) ? 'flex-1' : 'w-full'} py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors`}
+                  >
+                    {t.leaveSquad}
+                  </button>
+                </div>
+              </div>
+            ) : showCreateSquad ? (
+              /* Formulaire de création */
+              <form onSubmit={handleCreateSquad} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t.squadName} *
+                  </label>
+                  <input
+                    type="text"
+                    value={squadName}
+                    onChange={(e) => setSquadName(e.target.value)}
+                    placeholder={t.squadNamePlaceholder}
+                    maxLength={30}
+                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all`}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t.squadTag} (2-5 {t.characters}) *
+                  </label>
+                  <input
+                    type="text"
+                    value={squadTag}
+                    onChange={(e) => setSquadTag(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                    placeholder="Ex: INV"
+                    maxLength={5}
+                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all uppercase`}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t.description} ({t.optional})
+                  </label>
+                  <textarea
+                    value={squadDescription}
+                    onChange={(e) => setSquadDescription(e.target.value)}
+                    placeholder={t.squadDescPlaceholder}
+                    maxLength={200}
+                    rows={2}
+                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all resize-none`}
+                  />
+                </div>
+                
+                {squadError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+                    <p className="text-red-400 text-sm">{squadError}</p>
+                  </div>
+                )}
+                
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreateSquad(false);
+                      setSquadError('');
+                    }}
+                    className="flex-1 py-3 px-4 bg-dark-800 hover:bg-dark-700 border border-white/10 text-white font-medium rounded-xl transition-colors"
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creatingSquad}
+                    className={`flex-1 py-3 px-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} hover:opacity-90 disabled:opacity-50 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2`}
+                  >
+                    {creatingSquad ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5" />
+                        <span>{t.create}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Bouton pour afficher le formulaire */
+              <button
+                onClick={() => setShowCreateSquad(true)}
+                className={`w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-medium hover:opacity-90 transition-all shadow-lg`}
+              >
+                <Plus className="w-5 h-5" />
+                <span>{t.createSquad}</span>
+              </button>
+            )}
+          </div>
+
           {/* My Purchases */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-6`}>
             <div className="flex items-center justify-between mb-4">
@@ -613,6 +1028,54 @@ const MyProfile = () => {
           </div>
         </div>
       </div>
+
+      {/* Leave Squad Modal */}
+      {showLeaveModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`bg-dark-900 border border-${accentColor}-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl`}>
+            <div className="text-center mb-6">
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-full bg-${accentColor}-500/20 flex items-center justify-center`}>
+                {leaveError ? (
+                  <AlertCircle className={`w-8 h-8 text-${accentColor}-400`} />
+                ) : (
+                  <Users className={`w-8 h-8 text-${accentColor}-400`} />
+                )}
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">{t.leaveSquad}</h3>
+              {leaveError ? (
+                <p className="text-red-400 text-sm">{leaveError}</p>
+              ) : (
+                <p className="text-gray-400 text-sm">{t.confirmLeaveSquad}</p>
+              )}
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowLeaveModal(false);
+                  setLeaveError('');
+                }}
+                className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-colors font-medium"
+              >
+                {t.cancel}
+              </button>
+              {!leaveError && (
+                <button
+                  onClick={confirmLeaveSquad}
+                  disabled={leavingSquad}
+                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {leavingSquad ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    t.confirm
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

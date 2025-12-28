@@ -1,15 +1,7 @@
 import dotenv from 'dotenv';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
 
 // Load env variables FIRST - this must happen before any other imports
 dotenv.config();
-
-// Socket.io instance
-let io = null;
-
-// Export getIO function for routes to use
-export const getIO = () => io;
 
 // Now import everything else using dynamic imports to ensure env is loaded
 const startServer = async () => {
@@ -18,6 +10,8 @@ const startServer = async () => {
   const cors = (await import('cors')).default;
   const cookieParser = (await import('cookie-parser')).default;
   const passport = (await import('passport')).default;
+  const { createServer } = await import('http');
+  const { Server } = await import('socket.io');
   
   // Import routes and config AFTER dotenv is loaded
   const { default: authRoutes } = await import('./routes/auth.routes.js');
@@ -29,14 +23,86 @@ const startServer = async () => {
   const { default: squadRoutes } = await import('./routes/squad.routes.js');
   const { default: trophyRoutes } = await import('./routes/trophy.routes.js');
   const { default: matchRoutes } = await import('./routes/match.routes.js');
+  const { default: messageRoutes } = await import('./routes/message.routes.js');
   const { default: rankedMatchRoutes } = await import('./routes/rankedMatch.routes.js');
+  const { default: configRoutes } = await import('./routes/config.routes.js');
+  const { default: gameModeRulesRoutes } = await import('./routes/gameModeRules.routes.js');
+  const { default: hubRoutes } = await import('./routes/hub.routes.js');
+  const { default: ladderRulesRoutes } = await import('./routes/ladderRules.routes.js');
+  const { default: mapRoutes } = await import('./routes/map.routes.js');
+  const { default: ruleRoutes } = await import('./routes/rule.routes.js');
+  const { default: seasonRoutes } = await import('./routes/season.routes.js');
+  const { default: appSettingsRoutes } = await import('./routes/appSettings.routes.js');
+  const { default: systemRoutes } = await import('./routes/system.routes.js');
   await import('./config/passport.js');
   
   // Import Match model for cleanup job
   const Match = (await import('./models/Match.js')).default;
 
   const app = express();
+  const httpServer = createServer(app);
   const PORT = process.env.PORT || 5000;
+
+  // Socket.io configuration
+  const io = new Server(httpServer, {
+    cors: {
+      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      credentials: true
+    },
+    transports: ['websocket', 'polling']
+  });
+
+  // Track page viewers
+  const pageViewers = new Map();
+  // Track which pages each socket has joined (socket.rooms is empty on disconnect)
+  const socketPages = new Map();
+
+  // Socket.io event handlers
+  io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
+    socketPages.set(socket.id, new Set());
+
+    socket.on('joinPage', ({ page }) => {
+      socket.join(page);
+      socketPages.get(socket.id)?.add(page);
+      const count = (pageViewers.get(page) || 0) + 1;
+      pageViewers.set(page, count);
+      io.to(page).emit('viewerCount', count);
+    });
+
+    socket.on('leavePage', ({ page }) => {
+      socket.leave(page);
+      socketPages.get(socket.id)?.delete(page);
+      const count = Math.max(0, (pageViewers.get(page) || 1) - 1);
+      pageViewers.set(page, count);
+      io.to(page).emit('viewerCount', count);
+    });
+
+    socket.on('joinRankedMatch', (matchId) => {
+      socket.join(`ranked-match-${matchId}`);
+    });
+
+    socket.on('leaveRankedMatch', (matchId) => {
+      socket.leave(`ranked-match-${matchId}`);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Client disconnected:', socket.id);
+      // Decrement viewer count for all pages this socket was in
+      const pages = socketPages.get(socket.id);
+      if (pages) {
+        pages.forEach((page) => {
+          const count = Math.max(0, (pageViewers.get(page) || 1) - 1);
+          pageViewers.set(page, count);
+          io.to(page).emit('viewerCount', count);
+        });
+        socketPages.delete(socket.id);
+      }
+    });
+  });
+
+  // Make io accessible to routes
+  app.set('io', io);
 
   // Log config for debugging
   console.log('=== Server Configuration ===');
@@ -68,7 +134,17 @@ const startServer = async () => {
   app.use('/api/squads', squadRoutes);
   app.use('/api/trophies', trophyRoutes);
   app.use('/api/matches', matchRoutes);
+  app.use('/api/messages', messageRoutes);
   app.use('/api/ranked-matches', rankedMatchRoutes);
+  app.use('/api/config', configRoutes);
+  app.use('/api/game-mode-rules', gameModeRulesRoutes);
+  app.use('/api/hub', hubRoutes);
+  app.use('/api/ladder-rules', ladderRulesRoutes);
+  app.use('/api/maps', mapRoutes);
+  app.use('/api/rules', ruleRoutes);
+  app.use('/api/seasons', seasonRoutes);
+  app.use('/api/app-settings', appSettingsRoutes);
+  app.use('/api/system', systemRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {
@@ -85,77 +161,6 @@ const startServer = async () => {
     });
   });
 
-  // Create HTTP server and Socket.io
-  const httpServer = createServer(app);
-  
-  io = new Server(httpServer, {
-    cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
-      credentials: true
-    }
-  });
-
-  // Socket.io connection handling
-  io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-    
-    // Join user-specific room for notifications (matchmaking, etc.)
-    socket.on('joinUserRoom', (userId) => {
-      if (userId) {
-        socket.join(`user:${userId}`);
-        console.log(`Socket ${socket.id} joined user:${userId}`);
-      }
-    });
-    
-    // Leave user room
-    socket.on('leaveUserRoom', (userId) => {
-      if (userId) {
-        socket.leave(`user:${userId}`);
-        console.log(`Socket ${socket.id} left user:${userId}`);
-      }
-    });
-    
-    // Join match room
-    socket.on('joinMatch', (matchId) => {
-      socket.join(`match:${matchId}`);
-      console.log(`Socket ${socket.id} joined match:${matchId}`);
-    });
-    
-    // Leave match room
-    socket.on('leaveMatch', (matchId) => {
-      socket.leave(`match:${matchId}`);
-      console.log(`Socket ${socket.id} left match:${matchId}`);
-    });
-    
-    // Join ranked match room
-    socket.on('joinRankedMatch', (matchId) => {
-      socket.join(`ranked-match:${matchId}`);
-      console.log(`Socket ${socket.id} joined ranked-match:${matchId}`);
-    });
-    
-    // Leave ranked match room
-    socket.on('leaveRankedMatch', (matchId) => {
-      socket.leave(`ranked-match:${matchId}`);
-      console.log(`Socket ${socket.id} left ranked-match:${matchId}`);
-    });
-    
-    // Join matchmaking queue room
-    socket.on('joinMatchmakingQueue', ({ gameMode, mode }) => {
-      socket.join(`queue:${mode}:${gameMode}`);
-      console.log(`Socket ${socket.id} joined queue:${mode}:${gameMode}`);
-    });
-    
-    // Leave matchmaking queue room
-    socket.on('leaveMatchmakingQueue', ({ gameMode, mode }) => {
-      socket.leave(`queue:${mode}:${gameMode}`);
-      console.log(`Socket ${socket.id} left queue:${mode}:${gameMode}`);
-    });
-    
-    socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
-    });
-  });
-
   // Connect to MongoDB and start server
   try {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nomercy');
@@ -163,7 +168,7 @@ const startServer = async () => {
     
     httpServer.listen(PORT, () => {
       console.log(`✓ Server running on http://localhost:${PORT}`);
-      console.log('✓ Socket.io ready');
+      console.log('✓ Socket.io enabled');
       
       // Job de nettoyage des matchs expirés - toutes les 5 minutes
       const cleanupExpiredMatches = async () => {

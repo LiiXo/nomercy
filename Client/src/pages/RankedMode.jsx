@@ -42,6 +42,7 @@ const RankedMode = () => {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
   const [activeRankIndex, setActiveRankIndex] = useState(0);
   const sliderRef = useRef(null);
+  const [appSettings, setAppSettings] = useState(null);
 
   // Game modes configuration
   const gameModes = [
@@ -410,6 +411,22 @@ const RankedMode = () => {
     fetchLeaderboard();
   }, [isAuthenticated, selectedMode]);
 
+  // Fetch app settings to check if ranked matchmaking is enabled
+  useEffect(() => {
+    const fetchAppSettings = async () => {
+      try {
+        const response = await fetch(`${API_URL}/app-settings/public`);
+        const data = await response.json();
+        if (data.success) {
+          setAppSettings(data);
+        }
+      } catch (err) {
+        console.error('Error fetching app settings:', err);
+      }
+    };
+    fetchAppSettings();
+  }, []);
+
   // Scroll to player's rank when ranking is loaded
   useEffect(() => {
     if (myRanking) {
@@ -509,7 +526,9 @@ const RankedMode = () => {
 
   const fetchQueuesInfo = async () => {
     try {
-      const response = await fetch(`${API_URL}/ranked-matches/matchmaking/queues?mode=${selectedMode}`);
+      const response = await fetch(`${API_URL}/ranked-matches/matchmaking/queues?mode=${selectedMode}`, {
+        credentials: 'include'
+      });
       const data = await response.json();
       if (data.success) {
         setQueuesInfo(data.queues);

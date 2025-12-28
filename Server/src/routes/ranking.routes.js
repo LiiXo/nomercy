@@ -635,5 +635,8 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
+// ==================== DUPLICATE ADMIN ROUTE - REMOVED ====================
+// (The correct /admin/all route is at line 316)
+
 export default router;
 

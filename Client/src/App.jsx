@@ -8,7 +8,7 @@ import ScrollToTop from './components/ScrollToTop';
 import PageTransition from './components/PageTransition';
 import AnnouncementModal from './components/AnnouncementModal';
 import BanDialog from './components/BanDialog';
-import CookieConsent from './components/CookieConsent';
+import GlobalAlerts from './components/GlobalAlerts';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import LandingPage from './pages/LandingPage';
@@ -18,26 +18,23 @@ import CDLDashboard from './pages/CDLDashboard';
 import Rankings from './pages/Rankings';
 import RankedMode from './pages/RankedMode';
 import Shop from './pages/Shop';
-import Tournaments from './pages/Tournaments';
 import PlayerProfile from './pages/PlayerProfile';
 import SquadProfile from './pages/SquadProfile';
-import LadderRules from './pages/LadderRules';
 import SetupProfile from './pages/SetupProfile';
 import MyProfile from './pages/MyProfile';
-import MySquad from './pages/MySquad';
 import SquadManagement from './pages/SquadManagement';
 import JoinSquad from './pages/JoinSquad';
 import AdminPanel from './pages/AdminPanel';
 import MatchSheet from './pages/MatchSheet';
 import Rules from './pages/Rules';
-import GameModeRules from './pages/GameModeRules';
 import Anticheat from './pages/Anticheat';
+import SquadHub from './pages/SquadHub';
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
-import SquadHub from './pages/SquadHub';
 import Messages from './pages/Messages';
-import RankedMatchSheet from './pages/RankedMatchSheet';
+import MySquad from './pages/MySquad';
 import MyDisputes from './pages/MyDisputes';
+import GameModeRulesEditor from './components/GameModeRulesEditor';
 
 // Loading component
 const LoadingScreen = () => (
@@ -62,6 +59,11 @@ const ProtectedRoute = ({ children, requiredMode }) => {
     return <Navigate to="/" replace />;
   }
 
+  // Mode CDL temporairement indisponible
+  if (requiredMode === 'cdl') {
+    return <Navigate to="/" replace />;
+  }
+  
   if (requiredMode && selectedMode !== requiredMode) {
     return <Navigate to={`/${selectedMode}`} replace />;
   }
@@ -139,13 +141,18 @@ function AppContent() {
   const isSetupPage = location.pathname === '/setup-profile';
   const isAdminPage = location.pathname === '/admin';
   const isMyProfilePage = location.pathname === '/my-profile';
-  const isMySquadPage = location.pathname === '/my-squad';
   const isSquadManagementPage = location.pathname === '/squad-management';
-  const isSquadHubPage = location.pathname === '/squad-hub';
+  const isMySquadPage = location.pathname === '/my-squad';
   const isMessagesPage = location.pathname === '/messages';
+  const isMyDisputesPage = location.pathname === '/my-disputes';
+  const isRulesPage = location.pathname === '/rules';
+  const isAnticheatPage = location.pathname === '/anticheat';
+  const isSquadHubPage = location.pathname === '/squad-hub';
+  const isTermsPage = location.pathname === '/terms';
+  const isPrivacyPage = location.pathname === '/privacy';
 
   // Pages qui n'ont pas besoin d'un mode mais doivent afficher la navbar
-  const isStandalonePage = isMyProfilePage || isMySquadPage || isSquadManagementPage || isSquadHubPage || isMessagesPage;
+  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isMyDisputesPage || isRulesPage || isAnticheatPage || isSquadHubPage || isTermsPage || isPrivacyPage;
 
   // Si on est sur une page standalone sans mode, on sélectionne hardcore par défaut
   React.useEffect(() => {
@@ -169,7 +176,6 @@ function AppContent() {
         onClose={clearBanInfo}
         banInfo={banInfo}
       />
-      <CookieConsent />
       {showNavbar && <Navbar />}
       <main className="flex-grow">
         <Routes>
@@ -204,24 +210,6 @@ function AppContent() {
             </AuthenticatedRoute>
           } />
 
-          {/* My Squad - Authenticated users only */}
-          <Route path="/my-squad" element={
-            <AuthenticatedRoute>
-              <PageTransition>
-                <MySquad />
-              </PageTransition>
-            </AuthenticatedRoute>
-          } />
-
-          {/* My Disputes - Authenticated users only */}
-          <Route path="/my-disputes" element={
-            <AuthenticatedRoute>
-              <PageTransition>
-                <MyDisputes />
-              </PageTransition>
-            </AuthenticatedRoute>
-          } />
-
           {/* Squad Management - Authenticated users only */}
           <Route path="/squad-management" element={
             <AuthenticatedRoute>
@@ -247,45 +235,13 @@ function AppContent() {
             </AdminRoute>
           } />
 
-          {/* Public pages */}
-          <Route path="/rules" element={
-            <PageTransition>
-              <Rules />
-            </PageTransition>
-          } />
-          <Route path="/game-mode-rules/:mode" element={
-            <PageTransition>
-              <GameModeRules />
-            </PageTransition>
-          } />
-          <Route path="/anticheat" element={
-            <PageTransition>
-              <Anticheat />
-            </PageTransition>
-          } />
-          <Route path="/terms" element={
-            <PageTransition>
-              <TermsOfService />
-            </PageTransition>
-          } />
-          <Route path="/privacy" element={
-            <PageTransition>
-              <PrivacyPolicy />
-            </PageTransition>
-          } />
-          <Route path="/squad-hub" element={
-            <ProtectedRoute>
+          {/* Game Rules Editor - Staff only */}
+          <Route path="/admin/game-rules-editor" element={
+            <AdminRoute>
               <PageTransition>
-                <SquadHub />
+                <GameModeRulesEditor />
               </PageTransition>
-            </ProtectedRoute>
-          } />
-          <Route path="/messages" element={
-            <ProtectedRoute>
-              <PageTransition>
-                <Messages />
-              </PageTransition>
-            </ProtectedRoute>
+            </AdminRoute>
           } />
 
           <Route 
@@ -324,26 +280,6 @@ function AppContent() {
               <ProtectedRoute requiredMode="hardcore">
                 <PageTransition>
                   <Rankings />
-                </PageTransition>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/hardcore/ladder-rules/:ladderId" 
-            element={
-              <ProtectedRoute requiredMode="hardcore">
-                <PageTransition>
-                  <LadderRules />
-                </PageTransition>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/cdl/ladder-rules/:ladderId" 
-            element={
-              <ProtectedRoute requiredMode="cdl">
-                <PageTransition>
-                  <LadderRules />
                 </PageTransition>
               </ProtectedRoute>
             } 
@@ -389,26 +325,6 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/cdl/tournaments" 
-            element={
-              <ProtectedRoute requiredMode="cdl">
-                <PageTransition>
-                  <Tournaments />
-                </PageTransition>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/hardcore/tournaments" 
-            element={
-              <ProtectedRoute requiredMode="hardcore">
-                <PageTransition>
-                  <Tournaments />
-                </PageTransition>
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
             path="/player/:playerName" 
             element={
               <ProtectedRoute>
@@ -438,12 +354,98 @@ function AppContent() {
               </AuthenticatedRoute>
             } 
           />
+
+          {/* Rules */}
           <Route 
-            path="/ranked-match/:matchId" 
+            path="/rules" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <Rules />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Anticheat */}
+          <Route 
+            path="/anticheat" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <Anticheat />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Squad Hub */}
+          <Route 
+            path="/squad-hub" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <SquadHub />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Terms of Service */}
+          <Route 
+            path="/terms" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <TermsOfService />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Privacy Policy */}
+          <Route 
+            path="/privacy" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <PrivacyPolicy />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Messages - Authenticated users only */}
+          <Route 
+            path="/messages" 
             element={
               <AuthenticatedRoute>
                 <PageTransition>
-                  <RankedMatchSheet />
+                  <Messages />
+                </PageTransition>
+              </AuthenticatedRoute>
+            } 
+          />
+
+          {/* My Squad - Authenticated users only */}
+          <Route 
+            path="/my-squad" 
+            element={
+              <AuthenticatedRoute>
+                <PageTransition>
+                  <MySquad />
+                </PageTransition>
+              </AuthenticatedRoute>
+            } 
+          />
+
+          {/* My Disputes - Authenticated users only */}
+          <Route 
+            path="/my-disputes" 
+            element={
+              <AuthenticatedRoute>
+                <PageTransition>
+                  <MyDisputes />
                 </PageTransition>
               </AuthenticatedRoute>
             } 
@@ -454,6 +456,9 @@ function AppContent() {
       
       {/* Announcement Modal - Shows pending announcements */}
       <AnnouncementModal />
+      
+      {/* Global Alerts - Shows app-wide notifications and disabled features */}
+      <GlobalAlerts />
     </div>
   );
 }
