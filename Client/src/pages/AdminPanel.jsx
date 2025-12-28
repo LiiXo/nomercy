@@ -2989,7 +2989,7 @@ const renderDisputes = () => {
                 Cette action supprimera TOUTES les données suivantes:
               </p>
               <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside mb-4">
-                <li>Tous les utilisateurs (sauf admins)</li>
+                <li>Tous les utilisateurs (y compris les admins)</li>
                 <li>Toutes les escouades</li>
                 <li>Tous les matchs (ladder et classés)</li>
                 <li>Tous les classements</li>

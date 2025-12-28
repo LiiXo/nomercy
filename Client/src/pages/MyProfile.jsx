@@ -7,7 +7,7 @@ import {
   ArrowLeft, User, FileText, Save, Loader2, Check, X, AlertCircle,
   Trophy, Medal, Target, TrendingUp, Calendar, Coins, Shield, Crown,
   Edit3, LogOut, ShoppingBag, Package, Star, Zap, Gift, Award, Users,
-  Swords, Plus, Eye, Settings
+  Swords, Eye, Settings
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -37,12 +37,6 @@ const MyProfile = () => {
   // Squad state
   const [squad, setSquad] = useState(null);
   const [loadingSquad, setLoadingSquad] = useState(true);
-  const [showCreateSquad, setShowCreateSquad] = useState(false);
-  const [squadName, setSquadName] = useState('');
-  const [squadTag, setSquadTag] = useState('');
-  const [squadDescription, setSquadDescription] = useState('');
-  const [creatingSquad, setCreatingSquad] = useState(false);
-  const [squadError, setSquadError] = useState('');
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [leaveError, setLeaveError] = useState('');
   const [leavingSquad, setLeavingSquad] = useState(false);
@@ -117,51 +111,6 @@ const MyProfile = () => {
       console.error('Error fetching squad:', err);
     } finally {
       setLoadingSquad(false);
-    }
-  };
-
-  const handleCreateSquad = async (e) => {
-    e.preventDefault();
-    setSquadError('');
-    
-    if (!squadName.trim() || squadName.length < 3) {
-      setSquadError(texts[language]?.nameTooShort || texts.en.nameTooShort);
-      return;
-    }
-    if (!squadTag.trim() || squadTag.length < 2 || squadTag.length > 5) {
-      setSquadError(texts[language]?.tagInvalid || texts.en.tagInvalid);
-      return;
-    }
-    
-    setCreatingSquad(true);
-    try {
-      const response = await fetch(`${API_URL}/squads/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: squadName.trim(),
-          tag: squadTag.trim().toUpperCase(),
-          description: squadDescription.trim(),
-          mode: selectedMode,
-          color: isHardcore ? '#ef4444' : '#06b6d4'
-        })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSquad(data.squad);
-        setShowCreateSquad(false);
-        setSquadName('');
-        setSquadTag('');
-        setSquadDescription('');
-      } else {
-        setSquadError(data.message || 'Erreur lors de la création');
-      }
-    } catch (err) {
-      console.error('Error creating squad:', err);
-      setSquadError('Erreur serveur');
-    } finally {
-      setCreatingSquad(false);
     }
   };
 
@@ -384,7 +333,8 @@ const MyProfile = () => {
       tagInvalid: 'Le tag doit faire entre 2 et 5 caractères',
       usernameInvalid: 'Pseudo invalide ou déjà pris.',
       profileUpdated: 'Profil mis à jour !',
-      items: 'articles'
+      items: 'articles',
+      goToSquadPage: 'Gérer mon escouade'
     },
     en: {
       back: 'Back',
@@ -443,7 +393,8 @@ const MyProfile = () => {
       tagInvalid: 'Tag must be 2-5 characters',
       usernameInvalid: 'Invalid or taken username.',
       profileUpdated: 'Profile updated!',
-      items: 'items'
+      items: 'items',
+      goToSquadPage: 'Manage my squad'
     },
     de: {
       back: 'Zurück',
@@ -502,7 +453,8 @@ const MyProfile = () => {
       tagInvalid: 'Tag muss 2-5 Zeichen haben',
       usernameInvalid: 'Ungültiger oder bereits verwendeter Benutzername.',
       profileUpdated: 'Profil aktualisiert!',
-      items: 'Artikel'
+      items: 'Artikel',
+      goToSquadPage: 'Mein Squad verwalten'
     },
     it: {
       back: 'Indietro',
@@ -561,7 +513,8 @@ const MyProfile = () => {
       tagInvalid: 'Il tag deve avere 2-5 caratteri',
       usernameInvalid: 'Nome utente non valido o già in uso.',
       profileUpdated: 'Profilo aggiornato!',
-      items: 'articoli'
+      items: 'articoli',
+      goToSquadPage: 'Gestisci la mia squadra'
     }
   };
 
@@ -863,97 +816,20 @@ const MyProfile = () => {
                   </button>
                 </div>
               </div>
-            ) : showCreateSquad ? (
-              /* Formulaire de création */
-              <form onSubmit={handleCreateSquad} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t.squadName} *
-                  </label>
-                  <input
-                    type="text"
-                    value={squadName}
-                    onChange={(e) => setSquadName(e.target.value)}
-                    placeholder={t.squadNamePlaceholder}
-                    maxLength={30}
-                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all`}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t.squadTag} (2-5 {t.characters}) *
-                  </label>
-                  <input
-                    type="text"
-                    value={squadTag}
-                    onChange={(e) => setSquadTag(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-                    placeholder="Ex: INV"
-                    maxLength={5}
-                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all uppercase`}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    {t.description} ({t.optional})
-                  </label>
-                  <textarea
-                    value={squadDescription}
-                    onChange={(e) => setSquadDescription(e.target.value)}
-                    placeholder={t.squadDescPlaceholder}
-                    maxLength={200}
-                    rows={2}
-                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all resize-none`}
-                  />
-                </div>
-                
-                {squadError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-                    <p className="text-red-400 text-sm">{squadError}</p>
-                  </div>
-                )}
-                
-                <div className="flex gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowCreateSquad(false);
-                      setSquadError('');
-                    }}
-                    className="flex-1 py-3 px-4 bg-dark-800 hover:bg-dark-700 border border-white/10 text-white font-medium rounded-xl transition-colors"
-                  >
-                    {t.cancel}
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creatingSquad}
-                    className={`flex-1 py-3 px-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} hover:opacity-90 disabled:opacity-50 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2`}
-                  >
-                    {creatingSquad ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <Plus className="w-5 h-5" />
-                        <span>{t.create}</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
             ) : (
-              /* Bouton pour afficher le formulaire */
-              <button
-                onClick={() => setShowCreateSquad(true)}
+              /* Bouton pour aller à la page my-squad */
+              <Link
+                to="/my-squad"
                 className={`w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-medium hover:opacity-90 transition-all shadow-lg`}
               >
-                <Plus className="w-5 h-5" />
-                <span>{t.createSquad}</span>
-              </button>
+                <Users className="w-5 h-5" />
+                <span>{t.goToSquadPage}</span>
+              </Link>
             )}
           </div>
 
-          {/* My Purchases */}
+          {/* My Purchases - Temporairement caché */}
+          {false && (
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-6`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
@@ -1026,6 +902,7 @@ const MyProfile = () => {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 

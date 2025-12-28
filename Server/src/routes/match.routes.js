@@ -1,5 +1,6 @@
 import express from 'express';
 import Match from '../models/Match.js';
+import RankedMatch from '../models/RankedMatch.js';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
@@ -131,6 +132,73 @@ router.get('/my-active', verifyToken, async (req, res) => {
     res.json({ success: true, matches });
   } catch (error) {
     console.error('Get my active matches error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Obtenir les litiges de l'utilisateur (ladder + ranked)
+router.get('/my-disputes', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    const disputes = [];
+
+    // 1. Récupérer les litiges ladder (si l'utilisateur a une squad)
+    if (user.squad) {
+      const ladderDisputes = await Match.find({
+        $or: [
+          { challenger: user.squad._id },
+          { opponent: user.squad._id }
+        ],
+        status: 'disputed'
+      })
+        .populate('challenger', 'name tag color logo')
+        .populate('opponent', 'name tag color logo')
+        .populate('dispute.reportedBy', 'username')
+        .populate('createdBy', 'username')
+        .select('challenger opponent mode selectedMap dispute createdAt status ladderId')
+        .sort({ 'dispute.reportedAt': -1 });
+
+      // Ajouter les litiges ladder avec un indicateur de type
+      ladderDisputes.forEach(match => {
+        disputes.push({
+          ...match.toObject(),
+          disputeType: 'ladder'
+        });
+      });
+    }
+
+    // 2. Récupérer les litiges ranked (matchs où l'utilisateur est un joueur)
+    const rankedDisputes = await RankedMatch.find({
+      'players.user': user._id,
+      status: 'disputed'
+    })
+      .populate('players.user', 'username avatar')
+      .populate('team1Captain', 'username')
+      .populate('team2Captain', 'username')
+      .populate('host', 'username')
+      .populate('dispute.reportedBy', 'username')
+      .select('gameMode mode players dispute createdAt status map team1 team2')
+      .sort({ 'dispute.reportedAt': -1 });
+
+    // Ajouter les litiges ranked avec un indicateur de type
+    rankedDisputes.forEach(match => {
+      disputes.push({
+        ...match.toObject(),
+        disputeType: 'ranked'
+      });
+    });
+
+    // Trier tous les litiges par date de signalement
+    disputes.sort((a, b) => {
+      const dateA = a.dispute?.reportedAt || new Date(0);
+      const dateB = b.dispute?.reportedAt || new Date(0);
+      return dateB - dateA;
+    });
+
+    res.json({ success: true, disputes });
+  } catch (error) {
+    console.error('Get my disputes error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

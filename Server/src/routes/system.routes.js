@@ -36,11 +36,9 @@ router.post('/admin/reset-all', verifyToken, requireAdmin, async (req, res) => {
     
     console.log('🔥 Starting full system reset...');
     
-    // Delete all users EXCEPT admins
-    const deletedUsers = await User.deleteMany({
-      roles: { $nin: ['admin'] }
-    });
-    console.log(`✅ Deleted ${deletedUsers.deletedCount} users (kept admins)`);
+    // Delete ALL users including admins
+    const deletedUsers = await User.deleteMany({});
+    console.log(`✅ Deleted ${deletedUsers.deletedCount} users (including admins)`);
     
     // Delete all squads
     const deletedSquads = await Squad.deleteMany({});
