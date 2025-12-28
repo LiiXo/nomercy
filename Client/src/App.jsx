@@ -16,6 +16,7 @@ import ModeSelection from './pages/ModeSelection';
 import HardcoreDashboard from './pages/HardcoreDashboard';
 import CDLDashboard from './pages/CDLDashboard';
 import Rankings from './pages/Rankings';
+import RankingsInfo from './pages/RankingsInfo';
 import RankedMode from './pages/RankedMode';
 import Shop from './pages/Shop';
 import PlayerProfile from './pages/PlayerProfile';
@@ -280,6 +281,26 @@ function AppContent() {
               <ProtectedRoute requiredMode="hardcore">
                 <PageTransition>
                   <Rankings />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/cdl/ladder-rules" 
+            element={
+              <ProtectedRoute requiredMode="cdl">
+                <PageTransition>
+                  <RankingsInfo />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/hardcore/ladder-rules" 
+            element={
+              <ProtectedRoute requiredMode="hardcore">
+                <PageTransition>
+                  <RankingsInfo />
                 </PageTransition>
               </ProtectedRoute>
             } 

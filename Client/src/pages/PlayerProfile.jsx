@@ -37,10 +37,14 @@ const PlayerProfile = () => {
       copy: 'Copier',
       memberSince: 'Membre depuis le',
       statistics: 'Statistiques',
+      totalStatistics: 'Statistiques Totales',
       points: 'Points',
       wins: 'Victoires',
       losses: 'Défaites',
       winRate: 'Win Rate',
+      totalWins: 'Victoires Totales',
+      totalLosses: 'Défaites Totales',
+      totalWinRate: 'Ratio de Victoire',
       notRanked: 'Pas encore classé dans ce mode',
       winStreak: 'victoires consécutives',
       best: 'Record',
@@ -58,10 +62,14 @@ const PlayerProfile = () => {
       copy: 'Copy',
       memberSince: 'Member since',
       statistics: 'Statistics',
+      totalStatistics: 'Total Statistics',
       points: 'Points',
       wins: 'Wins',
       losses: 'Losses',
       winRate: 'Win Rate',
+      totalWins: 'Total Wins',
+      totalLosses: 'Total Losses',
+      totalWinRate: 'Win Ratio',
       notRanked: 'Not ranked in this mode yet',
       winStreak: 'win streak',
       matchHistory: 'Match History',
@@ -79,10 +87,14 @@ const PlayerProfile = () => {
       copy: 'Kopieren',
       memberSince: 'Mitglied seit',
       statistics: 'Statistiken',
+      totalStatistics: 'Gesamtstatistiken',
       points: 'Punkte',
       wins: 'Siege',
       losses: 'Niederlagen',
       winRate: 'Siegquote',
+      totalWins: 'Gesamtsiege',
+      totalLosses: 'Gesamtniederlagen',
+      totalWinRate: 'Siegverhältnis',
       notRanked: 'In diesem Modus noch nicht platziert',
       winStreak: 'Siegesserie',
       best: 'Rekord',
@@ -100,10 +112,14 @@ const PlayerProfile = () => {
       copy: 'Copia',
       memberSince: 'Membro dal',
       statistics: 'Statistiche',
+      totalStatistics: 'Statistiche Totali',
       points: 'Punti',
       wins: 'Vittorie',
       losses: 'Sconfitte',
       winRate: 'Win Rate',
+      totalWins: 'Vittorie Totali',
+      totalLosses: 'Sconfitte Totali',
+      totalWinRate: 'Rapporto Vittorie',
       notRanked: 'Non ancora classificato in questa modalità',
       winStreak: 'serie di vittorie',
       best: 'Record',
@@ -234,6 +250,14 @@ const PlayerProfile = () => {
     return `${Math.round((playerStats.wins / total) * 100)}%`;
   };
 
+  // Calculate total win rate
+  const getTotalWinRate = () => {
+    if (!playerData?.totalStats) return '0%';
+    const total = playerData.totalStats.wins + playerData.totalStats.losses;
+    if (total === 0) return '0%';
+    return `${Math.round((playerData.totalStats.wins / total) * 100)}%`;
+  };
+
   // Get rank for ornament (use ranking.rank from DB)
   const playerRank = playerStats?.rank || 999;
 
@@ -290,7 +314,21 @@ const PlayerProfile = () => {
             <span>{t.back}</span>
         </button>
 
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-8 mb-6`}>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-6`}>
+          {/* Banner */}
+          {playerData.banner && (
+            <div className="w-full h-48 relative overflow-hidden">
+              <img 
+                src={`https://api-nomercy.ggsecure.io${playerData.banner}`}
+                alt="Profile banner"
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-dark-900/80"></div>
+            </div>
+          )}
+          
+          <div className="p-8">
           <div className="flex flex-col items-center text-center">
               {/* Avatar simple */}
               <div className="relative group mb-6">
@@ -380,7 +418,36 @@ const PlayerProfile = () => {
                 </p>
               )}
           </div>
+          </div>
         </div>
+
+          {/* Total Stats (all modes combined) */}
+          {playerData?.totalStats && (
+            <div className={`bg-gradient-to-br from-purple-900/40 to-indigo-900/40 backdrop-blur-xl rounded-xl border border-purple-500/30 p-6 mb-6`}>
+              <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                <Trophy className="w-5 h-5 text-purple-400" />
+                <span>{t.totalStatistics}</span>
+              </h2>
+              
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors">
+                  <Medal className="w-5 h-5 text-green-400 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-green-400">{playerData.totalStats.wins || 0}</div>
+                  <div className="text-gray-500 text-xs">{t.totalWins}</div>
+                </div>
+                <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-red-500/30 transition-colors">
+                  <Target className="w-5 h-5 text-red-400 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-red-400">{playerData.totalStats.losses || 0}</div>
+                  <div className="text-gray-500 text-xs">{t.totalLosses}</div>
+                </div>
+                <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-purple-500/30 transition-colors">
+                  <TrendingUp className="w-5 h-5 text-purple-400 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-purple-400">{getTotalWinRate()}</div>
+                  <div className="text-gray-500 text-xs">{t.totalWinRate}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Stats */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>

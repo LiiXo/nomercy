@@ -1,23 +1,45 @@
 import mongoose from 'mongoose';
 
 const accountDeletionSchema = new mongoose.Schema({
-  // User info before deletion (snapshot)
+  // User reference (for pending deletions)
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+    index: true
+  },
+  
+  // Deletion request info
+  status: {
+    type: String,
+    enum: ['pending', 'completed', 'cancelled'],
+    default: 'pending'
+  },
+  scheduledFor: {
+    type: Date,
+    required: true
+  },
+  cancelledAt: {
+    type: Date,
+    default: null
+  },
+  
+  // User info before deletion (snapshot - filled when completed)
   deletedUserId: {
     type: mongoose.Schema.Types.ObjectId,
-    required: true,
-    index: true
+    default: null
   },
   username: {
     type: String,
-    required: true
+    default: null
   },
   discordId: {
     type: String,
-    required: true
+    default: null
   },
   discordUsername: {
     type: String,
-    required: true
+    default: null
   },
   email: {
     type: String,
@@ -58,7 +80,7 @@ const accountDeletionSchema = new mongoose.Schema({
   // Deletion info
   deletedAt: {
     type: Date,
-    default: Date.now
+    default: null
   },
   deletedBy: {
     type: String,
@@ -76,10 +98,13 @@ const accountDeletionSchema = new mongoose.Schema({
 // Index for queries
 accountDeletionSchema.index({ deletedAt: -1 });
 accountDeletionSchema.index({ username: 1 });
+accountDeletionSchema.index({ status: 1, scheduledFor: 1 });
+accountDeletionSchema.index({ user: 1, status: 1 });
 
 const AccountDeletion = mongoose.model('AccountDeletion', accountDeletionSchema);
 
 export default AccountDeletion;
+
 
 
 

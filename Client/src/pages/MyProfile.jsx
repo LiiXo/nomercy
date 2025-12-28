@@ -7,7 +7,7 @@ import {
   ArrowLeft, User, FileText, Save, Loader2, Check, X, AlertCircle,
   Trophy, Medal, Target, TrendingUp, Calendar, Coins, Shield, Crown,
   Edit3, LogOut, ShoppingBag, Package, Star, Zap, Gift, Award, Users,
-  Swords, Eye, Settings
+  Swords, Eye, Settings, Trash2
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -21,10 +21,16 @@ const MyProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
+  const [activisionId, setActivisionId] = useState(user?.activisionId || '');
   const [usernameStatus, setUsernameStatus] = useState('current');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Banner upload state
+  const [bannerFile, setBannerFile] = useState(null);
+  const [bannerPreview, setBannerPreview] = useState(user?.banner || null);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   
   // Purchases state
   const [purchases, setPurchases] = useState([]);
@@ -41,6 +47,11 @@ const MyProfile = () => {
   const [leaveError, setLeaveError] = useState('');
   const [leavingSquad, setLeavingSquad] = useState(false);
 
+  // Account deletion state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [loadingDeletion, setLoadingDeletion] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
   const gradientFrom = isHardcore ? 'from-red-500' : 'from-cyan-400';
@@ -56,6 +67,13 @@ const MyProfile = () => {
     };
     document.title = titles[language] || titles.en;
   }, [language]);
+
+  // Update banner preview when user.banner changes
+  useEffect(() => {
+    if (user?.banner) {
+      setBannerPreview(user.banner);
+    }
+  }, [user?.banner]);
 
   // Fetch user purchases, ranking, and squad
   useEffect(() => {
@@ -111,6 +129,29 @@ const MyProfile = () => {
       console.error('Error fetching squad:', err);
     } finally {
       setLoadingSquad(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setLoadingDeletion(true);
+    setDeleteError('');
+    try {
+      const response = await fetch(`${API_URL}/users/delete-account`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Account deleted, logout user
+        logout();
+      } else {
+        setDeleteError(data.message);
+      }
+    } catch (err) {
+      console.error('Error deleting account:', err);
+      setDeleteError(texts[language]?.errorOccurred || 'Une erreur est survenue');
+    } finally {
+      setLoadingDeletion(false);
     }
   };
 
@@ -179,6 +220,81 @@ const MyProfile = () => {
     return () => clearTimeout(timer);
   }, [username, user?.username, isEditing, checkUsername]);
 
+  const handleBannerChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setError(texts[language]?.bannerTooLarge || 'Banner file must be less than 10MB');
+      return;
+    }
+
+    // Check file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      setError(texts[language]?.bannerInvalidType || 'Only PNG, JPEG, JPG and GIF files are allowed');
+      return;
+    }
+
+    setBannerFile(file);
+    setBannerPreview(URL.createObjectURL(file));
+  };
+
+  const handleBannerUpload = async () => {
+    if (!bannerFile) return;
+
+    setUploadingBanner(true);
+    try {
+      const formData = new FormData();
+      formData.append('banner', bannerFile);
+
+      const response = await fetch(`${API_URL}/users/upload-banner`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(texts[language]?.bannerUploaded || 'Banner uploaded successfully!');
+        setBannerFile(null);
+        await refreshUser();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      console.error('Banner upload error:', err);
+      setError(texts[language]?.errorOccurred || 'An error occurred');
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
+  const handleBannerDelete = async () => {
+    try {
+      const response = await fetch(`${API_URL}/users/delete-banner`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setBannerPreview(null);
+        setBannerFile(null);
+        await refreshUser();
+        setSuccess(texts[language]?.bannerDeleted || 'Banner deleted successfully!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      console.error('Banner delete error:', err);
+      setError(texts[language]?.errorOccurred || 'An error occurred');
+    }
+  };
+
   const handleSave = async () => {
     setError('');
     setSuccess('');
@@ -192,6 +308,7 @@ const MyProfile = () => {
     const updates = {};
     if (username !== user?.username) updates.username = username;
     if (bio !== user?.bio) updates.bio = bio;
+    if (activisionId !== user?.activisionId) updates.activisionId = activisionId;
 
     if (Object.keys(updates).length === 0) {
       setIsEditing(false);
@@ -213,6 +330,9 @@ const MyProfile = () => {
   const handleCancel = () => {
     setUsername(user?.username || '');
     setBio(user?.bio || '');
+    setActivisionId(user?.activisionId || '');
+    setBannerFile(null);
+    setBannerPreview(user?.banner || null);
     setIsEditing(false);
     setError('');
     setUsernameStatus('current');
@@ -334,7 +454,24 @@ const MyProfile = () => {
       usernameInvalid: 'Pseudo invalide ou déjà pris.',
       profileUpdated: 'Profil mis à jour !',
       items: 'articles',
-      goToSquadPage: 'Gérer mon escouade'
+      goToSquadPage: 'Gérer mon escouade',
+      deleteAccount: 'Supprimer mon compte',
+      deleteAccountTitle: 'Supprimer votre compte',
+      deleteAccountWarning: 'Cette action est irréversible et immédiate. Toutes vos données seront définitivement supprimées.',
+      deleteAccountConfirm: 'Êtes-vous vraiment sûr de vouloir supprimer définitivement votre compte ?',
+      cannotDeleteWithSquad: 'Vous devez d\'abord quitter votre escouade.',
+      cannotDeleteBanned: 'Impossible de supprimer un compte banni.',
+      confirmDelete: 'Supprimer définitivement',
+      dangerZone: 'Zone Dangereuse',
+      activisionId: 'Activision ID',
+      banner: 'Bannière',
+      uploadBanner: 'Télécharger bannière',
+      deleteBanner: 'Supprimer bannière',
+      bannerUploaded: 'Bannière téléchargée !',
+      bannerDeleted: 'Bannière supprimée !',
+      bannerTooLarge: 'La bannière doit faire moins de 10MB',
+      bannerInvalidType: 'Seuls les fichiers PNG, JPEG, JPG et GIF sont autorisés',
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
     },
     en: {
       back: 'Back',
@@ -394,7 +531,24 @@ const MyProfile = () => {
       usernameInvalid: 'Invalid or taken username.',
       profileUpdated: 'Profile updated!',
       items: 'items',
-      goToSquadPage: 'Manage my squad'
+      goToSquadPage: 'Manage my squad',
+      deleteAccount: 'Delete my account',
+      deleteAccountTitle: 'Delete your account',
+      deleteAccountWarning: 'This action is irreversible and immediate. All your data will be permanently deleted.',
+      deleteAccountConfirm: 'Are you really sure you want to permanently delete your account?',
+      cannotDeleteWithSquad: 'You must leave your squad first.',
+      cannotDeleteBanned: 'Cannot delete a banned account.',
+      confirmDelete: 'Permanently delete',
+      dangerZone: 'Danger Zone',
+      activisionId: 'Activision ID',
+      banner: 'Banner',
+      uploadBanner: 'Upload banner',
+      deleteBanner: 'Delete banner',
+      bannerUploaded: 'Banner uploaded!',
+      bannerDeleted: 'Banner deleted!',
+      bannerTooLarge: 'Banner must be less than 10MB',
+      bannerInvalidType: 'Only PNG, JPEG, JPG and GIF files are allowed',
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
     },
     de: {
       back: 'Zurück',
@@ -454,7 +608,24 @@ const MyProfile = () => {
       usernameInvalid: 'Ungültiger oder bereits verwendeter Benutzername.',
       profileUpdated: 'Profil aktualisiert!',
       items: 'Artikel',
-      goToSquadPage: 'Mein Squad verwalten'
+      goToSquadPage: 'Mein Squad verwalten',
+      deleteAccount: 'Mein Konto löschen',
+      deleteAccountTitle: 'Konto löschen',
+      deleteAccountWarning: 'Diese Aktion ist unwiderruflich und sofort. Alle Ihre Daten werden endgültig gelöscht.',
+      deleteAccountConfirm: 'Sind Sie wirklich sicher, dass Sie Ihr Konto endgültig löschen möchten?',
+      cannotDeleteWithSquad: 'Sie müssen zuerst Ihr Squad verlassen.',
+      cannotDeleteBanned: 'Ein gesperrtes Konto kann nicht gelöscht werden.',
+      confirmDelete: 'Endgültig löschen',
+      dangerZone: 'Gefahrenzone',
+      activisionId: 'Activision ID',
+      banner: 'Banner',
+      uploadBanner: 'Banner hochladen',
+      deleteBanner: 'Banner löschen',
+      bannerUploaded: 'Banner hochgeladen!',
+      bannerDeleted: 'Banner gelöscht!',
+      bannerTooLarge: 'Banner muss kleiner als 10MB sein',
+      bannerInvalidType: 'Nur PNG, JPEG, JPG und GIF Dateien sind erlaubt',
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
     },
     it: {
       back: 'Indietro',
@@ -514,7 +685,24 @@ const MyProfile = () => {
       usernameInvalid: 'Nome utente non valido o già in uso.',
       profileUpdated: 'Profilo aggiornato!',
       items: 'articoli',
-      goToSquadPage: 'Gestisci la mia squadra'
+      goToSquadPage: 'Gestisci la mia squadra',
+      deleteAccount: 'Elimina il mio account',
+      deleteAccountTitle: 'Elimina il tuo account',
+      deleteAccountWarning: 'Questa azione è irreversibile e immediata. Tutti i tuoi dati verranno eliminati definitivamente.',
+      deleteAccountConfirm: 'Sei davvero sicuro di voler eliminare definitivamente il tuo account?',
+      cannotDeleteWithSquad: 'Devi prima lasciare la tua squadra.',
+      cannotDeleteBanned: 'Impossibile eliminare un account bannato.',
+      confirmDelete: 'Elimina definitivamente',
+      dangerZone: 'Zona Pericolosa',
+      activisionId: 'Activision ID',
+      banner: 'Banner',
+      uploadBanner: 'Carica banner',
+      deleteBanner: 'Elimina banner',
+      bannerUploaded: 'Banner caricato!',
+      bannerDeleted: 'Banner eliminato!',
+      bannerTooLarge: 'Il banner deve essere inferiore a 10MB',
+      bannerInvalidType: 'Sono consentiti solo file PNG, JPEG, JPG e GIF',
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
     }
   };
 
@@ -564,7 +752,21 @@ const MyProfile = () => {
           )}
 
           {/* Profile Card */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 p-4 sm:p-8 mb-4 sm:mb-6`}>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-4 sm:mb-6`}>
+          {/* Banner */}
+          {user.banner && (
+            <div className="w-full h-32 sm:h-48 relative overflow-hidden">
+              <img 
+                src={`https://api-nomercy.ggsecure.io${user.banner}`}
+                alt="Profile banner"
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-dark-900/80"></div>
+            </div>
+          )}
+          
+          <div className="p-4 sm:p-8">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
               {/* Avatar */}
               <div className="relative flex-shrink-0">
@@ -633,6 +835,7 @@ const MyProfile = () => {
               </div>
             </div>
           </div>
+          </div>
 
           {/* Edit Form */}
           {isEditing && (
@@ -664,6 +867,18 @@ const MyProfile = () => {
                   </div>
                 </div>
 
+                {/* Activision ID */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.activisionId}</label>
+                  <input
+                    type="text"
+                    value={activisionId}
+                    onChange={(e) => setActivisionId(e.target.value)}
+                    maxLength={50}
+                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all`}
+                  />
+                </div>
+
                 {/* Bio */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">{t.bio}</label>
@@ -676,6 +891,54 @@ const MyProfile = () => {
                     className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all resize-none`}
                   />
                   <p className="text-xs text-gray-500 mt-1 text-right">{bio.length}/500</p>
+                </div>
+
+                {/* Banner Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.banner}</label>
+                  {bannerPreview && (
+                    <div className="mb-3 relative rounded-xl overflow-hidden border border-white/10">
+                      <img 
+                        src={bannerPreview.startsWith('blob:') ? bannerPreview : `https://api-nomercy.ggsecure.io${bannerPreview}`}
+                        alt="Banner preview" 
+                        className="w-full h-32 object-cover"
+                      />
+                      <button
+                        onClick={handleBannerDelete}
+                        type="button"
+                        className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4 text-white" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <label className="flex-1 cursor-pointer">
+                      <div className={`px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all`}>
+                        {bannerFile ? bannerFile.name : t.uploadBanner}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/gif"
+                        onChange={handleBannerChange}
+                        className="hidden"
+                      />
+                    </label>
+                    {bannerFile && (
+                      <button
+                        onClick={handleBannerUpload}
+                        disabled={uploadingBanner}
+                        className={`px-4 py-3 bg-gradient-to-r ${gradientFrom} ${gradientTo} hover:opacity-90 disabled:opacity-50 text-white font-medium rounded-xl transition-all flex items-center gap-2`}
+                      >
+                        {uploadingBanner ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{t.bannerInfo}</p>
                 </div>
 
                 {/* Error */}
@@ -903,8 +1166,82 @@ const MyProfile = () => {
             )}
           </div>
           )}
+
+          {/* Danger Zone - Account Deletion */}
+          <div className="bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-red-500/30 p-6 mt-6">
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+              <AlertCircle className="w-5 h-5 text-red-400" />
+              <span>{t.dangerZone}</span>
+            </h2>
+
+            <div className="space-y-4">
+              <p className="text-gray-400 text-sm">{t.deleteAccountWarning}</p>
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                disabled={user.isBanned || !!squad}
+                className="w-full py-3 px-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-medium rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={
+                  user.isBanned 
+                    ? t.cannotDeleteBanned 
+                    : squad 
+                      ? t.cannotDeleteWithSquad 
+                      : ''
+                }
+              >
+                <Trash2 className="w-5 h-5" />
+                {t.deleteAccount}
+              </button>
+              {(user.isBanned || squad) && (
+                <p className="text-xs text-red-400 text-center">
+                  {user.isBanned ? t.cannotDeleteBanned : t.cannotDeleteWithSquad}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-900 border border-red-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-8 h-8 text-red-400" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">{t.deleteAccountTitle}</h3>
+              <p className="text-gray-400 text-sm mb-4">{t.deleteAccountConfirm}</p>
+              <p className="text-red-400 text-sm">{t.deleteAccountWarning}</p>
+              {deleteError && (
+                <p className="text-red-400 text-sm mt-3 p-2 bg-red-500/10 rounded">{deleteError}</p>
+              )}
+            </div>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteError('');
+                }}
+                className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-colors font-medium"
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={loadingDeletion}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingDeletion ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  t.confirmDelete
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Leave Squad Modal */}
       {showLeaveModal && (

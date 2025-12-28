@@ -35,6 +35,10 @@ const userSchema = new mongoose.Schema({
   avatar: {
     type: String // Custom avatar URL, defaults to Discord avatar
   },
+  banner: {
+    type: String, // Banner image URL (PNG, JPEG, GIF - max 10MB)
+    default: null
+  },
   
   // Gaming Info
   platform: {

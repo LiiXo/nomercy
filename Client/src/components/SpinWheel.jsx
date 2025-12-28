@@ -271,9 +271,9 @@ const SpinWheel = ({ isOpen, onClose }) => {
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 overflow-y-auto" onClick={() => !isSpinning && onClose()}>
-      <div className="relative my-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="relative my-auto w-full max-w-[95vw] sm:max-w-none" onClick={(e) => e.stopPropagation()}>
         {/* Modal */}
-        <div className={`relative bg-gradient-to-b from-amber-950 via-amber-900 to-amber-950 border-2 border-yellow-500/50 rounded-2xl shadow-2xl shadow-yellow-500/20 overflow-hidden transition-all duration-300 ${result ? 'w-[450px]' : 'w-[340px]'}`}>
+        <div className={`relative bg-gradient-to-b from-amber-950 via-amber-900 to-amber-950 border-2 border-yellow-500/50 rounded-2xl shadow-2xl shadow-yellow-500/20 overflow-hidden transition-all duration-300 mx-auto ${result ? 'w-full sm:w-[450px]' : 'w-full sm:w-[340px]'}`}>
           {/* Decorative corners */}
           <div className="absolute top-0 left-0 w-10 h-10 border-t-2 border-l-2 border-yellow-400 rounded-tl-2xl"></div>
           <div className="absolute top-0 right-0 w-10 h-10 border-t-2 border-r-2 border-yellow-400 rounded-tr-2xl"></div>
@@ -309,37 +309,37 @@ const SpinWheel = ({ isOpen, onClose }) => {
               </div>
             ) : result ? (
               // Result screen
-              <div className="relative z-30 text-center py-6">
-                <div className="mb-6 relative">
+              <div className="relative z-30 text-center py-4 sm:py-6 px-2">
+                <div className="mb-4 sm:mb-6 relative">
                   {/* Animated coins */}
-                  <div className="relative w-32 h-32 mx-auto">
+                  <div className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto">
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <div className={`w-24 h-24 rounded-full shadow-2xl flex items-center justify-center border-4 animate-bounce ${
+                      <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full shadow-2xl flex items-center justify-center border-4 animate-bounce ${
                         result.isJackpot 
                           ? 'bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/50 border-red-300' 
                           : 'bg-gradient-to-br from-yellow-400 to-amber-500 shadow-yellow-500/50 border-yellow-300'
                       }`}>
-                        <Coins className={`w-12 h-12 ${result.isJackpot ? 'text-red-900' : 'text-amber-900'}`} />
+                        <Coins className={`w-10 h-10 sm:w-12 sm:h-12 ${result.isJackpot ? 'text-red-900' : 'text-amber-900'}`} />
                       </div>
                     </div>
-                    <Sparkles className={`absolute top-0 right-2 w-8 h-8 animate-pulse ${result.isJackpot ? 'text-red-400' : 'text-yellow-400'}`} />
-                    <Sparkles className={`absolute bottom-2 left-0 w-6 h-6 animate-pulse ${result.isJackpot ? 'text-red-300' : 'text-yellow-300'}`} style={{ animationDelay: '0.5s' }} />
-                    <Sparkles className={`absolute top-4 left-4 w-5 h-5 animate-pulse ${result.isJackpot ? 'text-red-300' : 'text-amber-300'}`} style={{ animationDelay: '0.3s' }} />
+                    <Sparkles className={`absolute top-0 right-0 sm:right-2 w-6 h-6 sm:w-8 sm:h-8 animate-pulse ${result.isJackpot ? 'text-red-400' : 'text-yellow-400'}`} />
+                    <Sparkles className={`absolute bottom-0 sm:bottom-2 left-0 w-5 h-5 sm:w-6 sm:h-6 animate-pulse ${result.isJackpot ? 'text-red-300' : 'text-yellow-300'}`} style={{ animationDelay: '0.5s' }} />
+                    <Sparkles className={`absolute top-2 sm:top-4 left-2 sm:left-4 w-4 h-4 sm:w-5 sm:h-5 animate-pulse ${result.isJackpot ? 'text-red-300' : 'text-amber-300'}`} style={{ animationDelay: '0.3s' }} />
                   </div>
                 </div>
                 {result.isJackpot && (
-                  <div className="text-red-400 text-lg font-bold mb-2 animate-pulse">🎉 JACKPOT! 🎉</div>
+                  <div className="text-red-400 text-base sm:text-lg font-bold mb-2 animate-pulse">🎉 JACKPOT! 🎉</div>
                 )}
-                <h3 className={`text-2xl font-bold mb-2 ${result.isJackpot ? 'text-red-400' : 'text-yellow-400'}`}>{t.youWon}</h3>
-                <div className={`inline-flex items-center gap-3 px-8 py-4 rounded-2xl shadow-2xl border-2 ${
+                <h3 className={`text-xl sm:text-2xl font-bold mb-2 ${result.isJackpot ? 'text-red-400' : 'text-yellow-400'}`}>{t.youWon}</h3>
+                <div className={`inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-8 py-3 sm:py-4 rounded-xl sm:rounded-2xl shadow-2xl border-2 ${
                   result.isJackpot 
                     ? 'bg-gradient-to-r from-red-500 to-red-600 border-red-300' 
                     : 'bg-gradient-to-r from-yellow-500 to-amber-500 border-yellow-300'
                 }`}>
-                  <span className={`text-4xl font-bold ${result.isJackpot ? 'text-white' : 'text-amber-900'}`}>+{result.amount.toLocaleString()}</span>
-                  <Coins className={`w-8 h-8 ${result.isJackpot ? 'text-red-200' : 'text-amber-800'}`} />
+                  <span className={`text-2xl sm:text-4xl font-bold ${result.isJackpot ? 'text-white' : 'text-amber-900'}`}>+{result.amount.toLocaleString()}</span>
+                  <Coins className={`w-6 h-6 sm:w-8 sm:h-8 ${result.isJackpot ? 'text-red-200' : 'text-amber-800'}`} />
                 </div>
-                <p className={`mt-2 ${result.isJackpot ? 'text-red-300/70' : 'text-amber-300/70'}`}>{t.gold}</p>
+                <p className={`mt-2 text-sm sm:text-base ${result.isJackpot ? 'text-red-300/70' : 'text-amber-300/70'}`}>{t.gold}</p>
                 <button
                   onClick={(e) => {
                     e.preventDefault();
@@ -347,7 +347,7 @@ const SpinWheel = ({ isOpen, onClose }) => {
                     onClose();
                   }}
                   type="button"
-                  className={`relative z-50 mt-6 px-10 py-3 font-bold rounded-xl transition-all shadow-lg border-2 cursor-pointer select-none active:scale-95 ${
+                  className={`relative z-50 mt-4 sm:mt-6 px-8 sm:px-10 py-2.5 sm:py-3 font-bold rounded-lg sm:rounded-xl transition-all shadow-lg border-2 cursor-pointer select-none active:scale-95 text-sm sm:text-base ${
                     result.isJackpot 
                       ? 'bg-gradient-to-r from-red-500 to-red-600 text-white border-red-300 hover:from-red-400 hover:to-red-500 shadow-red-500/30' 
                       : 'bg-gradient-to-r from-yellow-500 to-amber-500 text-amber-900 border-yellow-300 hover:from-yellow-400 hover:to-amber-400 shadow-yellow-500/30'

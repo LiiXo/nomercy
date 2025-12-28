@@ -36,6 +36,7 @@ const AdminPanel = () => {
   // Données
   const [users, setUsers] = useState([]);
   const [squads, setSquads] = useState([]);
+  const [deletedAccounts, setDeletedAccounts] = useState([]);
   const [shopItems, setShopItems] = useState([]);
   const [trophies, setTrophies] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -98,6 +99,7 @@ const AdminPanel = () => {
       tabs: [
         { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false },
         { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false },
+        { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false },
         { id: 'disputes', label: 'Litiges', icon: AlertTriangle, adminOnly: false },
       ]
     },
@@ -198,6 +200,9 @@ const AdminPanel = () => {
         case 'squads':
           await fetchSquads();
           break;
+        case 'deleted-accounts':
+          await fetchDeletedAccounts();
+          break;
         case 'shop':
           await fetchShopItems();
           await fetchTrophies();
@@ -248,6 +253,31 @@ const AdminPanel = () => {
       }
     } catch (err) {
       console.error('Error fetching stats:', err);
+    }
+  };
+
+  const fetchDeletedAccounts = async () => {
+    try {
+      const params = new URLSearchParams({
+        search: searchTerm,
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      });
+      
+      const response = await fetch(`${API_URL}/users/admin/deleted-accounts?${params}`, {
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setDeletedAccounts(data.deletedAccounts);
+        setTotalPages(data.pagination.pages);
+      } else {
+        setError('Erreur lors du chargement des comptes supprimés');
+      }
+    } catch (err) {
+      console.error('Fetch deleted accounts error:', err);
+      setError('Erreur lors du chargement des comptes supprimés');
     }
   };
 
@@ -806,8 +836,8 @@ const AdminPanel = () => {
         return {
           name: '',
           image: '',
-          mode: 'hardcore',
-          gameMode: 'Search & Destroy',
+          ladders: [],
+          gameModes: [],
           isActive: true
         };
       default:
@@ -1292,6 +1322,150 @@ const AdminPanel = () => {
           </div>
                   )}
                 </div>
+    );
+  };
+
+  const renderDeletedAccounts = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Comptes Supprimés</h2>
+          <div className="text-gray-400 text-sm">
+            {deletedAccounts.length} compte(s) supprimé(s) • Page {page}/{totalPages || 1}
+          </div>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Rechercher un compte supprimé..."
+            className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+          />
+        </div>
+
+        {/* Deleted Accounts Table */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-900/50">
+                <tr>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Utilisateur</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Discord</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Stats</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Coins</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Supprimé par</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {deletedAccounts.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
+                      Aucun compte supprimé trouvé
+                    </td>
+                  </tr>
+                ) : (
+                  deletedAccounts.map((account) => (
+                    <tr key={account._id} className="hover:bg-white/5 transition-colors">
+                      {/* Username */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-3">
+                          <div>
+                            <div className="text-white font-medium">{account.username || 'N/A'}</div>
+                            <div className="text-xs text-gray-500">ID: {account.deletedUserId}</div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Discord */}
+                      <td className="px-6 py-4">
+                        <div className="text-sm">
+                          <div className="text-white">{account.discordUsername}</div>
+                          <div className="text-xs text-gray-500">{account.discordId}</div>
+                        </div>
+                      </td>
+
+                      {/* Stats */}
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-300">
+                          <div>{account.stats?.wins || 0}W / {account.stats?.losses || 0}L</div>
+                          <div className="text-xs text-gray-500">{account.stats?.points || 0} pts</div>
+                        </div>
+                      </td>
+
+                      {/* Coins */}
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-1">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                          <span className="text-yellow-400 font-medium">{account.goldCoins || 0}</span>
+                        </div>
+                      </td>
+
+                      {/* Deleted By */}
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          account.deletedBy === 'admin' 
+                            ? 'bg-red-500/20 text-red-400' 
+                            : 'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {account.deletedBy === 'admin' ? 'Admin' : 'Utilisateur'}
+                        </span>
+                        {account.deletionReason && (
+                          <div className="text-xs text-gray-500 mt-1">{account.deletionReason}</div>
+                        )}
+                      </td>
+
+                      {/* Date */}
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-400">
+                          {new Date(account.deletedAt).toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between bg-dark-800/50 border border-white/10 rounded-xl px-6 py-4">
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 rounded-lg transition-colors"
+            >
+              Précédent
+            </button>
+            <span className="text-gray-400">
+              Page {page} sur {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
+              disabled={page === totalPages}
+              className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-purple-400 rounded-lg transition-colors"
+            >
+              Suivant
+            </button>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -3641,6 +3815,8 @@ const renderDisputes = () => {
         return renderUsers();
       case 'squads':
         return renderSquads();
+      case 'deleted-accounts':
+        return renderDeletedAccounts();
       case 'shop':
         return renderShop();
       case 'disputes':

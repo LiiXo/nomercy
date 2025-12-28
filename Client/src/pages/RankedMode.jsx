@@ -49,7 +49,7 @@ const RankedMode = () => {
     {
       id: 'Duel',
       icon: Swords,
-      players: '1v1',
+      players: '2 joueurs',
       color: 'from-yellow-500 to-orange-600',
       bgColor: 'bg-yellow-500/10',
       borderColor: 'border-yellow-500/30',
@@ -63,21 +63,21 @@ const RankedMode = () => {
     {
       id: 'Team Deathmatch',
       icon: Skull,
-      players: '4v4',
+      players: '5-10 joueurs',
       color: 'from-red-500 to-pink-600',
       bgColor: 'bg-red-500/10',
       borderColor: 'border-red-500/30',
       description: {
-        fr: 'Mêlée générale en équipe. Élimine l\'équipe adverse.',
-        en: 'Team deathmatch. Eliminate the enemy team.',
-        de: 'Team-Deathmatch. Eliminiere das gegnerische Team.',
-        it: 'Deathmatch a squadre. Elimina la squadra avversaria.'
+        fr: 'Mêlée générale. Élimine tes adversaires.',
+        en: 'Free for all. Eliminate your opponents.',
+        de: 'Jeder gegen jeden. Eliminiere deine Gegner.',
+        it: 'Tutti contro tutti. Elimina i tuoi avversari.'
       }
     },
     {
       id: 'Domination',
       icon: Flag,
-      players: '4v4',
+      players: '8-10 joueurs',
       color: 'from-blue-500 to-purple-600',
       bgColor: 'bg-blue-500/10',
       borderColor: 'border-blue-500/30',
@@ -91,7 +91,7 @@ const RankedMode = () => {
     {
       id: 'Search & Destroy',
       icon: Target,
-      players: '4v4',
+      players: '6-10 joueurs',
       color: 'from-green-500 to-teal-600',
       bgColor: 'bg-green-500/10',
       borderColor: 'border-green-500/30',

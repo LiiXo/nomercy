@@ -674,6 +674,29 @@ const MySquad = () => {
                   </div>
                 </div>
 
+                {/* Features Preview */}
+                <div className="border-t border-white/5 px-8 py-6 bg-dark-800/30">
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
+                        <Swords className={`w-5 h-5 text-${accentColor}-400`} />
+                      </div>
+                      <p className="text-xs text-gray-500">Matchs 5v5</p>
+                    </div>
+                    <div className="text-center">
+                      <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
+                        <Trophy className={`w-5 h-5 text-${accentColor}-400`} />
+                      </div>
+                      <p className="text-xs text-gray-500">Tournois</p>
+                    </div>
+                    <div className="text-center">
+                      <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
+                        <TrendingUp className={`w-5 h-5 text-${accentColor}-400`} />
+                      </div>
+                      <p className="text-xs text-gray-500">Rankings</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

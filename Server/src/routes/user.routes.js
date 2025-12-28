@@ -1,4 +1,8 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import User from '../models/User.js';
 import Squad from '../models/Squad.js';
 import Match from '../models/Match.js';
@@ -7,7 +11,40 @@ import Trophy from '../models/Trophy.js';
 import Announcement from '../models/Announcement.js';
 import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
+
+// Configure multer for banner upload
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/banners');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'banner-' + req.user._id + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const bannerUpload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG, JPEG, JPG and GIF files are allowed'));
+    }
+  }
+});
 
 // Search users (for finding helpers, etc.)
 router.get('/search', async (req, res) => {
@@ -121,10 +158,79 @@ router.put('/setup-profile', verifyToken, async (req, res) => {
   }
 });
 
+// Upload banner
+router.post('/upload-banner', verifyToken, bannerUpload.single('banner'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    // Delete old banner if exists
+    if (req.user.banner) {
+      const oldBannerPath = path.join(__dirname, '../../uploads/banners', path.basename(req.user.banner));
+      if (fs.existsSync(oldBannerPath)) {
+        fs.unlinkSync(oldBannerPath);
+      }
+    }
+
+    // Save banner URL
+    const bannerUrl = `/uploads/banners/${req.file.filename}`;
+    req.user.banner = bannerUrl;
+    await req.user.save();
+
+    res.json({
+      success: true,
+      message: 'Banner uploaded successfully',
+      bannerUrl
+    });
+  } catch (error) {
+    console.error('Banner upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error uploading banner'
+    });
+  }
+});
+
+// Delete banner
+router.delete('/delete-banner', verifyToken, async (req, res) => {
+  try {
+    if (!req.user.banner) {
+      return res.status(400).json({
+        success: false,
+        message: 'No banner to delete'
+      });
+    }
+
+    // Delete banner file
+    const bannerPath = path.join(__dirname, '../../uploads/banners', path.basename(req.user.banner));
+    if (fs.existsSync(bannerPath)) {
+      fs.unlinkSync(bannerPath);
+    }
+
+    req.user.banner = null;
+    await req.user.save();
+
+    res.json({
+      success: true,
+      message: 'Banner deleted successfully'
+    });
+  } catch (error) {
+    console.error('Banner delete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting banner'
+    });
+  }
+});
+
 // Update profile
 router.put('/profile', verifyToken, async (req, res) => {
   try {
-    const { username, bio, avatar } = req.body;
+    const { username, bio, avatar, activisionId } = req.body;
 
     // Validate username if provided
     if (username) {
@@ -166,6 +272,10 @@ router.put('/profile', verifyToken, async (req, res) => {
       req.user.avatar = avatar;
     }
 
+    if (activisionId !== undefined) {
+      req.user.activisionId = activisionId.trim();
+    }
+
     await req.user.save();
 
     res.json({
@@ -178,6 +288,9 @@ router.put('/profile', verifyToken, async (req, res) => {
         username: req.user.username,
         bio: req.user.bio,
         avatar: req.user.avatarUrl,
+        banner: req.user.banner,
+        activisionId: req.user.activisionId,
+        platform: req.user.platform,
         roles: req.user.roles,
         isProfileComplete: req.user.isProfileComplete,
         goldCoins: req.user.goldCoins,
@@ -209,6 +322,73 @@ router.get('/profile/:username', async (req, res) => {
       });
     }
 
+    // Calculate total wins and losses (including ranked matches)
+    let totalWins = 0;
+    let totalLosses = 0;
+
+    // Count wins/losses from squad matches
+    const squadMatches = await Match.find({
+      status: 'completed',
+      $or: [
+        { 'challengerRoster.user': user._id },
+        { 'opponentRoster.user': user._id }
+      ],
+      'result.winner': { $exists: true }
+    }).populate('result.winner challenger opponent');
+
+    for (const match of squadMatches) {
+      // Determine which squad the user was in
+      const isInChallenger = match.challengerRoster.some(r => r.user.toString() === user._id.toString());
+      const userSquad = isInChallenger ? match.challenger : match.opponent;
+      
+      if (!userSquad) continue;
+
+      // Check if user's squad won
+      if (match.result.winner && match.result.winner.toString() === userSquad._id.toString()) {
+        totalWins++;
+      } else {
+        totalLosses++;
+      }
+    }
+
+    // Count wins/losses from ranked matches
+    const RankedMatch = (await import('../models/RankedMatch.js')).default;
+    const rankedMatches = await RankedMatch.find({
+      status: 'completed',
+      'players.user': user._id,
+      'result.winner': { $exists: true }
+    });
+
+    for (const match of rankedMatches) {
+      const player = match.players.find(p => p.user.toString() === user._id.toString());
+      if (!player) continue;
+
+      // Check if user won
+      if (match.gameMode === 'Duel') {
+        // For Duel, check if user is the winner
+        if (match.result.winnerUser && match.result.winnerUser.toString() === user._id.toString()) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      } else if (match.gameMode === 'Team Deathmatch') {
+        // For Team Deathmatch, check if user has highest score
+        // This is a free-for-all mode, so we check winnerUser
+        if (match.result.winnerUser && match.result.winnerUser.toString() === user._id.toString()) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      } else {
+        // For team modes (Domination, Search & Destroy)
+        if (player.team && match.result.winner === `team${player.team}`) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      }
+    }
+
     res.json({
       success: true,
       user: {
@@ -216,13 +396,19 @@ router.get('/profile/:username', async (req, res) => {
         username: user.username,
         bio: user.bio,
         avatar: user.avatarUrl,
+        banner: user.banner,
         platform: user.platform,
         activisionId: user.activisionId,
         stats: user.stats,
+        totalStats: {
+          wins: totalWins,
+          losses: totalLosses
+        },
         createdAt: user.createdAt
       }
     });
   } catch (error) {
+    console.error('Error fetching user profile:', error);
     res.status(500).json({
       success: false,
       message: 'An error occurred.'
@@ -300,6 +486,75 @@ router.get('/check-username/:username', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ available: false, message: 'Error checking username' });
+  }
+});
+
+// Delete account immediately (user can delete their own account)
+router.delete('/delete-account', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // Check if user is banned
+    if (req.user.isBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous ne pouvez pas supprimer votre compte car vous êtes banni.'
+      });
+    }
+
+    // Check if user has a squad
+    if (req.user.squad) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous devez quitter votre escouade avant de supprimer votre compte.'
+      });
+    }
+
+    // Import necessary models
+    const AccountDeletion = (await import('../models/AccountDeletion.js')).default;
+    const Ranking = (await import('../models/Ranking.js')).default;
+    
+    // Get user's rankings
+    const rankings = await Ranking.find({ user: userId });
+    
+    // Create deletion record (snapshot)
+    await AccountDeletion.create({
+      deletedUserId: req.user._id,
+      username: req.user.username,
+      discordId: req.user.discordId,
+      discordUsername: req.user.discordUsername,
+      email: req.user.discordEmail || null,
+      stats: req.user.stats,
+      goldCoins: req.user.goldCoins,
+      squadId: req.user.squad || null,
+      rankings: rankings.map(r => ({
+        mode: r.mode,
+        points: r.points,
+        wins: r.wins,
+        losses: r.losses,
+        rank: r.rank
+      })),
+      deletedAt: new Date(),
+      deletedBy: 'self',
+      status: 'completed'
+    });
+
+    // Delete user's rankings
+    await Ranking.deleteMany({ user: userId });
+    
+    // Delete the user
+    await User.findByIdAndDelete(userId);
+
+    res.json({
+      success: true,
+      message: 'Votre compte a été supprimé avec succès.'
+    });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Une erreur est survenue.'
+    });
   }
 });
 
@@ -713,6 +968,40 @@ router.delete('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
       });
     }
 
+    // Import necessary models
+    const AccountDeletion = (await import('../models/AccountDeletion.js')).default;
+    const Ranking = (await import('../models/Ranking.js')).default;
+    
+    // Get user's rankings
+    const rankings = await Ranking.find({ user: user._id });
+    
+    // Create deletion record (snapshot)
+    await AccountDeletion.create({
+      deletedUserId: user._id,
+      username: user.username,
+      discordId: user.discordId,
+      discordUsername: user.discordUsername,
+      email: user.discordEmail || null,
+      stats: user.stats,
+      goldCoins: user.goldCoins,
+      squadId: user.squad || null,
+      rankings: rankings.map(r => ({
+        mode: r.mode,
+        points: r.points,
+        wins: r.wins,
+        losses: r.losses,
+        rank: r.rank
+      })),
+      deletedAt: new Date(),
+      deletedBy: 'admin',
+      deletionReason: req.body.reason || null,
+      status: 'completed'
+    });
+
+    // Delete user's rankings
+    await Ranking.deleteMany({ user: user._id });
+    
+    // Delete the user
     await User.findByIdAndDelete(req.params.userId);
 
     res.json({
@@ -721,6 +1010,46 @@ router.delete('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Admin: Get deleted accounts
+router.get('/admin/deleted-accounts', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = '' } = req.query;
+    const AccountDeletion = (await import('../models/AccountDeletion.js')).default;
+
+    const query = { status: 'completed' };
+    if (search) {
+      query.$or = [
+        { username: { $regex: search, $options: 'i' } },
+        { discordUsername: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const deletedAccounts = await AccountDeletion.find(query)
+      .sort({ deletedAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await AccountDeletion.countDocuments(query);
+
+    res.json({
+      success: true,
+      deletedAccounts,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get deleted accounts error:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'
