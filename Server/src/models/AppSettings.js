@@ -106,6 +106,8 @@ const appSettingsSchema = new mongoose.Schema({
     overview: { type: Boolean, default: true },
     users: { type: Boolean, default: true },
     squads: { type: Boolean, default: true },
+    'deleted-accounts': { type: Boolean, default: true },
+    messages: { type: Boolean, default: true },
     disputes: { type: Boolean, default: true },
     announcements: { type: Boolean, default: true },
     hub: { type: Boolean, default: true },

@@ -738,7 +738,7 @@ const SquadHub = () => {
                           
                           {/* Author */}
                           <Link 
-                            to={`/player/${encodeURIComponent(post.author?.username)}`}
+                            to={`/player/${post.author?._id}`}
                             className="text-gray-500 hover:text-white transition-colors flex items-center gap-1 ml-auto"
                           >
                             <img
@@ -765,7 +765,7 @@ const SquadHub = () => {
                         )}
                         {post.type === 'looking_for_team' && (
                           <Link
-                            to={`/player/${encodeURIComponent(post.author?.username)}`}
+                            to={`/player/${post.author?._id}`}
                             className="px-4 py-2 rounded-xl bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors text-sm font-medium flex items-center gap-2"
                           >
                             {t.viewProfile}
@@ -1026,6 +1026,8 @@ const SquadHub = () => {
 };
 
 export default SquadHub;
+
+
 
 
 

@@ -707,7 +707,7 @@ const SquadProfile = () => {
                 {squad.members.map((member, index) => (
                   <Link 
                     key={member.user?._id || index} 
-                    to={`/player/${encodeURIComponent(member.user?.username || 'Unknown')}`}
+                    to={`/player/${member.user?._id}`}
                     className={`flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}
                   >
                     <div className="flex items-center gap-3">
@@ -723,7 +723,7 @@ const SquadProfile = () => {
                       />
                     <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-white font-semibold">{member.user?.username || 'Unknown'}</span>
+                          <span className="text-white font-semibold">{member.user?.username || member.user?.discordUsername || 'Unknown'}</span>
                           {getRoleBadge(member.role)}
                     </div>
                         <p className="text-gray-500 text-xs">
@@ -1050,7 +1050,7 @@ const SquadProfile = () => {
                                 />
                                 <div className="flex-1 min-w-0">
                                   <Link 
-                                    to={`/player/${p.user?.username}`}
+                                    to={`/player/${p.user?._id}`}
                                     className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
                                   >
                                     {p.user?.username}
@@ -1100,7 +1100,7 @@ const SquadProfile = () => {
                                 />
                                 <div className="flex-1 min-w-0">
                                   <Link 
-                                    to={`/player/${p.user?.username}`}
+                                    to={`/player/${p.user?._id}`}
                                     className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
                                   >
                                     {p.user?.username}

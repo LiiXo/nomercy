@@ -1203,7 +1203,7 @@ const MyProfile = () => {
                     <div className="flex flex-wrap gap-2">
                       {squad.members.map((member) => (
                         <Link
-                          to={`/player/${encodeURIComponent(member.user?.username || 'Unknown')}`}
+                          to={`/player/${member.user?._id}`}
                           key={member.user?._id || member._id}
                           className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg hover:bg-dark-700/50 transition-colors"
                         >
@@ -1219,7 +1219,7 @@ const MyProfile = () => {
                             className="w-6 h-6 rounded-full"
                             onError={(e) => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png'; }}
                           />
-                          <span className="text-sm text-white hover:underline">{member.user?.username || 'Unknown'}</span>
+                          <span className="text-sm text-white hover:underline">{member.user?.username || member.user?.discordUsername || 'Unknown'}</span>
                           {member.role === 'leader' && (
                             <Crown className="w-3 h-3 text-yellow-400" />
                           )}

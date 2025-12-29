@@ -348,7 +348,7 @@ const Messages = () => {
     if (participant.avatar) return getAvatarUrl(participant.avatar);
     if (participant.avatarUrl) return getAvatarUrl(participant.avatarUrl);
     if (participant.discordAvatar) return participant.discordAvatar;
-    return getDefaultAvatar(participant.username || 'User');
+    return getDefaultAvatar(participant.username || participant.discordUsername || 'User');
   };
   
   const isStaff = (participant) => {
@@ -450,7 +450,7 @@ const Messages = () => {
                               className="w-12 h-12 rounded-full object-cover bg-dark-800"
                               onError={(e) => {
                                 e.target.onerror = null;
-                                e.target.src = getDefaultAvatar(conv.participants[0]?.username || 'User');
+                                e.target.src = getDefaultAvatar(conv.participants[0]?.username || conv.participants[0]?.discordUsername || 'User');
                               }}
                             />
                           )}
@@ -510,13 +510,13 @@ const Messages = () => {
                           className="w-8 h-8 lg:w-10 lg:h-10 rounded-full object-cover bg-dark-800 flex-shrink-0"
                           onError={(e) => {
                             e.target.onerror = null;
-                            e.target.src = getDefaultAvatar(p?.username || 'User');
+                            e.target.src = getDefaultAvatar(p?.username || p?.discordUsername || 'User');
                           }}
                         />
                         <div>
                           <div className="flex items-center gap-2">
                             <Link 
-                              to={`/player/${p.username}`}
+                              to={`/player/${p._id}`}
                               className="font-semibold text-white hover:text-cyan-400 transition-colors"
                             >
                               {p.username}
@@ -582,7 +582,7 @@ const Messages = () => {
                                 className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-dark-800"
                                 onError={(e) => {
                                   e.target.onerror = null;
-                                  e.target.src = getDefaultAvatar(msg.sender?.username || 'User');
+                                  e.target.src = getDefaultAvatar(msg.sender?.username || msg.sender?.discordUsername || 'User');
                                 }}
                               />
                               <div>
@@ -591,7 +591,7 @@ const Messages = () => {
                                     <span className="text-xs text-gray-400">{txt.you}</span>
                                   ) : (
                                     <Link 
-                                      to={`/player/${msg.sender?.username}`}
+                                      to={`/player/${msg.sender?._id}`}
                                       className={`text-xs hover:underline ${
                                         isStaff(msg.sender || {}) ? 'text-purple-400' : 'text-gray-400'
                                       }`}

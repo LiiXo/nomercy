@@ -12,7 +12,7 @@ import {
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
-  ShieldAlert, Link, ExternalLink
+  ShieldAlert, Link, ExternalLink, MessageSquare
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -79,12 +79,23 @@ const AdminPanel = () => {
   const [disputedMatches, setDisputedMatches] = useState([]);
   const [disputedRankedMatches, setDisputedRankedMatches] = useState([]);
   
+  // Messages states
+  const [allMessages, setAllMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  
   // Update editedConfig when config changes
   useEffect(() => {
     if (config) {
       setEditedConfig(config);
     }
   }, [config]);
+
+  // Load appSettings on mount for staff access control
+  useEffect(() => {
+    if (userIsStaff && !appSettings) {
+      fetchAppSettings();
+    }
+  }, [userIsStaff]);
 
   // Navigation tabs configuration grouped by category
   // Staff has limited access based on appSettings.staffAdminAccess
@@ -101,6 +112,7 @@ const AdminPanel = () => {
         { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false },
         { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false },
         { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false },
+        { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false },
         { id: 'disputes', label: 'Litiges', icon: AlertTriangle, adminOnly: false },
       ]
     },
@@ -134,8 +146,9 @@ const AdminPanel = () => {
     // Admin-only tabs are never accessible to staff
     const tab = allTabs.find(t => t.id === tabId);
     if (tab?.adminOnly) return false;
-    // Check appSettings for staff access
-    return appSettings?.staffAdminAccess?.[tabId] !== false;
+    // Check appSettings for staff access - default to true if not set
+    if (!appSettings || !appSettings.staffAdminAccess) return true;
+    return appSettings.staffAdminAccess[tabId] !== false;
   };
   
   const tabs = userIsAdmin 
@@ -210,6 +223,9 @@ const AdminPanel = () => {
           break;
         case 'disputes':
           await fetchDisputedMatches();
+          break;
+        case 'messages':
+          await fetchAllMessages();
           break;
         case 'application':
           await fetchAppSettings();
@@ -416,6 +432,20 @@ const AdminPanel = () => {
       }
     } catch (err) {
       console.error('Error fetching disputed matches:', err);
+    }
+  };
+
+  const fetchAllMessages = async () => {
+    try {
+      const response = await fetch(`${API_URL}/messages/admin/all`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setConversations(data.conversations || []);
+      }
+    } catch (err) {
+      console.error('Error fetching messages:', err);
     }
   };
 
@@ -768,7 +798,11 @@ const AdminPanel = () => {
   const openEditModal = (type, item) => {
     setModalType(type);
     setEditingItem(item);
-    setFormData({ ...item });
+    // Deep copy arrays for proper editing
+    const formDataCopy = { ...item };
+    if (item.ladders) formDataCopy.ladders = [...item.ladders];
+    if (item.gameModes) formDataCopy.gameModes = [...item.gameModes];
+    setFormData(formDataCopy);
     setShowModal(true);
     setError('');
     setSuccess('');
@@ -1197,6 +1231,7 @@ const AdminPanel = () => {
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Utilisateur</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Discord</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Escouade</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Rôles</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Coins</th>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
@@ -1207,7 +1242,7 @@ const AdminPanel = () => {
               <tbody className="divide-y divide-white/5">
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
+                    <td colSpan="8" className="px-6 py-8 text-center text-gray-400">
                       Aucun utilisateur trouvé
                     </td>
                   </tr>
@@ -1222,7 +1257,7 @@ const AdminPanel = () => {
                             className="w-10 h-10 rounded-full"
                           />
                 <div>
-                            <p className="text-white font-medium">{user.username || 'Sans pseudo'}</p>
+                            <p className="text-white font-medium">{user.username || user.discordUsername || 'Sans identifiant'}</p>
                             <p className="text-gray-500 text-sm">{user._id}</p>
                 </div>
               </div>
@@ -1230,6 +1265,17 @@ const AdminPanel = () => {
                       <td className="px-6 py-4">
                         <p className="text-white text-sm">{user.discordUsername}</p>
                         <p className="text-gray-500 text-xs">{user.discordId}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        {user.squad ? (
+                          <div className="flex items-center gap-2">
+                            <Shield className="w-4 h-4 text-purple-400" />
+                            <span className="text-white text-sm">{user.squad.name}</span>
+                            <span className="text-gray-500 text-xs">[{user.squad.tag}]</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500 text-sm">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
@@ -1380,7 +1426,7 @@ const AdminPanel = () => {
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div>
-                            <div className="text-white font-medium">{account.username || 'N/A'}</div>
+                            <div className="text-white font-medium">{account.username || account.discordUsername || 'N/A'}</div>
                             <div className="text-xs text-gray-500">ID: {account.deletedUserId}</div>
                           </div>
                         </div>
@@ -1466,6 +1512,85 @@ const AdminPanel = () => {
             </button>
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderMessages = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Messages</h2>
+          <div className="text-gray-400 text-sm">
+            {conversations.length} conversation(s)
+          </div>
+        </div>
+
+        {/* Conversations List */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          {conversations.length === 0 ? (
+            <div className="px-6 py-12 text-center text-gray-400">
+              Aucune conversation trouvée
+            </div>
+          ) : (
+            <div className="divide-y divide-white/5">
+              {conversations.map((conv) => (
+                <div key={conv._id} className="p-6 hover:bg-white/5 transition-colors">
+                  {/* Conversation Header */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <MessageSquare className="w-5 h-5 text-purple-400" />
+                      <div>
+                        <h3 className="text-white font-medium">
+                          Participants: {conv.participants?.map(p => p.username).join(', ')}
+                        </h3>
+                        <p className="text-gray-500 text-sm">
+                          {conv.messages?.length || 0} message(s)
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-gray-500 text-sm">
+                      {new Date(conv.lastMessageAt || conv.createdAt).toLocaleDateString('fr-FR', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Messages */}
+                  {conv.messages && conv.messages.length > 0 && (
+                    <div className="space-y-2 max-h-96 overflow-y-auto bg-dark-900/50 rounded-lg p-4">
+                      {conv.messages.map((msg) => (
+                        <div key={msg._id} className="flex items-start gap-3 p-2 rounded hover:bg-white/5">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-purple-400 font-medium text-sm">
+                                {msg.sender?.username || msg.sender?.discordUsername || 'Utilisateur supprimé'}
+                              </span>
+                              <span className="text-gray-500 text-xs">
+                                {new Date(msg.createdAt).toLocaleDateString('fr-FR', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                            <p className="text-gray-300 text-sm">{msg.content}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -2379,7 +2504,7 @@ const renderDisputes = () => {
                             className="w-10 h-10 rounded-full"
                               />
                           <div>
-                            <p className="text-white font-medium">{ranking.user?.username || 'Inconnu'}</p>
+                            <p className="text-white font-medium">{ranking.user?.username || ranking.user?.discordUsername || 'Inconnu'}</p>
                           </div>
                             </div>
                           </td>
@@ -2656,7 +2781,7 @@ const renderDisputes = () => {
                         <p className="text-white font-medium max-w-xs truncate">{post.title}</p>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-white">{post.author?.username || 'Inconnu'}</p>
+                        <p className="text-white">{post.author?.username || post.author?.discordUsername || 'Inconnu'}</p>
                       </td>
                       <td className="px-6 py-4">
                         {post.squad ? (
@@ -3300,7 +3425,7 @@ const renderDisputes = () => {
               <input
                 type="text"
                 value={formData.tag || ''}
-                onChange={(e) => setFormData({ ...formData, tag: e.target.value.toUpperCase() })}
+                onChange={(e) => setFormData({ ...formData, tag: e.target.value.replace(/[^A-Za-z0-9]/g, '') })}
                 className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                 maxLength={5}
                 required
@@ -3818,6 +3943,8 @@ const renderDisputes = () => {
         return renderSquads();
       case 'deleted-accounts':
         return renderDeletedAccounts();
+      case 'messages':
+        return renderMessages();
       case 'shop':
         return renderShop();
       case 'disputes':

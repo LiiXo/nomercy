@@ -515,6 +515,151 @@ router.get('/profile/:username', async (req, res) => {
   }
 });
 
+// Get user by ID (public profile)
+router.get('/by-id/:id', async (req, res) => {
+  try {
+    const user = await User.findOne({ 
+      _id: req.params.id,
+      isProfileComplete: true,
+      isBanned: false
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.'
+      });
+    }
+
+    // Calculate total wins and losses (including ranked matches)
+    let totalWins = 0;
+    let totalLosses = 0;
+
+    // Count wins/losses from squad matches
+    const squadMatches = await Match.find({
+      status: 'completed',
+      $or: [
+        { 'challengerRoster.user': user._id },
+        { 'opponentRoster.user': user._id }
+      ],
+      'result.winner': { $exists: true }
+    }).populate('result.winner challenger opponent');
+
+    for (const match of squadMatches) {
+      const isInChallenger = match.challengerRoster.some(r => r.user.toString() === user._id.toString());
+      const userSquad = isInChallenger ? match.challenger : match.opponent;
+      
+      if (!userSquad) continue;
+
+      if (match.result.winner && match.result.winner.toString() === userSquad._id.toString()) {
+        totalWins++;
+      } else {
+        totalLosses++;
+      }
+    }
+
+    // Count wins/losses from ranked matches
+    const RankedMatch = (await import('../models/RankedMatch.js')).default;
+    const rankedMatches = await RankedMatch.find({
+      status: 'completed',
+      'players.user': user._id,
+      'result.winner': { $exists: true }
+    });
+
+    for (const match of rankedMatches) {
+      const player = match.players.find(p => p.user.toString() === user._id.toString());
+      if (!player) continue;
+
+      if (match.gameMode === 'Duel') {
+        if (match.result.winnerUser && match.result.winnerUser.toString() === user._id.toString()) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      } else if (match.gameMode === 'Team Deathmatch') {
+        if (match.result.winnerUser && match.result.winnerUser.toString() === user._id.toString()) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      } else {
+        if (player.team && match.result.winner === `team${player.team}`) {
+          totalWins++;
+        } else {
+          totalLosses++;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        username: user.username,
+        bio: user.bio,
+        avatar: user.avatarUrl,
+        banner: user.banner,
+        platform: user.platform,
+        activisionId: user.activisionId,
+        stats: user.stats,
+        totalStats: {
+          wins: totalWins,
+          losses: totalLosses
+        },
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user profile by ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred.'
+    });
+  }
+});
+
+// Get user's squad by ID (public)
+router.get('/by-id/:id/squad', async (req, res) => {
+  try {
+    const user = await User.findOne({ 
+      _id: req.params.id,
+      isProfileComplete: true,
+      isBanned: false
+    }).populate('squad');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.'
+      });
+    }
+
+    if (!user.squad) {
+      return res.json({
+        success: true,
+        squad: null
+      });
+    }
+
+    res.json({
+      success: true,
+      squad: {
+        id: user.squad._id,
+        name: user.squad.name,
+        tag: user.squad.tag,
+        logo: user.squad.logo,
+        color: user.squad.color
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user squad by ID:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred.'
+    });
+  }
+});
+
 // Get user's squad by username (public)
 router.get('/profile/:username/squad', async (req, res) => {
   try {
@@ -1048,8 +1193,8 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Admin: Delete user
-router.delete('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
+// Admin/Staff: Delete user
+router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
   try {
     const user = await User.findById(req.params.userId);
     if (!user) {

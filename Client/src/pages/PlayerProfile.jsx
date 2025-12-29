@@ -9,7 +9,7 @@ import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
 const PlayerProfile = () => {
-  const { playerName } = useParams();
+  const { playerId } = useParams();
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { selectedMode } = useMode();
@@ -152,8 +152,8 @@ const PlayerProfile = () => {
       de: 'Profil von',
     };
     const prefix = prefixes[language] || prefixes.en;
-    document.title = `NoMercy - ${prefix} ${playerName}`;
-  }, [playerName, language]);
+    document.title = `NoMercy - ${prefix} ${playerData?.username || playerData?.discordUsername || playerId}`;
+  }, [playerId, playerData?.username, playerData?.discordUsername, language]);
 
   // Fetch player data
   useEffect(() => {
@@ -162,8 +162,8 @@ const PlayerProfile = () => {
       setError(null);
       
       try {
-        // Fetch user profile
-        const userResponse = await fetch(`${API_URL}/users/profile/${encodeURIComponent(playerName)}`);
+        // Fetch user profile by ID
+        const userResponse = await fetch(`${API_URL}/users/by-id/${playerId}`);
         const userData = await userResponse.json();
         
         if (!userData.success) {
@@ -187,7 +187,7 @@ const PlayerProfile = () => {
         
         // Fetch squad if user has one
         try {
-          const squadResponse = await fetch(`${API_URL}/users/profile/${encodeURIComponent(playerName)}/squad`);
+          const squadResponse = await fetch(`${API_URL}/users/by-id/${playerId}/squad`);
           const squadData = await squadResponse.json();
           if (squadData.success && squadData.squad) {
             setSquad(squadData.squad);
@@ -204,10 +204,10 @@ const PlayerProfile = () => {
       }
     };
     
-    if (playerName) {
+    if (playerId) {
       fetchPlayerData();
     }
-  }, [playerName, selectedMode, language]);
+  }, [playerId, selectedMode, language]);
 
   // Fetch match history when player data is loaded
   useEffect(() => {
@@ -342,11 +342,11 @@ const PlayerProfile = () => {
                     backgroundSize: 'cover', 
                     backgroundPosition: 'center',
                   }}>
-                  {!playerData.avatar && <span>{playerData.username?.charAt(0).toUpperCase()}</span>}
+                  {!playerData.avatar && <span>{(playerData.username || playerData.discordUsername)?.charAt(0).toUpperCase()}</span>}
                 </div>
               </div>
               
-              <h1 className="text-3xl font-bold text-white mb-5">{playerData.username}</h1>
+              <h1 className="text-3xl font-bold text-white mb-5">{playerData.username || playerData.discordUsername || 'Utilisateur'}</h1>
               
               <div className="flex flex-wrap items-center justify-center gap-3 text-sm mb-4">
                 {playerStats && playerStats.points > 0 && (

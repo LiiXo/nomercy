@@ -1086,7 +1086,7 @@ const RankedMode = () => {
                         </div>
                         <div>
                           <p className={`font-semibold ${isCurrentUser ? `text-${accentColor}-400` : 'text-white'}`}>
-                            {player.user?.username || 'Unknown'}
+                            {player.user?.username || player.user?.discordUsername || 'Unknown'}
                             {isCurrentUser && <span className="ml-2 text-xs text-gray-500">({t.you})</span>}
                           </p>
                           <div className="flex items-center gap-1 text-xs">

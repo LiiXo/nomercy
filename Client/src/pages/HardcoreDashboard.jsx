@@ -908,13 +908,21 @@ const HardcoreDashboard = () => {
         const response = await fetch(`${API_URL}/rankings/top-players/hardcore?limit=10`);
         const data = await response.json();
         if (data.success) {
-          setTopPlayers(data.rankings.map((r, idx) => ({
-            rank: idx + 1,
-            id: r.user?._id,
-            player: r.user?.username || 'Deleted',
-            avatar: getAvatarUrl(r.user?.avatarUrl || r.user?.avatar) || null,
-            points: r.points
-          })));
+          setTopPlayers(data.rankings.map((r, idx) => {
+            const u = r.user;
+            // Handle avatar with Discord fallback
+            let avatarUrl = getAvatarUrl(u?.avatarUrl || u?.avatar);
+            if (!avatarUrl && u?.discordId && u?.discordAvatar) {
+              avatarUrl = `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png`;
+            }
+            return {
+              rank: idx + 1,
+              id: u?._id,
+              player: u?.username || u?.discordUsername || 'Deleted',
+              avatar: avatarUrl,
+              points: r.points
+            };
+          }));
         }
       } catch (err) {
         console.error('Error fetching top players:', err);
@@ -1330,7 +1338,7 @@ const HardcoreDashboard = () => {
                               <span className={`font-bold text-sm ${player.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{player.rank}</span>
                             </div>
                             <img src={player.avatar || getDefaultAvatar(player.player)} alt="" className={`w-8 h-8 rounded-full ${player.rank <= 3 ? 'ring-2 ring-offset-1 ring-offset-dark-900 ' + (player.rank === 1 ? 'ring-yellow-500' : player.rank === 2 ? 'ring-gray-400' : 'ring-amber-600') : ''}`} />
-                            <Link to={`/player/${encodeURIComponent(player.player)}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${player.rank === 1 ? 'text-yellow-500' : player.rank === 2 ? 'text-gray-300' : player.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
+                            <Link to={`/player/${player.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${player.rank === 1 ? 'text-yellow-500' : player.rank === 2 ? 'text-gray-300' : player.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
                               {player.player}
                             </Link>
                           </div>
@@ -1382,7 +1390,6 @@ const HardcoreDashboard = () => {
                           </div>
                           <div className="flex items-center gap-4">
                             <div className="hidden sm:flex items-center gap-2 text-xs">
-                              <span className="text-gray-500">{squad.totalMatches}M</span>
                               <span className="text-neon-green">{squad.totalWins}W</span>
                               <span className="text-neon-red">{squad.totalLosses}L</span>
                             </div>

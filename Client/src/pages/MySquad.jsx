@@ -337,7 +337,7 @@ const MySquad = () => {
         credentials: 'include',
         body: JSON.stringify({
           name: squadName.trim(),
-          tag: squadTag.trim().toUpperCase(),
+          tag: squadTag.trim(),
           description: squadDescription.trim(),
           mode: selectedMode,
           color: isHardcore ? '#ef4444' : '#06b6d4'
@@ -567,10 +567,10 @@ const MySquad = () => {
                     <input
                       type="text"
                       value={squadTag}
-                      onChange={(e) => setSquadTag(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                      onChange={(e) => setSquadTag(e.target.value.replace(/[^A-Za-z0-9]/g, ''))}
                       placeholder={t.tagPlaceholder}
                       maxLength={5}
-                      className={`w-full px-4 py-3.5 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all uppercase font-mono tracking-wider`}
+                      className={`w-full px-4 py-3.5 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all font-mono tracking-wider`}
                     />
                   </div>
 
@@ -903,7 +903,7 @@ const MySquad = () => {
                     return (
                       <Link
                         key={member.user?._id || member.user || index}
-                        to={`/player/${member.user?.username}`}
+                        to={`/player/${member.user?._id}`}
                         className="flex items-center gap-4 p-4 hover:bg-white/5 transition-colors group"
                       >
                         <div className="relative">

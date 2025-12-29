@@ -224,7 +224,7 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
 // Update map (admin)
 router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, gameMode, isActive } = req.body;
+    const { name, image, mode, gameMode, ladders, gameModes, isActive } = req.body;
     
     const map = await Map.findById(req.params.mapId);
     if (!map) {
@@ -235,6 +235,8 @@ router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (image !== undefined) map.image = image;
     if (mode !== undefined) map.mode = mode;
     if (gameMode !== undefined) map.gameMode = gameMode;
+    if (ladders !== undefined) map.ladders = ladders;
+    if (gameModes !== undefined) map.gameModes = gameModes;
     if (isActive !== undefined) map.isActive = isActive;
     
     await map.save();

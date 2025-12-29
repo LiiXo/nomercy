@@ -346,7 +346,7 @@ function AppContent() {
             } 
           />
           <Route 
-            path="/player/:playerName" 
+            path="/player/:playerId" 
             element={
               <ProtectedRoute>
                 <PageTransition>

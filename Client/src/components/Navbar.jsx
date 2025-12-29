@@ -269,7 +269,7 @@ const Navbar = () => {
                       {searchResults.map((player) => (
                         <Link
                           key={player._id}
-                          to={`/player/${player.username}`}
+                          to={`/player/${player._id}`}
                           onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); }}
                           className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
                         >

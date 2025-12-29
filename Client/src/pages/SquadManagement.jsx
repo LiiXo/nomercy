@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   Users, Crown, Shield, UserMinus, ArrowUpCircle, ArrowDownCircle, 
   Settings, UserPlus, Check, X, Loader2, ChevronLeft, Trash2,
@@ -417,9 +417,19 @@ const SquadManagement = () => {
   const canManage = isLeader || isOfficer;
 
   const getMemberAvatar = (member) => {
-    if (member.user?.avatar) return member.user.avatar;
-    if (member.user?.avatarUrl) return member.user.avatarUrl;
-    return getDefaultAvatar(member.user?.username);
+    const u = member.user;
+    if (!u) return getDefaultAvatar('Unknown');
+    
+    // Check for custom avatar or avatarUrl
+    const avatarUrl = getAvatarUrl(u.avatarUrl || u.avatar);
+    if (avatarUrl) return avatarUrl;
+    
+    // Fallback to Discord avatar
+    if (u.discordId && u.discordAvatar) {
+      return `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png`;
+    }
+    
+    return getDefaultAvatar(u.username);
   };
 
   const handlePromote = async (memberId) => {
@@ -1104,7 +1114,7 @@ const SquadManagement = () => {
                       }`}
                     >
                       <div className="flex items-center gap-3">
-                        <Link to={`/player/${member.user?.username}`}>
+                        <Link to={`/player/${member.user?._id}`}>
                           <img 
                             src={getMemberAvatar(member)}
                             alt={member.user?.username}
@@ -1114,10 +1124,10 @@ const SquadManagement = () => {
                         <div>
                           <div className="flex items-center gap-2">
                             <Link 
-                              to={`/player/${member.user?.username}`}
+                              to={`/player/${member.user?._id}`}
                               className="text-white font-medium hover:underline"
                             >
-                              {member.user?.username || 'Unknown'}
+                              {member.user?.username || member.user?.discordUsername || 'Unknown'}
                             </Link>
                             {getRoleBadge(member.role)}
                           </div>
@@ -1190,10 +1200,10 @@ const SquadManagement = () => {
                   );
                 })}
 
-                {/* Dev Button - Add Fake Player - Leaders/Officers/Staff */}
-                {(isLeader || (isStaff && isStaff())) && (
+                {/* Dev Button - Add Fake Player - Admin/Staff only */}
+                {(isStaff && isStaff()) && (
                   <div className="mt-6 pt-4 border-t border-white/10">
-                    <p className="text-xs text-purple-500 mb-2 font-mono">🎮 Ajouter des membres fictifs</p>
+                    <p className="text-xs text-purple-500 mb-2 font-mono">🎮 Ajouter des membres fictifs (Admin/Staff)</p>
                     <button
                       onClick={handleAddFakePlayer}
                       disabled={addingFakePlayer}
@@ -1224,19 +1234,28 @@ const SquadManagement = () => {
                           className="flex items-center justify-between p-4 bg-dark-800/50 rounded-xl"
                         >
                           <div className="flex items-center gap-3">
-                            <Link to={`/player/${encodeURIComponent(request.user?.username || 'Unknown')}`}>
+                            <Link to={`/player/${request.user?._id}`}>
                               <img 
-                                src={request.user?.avatarUrl || getDefaultAvatar(request.user?.username)}
+                                src={(() => {
+                                  const u = request.user;
+                                  if (!u) return getDefaultAvatar('Unknown');
+                                  const avatarUrl = getAvatarUrl(u.avatarUrl || u.avatar);
+                                  if (avatarUrl) return avatarUrl;
+                                  if (u.discordId && u.discordAvatar) {
+                                    return `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png`;
+                                  }
+                                  return getDefaultAvatar(u.username);
+                                })()}
                                 alt=""
                                 className="w-12 h-12 rounded-full border-2 border-white/10 hover:border-white/30 transition-colors"
                               />
                             </Link>
                             <div>
                               <Link 
-                                to={`/player/${encodeURIComponent(request.user?.username || 'Unknown')}`}
+                                to={`/player/${request.user?._id}`}
                                 className="text-white font-medium hover:underline"
                               >
-                                {request.user?.username || 'Unknown'}
+                                {request.user?.username || request.user?.discordUsername || 'Unknown'}
                               </Link>
                               {request.message && (
                                 <p className="text-gray-400 text-sm italic">"{request.message}"</p>

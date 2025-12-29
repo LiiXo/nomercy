@@ -272,7 +272,7 @@ const RankedMatchSheet = () => {
   const getAvatar = (player) => {
     if (!player) return getDefaultAvatar('?');
     const u = player.user || player;
-    return getAvatarUrl(u.avatarUrl || u.avatar) || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username || '?'));
+    return getAvatarUrl(u.avatarUrl || u.avatar) || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username || u.discordUsername || '?'));
   };
 
   // Fetch match data
@@ -797,7 +797,7 @@ const RankedMatchSheet = () => {
                 <p className="text-green-400 font-medium">
                   {match.result.winner === 'team1' ? t.team1 : 
                    match.result.winner === 'team2' ? t.team2 : 
-                   match.result.winnerUser?.username || 'Winner'}
+                   match.result.winnerUser?.username || match.result.winnerUser?.discordUsername || 'Winner'}
                 </p>
               </div>
             )}

@@ -126,7 +126,7 @@ const CDLDashboard = () => {
           setTopPlayers(data.rankings.map((r, idx) => ({
             rank: idx + 1,
             id: r.user?._id,
-            player: r.user?.username || (language === 'fr' ? 'Compte supprimé' : 'Deleted account'),
+            player: r.user?.username || r.user?.discordUsername || (language === 'fr' ? 'Compte supprimé' : 'Deleted account'),
             avatar: getAvatarUrl(r.user?.avatarUrl || r.user?.avatar) || null,
             points: r.points
           })));
@@ -517,7 +517,7 @@ const CDLDashboard = () => {
                               onError={(e) => e.target.style.display = 'none'}
                             />
                           )}
-                            <Link to={`/player/${encodeURIComponent(player.player)}`} className={`font-semibold text-sm hover:text-cyan-400 transition-colors ${player.rank === 1 ? 'text-yellow-500' : player.rank === 2 ? 'text-gray-300' : player.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
+                            <Link to={`/player/${player.id}`} className={`font-semibold text-sm hover:text-cyan-400 transition-colors ${player.rank === 1 ? 'text-yellow-500' : player.rank === 2 ? 'text-gray-300' : player.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
                             {player.player}
                           </Link>
                         </div>

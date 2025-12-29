@@ -411,6 +411,7 @@ router.get('/admin/all', verifyToken, async (req, res) => {
     let conversations = await Conversation.find(query)
       .populate('participants', 'username avatar avatarUrl discordAvatar roles')
       .populate('lastMessage.sender', 'username')
+      .populate('messages.sender', 'username avatar avatarUrl')
       .sort({ 'lastMessage.sentAt': -1, updatedAt: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit));
@@ -435,6 +436,8 @@ router.get('/admin/all', verifyToken, async (req, res) => {
         isStaffInitiated: conv.isStaffInitiated,
         participants: conv.participants,
         lastMessage: conv.lastMessage,
+        lastMessageAt: conv.lastMessage?.sentAt || conv.updatedAt,
+        messages: conv.messages || [],
         messageCount: conv.messages.length,
         createdAt: conv.createdAt,
         updatedAt: conv.updatedAt

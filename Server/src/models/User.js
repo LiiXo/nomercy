@@ -50,7 +50,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: 50,
-    default: ''
+    default: null
   },
 
   // Profile completion status
