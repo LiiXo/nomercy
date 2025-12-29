@@ -51,7 +51,10 @@ const ReadyCountdown = ({ createdAt, onExpire }) => {
 
 const HardcoreDashboard = () => {
   const { language, t } = useLanguage();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  
+  // Check if user is admin or staff (can bypass disabled features)
+  const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
   // Local translations
   const txt = {
@@ -116,6 +119,10 @@ const HardcoreDashboard = () => {
       rematchCooldown: '⏱️ Délai de rematch non respecté ! Vous avez déjà affronté cette équipe récemment. Vous pourrez les affronter à nouveau dans',
       hourUnit: 'h',
       minuteUnit: 'min',
+      openHours: '✓ Ouvert • 00h00 - 20h00',
+      closedHours: '✗ Fermé • 00h00 - 20h00',
+      matchesInProgress: 'match(s) en cours',
+      inLadder: 'dans le classement',
     },
     en: {
       matchmaking: 'Matchmaking',
@@ -178,6 +185,10 @@ const HardcoreDashboard = () => {
       rematchCooldown: '⏱️ Rematch cooldown not met! You already faced this team recently. You can face them again in',
       hourUnit: 'h',
       minuteUnit: 'min',
+      openHours: '✓ Open • 00:00 - 20:00',
+      closedHours: '✗ Closed • 00:00 - 20:00',
+      matchesInProgress: 'match(es) in progress',
+      inLadder: 'in the',
     },
     de: {
       matchmaking: 'Matchmaking',
@@ -240,6 +251,10 @@ const HardcoreDashboard = () => {
       rematchCooldown: '⏱️ Rematch-Abklingzeit nicht erfüllt!',
       hourUnit: ' Std.',
       minuteUnit: ' Min.',
+      openHours: '✓ Geöffnet • 00:00 - 20:00',
+      closedHours: '✗ Geschlossen • 00:00 - 20:00',
+      matchesInProgress: 'Spiel(e) läuft',
+      inLadder: 'in der Rangliste',
     },
     it: {
       matchmaking: 'Matchmaking',
@@ -302,6 +317,10 @@ const HardcoreDashboard = () => {
       rematchCooldown: '⏱️ Tempo di attesa non rispettato!',
       hourUnit: 'h',
       minuteUnit: 'min',
+      openHours: '✓ Aperto • 00:00 - 20:00',
+      closedHours: '✗ Chiuso • 00:00 - 20:00',
+      matchesInProgress: 'partita(e) in corso',
+      inLadder: 'nella classifica',
     },
   }[language] || {};
   
@@ -324,6 +343,7 @@ const HardcoreDashboard = () => {
     mapType: 'free'
   });
   const [appSettings, setAppSettings] = useState(null);
+  const [inProgressCounts, setInProgressCounts] = useState({ 'squad-team': 0, 'duo-trio': 0, total: 0 });
   
   // Roster selection states
   const [showRosterDialog, setShowRosterDialog] = useState(null);
@@ -423,9 +443,26 @@ const HardcoreDashboard = () => {
     }
   };
 
+  // Fetch in-progress matches count
+  const fetchInProgressCounts = async () => {
+    try {
+      const response = await fetch(`${API_URL}/matches/in-progress/count?mode=hardcore`);
+      const data = await response.json();
+      if (data.success) {
+        setInProgressCounts(data.counts);
+      }
+    } catch (err) {
+      console.error('Error fetching in-progress counts:', err);
+    }
+  };
+
   useEffect(() => {
     fetchMatches(true);
-    const interval = setInterval(() => fetchMatches(false), 30000);
+    fetchInProgressCounts();
+    const interval = setInterval(() => {
+      fetchMatches(false);
+      fetchInProgressCounts();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -454,8 +491,10 @@ const HardcoreDashboard = () => {
       if (data.mode === 'hardcore') {
         if (data.ladderId === 'squad-team') {
           setSquadTeamMatches(prev => prev.filter(m => m._id !== data.matchId));
+          setInProgressCounts(prev => ({ ...prev, 'squad-team': prev['squad-team'] + 1, total: prev.total + 1 }));
         } else if (data.ladderId === 'duo-trio') {
           setDuoTrioMatches(prev => prev.filter(m => m._id !== data.matchId));
+          setInProgressCounts(prev => ({ ...prev, 'duo-trio': prev['duo-trio'] + 1, total: prev.total + 1 }));
         }
         
         const currentSquad = mySquadRef.current;
@@ -629,6 +668,10 @@ const HardcoreDashboard = () => {
         ...selectedRoster.map(userId => ({ user: userId, isHelper: false })),
         ...(selectedHelper ? [{ user: selectedHelper._id, isHelper: true }] : [])
       ];
+      
+      console.log('[ROSTER DEBUG] selectedRoster:', selectedRoster);
+      console.log('[ROSTER DEBUG] selectedHelper:', selectedHelper);
+      console.log('[ROSTER DEBUG] Final roster to send:', JSON.stringify(roster, null, 2));
       
       const action = pendingMatchAction;
       let actionSuccess = false;
@@ -875,7 +918,7 @@ const HardcoreDashboard = () => {
               <span className="px-5 py-2.5 glass text-gray-500 text-sm rounded-xl">🔒</span>
             )
           ) : isAuthenticated && mySquad && isRegisteredToLadder(ladder) ? (
-            appSettings?.features?.ladderMatchmaking?.enabled === false ? (
+            appSettings?.features?.ladderMatchmaking?.enabled === false && !isAdminOrStaff ? (
               <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
                 <span>{appSettings.features.ladderMatchmaking.disabledMessage || 'Prise désactivée'}</span>
@@ -1002,7 +1045,7 @@ const HardcoreDashboard = () => {
               <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full glass">
                 <div className="w-2 h-2 bg-neon-green rounded-full animate-pulse" />
                 <Users className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300 text-sm font-medium">{totalOnlineUsers} {language === 'fr' ? 'en ligne' : language === 'de' ? 'online' : language === 'it' ? 'online' : 'online'}</span>
+                <span className="text-gray-300 text-sm font-medium">{totalOnlineUsers}</span>
               </div>
             </div>
 
@@ -1011,15 +1054,34 @@ const HardcoreDashboard = () => {
                 <div className="w-10 h-10 bg-neon-red/20 rounded-xl flex items-center justify-center">
                   <Play className="w-5 h-5 text-neon-red animate-pulse" />
                 </div>
-                <h2 className="text-2xl font-display text-white">{t('availableMatches')}</h2>
-                <span className="text-sm text-gray-500 px-3 py-1 rounded-full glass">
-                  {squadTeamMatches.length + duoTrioMatches.length}
-                </span>
+                <div>
+                  <h2 className="text-2xl font-display text-white">{t('availableMatches')}</h2>
+                  {inProgressCounts.total > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {inProgressCounts['squad-team'] > 0 && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon-green/10 border border-neon-green/30 animate-pulse">
+                          <div className="w-2 h-2 bg-neon-green rounded-full animate-ping" />
+                          <span className="text-neon-green text-xs font-semibold">
+                            {inProgressCounts['squad-team']} {txt.matchesInProgress} {txt.inLadder} Squad/Team
+                          </span>
+                        </div>
+                      )}
+                      {inProgressCounts['duo-trio'] > 0 && (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-500/10 border border-accent-500/30 animate-pulse">
+                          <div className="w-2 h-2 bg-accent-400 rounded-full animate-ping" />
+                          <span className="text-accent-400 text-xs font-semibold">
+                            {inProgressCounts['duo-trio']} {txt.matchesInProgress} {txt.inLadder} Duo/Trio
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               
               {/* Post Match Buttons */}
               <div className="flex gap-3">
-                {appSettings?.features?.ladderPosting?.enabled === false ? (
+                {appSettings?.features?.ladderPosting?.enabled === false && !isAdminOrStaff ? (
                   <div className="px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4" />
                     <span>{appSettings.features.ladderPosting.disabledMessage || 'Publication désactivée'}</span>
@@ -1073,7 +1135,7 @@ const HardcoreDashboard = () => {
                   <div className={`mb-4 px-4 py-2.5 rounded-xl flex items-center gap-2 ${isDuoTrioOpen() ? 'bg-neon-green/10 border border-neon-green/30' : 'bg-neon-red/10 border border-neon-red/30'}`}>
                     <Clock className={`w-4 h-4 ${isDuoTrioOpen() ? 'text-neon-green' : 'text-neon-red'}`} />
                     <span className={`text-sm font-medium ${isDuoTrioOpen() ? 'text-neon-green' : 'text-neon-red'}`}>
-                      {isDuoTrioOpen() ? '✓ Ouvert • 00h00 - 20h00' : '✗ Fermé • 00h00 - 20h00'}
+                      {isDuoTrioOpen() ? txt.openHours : txt.closedHours}
                     </span>
                   </div>
                 )}

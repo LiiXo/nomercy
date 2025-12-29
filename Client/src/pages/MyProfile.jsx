@@ -856,7 +856,7 @@ const MyProfile = () => {
                         <Edit3 className={`w-4 h-4 text-${accentColor}-400`} />
                       </button>
                       <button
-                        onClick={() => navigate(`/player/${user.username}`)}
+                        onClick={() => navigate(`/player/${user._id || user.id}`)}
                         className={`p-1.5 sm:p-2 hover:bg-${accentColor}-500/20 rounded-lg transition-colors`}
                         title={t.viewPublicProfile}
                       >

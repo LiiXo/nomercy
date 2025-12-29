@@ -64,6 +64,8 @@ const AdminPanel = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [formData, setFormData] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [resetStatsConfirm, setResetStatsConfirm] = useState(null);
+  const [resettingStats, setResettingStats] = useState(false);
   
   // System reset states
   const [confirmText, setConfirmText] = useState('');
@@ -1000,6 +1002,36 @@ const AdminPanel = () => {
     }
   };
 
+  // Reset user stats and match history
+  const handleResetUserStats = async (userId) => {
+    setResettingStats(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${userId}/reset-stats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`Stats réinitialisées ! ${data.matchesDeleted || 0} match(s) supprimé(s).`);
+        setResetStatsConfirm(null);
+        fetchUsers();
+      } else {
+        setError(data.message || 'Erreur lors de la réinitialisation');
+      }
+    } catch (err) {
+      console.error('Reset stats error:', err);
+      setError('Erreur lors de la réinitialisation');
+    } finally {
+      setResettingStats(false);
+    }
+  };
+
   const toggleFeature = async (featureKey, enabled) => {
     try {
       const response = await fetch(`${API_URL}/app-settings/admin/feature/${featureKey}`, {
@@ -1317,6 +1349,13 @@ const AdminPanel = () => {
                             title="Modifier"
                           >
                             <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+                            onClick={() => setResetStatsConfirm(user)}
+                            className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
+                            title="Reset Stats & Historique"
+                          >
+                            <RotateCcw className="w-4 h-4" />
             </button>
             <button
                             onClick={() => openBanModal(user)}
@@ -4254,6 +4293,56 @@ const renderDisputes = () => {
                 className="flex-1 py-3 px-4 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Stats Confirmation Modal */}
+      {resetStatsConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setResetStatsConfirm(null)}></div>
+          <div className="relative bg-dark-900 border border-purple-500/20 rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <RotateCcw className="w-6 h-6 text-purple-400" />
+              Reset Stats & Historique
+            </h3>
+            <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+              <p className="text-purple-300 text-sm font-medium mb-1">Utilisateur ciblé :</p>
+              <p className="text-white font-semibold">{resetStatsConfirm.username || resetStatsConfirm.discordUsername}</p>
+              <p className="text-gray-500 text-xs">{resetStatsConfirm._id}</p>
+            </div>
+            <p className="text-gray-400 mb-2 text-sm">
+              Cette action va :
+            </p>
+            <ul className="text-gray-400 text-sm mb-4 space-y-1 list-disc list-inside">
+              <li>Remettre les victoires à <span className="text-white font-medium">0</span></li>
+              <li>Remettre les défaites à <span className="text-white font-medium">0</span></li>
+              <li>Remettre les points à <span className="text-white font-medium">0</span></li>
+              <li>Supprimer <span className="text-red-400 font-medium">tout l'historique des matchs</span> du joueur</li>
+            </ul>
+            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg mb-6">
+              <p className="text-red-400 text-sm font-medium">⚠️ Cette action est irréversible !</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setResetStatsConfirm(null)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={() => handleResetUserStats(resetStatsConfirm._id)}
+                disabled={resettingStats}
+                className="flex-1 py-3 px-4 bg-purple-500 text-white font-medium rounded-xl hover:bg-purple-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {resettingStats ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                  <>
+                    <RotateCcw className="w-5 h-5" />
+                    Reset
+                  </>
+                )}
               </button>
             </div>
           </div>

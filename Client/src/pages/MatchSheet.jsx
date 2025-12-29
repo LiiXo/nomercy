@@ -3,15 +3,17 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
+import { io } from 'socket.io-client';
 import { 
   ArrowLeft, Trophy, Users, Clock, Coins, Send, Loader2, 
   TrendingUp, TrendingDown, Minus, Shield, Swords, MessageCircle,
-  CheckCircle, XCircle, AlertTriangle, Crown
+  CheckCircle, XCircle, AlertTriangle, Crown, Home, Map, Ban
 } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
+const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
 const MatchSheet = () => {
   const { matchId } = useParams();
@@ -43,6 +45,14 @@ const MatchSheet = () => {
   const [gameCode, setGameCode] = useState('');
   const [submittingCode, setSubmittingCode] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [requestingCancel, setRequestingCancel] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showStaffVictoryModal, setShowStaffVictoryModal] = useState(false);
+  const [staffActionLoading, setStaffActionLoading] = useState(false);
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
+  const [evidenceDescription, setEvidenceDescription] = useState('');
+  const evidenceInputRef = useRef(null);
+  const socketRef = useRef(null);
 
   // Points configuration
   const POINTS_WIN = 25;
@@ -119,6 +129,46 @@ const MatchSheet = () => {
       players: 'Joueurs',
       helper: 'Aide',
       noRoster: 'Aucun roster défini',
+      requestCancel: 'Demander l\'annulation',
+      cancelRequested: 'Annulation demandée',
+      waitingOpponentCancel: 'En attente de l\'adversaire',
+      cancelConfirm: 'Voulez-vous demander l\'annulation de ce match ? L\'adversaire devra confirmer.',
+      cancelMatch: 'Annuler le match',
+      bothTeamsCancel: 'Les deux équipes doivent accepter l\'annulation.',
+      randomMaps: 'Maps du match',
+      map: 'Map',
+      hostTeam: 'Équipe hôte',
+      gameModes: {
+        'Search & Destroy': 'Recherche et Destruction',
+        'Domination': 'Domination',
+        'Kill Confirmed': 'Meurtre Confirmé',
+        'CTF': 'Capture du Drapeau',
+      },
+      staffActions: 'Actions Staff',
+      giveVictory: 'Donner la victoire',
+      cancelMatch: 'Annuler le match',
+      removeDispute: 'Retirer le litige',
+      selectTeam: 'Sélectionnez l\'équipe gagnante',
+      evidence: 'Preuves',
+      uploadEvidence: 'Ajouter une preuve',
+      evidenceDescription: 'Description (optionnel)',
+      evidenceDescriptionPlaceholder: 'Décrivez brièvement cette preuve...',
+      uploadedBy: 'Envoyé par',
+      noEvidence: 'Aucune preuve ajoutée',
+      maxEvidenceReached: 'Limite de 5 preuves atteinte',
+      dragDropEvidence: 'Glissez-déposez une image ou cliquez pour sélectionner',
+      supportedFormats: 'Formats: JPG, PNG, GIF, WebP (max 5 Mo)',
+      uploading: 'Envoi en cours...',
+      systemMessages: {
+        result_declared: (p) => `🏆 ${p.squadName} a déclaré ${p.winnerName} vainqueur du match.`,
+        dispute_reported: (p) => `⚠️ ${p.squadName} a signalé un litige.${p.reason ? ` Raison: ${p.reason}` : ''}`,
+        evidence_added: (p) => `📷 ${p.username} a ajouté une preuve au litige.`,
+        match_cancelled_mutual: () => `⚠️ Match annulé d'un commun accord entre les deux équipes.`,
+        cancel_requested: (p) => `🔄 ${p.squadName} demande l'annulation du match.`,
+        match_cancelled_staff: (p) => `❌ Match annulé par le staff.${p.reason ? ` Raison: ${p.reason}` : ''}`,
+        victory_assigned_staff: (p) => `👑 Le staff a attribué la victoire à ${p.winnerName}.`,
+        dispute_removed_staff: () => `✅ Le litige a été retiré par le staff. Le match reprend.`,
+      },
     },
     en: {
       back: 'Back',
@@ -188,6 +238,46 @@ const MatchSheet = () => {
       players: 'Players',
       helper: 'Helper',
       noRoster: 'No roster defined',
+      requestCancel: 'Request cancellation',
+      cancelRequested: 'Cancellation requested',
+      waitingOpponentCancel: 'Waiting for opponent',
+      cancelConfirm: 'Do you want to request the cancellation of this match? The opponent must confirm.',
+      cancelMatch: 'Cancel match',
+      bothTeamsCancel: 'Both teams must agree to cancel.',
+      randomMaps: 'Match maps',
+      map: 'Map',
+      hostTeam: 'Host team',
+      gameModes: {
+        'Search & Destroy': 'Search & Destroy',
+        'Domination': 'Domination',
+        'Kill Confirmed': 'Kill Confirmed',
+        'CTF': 'Capture the Flag',
+      },
+      staffActions: 'Staff Actions',
+      giveVictory: 'Give victory',
+      cancelMatch: 'Cancel match',
+      removeDispute: 'Remove dispute',
+      selectTeam: 'Select the winning team',
+      evidence: 'Evidence',
+      uploadEvidence: 'Add evidence',
+      evidenceDescription: 'Description (optional)',
+      evidenceDescriptionPlaceholder: 'Briefly describe this evidence...',
+      uploadedBy: 'Uploaded by',
+      noEvidence: 'No evidence added',
+      maxEvidenceReached: 'Limit of 5 pieces of evidence reached',
+      dragDropEvidence: 'Drag and drop an image or click to select',
+      supportedFormats: 'Formats: JPG, PNG, GIF, WebP (max 5 MB)',
+      uploading: 'Uploading...',
+      systemMessages: {
+        result_declared: (p) => `🏆 ${p.squadName} declared ${p.winnerName} as the match winner.`,
+        dispute_reported: (p) => `⚠️ ${p.squadName} reported a dispute.${p.reason ? ` Reason: ${p.reason}` : ''}`,
+        evidence_added: (p) => `📷 ${p.username} added evidence to the dispute.`,
+        match_cancelled_mutual: () => `⚠️ Match cancelled by mutual agreement.`,
+        cancel_requested: (p) => `🔄 ${p.squadName} is requesting match cancellation.`,
+        match_cancelled_staff: (p) => `❌ Match cancelled by staff.${p.reason ? ` Reason: ${p.reason}` : ''}`,
+        victory_assigned_staff: (p) => `👑 Staff assigned victory to ${p.winnerName}.`,
+        dispute_removed_staff: () => `✅ Dispute has been removed by staff. Match resumes.`,
+      },
     },
     de: {
       back: 'Zurück',
@@ -257,6 +347,46 @@ const MatchSheet = () => {
       players: 'Spieler',
       helper: 'Helfer',
       noRoster: 'Kein Roster definiert',
+      requestCancel: 'Abbruch anfordern',
+      cancelRequested: 'Abbruch angefordert',
+      waitingOpponentCancel: 'Warte auf Gegner',
+      cancelConfirm: 'Möchten Sie den Abbruch dieses Spiels anfordern? Der Gegner muss bestätigen.',
+      cancelMatch: 'Spiel abbrechen',
+      bothTeamsCancel: 'Beide Teams müssen dem Abbruch zustimmen.',
+      randomMaps: 'Spielkarten',
+      map: 'Karte',
+      hostTeam: 'Host-Team',
+      gameModes: {
+        'Search & Destroy': 'Suchen & Zerstören',
+        'Domination': 'Herrschaft',
+        'Kill Confirmed': 'Kill Bestätigt',
+        'CTF': 'Flaggenraub',
+      },
+      staffActions: 'Staff-Aktionen',
+      giveVictory: 'Sieg geben',
+      cancelMatch: 'Spiel abbrechen',
+      removeDispute: 'Streit entfernen',
+      selectTeam: 'Wählen Sie das Gewinnerteam',
+      evidence: 'Beweise',
+      uploadEvidence: 'Beweis hinzufügen',
+      evidenceDescription: 'Beschreibung (optional)',
+      evidenceDescriptionPlaceholder: 'Beschreiben Sie diesen Beweis kurz...',
+      uploadedBy: 'Hochgeladen von',
+      noEvidence: 'Keine Beweise hinzugefügt',
+      maxEvidenceReached: 'Limit von 5 Beweisen erreicht',
+      dragDropEvidence: 'Bild hierher ziehen oder klicken zum Auswählen',
+      supportedFormats: 'Formate: JPG, PNG, GIF, WebP (max 5 MB)',
+      uploading: 'Wird hochgeladen...',
+      systemMessages: {
+        result_declared: (p) => `🏆 ${p.squadName} hat ${p.winnerName} als Sieger erklärt.`,
+        dispute_reported: (p) => `⚠️ ${p.squadName} hat einen Streit gemeldet.${p.reason ? ` Grund: ${p.reason}` : ''}`,
+        evidence_added: (p) => `📷 ${p.username} hat einen Beweis hinzugefügt.`,
+        match_cancelled_mutual: () => `⚠️ Spiel wurde einvernehmlich abgesagt.`,
+        cancel_requested: (p) => `🔄 ${p.squadName} beantragt die Absage.`,
+        match_cancelled_staff: (p) => `❌ Spiel wurde vom Staff abgesagt.${p.reason ? ` Grund: ${p.reason}` : ''}`,
+        victory_assigned_staff: (p) => `👑 Staff hat ${p.winnerName} den Sieg zugesprochen.`,
+        dispute_removed_staff: () => `✅ Der Streit wurde vom Staff entfernt. Das Spiel wird fortgesetzt.`,
+      },
     },
     it: {
       back: 'Indietro',
@@ -326,6 +456,46 @@ const MatchSheet = () => {
       players: 'Giocatori',
       helper: 'Aiuto',
       noRoster: 'Nessun roster definito',
+      requestCancel: 'Richiedi annullamento',
+      cancelRequested: 'Annullamento richiesto',
+      waitingOpponentCancel: 'In attesa dell\'avversario',
+      cancelConfirm: 'Vuoi richiedere l\'annullamento di questa partita? L\'avversario deve confermare.',
+      cancelMatch: 'Annulla partita',
+      bothTeamsCancel: 'Entrambe le squadre devono accettare l\'annullamento.',
+      randomMaps: 'Mappe della partita',
+      map: 'Mappa',
+      hostTeam: 'Squadra ospitante',
+      gameModes: {
+        'Search & Destroy': 'Cerca e Distruggi',
+        'Domination': 'Dominazione',
+        'Kill Confirmed': 'Uccisione Confermata',
+        'CTF': 'Cattura la Bandiera',
+      },
+      staffActions: 'Azioni Staff',
+      giveVictory: 'Dare la vittoria',
+      cancelMatch: 'Annulla partita',
+      removeDispute: 'Rimuovi controversia',
+      selectTeam: 'Seleziona la squadra vincente',
+      evidence: 'Prove',
+      uploadEvidence: 'Aggiungi prova',
+      evidenceDescription: 'Descrizione (opzionale)',
+      evidenceDescriptionPlaceholder: 'Descrivi brevemente questa prova...',
+      uploadedBy: 'Caricato da',
+      noEvidence: 'Nessuna prova aggiunta',
+      maxEvidenceReached: 'Limite di 5 prove raggiunto',
+      dragDropEvidence: 'Trascina un\'immagine o clicca per selezionare',
+      supportedFormats: 'Formati: JPG, PNG, GIF, WebP (max 5 MB)',
+      uploading: 'Caricamento...',
+      systemMessages: {
+        result_declared: (p) => `🏆 ${p.squadName} ha dichiarato ${p.winnerName} vincitore.`,
+        dispute_reported: (p) => `⚠️ ${p.squadName} ha segnalato una controversia.${p.reason ? ` Motivo: ${p.reason}` : ''}`,
+        evidence_added: (p) => `📷 ${p.username} ha aggiunto una prova.`,
+        match_cancelled_mutual: () => `⚠️ Partita annullata di comune accordo.`,
+        cancel_requested: (p) => `🔄 ${p.squadName} richiede l'annullamento.`,
+        match_cancelled_staff: (p) => `❌ Partita annullata dallo staff.${p.reason ? ` Motivo: ${p.reason}` : ''}`,
+        victory_assigned_staff: (p) => `👑 Lo staff ha assegnato la vittoria a ${p.winnerName}.`,
+        dispute_removed_staff: () => `✅ La controversia è stata rimossa dallo staff. La partita riprende.`,
+      },
     },
   }[language] || {
     back: 'Back',
@@ -346,6 +516,10 @@ const MatchSheet = () => {
       const data = await response.json();
       
       if (data.success) {
+        console.log('[MATCH SHEET] Received match data:', data.match);
+        console.log('[MATCH SHEET] challengerRoster:', data.match?.challengerRoster);
+        console.log('[MATCH SHEET] opponentRoster:', data.match?.opponentRoster);
+        
         // Store staff status
         if (data.isStaff !== undefined) {
           setIsStaff(data.isStaff);
@@ -419,6 +593,66 @@ const MatchSheet = () => {
     return () => clearInterval(interval);
   }, [initialLoadDone, matchId]);
 
+  // Socket.io connection for real-time updates
+  useEffect(() => {
+    if (!matchId) return;
+
+    const socket = io(SOCKET_URL, { 
+      transports: ['websocket', 'polling'], 
+      withCredentials: true 
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('joinMatch', matchId);
+    });
+
+    // Real-time chat messages
+    socket.on('newChatMessage', (data) => {
+      if (data.matchId === matchId) {
+        setMessages(prev => {
+          // Avoid duplicates
+          if (prev.some(m => m.createdAt === data.message.createdAt && m.user?._id === data.message.user?._id)) {
+            return prev;
+          }
+          return [...prev, data.message];
+        });
+        // Scroll to bottom after receiving new message
+        setTimeout(scrollChatToBottom, 50);
+      }
+    });
+
+    // Match updates (cancel requests, status changes, etc.)
+    socket.on('matchUpdate', (data) => {
+      if (data.match?._id === matchId) {
+        setMatch(data.match);
+        
+        // Sync chat messages from match update (for system messages from staff actions, etc.)
+        if (data.match.chat) {
+          setMessages(prev => {
+            const newMessages = data.match.chat;
+            // Only update if there are new messages
+            if (newMessages.length > prev.length) {
+              return newMessages;
+            }
+            return prev;
+          });
+        }
+        
+        // Si le match est annulé, rediriger vers l'accueil du mode
+        if (data.match.status === 'cancelled') {
+          const redirectPath = data.match.mode === 'hardcore' ? '/hardcore' : '/cdl';
+          navigate(redirectPath);
+        }
+      }
+    });
+
+    return () => {
+      socket.emit('leaveMatch', matchId);
+      socket.disconnect();
+    };
+  }, [matchId, navigate]);
+
   // Chat container ref for scrolling
   const chatContainerRef = useRef(null);
   
@@ -429,16 +663,17 @@ const MatchSheet = () => {
     }
   };
 
-  // Scroll chat to bottom on initial load when messages are available
-  const initialScrollDone = useRef(false);
+  // Track previous message count to detect new messages
+  const prevMessageCount = useRef(0);
+  
+  // Scroll chat to bottom whenever a new message arrives
   useEffect(() => {
-    if (initialLoadDone && messages.length > 0 && !initialScrollDone.current) {
-      setTimeout(() => {
-        scrollChatToBottom();
-        initialScrollDone.current = true;
-      }, 100);
+    if (messages.length > 0) {
+      // Always scroll to bottom when messages change
+      setTimeout(scrollChatToBottom, 50);
     }
-  }, [initialLoadDone, messages.length]);
+    prevMessageCount.current = messages.length;
+  }, [messages.length]);
 
   // Send message
   const handleSendMessage = async (e) => {
@@ -456,10 +691,8 @@ const MatchSheet = () => {
 
       const data = await response.json();
       if (data.success) {
-        setMessages(prev => [...prev, data.message]);
+        // Ne pas ajouter le message ici - Socket.io s'en charge
         setNewMessage('');
-        // Scroll chat after a small delay to let the DOM update
-        setTimeout(scrollChatToBottom, 50);
       }
     } catch (err) {
       console.error('Error sending message:', err);
@@ -570,6 +803,215 @@ const MatchSheet = () => {
       console.error('Error submitting dispute:', err);
     } finally {
       setSubmittingDispute(false);
+    }
+  };
+
+  // Request match cancellation
+  const handleRequestCancel = async () => {
+    setRequestingCancel(true);
+    try {
+      const response = await fetch(`${API_URL}/matches/${matchId}/cancel-request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMatch(data.match);
+        setShowCancelModal(false);
+        
+        // Si le match est annulé (les deux équipes ont confirmé), rediriger vers l'accueil du mode
+        if (data.cancelled) {
+          const redirectPath = isHardcore ? '/hardcore' : '/cdl';
+          navigate(redirectPath);
+        }
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error requesting cancellation:', err);
+    } finally {
+      setRequestingCancel(false);
+    }
+  };
+
+  // Check if my team has already requested cancellation
+  const hasMyTeamRequestedCancel = () => {
+    if (!mySquad || !match?.cancelRequests) return false;
+    return match.cancelRequests.some(r => 
+      (r.squad?._id || r.squad)?.toString() === mySquad._id?.toString()
+    );
+  };
+
+  // Check if opponent has requested cancellation
+  const hasOpponentRequestedCancel = () => {
+    if (!mySquad || !match?.cancelRequests) return false;
+    const mySquadId = mySquad._id?.toString();
+    return match.cancelRequests.some(r => {
+      const squadId = (r.squad?._id || r.squad)?.toString();
+      return squadId !== mySquadId;
+    });
+  };
+
+  // Staff: Resolve dispute by giving victory
+  const handleStaffResolveVictory = async (winnerId) => {
+    setStaffActionLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/matches/${matchId}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ winnerId, resolution: 'Victoire attribuée par le staff' })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMatch(data.match);
+        setShowStaffVictoryModal(false);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error resolving dispute:', err);
+    } finally {
+      setStaffActionLoading(false);
+    }
+  };
+
+  // Staff: Cancel disputed match
+  const handleStaffCancelMatch = async () => {
+    if (!confirm(language === 'fr' ? 'Êtes-vous sûr de vouloir annuler ce match ?' : 'Are you sure you want to cancel this match?')) return;
+    
+    setStaffActionLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/matches/${matchId}/resolve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ winnerId: null, resolution: 'Match annulé par le staff', cancel: true })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMatch(data.match);
+        const redirectPath = isHardcore ? '/hardcore' : '/cdl';
+        navigate(redirectPath);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error cancelling match:', err);
+    } finally {
+      setStaffActionLoading(false);
+    }
+  };
+
+  // Upload evidence for dispute
+  const handleUploadEvidence = async (file) => {
+    if (!file) return;
+    
+    // Validate file
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      alert(language === 'fr' ? 'Type de fichier non autorisé. Seuls les images sont acceptées.' : 'File type not allowed. Only images are accepted.');
+      return;
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      alert(language === 'fr' ? 'Fichier trop volumineux (max 5 Mo)' : 'File too large (max 5 MB)');
+      return;
+    }
+    
+    setUploadingEvidence(true);
+    try {
+      const formData = new FormData();
+      formData.append('evidence', file);
+      formData.append('description', evidenceDescription);
+      
+      const response = await fetch(`${API_URL}/matches/${matchId}/dispute-evidence`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMatch(data.match);
+        setEvidenceDescription('');
+        if (evidenceInputRef.current) {
+          evidenceInputRef.current.value = '';
+        }
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error uploading evidence:', err);
+      alert(language === 'fr' ? 'Erreur lors de l\'upload' : 'Upload error');
+    } finally {
+      setUploadingEvidence(false);
+    }
+  };
+
+  // Handle file drop
+  const handleEvidenceDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      handleUploadEvidence(file);
+    }
+  };
+
+  // Handle file select
+  const handleEvidenceSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleUploadEvidence(file);
+    }
+  };
+
+  // Get my team's evidence count
+  const getMyEvidenceCount = () => {
+    if (!mySquad || !match?.dispute?.evidence) return 0;
+    return match.dispute.evidence.filter(e => 
+      e.squad?._id?.toString() === mySquad._id?.toString() ||
+      e.squad?.toString() === mySquad._id?.toString()
+    ).length;
+  };
+
+  // Translate system message
+  const getSystemMessage = (msg) => {
+    // If it's a new format with messageType
+    if (msg.messageType && t.systemMessages?.[msg.messageType]) {
+      return t.systemMessages[msg.messageType](msg.messageParams || {});
+    }
+    // Fallback to old format (plain message string)
+    return msg.message || '';
+  };
+
+  // Staff: Remove dispute (put match back in progress)
+  const handleStaffRemoveDispute = async () => {
+    if (!confirm(language === 'fr' ? 'Êtes-vous sûr de vouloir retirer le litige ?' : 'Are you sure you want to remove the dispute?')) return;
+    
+    setStaffActionLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/matches/${matchId}/cancel-dispute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setMatch(data.match);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error removing dispute:', err);
+    } finally {
+      setStaffActionLoading(false);
     }
   };
 
@@ -780,7 +1222,7 @@ const MatchSheet = () => {
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">
                   <span className="text-gray-500 text-sm">{t.gameMode}</span>
                   <span className={`px-2 py-0.5 bg-${accentColor}-500/20 rounded text-${accentColor}-400 text-xs font-medium`}>
-                    {match.gameMode}
+                    {t.gameModes?.[match.gameMode] || match.gameMode}
                   </span>
                 </div>
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">
@@ -825,22 +1267,103 @@ const MatchSheet = () => {
               </div>
             </div>
 
+            {/* Host Team Display */}
+            {match.hostTeam && match.opponent && (
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-yellow-500/20 p-4 mb-4`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                    <Home className="w-5 h-5 text-yellow-400" />
+                  </div>
+                  <div>
+                    <p className="text-yellow-400 text-xs font-medium uppercase">{t.hostTeam}</p>
+                    <p className="text-white font-semibold">{match.hostTeam.name || match.hostTeam.tag}</p>
+                  </div>
+                  {isMyTeamHost() && (
+                    <span className="ml-auto px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded-full">
+                      {t.youAreHost}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Random Maps Display */}
+            {match.mapType === 'random' && match.randomMaps?.length > 0 && (
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-4 mb-4`}>
+                <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
+                  <Map className="w-4 h-4" />
+                  {t.randomMaps}
+                </h3>
+                <div className="space-y-2">
+                  {match.randomMaps.map((map, idx) => (
+                    <div key={idx} className="flex items-center gap-3 p-2 bg-dark-800/50 rounded-lg border border-white/5">
+                      {map.image ? (
+                        <img src={map.image} alt={map.name} className="w-12 h-8 rounded object-cover" />
+                      ) : (
+                        <div className="w-12 h-8 rounded bg-purple-500/20 flex items-center justify-center">
+                          <Map className="w-4 h-4 text-purple-400" />
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-purple-400 text-xs">#{map.order}</span>
+                        <p className="text-white text-sm font-medium">{map.name}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Match Actions - Only for participants, leaders, and active matches */}
             {isParticipant && match.opponent && (match.status === 'accepted' || match.status === 'in_progress') && isLeader() && (
-              <div className="flex gap-2">
+              <div className="space-y-2">
+                {/* Sélectionner le gagnant */}
                 <button
                   onClick={() => setShowResultModal(true)}
-                  className={`flex-1 py-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2`}
+                  className={`w-full py-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2`}
                 >
                   <Trophy className="w-4 h-4" />
                   {t.selectWinner}
                 </button>
+
+                {/* Signaler un litige */}
                 <button
                   onClick={() => setShowDisputeModal(true)}
-                  className="px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400 text-sm font-medium hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"
                 >
                   <AlertTriangle className="w-4 h-4" />
+                  {t.reportDispute}
                 </button>
+
+                {/* Cancel Request Button */}
+                {hasMyTeamRequestedCancel() ? (
+                  <div className="flex items-center justify-center gap-2 py-2 px-3 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400 text-sm">
+                    <Ban className="w-4 h-4" />
+                    <span>{t.cancelRequested}</span>
+                    {!hasOpponentRequestedCancel() && (
+                      <span className="text-xs opacity-70">• {t.waitingOpponentCancel}</span>
+                    )}
+                  </div>
+                ) : hasOpponentRequestedCancel() ? (
+                  <button
+                    onClick={() => setShowCancelModal(true)}
+                    className="w-full py-2.5 bg-orange-500/20 border border-orange-500/30 rounded-lg text-orange-400 text-sm font-medium hover:bg-orange-500/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Ban className="w-4 h-4" />
+                    <span>{t.cancelMatch}</span>
+                    <span className="text-xs bg-orange-500/30 px-2 py-0.5 rounded-full animate-pulse">
+                      {language === 'fr' ? 'L\'adversaire attend' : 'Opponent waiting'}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowCancelModal(true)}
+                    className="w-full py-2 bg-dark-800/50 border border-white/10 rounded-lg text-gray-400 text-sm hover:bg-dark-700/50 hover:text-white transition-all flex items-center justify-center gap-2"
+                  >
+                    <Ban className="w-4 h-4" />
+                    {t.requestCancel}
+                  </button>
+                )}
               </div>
             )}
 
@@ -866,6 +1389,42 @@ const MatchSheet = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Staff Actions */}
+                {isStaff && (
+                  <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                    <h3 className="text-sm font-bold text-yellow-400 mb-3 flex items-center gap-2">
+                      <Crown className="w-4 h-4" />
+                      {t.staffActions}
+                    </h3>
+                    <div className="grid grid-cols-1 gap-2">
+                      <button
+                        onClick={() => setShowStaffVictoryModal(true)}
+                        disabled={staffActionLoading}
+                        className="w-full py-2 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm font-medium hover:bg-green-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <Trophy className="w-4 h-4" />
+                        {t.giveVictory}
+                      </button>
+                      <button
+                        onClick={handleStaffRemoveDispute}
+                        disabled={staffActionLoading}
+                        className="w-full py-2 bg-blue-500/20 border border-blue-500/30 rounded-lg text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        {t.removeDispute}
+                      </button>
+                      <button
+                        onClick={handleStaffCancelMatch}
+                        disabled={staffActionLoading}
+                        className="w-full py-2 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium hover:bg-red-500/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        <Ban className="w-4 h-4" />
+                        {t.cancelMatch}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -909,6 +1468,21 @@ const MatchSheet = () => {
                 ) : (
                   <div className="space-y-2">
                     {messages.map((msg, index) => {
+                      // System messages
+                      if (msg.isSystem) {
+                        return (
+                          <div key={index} className="flex justify-center">
+                            <div className="px-3 py-1.5 bg-dark-800/50 border border-white/10 rounded-lg text-xs text-gray-400 text-center max-w-[90%]">
+                              {getSystemMessage(msg)}
+                              <span className="text-gray-600 ml-2 text-[10px]">
+                                {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Regular user messages
                       const isMyMessage = msg.user?._id === user?.id;
                       const isChallenger = msg.squad === match.challenger?._id;
                       const isMsgStaff = msg.isStaff || msg.user?.roles?.some(r => ['admin', 'staff', 'cdl_manager', 'hardcore_manager'].includes(r));
@@ -943,6 +1517,77 @@ const MatchSheet = () => {
               )}
             </div>
 
+            {/* Evidence Section - Horizontal above rosters (only for disputed matches) */}
+            {match.status === 'disputed' && (
+              <div className="p-4 bg-dark-900/80 backdrop-blur-xl rounded-xl border border-orange-500/20">
+                <h3 className="text-sm font-bold text-orange-400 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  {t.evidence}
+                </h3>
+                
+                {/* Horizontal scrollable evidence gallery */}
+                <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-orange-500/30 scrollbar-track-transparent">
+                  {/* Existing Evidence */}
+                  {match.dispute?.evidence?.map((ev, idx) => (
+                    <div 
+                      key={ev._id || idx}
+                      className="flex-shrink-0 relative group rounded-lg overflow-hidden border border-white/10 bg-dark-800/50 w-32"
+                    >
+                      <img 
+                        src={`https://api-nomercy.ggsecure.io${ev.imageUrl}`}
+                        alt={`Evidence ${idx + 1}`}
+                        className="w-32 h-24 object-cover cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => window.open(`https://api-nomercy.ggsecure.io${ev.imageUrl}`, '_blank')}
+                      />
+                      <div className="absolute bottom-0 left-0 right-0 p-1.5 bg-gradient-to-t from-black/90 to-transparent">
+                        <p className="text-[10px] text-gray-300 truncate">
+                          {ev.uploadedBy?.username || 'Unknown'}
+                          {ev.squad && <span className="text-orange-400 ml-1">[{ev.squad.tag || ev.squad.name}]</span>}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Upload button for participants */}
+                  {isParticipant && getMyEvidenceCount() < 5 && (
+                    <div 
+                      onClick={() => !uploadingEvidence && evidenceInputRef.current?.click()}
+                      className={`flex-shrink-0 w-32 h-24 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all
+                        ${uploadingEvidence 
+                          ? 'border-orange-500/50 bg-orange-500/10' 
+                          : 'border-white/20 hover:border-orange-500/50 hover:bg-orange-500/5'
+                        }`}
+                    >
+                      <input
+                        ref={evidenceInputRef}
+                        type="file"
+                        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                        onChange={handleEvidenceSelect}
+                        className="hidden"
+                        disabled={uploadingEvidence}
+                      />
+                      {uploadingEvidence ? (
+                        <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+                      ) : (
+                        <>
+                          <svg className="w-6 h-6 text-gray-500 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                          </svg>
+                          <span className="text-gray-500 text-[10px]">{t.uploadEvidence}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {isParticipant && getMyEvidenceCount() >= 5 && (
+                  <p className="text-orange-400 text-xs mt-2">{t.maxEvidenceReached}</p>
+                )}
+              </div>
+            )}
+
             {/* Rosters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Challenger Roster */}
@@ -961,7 +1606,12 @@ const MatchSheet = () => {
                         <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                           <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                            <Link 
+                              to={`/player/${player._id}`} 
+                              className="text-white text-sm font-medium truncate hover:text-cyan-400 transition-colors cursor-pointer block"
+                            >
+                              {player.username}
+                            </Link>
                             {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                           </div>
                           <div className="flex items-center gap-1">
@@ -998,7 +1648,12 @@ const MatchSheet = () => {
                           <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                             <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                             <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                              <Link 
+                                to={`/player/${player._id}`} 
+                                className="text-white text-sm font-medium truncate hover:text-purple-400 transition-colors cursor-pointer block"
+                              >
+                                {player.username}
+                              </Link>
                               {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                             </div>
                             <div className="flex items-center gap-1">
@@ -1150,6 +1805,118 @@ const MatchSheet = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Request Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-dark-900 rounded-2xl border border-orange-500/30 p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Ban className="w-6 h-6 text-orange-400" />
+              {t.requestCancel}
+            </h3>
+            
+            <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+              <p className="text-orange-400 text-sm">{t.bothTeamsCancel}</p>
+            </div>
+
+            <p className="text-gray-300 text-sm mb-6">{t.cancelConfirm}</p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCancelModal(false)}
+                className="flex-1 py-2.5 bg-dark-800 hover:bg-dark-700 border border-white/10 rounded-lg text-gray-400 font-medium transition-colors"
+              >
+                {language === 'fr' ? 'Retour' : 'Back'}
+              </button>
+              <button
+                onClick={handleRequestCancel}
+                disabled={requestingCancel}
+                className="flex-1 py-2.5 bg-orange-500 hover:bg-orange-600 rounded-lg text-white font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {requestingCancel ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Ban className="w-4 h-4" />
+                    {hasOpponentRequestedCancel() ? (language === 'fr' ? 'Confirmer l\'annulation' : 'Confirm cancellation') : t.requestCancel}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff Victory Modal */}
+      {showStaffVictoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-dark-900 rounded-2xl border border-yellow-500/30 p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Crown className="w-6 h-6 text-yellow-400" />
+              {t.giveVictory}
+            </h3>
+            
+            <p className="text-gray-400 text-sm mb-4">{t.selectTeam}</p>
+
+            <div className="space-y-3">
+              {/* Challenger */}
+              <button
+                onClick={() => handleStaffResolveVictory(match.challenger?._id)}
+                disabled={staffActionLoading}
+                className="w-full p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {match.challenger?.logo ? (
+                      <img src={match.challenger.logo} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                        <Shield className="w-5 h-5 text-green-400" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-white font-semibold">{match.challenger?.name}</p>
+                      <p className="text-gray-500 text-xs">[{match.challenger?.tag}]</p>
+                    </div>
+                  </div>
+                  <Trophy className="w-6 h-6 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </button>
+
+              {/* Opponent */}
+              <button
+                onClick={() => handleStaffResolveVictory(match.opponent?._id)}
+                disabled={staffActionLoading}
+                className="w-full p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {match.opponent?.logo ? (
+                      <img src={match.opponent.logo} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                        <Shield className="w-5 h-5 text-green-400" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-white font-semibold">{match.opponent?.name}</p>
+                      <p className="text-gray-500 text-xs">[{match.opponent?.tag}]</p>
+                    </div>
+                  </div>
+                  <Trophy className="w-6 h-6 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => setShowStaffVictoryModal(false)}
+              className="w-full mt-4 py-2 bg-dark-800 hover:bg-dark-700 border border-white/10 rounded-lg text-gray-400 text-sm transition-colors"
+            >
+              {language === 'fr' ? 'Annuler' : 'Cancel'}
+            </button>
           </div>
         </div>
       )}

@@ -104,11 +104,16 @@ router.get('/conversations/:conversationId', verifyToken, async (req, res) => {
       await conversation.markAsRead(userId);
     }
     
-    // Paginate messages (most recent first)
-    const totalMessages = conversation.messages.length;
+    // Sort messages by createdAt to ensure correct order
+    const sortedMessages = [...conversation.messages].sort((a, b) => 
+      new Date(a.createdAt) - new Date(b.createdAt)
+    );
+    
+    // Paginate messages (get most recent ones first for pagination, then reverse for display)
+    const totalMessages = sortedMessages.length;
     const start = Math.max(0, totalMessages - parseInt(page) * parseInt(limit));
     const end = totalMessages - (parseInt(page) - 1) * parseInt(limit);
-    const messages = conversation.messages.slice(start, end);
+    const messages = sortedMessages.slice(start, end);
     
     // Populate message senders
     await Conversation.populate(messages, {
@@ -131,7 +136,7 @@ router.get('/conversations/:conversationId', verifyToken, async (req, res) => {
         blockedBy: conversation.blockedBy,
         createdAt: conversation.createdAt
       },
-      messages: messages.reverse(), // Return in chronological order
+      messages: messages, // Already in chronological order after sorting
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -478,6 +483,11 @@ router.get('/admin/conversations/:conversationId', verifyToken, async (req, res)
       select: 'username avatar avatarUrl discordAvatar roles'
     });
     
+    // Sort messages by createdAt
+    const sortedMessages = [...conversation.messages].sort((a, b) => 
+      new Date(a.createdAt) - new Date(b.createdAt)
+    );
+    
     res.json({
       success: true,
       conversation: {
@@ -485,7 +495,7 @@ router.get('/admin/conversations/:conversationId', verifyToken, async (req, res)
         type: conversation.type,
         isStaffInitiated: conversation.isStaffInitiated,
         participants: conversation.participants,
-        messages: conversation.messages,
+        messages: sortedMessages,
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt
       }

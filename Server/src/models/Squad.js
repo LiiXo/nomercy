@@ -14,7 +14,6 @@ const squadSchema = new mongoose.Schema({
     type: String,
     required: true,
     unique: true,
-    uppercase: true,
     trim: true,
     minlength: 2,
     maxlength: 5

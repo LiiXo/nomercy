@@ -95,6 +95,7 @@ const Rankings = () => {
       duoTrioDesc: 'Affrontez d\'autres équipes en 2v2 ou 3v3. Ouvert de 00h00 à 20h00 (heure française).',
       squadTeam: 'Squad / Team',
       squadTeamDesc: 'Le format compétitif en 5v5. Disponible 24h/24.',
+      gameMode: 'Recherche et Destruction',
       join: 'S\'inscrire au classement',
       unregister: 'Se désinscrire',
       confirmUnregister: 'Êtes-vous sûr de vouloir vous désinscrire ?',
@@ -125,6 +126,7 @@ const Rankings = () => {
       duoTrioDesc: 'Face other teams in 2v2 or 3v3. Open from 00:00 to 20:00 (French time).',
       squadTeam: 'Squad / Team',
       squadTeamDesc: 'Competitive format in 5v5. Available 24/7.',
+      gameMode: 'Search & Destroy',
       join: 'Join ranking',
       unregister: 'Unregister',
       confirmUnregister: 'Are you sure you want to unregister?',
@@ -155,6 +157,7 @@ const Rankings = () => {
       duoTrioDesc: 'Tretet gegen andere Teams im 2v2 oder 3v3 an. Geöffnet von 00:00 bis 20:00 (französische Zeit).',
       squadTeam: 'Squad / Team',
       squadTeamDesc: 'Wettkampfformat im 5v5. 24/7 verfügbar.',
+      gameMode: 'Suchen & Zerstören',
       join: 'Rangliste beitreten',
       unregister: 'Abmelden',
       confirmUnregister: 'Sind Sie sicher, dass Sie sich abmelden möchten?',
@@ -185,6 +188,7 @@ const Rankings = () => {
       duoTrioDesc: 'Affronta altre squadre in 2v2 o 3v3. Aperto dalle 00:00 alle 20:00 (ora francese).',
       squadTeam: 'Squad / Team',
       squadTeamDesc: 'Formato competitivo in 5v5. Disponibile 24/7.',
+      gameMode: 'Cerca e Distruggi',
       join: 'Iscriviti alla classifica',
       unregister: 'Annulla iscrizione',
       confirmUnregister: 'Sei sicuro di volerti disiscrivere?',
@@ -215,6 +219,7 @@ const Rankings = () => {
     duoTrioDesc: 'Face other teams in 2v2 or 3v3. Open from 00:00 to 20:00 (French time).',
     squadTeam: 'Squad / Team',
     squadTeamDesc: 'Competitive format in 5v5. Available 24/7.',
+    gameMode: 'Search & Destroy',
     join: 'Join ranking',
     unregister: 'Unregister',
     confirmUnregister: 'Are you sure you want to unregister?',
@@ -485,10 +490,16 @@ const Rankings = () => {
             </div>
           </div>
           
-          {/* Time info */}
-          <div className="mt-3 flex items-center gap-2 text-white/70 text-sm">
-            <Clock className="w-4 h-4" />
-            <span>{isDuoTrio ? txt.hours : txt.alwaysOpen}</span>
+          {/* Time info & Game Mode */}
+          <div className="mt-3 flex flex-wrap items-center gap-4 text-white/70 text-sm">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4" />
+              <span>{isDuoTrio ? txt.hours : txt.alwaysOpen}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full">
+              <Skull className="w-4 h-4 text-white" />
+              <span className="font-medium text-white">{txt.gameMode}</span>
+            </div>
           </div>
         </div>
 

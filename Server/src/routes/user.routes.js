@@ -105,6 +105,71 @@ router.get('/search', async (req, res) => {
   }
 });
 
+// Check anticheat status for a player (GGSecure integration)
+// L'ID GGSecure est l'_id du joueur NoMercy
+router.get('/anticheat-status/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await User.findById(userId).select('platform username');
+    
+    if (!user) {
+      return res.status(404).json({ success: false, isOnline: false, message: 'User not found' });
+    }
+    
+    // Si le joueur n'est pas sur PC, pas besoin de GGSecure
+    if (user.platform !== 'PC') {
+      return res.json({ success: true, isOnline: true, reason: 'not_pc' });
+    }
+    
+    // Appeler l'API GGSecure en temps réel avec l'ID du joueur NoMercy
+    try {
+      const ggsecureResponse = await fetch(`https://api.ggsecure.io/api/v1/fingerprints/player/${userId}`);
+      const ggsecureData = await ggsecureResponse.json();
+      
+      if (ggsecureData.success && ggsecureData.data) {
+        const isOnline = ggsecureData.data.isOnline === true;
+        const isBanned = ggsecureData.data.banned === true;
+        
+        // Si le joueur est banni sur GGSecure, il ne peut pas jouer
+        if (isBanned) {
+          return res.json({ 
+            success: true, 
+            isOnline: false, 
+            reason: 'banned',
+            message: 'Player is banned on GGSecure'
+          });
+        }
+        
+        return res.json({ 
+          success: true, 
+          isOnline: isOnline
+        });
+      } else {
+        // L'API GGSecure n'a pas trouvé le joueur (jamais lancé GGSecure)
+        return res.json({ 
+          success: true, 
+          isOnline: false, 
+          reason: 'not_registered',
+          message: 'Player not registered in GGSecure'
+        });
+      }
+    } catch (ggsecureError) {
+      console.error('GGSecure API error:', ggsecureError);
+      // En cas d'erreur avec l'API GGSecure, on laisse passer pour ne pas bloquer
+      return res.json({ 
+        success: true, 
+        isOnline: true, 
+        reason: 'ggsecure_api_error',
+        message: 'Could not verify GGSecure status'
+      });
+    }
+  } catch (error) {
+    console.error('Anticheat status error:', error);
+    res.status(500).json({ success: false, isOnline: false, message: 'Server error' });
+  }
+});
+
 // Setup/complete profile (first time after Discord login)
 router.put('/setup-profile', verifyToken, async (req, res) => {
   try {
@@ -1056,6 +1121,69 @@ router.put('/admin/:userId/ban', verifyToken, requireStaff, async (req, res) => 
     res.status(500).json({
       success: false,
       message: 'An error occurred.'
+    });
+  }
+});
+
+// Admin: Reset user stats and delete match history
+router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé.'
+      });
+    }
+
+    // Can't reset admin stats
+    if (user.roles.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Impossible de réinitialiser les stats d\'un admin.'
+      });
+    }
+
+    // Import Match model
+    const Match = (await import('../models/Match.js')).default;
+
+    // Delete all matches where user is in challenger or opponent roster
+    const deleteResult = await Match.deleteMany({
+      $or: [
+        { 'challengerRoster.user': userId },
+        { 'opponentRoster.user': userId }
+      ]
+    });
+
+    // Reset user stats
+    user.stats = {
+      wins: 0,
+      losses: 0,
+      points: 0,
+      rank: null
+    };
+
+    await user.save();
+
+    console.log(`[ADMIN] User ${user.username} (${userId}) stats reset by ${req.user._id}. ${deleteResult.deletedCount} matches deleted.`);
+
+    res.json({
+      success: true,
+      message: `Stats réinitialisées et ${deleteResult.deletedCount} match(s) supprimé(s).`,
+      matchesDeleted: deleteResult.deletedCount,
+      user: {
+        _id: user._id,
+        username: user.username,
+        stats: user.stats
+      }
+    });
+  } catch (error) {
+    console.error('Reset user stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la réinitialisation.'
     });
   }
 });

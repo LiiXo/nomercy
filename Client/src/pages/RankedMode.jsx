@@ -7,7 +7,8 @@ import { io } from 'socket.io-client';
 import { 
   Trophy, Swords, Target, Flag, Skull, Users, Loader2, 
   X, Play, Clock, Zap, Shield, Crown, Medal, Star,
-  ChevronRight, ChevronLeft, AlertCircle, Check, User
+  ChevronRight, AlertCircle, Check, User, Sparkles,
+  TrendingUp, Award, Gamepad2, Crosshair
 } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
@@ -42,66 +43,77 @@ const RankedMode = () => {
   const [activeMatch, setActiveMatch] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
-  const [activeRankIndex, setActiveRankIndex] = useState(0);
-  const sliderRef = useRef(null);
   const [appSettings, setAppSettings] = useState(null);
+  const [showMatchmakingDialog, setShowMatchmakingDialog] = useState(false);
 
-  // Game modes configuration
+  // Game modes configuration - Updated with correct player counts
   const gameModes = [
     {
       id: 'Duel',
       icon: Swords,
-      players: '2 joueurs',
+      players: '1v1',
+      minPlayers: 2,
+      maxPlayers: 2,
       color: 'from-yellow-500 to-orange-600',
       bgColor: 'bg-yellow-500/10',
       borderColor: 'border-yellow-500/30',
+      iconBg: 'bg-yellow-500',
       description: {
-        fr: 'Affrontement en tête-à-tête. Prouve ta valeur en solo.',
-        en: 'Head-to-head battle. Prove your worth solo.',
-        de: 'Kopf-an-Kopf-Kampf. Beweise deinen Wert solo.',
-        it: 'Battaglia testa a testa. Dimostra il tuo valore da solo.'
+        fr: 'Combat en tête-à-tête. Prouve ta valeur en 1 contre 1.',
+        en: 'Head-to-head battle. Prove your worth in 1v1.',
+        de: 'Kopf-an-Kopf-Kampf. Beweise dich im 1v1.',
+        it: 'Battaglia uno contro uno. Dimostra il tuo valore.'
       }
     },
     {
-      id: 'Team Deathmatch',
+      id: 'Free For All',
       icon: Skull,
-      players: '5-10 joueurs',
+      players: '5-10',
+      minPlayers: 5,
+      maxPlayers: 10,
       color: 'from-red-500 to-pink-600',
       bgColor: 'bg-red-500/10',
       borderColor: 'border-red-500/30',
+      iconBg: 'bg-red-500',
       description: {
-        fr: 'Mêlée générale. Élimine tes adversaires.',
-        en: 'Free for all. Eliminate your opponents.',
-        de: 'Jeder gegen jeden. Eliminiere deine Gegner.',
-        it: 'Tutti contro tutti. Elimina i tuoi avversari.'
+        fr: 'Mêlée générale. Chacun pour soi, seul le meilleur survit.',
+        en: 'Free-for-all chaos. Every player for themselves.',
+        de: 'Freies Gefecht. Jeder kämpft für sich selbst.',
+        it: 'Tutti contro tutti. Solo il migliore sopravvive.'
       }
     },
     {
       id: 'Domination',
       icon: Flag,
-      players: '8-10 joueurs',
+      players: '8-10',
+      minPlayers: 8,
+      maxPlayers: 10,
       color: 'from-blue-500 to-purple-600',
       bgColor: 'bg-blue-500/10',
       borderColor: 'border-blue-500/30',
+      iconBg: 'bg-blue-500',
       description: {
-        fr: 'Capture et défends les objectifs stratégiques.',
-        en: 'Capture and defend strategic objectives.',
-        de: 'Erobere und verteidige strategische Ziele.',
-        it: 'Cattura e difendi gli obiettivi strategici.'
+        fr: 'Capture et maintiens les objectifs pour dominer.',
+        en: 'Capture and hold objectives to dominate.',
+        de: 'Erobere und halte Ziele zur Dominanz.',
+        it: 'Cattura e mantieni gli obiettivi per dominare.'
       }
     },
     {
       id: 'Search & Destroy',
-      icon: Target,
-      players: '6-10 joueurs',
+      icon: Crosshair,
+      players: '6-10',
+      minPlayers: 6,
+      maxPlayers: 10,
       color: 'from-green-500 to-teal-600',
       bgColor: 'bg-green-500/10',
       borderColor: 'border-green-500/30',
+      iconBg: 'bg-green-500',
       description: {
-        fr: 'Plante la bombe ou défends les sites. Sans respawn.',
-        en: 'Plant the bomb or defend the sites. No respawn.',
-        de: 'Bombe legen oder Standorte verteidigen. Kein Respawn.',
-        it: 'Pianta la bomba o difendi i siti. Senza respawn.'
+        fr: 'Plante ou désamorce la bombe. Pas de respawn, tension maximale.',
+        en: 'Plant or defuse the bomb. No respawn, maximum tension.',
+        de: 'Bombe legen oder entschärfen. Kein Respawn.',
+        it: 'Pianta o disinnesca la bomba. Niente respawn.'
       }
     }
   ];
@@ -110,7 +122,7 @@ const RankedMode = () => {
   const getModeName = (modeId) => {
     const names = {
       'Duel': { fr: 'Duel', en: 'Duel', de: 'Duell', it: 'Duello' },
-      'Team Deathmatch': { fr: 'Mêlée Générale', en: 'Team Deathmatch', de: 'Team-Deathmatch', it: 'Deathmatch a Squadre' },
+      'Free For All': { fr: 'Mêlée Générale', en: 'Free For All', de: 'Freies Gefecht', it: 'Tutti Contro Tutti' },
       'Domination': { fr: 'Domination', en: 'Domination', de: 'Herrschaft', it: 'Dominazione' },
       'Search & Destroy': { fr: 'Recherche & Destruction', en: 'Search & Destroy', de: 'Suchen & Zerstören', it: 'Cerca e Distruggi' }
     };
@@ -121,7 +133,7 @@ const RankedMode = () => {
   const texts = {
     fr: {
       title: 'Mode Classé',
-      subtitle: 'Choisis ton mode de jeu et affronte des adversaires de ton niveau',
+      subtitle: 'Affronte les meilleurs joueurs et grimpe dans le classement',
       selectMode: 'Sélectionne un mode',
       players: 'Joueurs',
       inQueue: 'en file',
@@ -133,25 +145,35 @@ const RankedMode = () => {
       estimatedWait: 'Attente estimée',
       seconds: 'sec',
       minutes: 'min',
-      yourRank: 'Ton rang',
+      yourRank: 'Ton rang actuel',
+      currentSeason: 'Saison en cours',
       points: 'points',
+      pts: 'PTS',
       wins: 'Victoires',
       losses: 'Défaites',
       notRanked: 'Non classé',
+      playFirstMatch: 'Joue ta première partie pour être classé',
       loginRequired: 'Connecte-toi pour jouer en classé',
       activeMatch: 'Tu as un match en cours',
       rejoinMatch: 'Rejoindre le match',
       queuePosition: 'Position dans la file',
       playersSearching: 'joueurs recherchent',
       loginToPlay: 'Connexion requise',
-      allRanks: 'Tous les rangs',
+      allRanks: 'Les Rangs',
+      ranksDesc: 'Monte en grade et prouve ta valeur',
       top30: 'Classement Top 30',
-      tiers: 'Paliers',
-      you: 'Toi'
+      you: 'Toi',
+      rank: 'Rang',
+      position: 'Position',
+      gameModes: 'Modes de jeu',
+      selectModeFirst: 'Sélectionne un mode pour lancer la recherche',
+      matchmaking: 'Matchmaking',
+      findingOpponents: 'Recherche d\'adversaires...',
+      playersNeeded: 'joueurs requis'
     },
     en: {
       title: 'Ranked Mode',
-      subtitle: 'Choose your game mode and face opponents at your skill level',
+      subtitle: 'Face the best players and climb the ladder',
       selectMode: 'Select a mode',
       players: 'Players',
       inQueue: 'in queue',
@@ -163,25 +185,35 @@ const RankedMode = () => {
       estimatedWait: 'Estimated wait',
       seconds: 'sec',
       minutes: 'min',
-      yourRank: 'Your rank',
+      yourRank: 'Your current rank',
+      currentSeason: 'Current Season',
       points: 'points',
+      pts: 'PTS',
       wins: 'Wins',
       losses: 'Losses',
       notRanked: 'Unranked',
+      playFirstMatch: 'Play your first match to get ranked',
       loginRequired: 'Log in to play ranked',
       activeMatch: 'You have an active match',
       rejoinMatch: 'Rejoin match',
       queuePosition: 'Queue position',
       playersSearching: 'players searching',
       loginToPlay: 'Login required',
-      allRanks: 'All ranks',
+      allRanks: 'The Ranks',
+      ranksDesc: 'Climb the ranks and prove your worth',
       top30: 'Top 30 Leaderboard',
-      tiers: 'Tiers',
-      you: 'You'
+      you: 'You',
+      rank: 'Rank',
+      position: 'Position',
+      gameModes: 'Game Modes',
+      selectModeFirst: 'Select a mode to start searching',
+      matchmaking: 'Matchmaking',
+      findingOpponents: 'Finding opponents...',
+      playersNeeded: 'players required'
     },
     de: {
       title: 'Ranglisten-Modus',
-      subtitle: 'Wähle deinen Spielmodus und tritt gegen Gegner auf deinem Niveau an',
+      subtitle: 'Fordere die Besten heraus und klettere in der Rangliste',
       selectMode: 'Modus wählen',
       players: 'Spieler',
       inQueue: 'in Warteschlange',
@@ -193,201 +225,179 @@ const RankedMode = () => {
       estimatedWait: 'Geschätzte Wartezeit',
       seconds: 'Sek',
       minutes: 'Min',
-      yourRank: 'Dein Rang',
+      yourRank: 'Dein aktueller Rang',
+      currentSeason: 'Aktuelle Saison',
       points: 'Punkte',
+      pts: 'PKT',
       wins: 'Siege',
       losses: 'Niederlagen',
       notRanked: 'Nicht platziert',
-      loginRequired: 'Melde dich an, um Ranked zu spielen',
+      playFirstMatch: 'Spiele dein erstes Match',
+      loginRequired: 'Melde dich an',
       activeMatch: 'Du hast ein aktives Match',
       rejoinMatch: 'Match beitreten',
-      queuePosition: 'Warteschlangen-Position',
+      queuePosition: 'Position',
       playersSearching: 'Spieler suchen',
       loginToPlay: 'Anmeldung erforderlich',
-      allRanks: 'Alle Ränge',
+      allRanks: 'Die Ränge',
+      ranksDesc: 'Steige auf und beweise dein Können',
       top30: 'Top 30 Rangliste',
-      tiers: 'Stufen',
-      you: 'Du'
+      you: 'Du',
+      rank: 'Rang',
+      position: 'Position',
+      gameModes: 'Spielmodi',
+      selectModeFirst: 'Wähle einen Modus um zu starten',
+      matchmaking: 'Matchmaking',
+      findingOpponents: 'Gegner werden gesucht...',
+      playersNeeded: 'Spieler benötigt'
     },
     it: {
       title: 'Modalità Classificata',
-      subtitle: 'Scegli la tua modalità di gioco e affronta avversari al tuo livello',
+      subtitle: 'Affronta i migliori giocatori e scala la classifica',
       selectMode: 'Seleziona modalità',
       players: 'Giocatori',
       inQueue: 'in coda',
       searchMatch: 'Cerca Partita',
-      searching: 'Ricerca in corso...',
+      searching: 'Ricerca...',
       cancel: 'Annulla',
       matchFound: 'Partita Trovata!',
-      joiningMatch: 'Connessione alla partita...',
+      joiningMatch: 'Connessione...',
       estimatedWait: 'Attesa stimata',
       seconds: 'sec',
       minutes: 'min',
-      yourRank: 'Il tuo rango',
+      yourRank: 'Il tuo rango attuale',
+      currentSeason: 'Stagione in corso',
       points: 'punti',
+      pts: 'PNT',
       wins: 'Vittorie',
       losses: 'Sconfitte',
       notRanked: 'Non classificato',
-      loginRequired: 'Accedi per giocare in classificata',
+      playFirstMatch: 'Gioca la prima partita',
+      loginRequired: 'Accedi per giocare',
       activeMatch: 'Hai una partita attiva',
-      rejoinMatch: 'Rientra nella partita',
-      queuePosition: 'Posizione in coda',
+      rejoinMatch: 'Rientra',
+      queuePosition: 'Posizione',
       playersSearching: 'giocatori cercano',
       loginToPlay: 'Accesso richiesto',
-      allRanks: 'Tutti i ranghi',
+      allRanks: 'I Ranghi',
+      ranksDesc: 'Sali di grado e dimostra il tuo valore',
       top30: 'Classifica Top 30',
-      tiers: 'Livelli',
-      you: 'Tu'
+      you: 'Tu',
+      rank: 'Rango',
+      position: 'Posizione',
+      gameModes: 'Modalità di gioco',
+      selectModeFirst: 'Seleziona una modalità per iniziare',
+      matchmaking: 'Matchmaking',
+      findingOpponents: 'Ricerca avversari...',
+      playersNeeded: 'giocatori richiesti'
     }
   };
 
   const t = texts[language] || texts.en;
 
-  // Ranks configuration - Full details
+  // Ranks configuration
   const allRanks = [
     {
       name: 'Bronze',
       color: 'from-amber-700 to-amber-900',
       textColor: 'text-amber-600',
-      bgColor: 'bg-amber-900/30',
-      borderColor: 'border-amber-700/50',
-      glowColor: 'shadow-amber-700/30',
+      bgColor: 'bg-amber-900/20',
+      borderColor: 'border-amber-700/40',
+      glowColor: 'shadow-amber-700/20',
       icon: Shield,
-      tiers: ['IV', 'III', 'II', 'I'],
-      pointsRange: '0 - 499',
       minPoints: 0,
       maxPoints: 499,
-      description: { fr: 'Début du parcours', en: 'Start of journey', de: 'Beginn der Reise', it: 'Inizio del percorso' }
+      pointsRange: '0 - 499'
     },
     {
       name: 'Silver',
       color: 'from-gray-400 to-gray-600',
       textColor: 'text-gray-300',
-      bgColor: 'bg-gray-500/30',
-      borderColor: 'border-gray-500/50',
-      glowColor: 'shadow-gray-500/30',
+      bgColor: 'bg-gray-500/20',
+      borderColor: 'border-gray-500/40',
+      glowColor: 'shadow-gray-500/20',
       icon: Shield,
-      tiers: ['IV', 'III', 'II', 'I'],
-      pointsRange: '500 - 999',
       minPoints: 500,
       maxPoints: 999,
-      description: { fr: 'Joueur en progression', en: 'Progressing player', de: 'Aufsteigend', it: 'In progressione' }
+      pointsRange: '500 - 999'
     },
     {
       name: 'Gold',
       color: 'from-yellow-500 to-yellow-700',
       textColor: 'text-yellow-400',
-      bgColor: 'bg-yellow-500/30',
-      borderColor: 'border-yellow-500/50',
-      glowColor: 'shadow-yellow-500/40',
+      bgColor: 'bg-yellow-500/20',
+      borderColor: 'border-yellow-500/40',
+      glowColor: 'shadow-yellow-500/30',
       icon: Medal,
-      tiers: ['IV', 'III', 'II', 'I'],
-      pointsRange: '1000 - 1499',
       minPoints: 1000,
       maxPoints: 1499,
-      description: { fr: 'Joueur confirmé', en: 'Confirmed player', de: 'Bestätigt', it: 'Confermato' }
+      pointsRange: '1000 - 1499'
     },
     {
       name: 'Platinum',
       color: 'from-teal-400 to-teal-600',
       textColor: 'text-teal-400',
-      bgColor: 'bg-teal-500/30',
-      borderColor: 'border-teal-500/50',
-      glowColor: 'shadow-teal-500/40',
+      bgColor: 'bg-teal-500/20',
+      borderColor: 'border-teal-500/40',
+      glowColor: 'shadow-teal-500/30',
       icon: Medal,
-      tiers: ['IV', 'III', 'II', 'I'],
-      pointsRange: '1500 - 1999',
       minPoints: 1500,
       maxPoints: 1999,
-      description: { fr: 'Joueur expérimenté', en: 'Experienced', de: 'Erfahren', it: 'Esperto' }
+      pointsRange: '1500 - 1999'
     },
     {
       name: 'Diamond',
       color: 'from-blue-400 to-purple-500',
       textColor: 'text-blue-400',
-      bgColor: 'bg-blue-500/30',
-      borderColor: 'border-blue-500/50',
-      glowColor: 'shadow-blue-500/40',
+      bgColor: 'bg-blue-500/20',
+      borderColor: 'border-blue-500/40',
+      glowColor: 'shadow-blue-500/30',
       icon: Star,
-      tiers: ['IV', 'III', 'II', 'I'],
-      pointsRange: '2000 - 2499',
       minPoints: 2000,
       maxPoints: 2499,
-      description: { fr: 'Joueur d\'élite', en: 'Elite player', de: 'Elite', it: 'Élite' }
+      pointsRange: '2000 - 2499'
     },
     {
       name: 'Master',
       color: 'from-purple-500 to-pink-500',
       textColor: 'text-purple-400',
-      bgColor: 'bg-purple-500/30',
-      borderColor: 'border-purple-500/50',
-      glowColor: 'shadow-purple-500/40',
+      bgColor: 'bg-purple-500/20',
+      borderColor: 'border-purple-500/40',
+      glowColor: 'shadow-purple-500/30',
       icon: Trophy,
-      tiers: ['III', 'II', 'I'],
-      pointsRange: '2500 - 2999',
       minPoints: 2500,
       maxPoints: 2999,
-      description: { fr: 'Maître du jeu', en: 'Game master', de: 'Meister', it: 'Maestro' }
+      pointsRange: '2500 - 2999'
     },
     {
       name: 'Grandmaster',
       color: 'from-red-500 to-orange-500',
       textColor: 'text-red-400',
-      bgColor: 'bg-red-500/30',
-      borderColor: 'border-red-500/50',
-      glowColor: 'shadow-red-500/40',
+      bgColor: 'bg-red-500/20',
+      borderColor: 'border-red-500/40',
+      glowColor: 'shadow-red-500/30',
       icon: Crown,
-      tiers: ['II', 'I'],
-      pointsRange: '3000 - 3499',
       minPoints: 3000,
       maxPoints: 3499,
-      description: { fr: 'Légende vivante', en: 'Living legend', de: 'Legende', it: 'Leggenda' }
+      pointsRange: '3000 - 3499'
     },
     {
       name: 'Champion',
       color: 'from-yellow-400 via-orange-500 to-red-500',
       textColor: 'text-yellow-400',
-      bgColor: 'bg-gradient-to-br from-yellow-500/30 to-red-500/30',
-      borderColor: 'border-yellow-500/60',
-      glowColor: 'shadow-yellow-500/50',
+      bgColor: 'bg-gradient-to-br from-yellow-500/20 to-red-500/20',
+      borderColor: 'border-yellow-500/50',
+      glowColor: 'shadow-yellow-500/40',
       icon: Zap,
-      tiers: ['Top 100'],
-      pointsRange: '3500+',
       minPoints: 3500,
       maxPoints: 99999,
-      description: { fr: 'L\'élite absolue', en: 'Absolute elite', de: 'Absolute Elite', it: 'Élite assoluta' },
+      pointsRange: '3500+',
       special: true
     }
   ];
 
-  // Simple ranks for other uses
-  const ranks = allRanks.map(r => ({
-    name: r.name,
-    color: r.textColor,
-    icon: r.icon,
-    minPoints: r.minPoints
-  }));
-
   const getRankForPoints = (points) => {
     return [...allRanks].reverse().find(r => points >= r.minPoints) || allRanks[0];
-  };
-
-  // Slider navigation
-  const scrollSlider = (direction) => {
-    const newIndex = direction === 'left' 
-      ? Math.max(0, activeRankIndex - 1)
-      : Math.min(allRanks.length - 1, activeRankIndex + 1);
-    setActiveRankIndex(newIndex);
-    if (sliderRef.current) {
-      sliderRef.current.scrollTo({ left: newIndex * 280, behavior: 'smooth' });
-    }
-  };
-
-  const scrollToRankIndex = (index) => {
-    setActiveRankIndex(index);
-    if (sliderRef.current) {
-      sliderRef.current.scrollTo({ left: index * 280, behavior: 'smooth' });
-    }
   };
 
   // Set page title
@@ -413,7 +423,7 @@ const RankedMode = () => {
     fetchLeaderboard();
   }, [isAuthenticated, selectedMode]);
 
-  // Fetch app settings to check if ranked matchmaking is enabled
+  // Fetch app settings
   useEffect(() => {
     const fetchAppSettings = async () => {
       try {
@@ -429,19 +439,6 @@ const RankedMode = () => {
     fetchAppSettings();
   }, []);
 
-  // Scroll to player's rank when ranking is loaded
-  useEffect(() => {
-    if (myRanking) {
-      const playerRankIdx = allRanks.findIndex(r => 
-        myRanking.points >= r.minPoints && myRanking.points <= r.maxPoints
-      );
-      if (playerRankIdx >= 0) {
-        setActiveRankIndex(playerRankIdx);
-        setTimeout(() => scrollToRankIndex(playerRankIdx), 100);
-      }
-    }
-  }, [myRanking]);
-
   // Socket connection
   useEffect(() => {
     if (!isAuthenticated || !user) return;
@@ -453,7 +450,6 @@ const RankedMode = () => {
 
     socketRef.current.on('connect', () => {
       console.log('Socket connected');
-      // Join user room for matchmaking notifications
       socketRef.current.emit('joinUserRoom', user._id || user.id);
     });
 
@@ -462,8 +458,8 @@ const RankedMode = () => {
       setMatchFound(data);
       setIsSearching(false);
       
-      // Navigate to match after short delay
       setTimeout(() => {
+        setShowMatchmakingDialog(false);
         navigate(`/ranked-match/${data.matchId}`);
       }, 2000);
     });
@@ -562,6 +558,7 @@ const RankedMode = () => {
 
     setError('');
     setIsSearching(true);
+    setShowMatchmakingDialog(true);
 
     try {
       const response = await fetch(`${API_URL}/ranked-matches/matchmaking/join`, {
@@ -580,7 +577,6 @@ const RankedMode = () => {
         setError(data.message);
         setIsSearching(false);
         
-        // If there's an active match, redirect to it
         if (data.matchId) {
           setActiveMatch({ _id: data.matchId });
         }
@@ -591,6 +587,7 @@ const RankedMode = () => {
         setMatchFound(data);
         setIsSearching(false);
         setTimeout(() => {
+          setShowMatchmakingDialog(false);
           navigate(`/ranked-match/${data.match._id}`);
         }, 2000);
       } else {
@@ -624,6 +621,7 @@ const RankedMode = () => {
     
     setIsSearching(false);
     setQueueStatus(null);
+    setShowMatchmakingDialog(false);
   };
 
   const formatTime = (seconds) => {
@@ -637,44 +635,253 @@ const RankedMode = () => {
   const playerRank = myRanking ? getRankForPoints(myRanking.points) : null;
   const RankIcon = playerRank?.icon || Shield;
 
+  // Matchmaking Dialog Component
+  const MatchmakingDialog = () => {
+    if (!showMatchmakingDialog) return null;
+
+    const selectedModeInfo = gameModes.find(m => m.id === selectedGameMode);
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          onClick={!isSearching ? () => setShowMatchmakingDialog(false) : undefined}
+        />
+        
+        {/* Dialog */}
+        <div className={`relative w-full max-w-md bg-dark-900/95 backdrop-blur-xl rounded-3xl border-2 ${borderColor} shadow-2xl overflow-hidden`}>
+          {/* Header */}
+          <div className={`p-6 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                  {selectedModeInfo && <selectedModeInfo.icon className="w-6 h-6 text-white" />}
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white">{t.matchmaking}</h3>
+                  <p className="text-white/80 text-sm">{getModeName(selectedGameMode)}</p>
+                </div>
+              </div>
+              {!isSearching && (
+                <button
+                  onClick={() => setShowMatchmakingDialog(false)}
+                  className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-8">
+            {matchFound ? (
+              <div className="text-center">
+                <div className={`w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center animate-pulse`}>
+                  <Check className="w-12 h-12 text-white" />
+                </div>
+                <h3 className="text-3xl font-black text-white mb-3">{t.matchFound}</h3>
+                <p className="text-gray-400 text-lg">{t.joiningMatch}</p>
+              </div>
+            ) : (
+              <div className="text-center">
+                {/* Animated searching spinner */}
+                <div className="relative w-32 h-32 mx-auto mb-8">
+                  {/* Outer rotating ring */}
+                  <div className={`absolute inset-0 rounded-full border-4 border-transparent bg-gradient-to-r ${gradientFrom} ${gradientTo} animate-spin`} style={{ 
+                    borderRadius: '50%',
+                    background: `conic-gradient(from 0deg, transparent, ${isHardcore ? '#ef4444' : '#06b6d4'}, transparent)`,
+                    animation: 'spin 2s linear infinite'
+                  }} />
+                  
+                  {/* Inner circle */}
+                  <div className="absolute inset-2 rounded-full bg-dark-900 flex items-center justify-center">
+                    <div className={`absolute inset-0 rounded-full border-2 ${borderColor} opacity-50`} />
+                    <Swords className={`w-12 h-12 text-${accentColor}-400 animate-pulse`} />
+                  </div>
+
+                  {/* Pulsing circles */}
+                  <div className={`absolute inset-0 rounded-full border-2 ${borderColor} animate-ping opacity-30`} />
+                </div>
+
+                <h3 className="text-2xl font-bold text-white mb-2">{t.findingOpponents}</h3>
+                
+                {/* Timer */}
+                <p className={`text-4xl font-black bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent mb-6 font-mono`}>
+                  {formatTime(searchTime)}
+                </p>
+
+                {/* Queue info */}
+                {queueStatus && (
+                  <div className="mb-6 p-4 bg-dark-800/50 rounded-xl space-y-3">
+                    <div className="flex items-center justify-center gap-2 text-gray-300">
+                      <Users className="w-5 h-5" />
+                      <span className="font-medium">{queueStatus.queueSize} {t.playersSearching}</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
+                      <span>{t.queuePosition}:</span>
+                      <span className={`font-bold text-${accentColor}-400`}>#{queueStatus.position}</span>
+                    </div>
+                    {selectedModeInfo && (
+                      <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
+                        <span>{selectedModeInfo.minPlayers}-{selectedModeInfo.maxPlayers} {t.playersNeeded}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Cancel button */}
+                <button
+                  onClick={handleCancelSearch}
+                  className="w-full px-8 py-4 bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/40 rounded-xl text-red-400 font-bold transition-all flex items-center justify-center gap-3 hover:scale-105"
+                >
+                  <X className="w-5 h-5" />
+                  {t.cancel}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-br from-dark-900 via-dark-950 to-dark-900" />
-      {isHardcore ? (
+        {isHardcore ? (
           <>
-            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 30% 20%, rgba(239, 68, 68, 0.1) 0%, transparent 50%)' }} />
-            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 70% 80%, rgba(249, 115, 22, 0.05) 0%, transparent 50%)' }} />
+            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 30% 20%, rgba(239, 68, 68, 0.15) 0%, transparent 60%)' }} />
+            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 70% 80%, rgba(249, 115, 22, 0.1) 0%, transparent 60%)' }} />
           </>
-      ) : (
+        ) : (
           <>
-            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 30% 20%, rgba(6, 182, 212, 0.1) 0%, transparent 50%)' }} />
-            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 70% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 50%)' }} />
+            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 30% 20%, rgba(6, 182, 212, 0.15) 0%, transparent 60%)' }} />
+            <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse at 70% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 60%)' }} />
           </>
-      )}
-        <div className="absolute inset-0 grid-pattern opacity-20" />
+        )}
+        <div className="absolute inset-0 grid-pattern opacity-10" />
       </div>
           
-      <div className="relative z-10 py-8 px-4">
-        <div className="max-w-5xl mx-auto">
+      <div className="relative z-10 py-10 px-4">
+        <div className="max-w-7xl mx-auto">
           {/* Header */}
           <div className="text-center mb-10">
-            <div className={`inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br ${gradientFrom} ${gradientTo} shadow-xl ${glowColor} mb-6`}>
+            <div className={`inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br ${gradientFrom} ${gradientTo} shadow-2xl ${glowColor} mb-5`}>
               <Trophy className="w-10 h-10 text-white" />
             </div>
-            <h1 className={`text-4xl font-black bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent mb-3`}>
+            <h1 className={`text-4xl md:text-5xl font-black bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent mb-3`}>
               {t.title}
             </h1>
-            <p className="text-gray-400 text-lg max-w-xl mx-auto">{t.subtitle}</p>
+            <p className="text-gray-400 text-lg max-w-2xl mx-auto">{t.subtitle}</p>
+          </div>
+
+          {/* ====== ANIMATED RANKS CARDS ====== */}
+          <div className="mb-12">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl font-black text-white flex items-center justify-center gap-3">
+                <Award className={`w-7 h-7 text-${accentColor}-400`} />
+                {t.allRanks}
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">{t.ranksDesc}</p>
+            </div>
+
+            {/* Ranks Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 max-w-6xl mx-auto px-2">
+              {allRanks.map((rank, index) => {
+                const RIcon = rank.icon;
+                const isPlayerRank = myRanking && myRanking.points >= rank.minPoints && myRanking.points <= rank.maxPoints;
+                
+                return (
+                  <div
+                    key={rank.name}
+                    className="group relative"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                  >
+                    {/* Glow effect behind card */}
+                    <div 
+                      className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${rank.color} opacity-0 group-hover:opacity-30 blur-xl transition-all duration-500 ${isPlayerRank ? 'opacity-40' : ''}`}
+                    />
+                    
+                    {/* Card */}
+                    <div
+                      className={`relative p-4 rounded-2xl border-2 transition-all duration-500 transform group-hover:scale-105 group-hover:-translate-y-2 ${
+                        isPlayerRank
+                          ? `${rank.bgColor} ${rank.borderColor} shadow-2xl ${rank.glowColor} scale-105 -translate-y-1`
+                          : 'bg-dark-900/60 border-dark-700/50 hover:border-opacity-100'
+                      } group-hover:${rank.borderColor} backdrop-blur-sm`}
+                    >
+                      {/* Player rank indicator */}
+                      {isPlayerRank && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-gradient-to-r from-yellow-400 to-orange-500 text-dark-900 text-xs font-black shadow-lg animate-bounce whitespace-nowrap">
+                          ⭐ {t.you}
+                        </div>
+                      )}
+                      
+                      {/* Animated background particles */}
+                      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                        <div className={`absolute w-20 h-20 -top-10 -right-10 rounded-full bg-gradient-to-br ${rank.color} opacity-0 group-hover:opacity-20 blur-2xl transition-all duration-700 group-hover:scale-150`} />
+                        <div className={`absolute w-16 h-16 -bottom-8 -left-8 rounded-full bg-gradient-to-br ${rank.color} opacity-0 group-hover:opacity-15 blur-2xl transition-all duration-700 delay-100 group-hover:scale-150`} />
+                      </div>
+                      
+                      <div className="relative text-center">
+                        {/* Rank Icon with animation */}
+                        <div className={`relative w-16 h-16 mx-auto mb-3 rounded-xl bg-gradient-to-br ${rank.color} flex items-center justify-center shadow-xl transition-all duration-500 group-hover:shadow-2xl ${rank.glowColor} ${isPlayerRank ? 'animate-pulse' : 'group-hover:scale-110'}`}>
+                          {/* Shine effect */}
+                          <div className="absolute inset-0 rounded-xl overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/30 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                          </div>
+                          <RIcon className="w-8 h-8 text-white drop-shadow-lg relative z-10" />
+                          
+                          {/* Rotating ring for special rank */}
+                          {rank.special && (
+                            <div className="absolute inset-0 rounded-xl border-2 border-yellow-400/50 animate-spin" style={{ animationDuration: '8s' }} />
+                          )}
+                        </div>
+                        
+                        {/* Rank Name */}
+                        <h3 className={`text-sm font-black ${rank.textColor} mb-1 transition-all duration-300 group-hover:scale-110`}>
+                          {rank.name}
+                        </h3>
+                        
+                        {/* Points Range */}
+                        <p className="text-gray-500 text-xs font-mono transition-all duration-300 group-hover:text-gray-400">
+                          {rank.pointsRange}
+                        </p>
+                        
+                        {/* Progress bar for current rank */}
+                        {isPlayerRank && myRanking && (
+                          <div className="mt-3">
+                            <div className="h-1.5 bg-dark-800 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full bg-gradient-to-r ${rank.color} transition-all duration-1000 ease-out`}
+                                style={{ 
+                                  width: `${Math.min(100, ((myRanking.points - rank.minPoints) / (rank.maxPoints - rank.minPoints + 1)) * 100)}%` 
+                                }}
+                              />
+                            </div>
+                            <p className="text-[10px] text-gray-600 mt-1 font-mono">
+                              {myRanking.points} / {rank.maxPoints === 99999 ? '∞' : rank.maxPoints}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Error message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3 text-red-400 max-w-2xl mx-auto">
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-center gap-3 text-red-400 max-w-3xl mx-auto backdrop-blur-sm">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
               {error}
-              <button onClick={() => setError('')} className="ml-auto p-1 hover:bg-red-500/20 rounded">
+              <button onClick={() => setError('')} className="ml-auto p-1 hover:bg-red-500/20 rounded-lg transition-colors">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -682,435 +889,290 @@ const RankedMode = () => {
 
           {/* Active match banner */}
           {activeMatch && (
-            <div className={`mb-6 p-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-xl flex items-center justify-between max-w-2xl mx-auto`}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
-                  <Swords className="w-5 h-5 text-white" />
+            <div className={`mb-8 p-5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-2xl flex items-center justify-between max-w-3xl mx-auto shadow-2xl`}>
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center animate-pulse">
+                  <Swords className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <p className="text-white font-bold">{t.activeMatch}</p>
-                  <p className="text-white/70 text-sm">{activeMatch.gameMode}</p>
+                  <p className="text-white font-bold text-lg">{t.activeMatch}</p>
+                  <p className="text-white/80 text-sm">{activeMatch.gameMode}</p>
                 </div>
               </div>
               <button
                 onClick={() => navigate(`/ranked-match/${activeMatch._id}`)}
-                className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-white font-semibold transition-colors flex items-center gap-2"
+                className="px-6 py-3 bg-white/20 hover:bg-white/30 rounded-xl text-white font-bold transition-all flex items-center gap-2 hover:scale-105"
               >
                 {t.rejoinMatch}
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-5 h-5" />
               </button>
             </div>
           )}
 
-          {/* Player rank card */}
+          {/* ====== CURRENT RANK CARD ====== */}
           {isAuthenticated && (
-            <div className={`mb-8 p-5 bg-dark-900/80 backdrop-blur-sm rounded-2xl border ${borderColor} max-w-2xl mx-auto`}>
+            <div className={`mb-10 bg-dark-900/60 backdrop-blur-xl rounded-3xl border ${borderColor} overflow-hidden max-w-3xl mx-auto shadow-2xl`}>
+              <div className={`px-6 py-4 border-b ${borderColor} bg-dark-800/50`}>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <TrendingUp className={`w-5 h-5 text-${accentColor}-400`} />
+                  {t.currentSeason}
+                </h3>
+              </div>
+              
               {loadingRanking ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className={`w-6 h-6 text-${accentColor}-500 animate-spin`} />
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className={`w-8 h-8 text-${accentColor}-500 animate-spin`} />
                 </div>
               ) : myRanking ? (
-                  <div className="flex items-center gap-4">
-                  <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg ${glowColor}`}>
-                    <RankIcon className="w-8 h-8 text-white" />
+                <div className="p-6 md:p-8">
+                  <div className="flex flex-col md:flex-row items-center gap-6">
+                    {/* Rank Badge */}
+                    <div className="relative">
+                      <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${playerRank.color} flex items-center justify-center shadow-2xl ${playerRank.glowColor}`}>
+                        <RankIcon className="w-14 h-14 text-white drop-shadow-lg" />
+                      </div>
+                      {myRanking.rank && (
+                        <div className={`absolute -top-3 -right-3 px-3 py-1.5 rounded-full bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white text-sm font-black shadow-lg`}>
+                          #{myRanking.rank}
+                        </div>
+                      )}
                     </div>
-                  <div className="flex-1">
-                    <p className="text-gray-500 text-sm">{t.yourRank}</p>
-                    <p className={`text-2xl font-bold ${playerRank?.color || 'text-white'}`}>{playerRank?.name || 'Bronze'}</p>
-                    <p className="text-gray-400 text-sm">{myRanking.points} {t.points}</p>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="text-center px-4 py-2 bg-dark-800/50 rounded-xl">
-                      <p className="text-xl font-bold text-green-400">{myRanking.wins}</p>
-                      <p className="text-xs text-gray-500">{t.wins}</p>
+                    
+                    {/* Rank Info */}
+                    <div className="flex-1 text-center md:text-left">
+                      <p className="text-gray-500 text-sm uppercase tracking-wider mb-1">{t.yourRank}</p>
+                      <h2 className={`text-4xl font-black ${playerRank.textColor} mb-3`}>{playerRank.name}</h2>
+                      <div className="flex items-center justify-center md:justify-start gap-3">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-dark-800/80 rounded-xl border border-dark-700">
+                          <Sparkles className={`w-5 h-5 text-${accentColor}-400`} />
+                          <span className="text-white font-black text-2xl">{myRanking.points}</span>
+                          <span className="text-gray-500 text-sm">{t.pts}</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-center px-4 py-2 bg-dark-800/50 rounded-xl">
-                      <p className="text-xl font-bold text-red-400">{myRanking.losses}</p>
-                      <p className="text-xs text-gray-500">{t.losses}</p>
+
+                    {/* Stats */}
+                    <div className="flex gap-4">
+                      <div className="text-center px-6 py-4 bg-dark-800/50 rounded-2xl border border-green-500/20">
+                        <p className="text-3xl font-black text-green-400">{myRanking.wins}</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider">{t.wins}</p>
+                      </div>
+                      <div className="text-center px-6 py-4 bg-dark-800/50 rounded-2xl border border-red-500/20">
+                        <p className="text-3xl font-black text-red-400">{myRanking.losses}</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wider">{t.losses}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-xl bg-gray-700/50 flex items-center justify-center">
-                    <Shield className="w-8 h-8 text-gray-500" />
+                <div className="p-8 flex flex-col md:flex-row items-center gap-6">
+                  <div className="w-24 h-24 rounded-2xl bg-dark-800/80 flex items-center justify-center border border-dark-700">
+                    <Shield className="w-12 h-12 text-gray-600" />
                   </div>
-                  <div>
-                    <p className="text-gray-500 text-sm">{t.yourRank}</p>
-                    <p className="text-xl font-bold text-gray-400">{t.notRanked}</p>
-                    <p className="text-gray-500 text-sm">{language === 'fr' ? 'Joue ta première partie !' : 'Play your first match!'}</p>
+                  <div className="text-center md:text-left">
+                    <p className="text-gray-500 text-sm uppercase tracking-wider mb-1">{t.yourRank}</p>
+                    <h2 className="text-3xl font-black text-gray-400 mb-2">{t.notRanked}</h2>
+                    <p className="text-gray-600">{t.playFirstMatch}</p>
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* Game modes grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 max-w-3xl mx-auto">
-            {gameModes.map((mode) => {
-              const Icon = mode.icon;
-              const isSelected = selectedGameMode === mode.id;
-              const queueInfo = queuesInfo[mode.id];
-              
+          {/* ====== GAME MODES ====== */}
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
+              <Gamepad2 className={`w-6 h-6 text-${accentColor}-400`} />
+              {t.gameModes}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl mx-auto">
+              {gameModes.map((mode) => {
+                const Icon = mode.icon;
+                const isSelected = selectedGameMode === mode.id;
+                const queueInfo = queuesInfo[mode.id];
+                
                 return (
-                <button
-                  key={mode.id}
-                  onClick={() => !isSearching && setSelectedGameMode(mode.id)}
-                  disabled={isSearching}
-                  className={`relative p-6 rounded-2xl border-2 transition-all duration-300 text-left group ${
-                    isSelected 
-                      ? `border-white/50 ${mode.bgColor} shadow-xl scale-[1.02]` 
-                      : `${mode.borderColor} bg-dark-900/60 hover:bg-dark-900/80 hover:border-white/30`
-                  } ${isSearching ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {/* Selected indicator */}
-                  {isSelected && (
-                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-white flex items-center justify-center">
-                      <Check className="w-4 h-4 text-dark-900" />
+                  <button
+                    key={mode.id}
+                    onClick={() => !isSearching && setSelectedGameMode(mode.id)}
+                    disabled={isSearching}
+                    className={`relative p-6 rounded-2xl border-2 transition-all duration-300 text-left group overflow-hidden ${
+                      isSelected 
+                        ? `${mode.bgColor} border-white/50 shadow-2xl scale-[1.02]` 
+                        : `bg-dark-900/40 ${mode.borderColor} hover:bg-dark-900/60 hover:scale-[1.01]`
+                    } ${isSearching ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {/* Background gradient effect */}
+                    <div className={`absolute inset-0 bg-gradient-to-br ${mode.color} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
+                    
+                    {/* Selected check */}
+                    {isSelected && (
+                      <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-lg animate-bounce">
+                        <Check className="w-5 h-5 text-dark-900" />
+                      </div>
+                    )}
+                    
+                    <div className="relative z-10">
+                      {/* Mode header */}
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${mode.color} flex items-center justify-center shadow-xl transform group-hover:scale-110 transition-transform duration-300`}>
+                          <Icon className="w-8 h-8 text-white" />
                         </div>
-                      )}
-                      
-                  <div className="flex items-start gap-4">
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${mode.color} flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform`}>
-                      <Icon className="w-7 h-7 text-white" />
+                        <div className="flex-1">
+                          <h3 className="text-xl font-black text-white mb-1">{getModeName(mode.id)}</h3>
+                          <div className="flex items-center gap-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold bg-white/10 text-white border ${mode.borderColor}`}>
+                              <Users className="w-3 h-3 inline mr-1" />
+                              {mode.players} {t.players}
+                            </span>
+                          </div>
                         </div>
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-lg font-bold text-white">{getModeName(mode.id)}</h3>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${mode.bgColor} ${mode.borderColor} border`}>
-                          {mode.players}
-                        </span>
-                              </div>
-                      <p className="text-gray-400 text-sm mb-3">{mode.description[language]}</p>
+                      {/* Description */}
+                      <p className="text-gray-400 text-sm mb-4 leading-relaxed">{mode.description[language]}</p>
                       
-                      {/* Queue info */}
-                      <div className="flex items-center gap-3 text-xs">
-                        <div className="flex items-center gap-1 text-gray-500">
-                          <Users className="w-3.5 h-3.5" />
-                          <span>{queueInfo?.playersInQueue || 0} {t.inQueue}</span>
-                            </div>
+                      {/* Queue stats */}
+                      <div className="flex items-center gap-4 text-xs">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg">
+                          <Users className="w-4 h-4 text-gray-500" />
+                          <span className="text-gray-400">{queueInfo?.playersInQueue || 0}</span>
+                          <span className="text-gray-600">{t.inQueue}</span>
+                        </div>
                         {queueInfo?.estimatedWait > 0 && (
-                          <div className="flex items-center gap-1 text-gray-500">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>~{Math.ceil(queueInfo.estimatedWait / 60)} {t.minutes}</span>
+                          <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg">
+                            <Clock className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-400">~{Math.ceil(queueInfo.estimatedWait / 60)}</span>
+                            <span className="text-gray-600">{t.minutes}</span>
                           </div>
                         )}
                       </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
                 );
               })}
             </div>
+          </div>
 
-          {/* Search button / Searching state */}
-          <div className="max-w-md mx-auto">
+          {/* ====== SEARCH BUTTON ====== */}
+          <div className="max-w-md mx-auto mb-12">
             {!isAuthenticated ? (
-              <div className="p-6 bg-dark-900/80 rounded-2xl border border-white/10 text-center">
-                <User className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-400 mb-4">{t.loginRequired}</p>
-                  <button
+              <div className="p-8 bg-dark-900/60 backdrop-blur-xl rounded-2xl border border-white/10 text-center">
+                <User className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-6 text-lg">{t.loginRequired}</p>
+                <button
                   onClick={() => navigate('/login')}
-                  className={`px-6 py-3 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-xl text-white font-bold`}
+                  className={`w-full px-8 py-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-xl text-white font-bold text-lg shadow-xl hover:scale-105 transition-transform`}
                 >
                   {t.loginToPlay}
-                </button>
-            </div>
-            ) : matchFound ? (
-              <div className={`p-8 bg-gradient-to-br ${gradientFrom} ${gradientTo} rounded-2xl text-center shadow-2xl ${glowColor} animate-pulse`}>
-                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white/20 flex items-center justify-center">
-                  <Check className="w-10 h-10 text-white" />
-          </div>
-                <h3 className="text-2xl font-black text-white mb-2">{t.matchFound}</h3>
-                <p className="text-white/80">{t.joiningMatch}</p>
-              </div>
-            ) : isSearching ? (
-              <div className={`p-8 bg-dark-900/80 backdrop-blur-sm rounded-2xl border ${borderColor} text-center`}>
-                {/* Animated searching indicator */}
-                <div className="relative w-24 h-24 mx-auto mb-6">
-                  <div className={`absolute inset-0 rounded-full border-4 ${borderColor} opacity-30`} />
-                  <div className={`absolute inset-0 rounded-full border-4 border-t-${accentColor}-500 animate-spin`} />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Swords className={`w-10 h-10 text-${accentColor}-500`} />
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-bold text-white mb-2">{t.searching}</h3>
-                <p className={`text-${accentColor}-400 font-mono text-2xl mb-4`}>{formatTime(searchTime)}</p>
-                
-                {queueStatus && (
-                  <div className="mb-6 space-y-2">
-                    <div className="flex items-center justify-center gap-2 text-gray-400">
-                      <Users className="w-4 h-4" />
-                      <span>{queueStatus.queueSize} {t.playersSearching}</span>
-                    </div>
-                    <div className="flex items-center justify-center gap-2 text-gray-500 text-sm">
-                      <span>{t.queuePosition}: #{queueStatus.position}</span>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={handleCancelSearch}
-                  className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl text-red-400 font-semibold transition-colors flex items-center justify-center gap-2 mx-auto"
-                >
-                  <X className="w-5 h-5" />
-                  {t.cancel}
                 </button>
               </div>
             ) : (
               <button
                 onClick={handleSearchMatch}
                 disabled={!selectedGameMode || activeMatch}
-                className={`w-full py-5 rounded-2xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${
+                className={`w-full py-6 rounded-2xl font-black text-xl transition-all flex items-center justify-center gap-4 shadow-2xl ${
                   selectedGameMode && !activeMatch
-                    ? `bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white hover:opacity-90 shadow-xl ${glowColor}`
-                    : 'bg-dark-800 text-gray-500 cursor-not-allowed'
+                    ? `bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white hover:scale-105 ${glowColor}`
+                    : 'bg-dark-800/50 text-gray-600 cursor-not-allowed'
                 }`}
               >
-                <Play className="w-6 h-6" />
-                {selectedGameMode ? t.searchMatch : t.selectMode}
+                <Play className="w-7 h-7" />
+                {selectedGameMode ? t.searchMatch : t.selectModeFirst}
               </button>
             )}
           </div>
 
-          {/* How it works */}
-          <div className={`mt-12 p-6 bg-dark-900/60 rounded-2xl border ${borderColor} max-w-2xl mx-auto`}>
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Zap className={`w-5 h-5 text-${accentColor}-400`} />
-              {language === 'fr' ? 'Comment ça marche ?' : 'How does it work?'}
-            </h3>
-            <div className="grid gap-4">
-              <div className="flex items-start gap-3">
-                <div className={`w-8 h-8 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center flex-shrink-0`}>
-                  <span className={`text-${accentColor}-400 font-bold text-sm`}>1</span>
-                </div>
-                <div>
-                  <p className="text-white font-medium">{language === 'fr' ? 'Choisis ton mode' : 'Choose your mode'}</p>
-                  <p className="text-gray-500 text-sm">{language === 'fr' ? 'Duel, Mêlée, Domination ou Recherche & Destruction' : 'Duel, TDM, Domination or Search & Destroy'}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className={`w-8 h-8 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center flex-shrink-0`}>
-                  <span className={`text-${accentColor}-400 font-bold text-sm`}>2</span>
-                </div>
-                <div>
-                  <p className="text-white font-medium">{language === 'fr' ? 'File d\'attente automatique' : 'Automatic queue'}</p>
-                  <p className="text-gray-500 text-sm">{language === 'fr' ? 'Le système trouve des joueurs de ton niveau' : 'The system finds players at your skill level'}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className={`w-8 h-8 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center flex-shrink-0`}>
-                  <span className={`text-${accentColor}-400 font-bold text-sm`}>3</span>
-                </div>
-                <div>
-                  <p className="text-white font-medium">{language === 'fr' ? 'Gagne des points' : 'Earn points'}</p>
-                  <p className="text-gray-500 text-sm">{language === 'fr' ? 'Monte dans le classement et atteins le sommet !' : 'Climb the ranks and reach the top!'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* All Ranks Slider */}
-          <div className="mt-12">
-            <div className="flex items-center justify-between mb-6 max-w-5xl mx-auto">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Crown className={`w-5 h-5 text-${accentColor}-400`} />
-                {t.allRanks}
-              </h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => scrollSlider('left')}
-                  disabled={activeRankIndex === 0}
-                  className={`p-2 rounded-lg transition-colors ${
-                    activeRankIndex === 0
-                      ? 'bg-dark-800/50 text-gray-600 cursor-not-allowed'
-                      : `bg-dark-800 text-gray-400 hover:text-${accentColor}-400 hover:bg-dark-700`
-                  }`}
-                >
-                  <ChevronLeft className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => scrollSlider('right')}
-                  disabled={activeRankIndex === allRanks.length - 1}
-                  className={`p-2 rounded-lg transition-colors ${
-                    activeRankIndex === allRanks.length - 1
-                      ? 'bg-dark-800/50 text-gray-600 cursor-not-allowed'
-                      : `bg-dark-800 text-gray-400 hover:text-${accentColor}-400 hover:bg-dark-700`
-                  }`}
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Rank dots indicator */}
-            <div className="flex justify-center gap-2 mb-4">
-              {allRanks.map((rank, idx) => (
-                <button
-                  key={rank.name}
-                  onClick={() => scrollToRankIndex(idx)}
-                  className={`w-2 h-2 rounded-full transition-all ${
-                    idx === activeRankIndex
-                      ? `bg-gradient-to-r ${rank.color} scale-125`
-                      : 'bg-dark-700 hover:bg-dark-600'
-                  }`}
-                />
-              ))}
-            </div>
-
-            {/* Slider */}
-            <div 
-              ref={sliderRef}
-              className="flex gap-4 overflow-x-auto pb-4 scroll-smooth hide-scrollbar snap-x snap-mandatory max-w-5xl mx-auto"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {allRanks.map((rank, idx) => {
-                const RankIcon = rank.icon;
-                const isPlayerRank = myRanking && myRanking.points >= rank.minPoints && myRanking.points <= rank.maxPoints;
-                
-                return (
-                  <div
-                    key={rank.name}
-                    className={`flex-shrink-0 w-[260px] snap-center p-5 rounded-2xl border transition-all duration-300 ${
-                      idx === activeRankIndex
-                        ? `${rank.bgColor} ${rank.borderColor} shadow-lg ${rank.glowColor}`
-                        : 'bg-dark-900/60 border-dark-700/50 opacity-70 hover:opacity-90'
-                    } ${isPlayerRank ? 'ring-2 ring-offset-2 ring-offset-dark-900 ring-white/30' : ''}`}
-                  >
-                    {/* Rank header */}
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${rank.color} flex items-center justify-center shadow-lg ${rank.glowColor}`}>
-                        <RankIcon className="w-7 h-7 text-white" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className={`text-xl font-bold ${rank.textColor}`}>{rank.name}</h3>
-                          {isPlayerRank && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full bg-${accentColor}-500/20 text-${accentColor}-400`}>
-                              {t.you}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-gray-500 text-sm">{rank.pointsRange} pts</p>
-                      </div>
-                    </div>
-                    
-                    {/* Description */}
-                    <p className="text-gray-400 text-sm mb-4">
-                      {rank.description[language] || rank.description.en}
-                    </p>
-                    
-                    {/* Tiers */}
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">{t.tiers}</p>
-                      <div className="flex gap-1 flex-wrap">
-                        {rank.tiers.map((tier) => (
-                          <span 
-                            key={tier} 
-                            className={`px-2 py-1 rounded text-xs font-medium ${rank.bgColor} ${rank.textColor} border ${rank.borderColor}`}
-                          >
-                            {rank.special ? tier : `${rank.name.charAt(0)} ${tier}`}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Top 30 Leaderboard */}
-          <div className={`mt-12 bg-dark-900/80 backdrop-blur-sm rounded-2xl border ${borderColor} overflow-hidden max-w-4xl mx-auto`}>
-            <div className={`p-5 border-b ${borderColor} bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
-              <h2 className="text-xl font-bold text-white flex items-center gap-3">
-                <Trophy className="w-6 h-6" />
+          {/* ====== TOP 30 LEADERBOARD ====== */}
+          <div className={`bg-dark-900/60 backdrop-blur-xl rounded-3xl border ${borderColor} overflow-hidden max-w-6xl mx-auto shadow-2xl`}>
+            <div className={`p-6 border-b ${borderColor} bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
+              <h2 className="text-2xl font-black text-white flex items-center gap-3">
+                <Trophy className="w-7 h-7" />
                 {t.top30}
               </h2>
             </div>
             
             {loadingLeaderboard ? (
-              <div className="flex items-center justify-center py-16">
-                <Loader2 className={`w-8 h-8 text-${accentColor}-500 animate-spin`} />
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className={`w-10 h-10 text-${accentColor}-500 animate-spin`} />
               </div>
             ) : leaderboard.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-gray-500">
-                <Users className="w-12 h-12 mb-3 opacity-50" />
-                <p>{language === 'fr' ? 'Aucun joueur classé pour le moment' : 'No ranked players yet'}</p>
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+                <Users className="w-16 h-16 mb-4 opacity-30" />
+                <p className="text-lg">{language === 'fr' ? 'Aucun joueur classé' : 'No ranked players yet'}</p>
               </div>
             ) : (
-              <div className="divide-y divide-dark-700/50">
+              <div className="divide-y divide-dark-700/30">
                 {leaderboard.map((player, index) => {
                   const playerRankInfo = getRankForPoints(player.points);
-                  const RankIcon = playerRankInfo.icon;
+                  const RIcon = playerRankInfo.icon;
                   const isCurrentUser = user && player.user?._id === user._id;
                   
                   return (
                     <div
                       key={player._id}
-                      className={`flex items-center gap-4 p-4 transition-colors hover:bg-dark-800/50 ${
+                      className={`flex items-center gap-4 md:gap-6 p-4 md:p-5 transition-all hover:bg-dark-800/40 ${
                         isCurrentUser ? `bg-${accentColor}-500/10 border-l-4 border-${accentColor}-500` : ''
                       }`}
                     >
-                      {/* Position */}
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
-                        index === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900 shadow-lg shadow-yellow-500/30' :
-                        index === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-gray-800 shadow-lg shadow-gray-400/30' :
-                        index === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-orange-900 shadow-lg shadow-orange-500/30' :
-                        'bg-dark-700 text-gray-400'
+                      {/* Position Badge */}
+                      <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl flex items-center justify-center font-black text-lg flex-shrink-0 ${
+                        index === 0 ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-yellow-900 shadow-xl shadow-yellow-500/30' :
+                        index === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-gray-800 shadow-xl shadow-gray-400/30' :
+                        index === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-orange-900 shadow-xl shadow-orange-500/30' :
+                        'bg-dark-700/50 text-gray-400'
                       }`}>
-                        {index === 0 && <Crown className="w-5 h-5" />}
-                        {index === 1 && <Medal className="w-5 h-5" />}
-                        {index === 2 && <Medal className="w-5 h-5" />}
+                        {index === 0 && <Crown className="w-6 h-6" />}
+                        {index === 1 && <Medal className="w-6 h-6" />}
+                        {index === 2 && <Medal className="w-6 h-6" />}
                         {index > 2 && (index + 1)}
                       </div>
 
-                      {/* Avatar & Username */}
+                      {/* Player info */}
                       <Link
                         to={`/profile/${player.user?.username}`}
-                        className="flex items-center gap-3 flex-1 hover:opacity-80 transition-opacity"
+                        className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 hover:opacity-80 transition-opacity"
                       >
-                        <div className="relative">
+                        <div className="relative flex-shrink-0">
                           <img
                             src={getAvatarUrl(player.user?.avatar || player.user?.avatarUrl) || getDefaultAvatar(player.user?.username)}
                             alt={player.user?.username}
-                            className="w-10 h-10 rounded-full object-cover border-2 border-dark-600"
+                            className={`w-10 h-10 md:w-12 md:h-12 rounded-xl object-cover border-2 ${
+                              index < 3 ? 'border-yellow-400/50 shadow-lg' : 'border-dark-600'
+                            }`}
                           />
                           {isCurrentUser && (
-                            <div className={`absolute -top-1 -right-1 w-4 h-4 bg-${accentColor}-500 rounded-full border-2 border-dark-900 flex items-center justify-center`}>
-                              <Star className="w-2 h-2 text-white" />
+                            <div className={`absolute -top-1 -right-1 w-5 h-5 bg-${accentColor}-500 rounded-full border-2 border-dark-900 flex items-center justify-center`}>
+                              <Star className="w-3 h-3 text-white" />
                             </div>
                           )}
                         </div>
-                        <div>
-                          <p className={`font-semibold ${isCurrentUser ? `text-${accentColor}-400` : 'text-white'}`}>
+                        <div className="min-w-0">
+                          <p className={`font-bold text-base md:text-lg truncate ${isCurrentUser ? `text-${accentColor}-400` : 'text-white'}`}>
                             {player.user?.username || player.user?.discordUsername || 'Unknown'}
-                            {isCurrentUser && <span className="ml-2 text-xs text-gray-500">({t.you})</span>}
                           </p>
-                          <div className="flex items-center gap-1 text-xs">
-                            <div className={`w-4 h-4 rounded bg-gradient-to-br ${playerRankInfo.color} flex items-center justify-center`}>
-                              <RankIcon className="w-2.5 h-2.5 text-white" />
+                          <div className="flex items-center gap-2">
+                            <div className={`w-5 h-5 rounded-lg bg-gradient-to-br ${playerRankInfo.color} flex items-center justify-center`}>
+                              <RIcon className="w-3 h-3 text-white" />
                             </div>
-                            <span className={playerRankInfo.textColor}>{playerRankInfo.name}</span>
+                            <span className={`text-sm font-medium ${playerRankInfo.textColor}`}>{playerRankInfo.name}</span>
                           </div>
                         </div>
                       </Link>
 
                       {/* Stats */}
-                      <div className="flex items-center gap-6">
-                        <div className="text-center">
-                          <p className="text-green-400 font-bold">{player.wins}</p>
-                          <p className="text-xs text-gray-500">{t.wins}</p>
+                      <div className="flex items-center gap-2 md:gap-6 flex-shrink-0">
+                        <div className="hidden md:flex items-center gap-4">
+                          <div className="text-center px-4 py-2 bg-dark-800/40 rounded-xl">
+                            <p className="text-lg font-bold text-green-400">{player.wins}W</p>
+                          </div>
+                          <div className="text-center px-4 py-2 bg-dark-800/40 rounded-xl">
+                            <p className="text-lg font-bold text-red-400">{player.losses}L</p>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <p className="text-red-400 font-bold">{player.losses}</p>
-                          <p className="text-xs text-gray-500">{t.losses}</p>
-                        </div>
-                        <div className="text-center min-w-[60px]">
-                          <p className={`text-lg font-bold ${playerRankInfo.textColor}`}>{player.points}</p>
-                          <p className="text-xs text-gray-500">{t.points}</p>
+                        <div className="text-center min-w-[60px] md:min-w-[80px]">
+                          <p className={`text-xl md:text-2xl font-black ${playerRankInfo.textColor}`}>{player.points}</p>
+                          <p className="text-xs text-gray-500 uppercase">{t.pts}</p>
                         </div>
                       </div>
                     </div>
@@ -1122,12 +1184,8 @@ const RankedMode = () => {
         </div>
       </div>
 
-      {/* Custom CSS for hiding scrollbar */}
-      <style>{`
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
+      {/* Matchmaking Dialog */}
+      <MatchmakingDialog />
     </div>
   );
 };

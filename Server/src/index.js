@@ -101,6 +101,17 @@ const startServer = async () => {
       socket.leave(`ranked-match-${matchId}`);
     });
 
+    // Ladder match rooms
+    socket.on('joinMatch', (matchId) => {
+      socket.join(`match-${matchId}`);
+      console.log(`Socket ${socket.id} joined match-${matchId}`);
+    });
+
+    socket.on('leaveMatch', (matchId) => {
+      socket.leave(`match-${matchId}`);
+      console.log(`Socket ${socket.id} left match-${matchId}`);
+    });
+
     socket.on('disconnect', () => {
       console.log('Client disconnected:', socket.id);
       // Decrement viewer count for all pages this socket was in

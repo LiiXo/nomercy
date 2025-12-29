@@ -424,72 +424,30 @@ const PlayerProfile = () => {
         </div>
 
           {/* Total Stats (all modes combined) */}
-          {playerData?.totalStats && (
-            <div className={`bg-gradient-to-br from-purple-900/40 to-indigo-900/40 backdrop-blur-xl rounded-xl border border-purple-500/30 p-6 mb-6`}>
-              <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-                <Trophy className="w-5 h-5 text-purple-400" />
-                <span>{t.totalStatistics}</span>
-              </h2>
-              
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors">
-                  <Medal className="w-5 h-5 text-green-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-green-400">{playerData.totalStats.wins || 0}</div>
-                  <div className="text-gray-500 text-xs">{t.totalWins}</div>
-                </div>
-                <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-red-500/30 transition-colors">
-                  <Target className="w-5 h-5 text-red-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-red-400">{playerData.totalStats.losses || 0}</div>
-                  <div className="text-gray-500 text-xs">{t.totalLosses}</div>
-                </div>
-                <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-purple-500/30 transition-colors">
-                  <TrendingUp className="w-5 h-5 text-purple-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-purple-400">{getTotalWinRate()}</div>
-                  <div className="text-gray-500 text-xs">{t.totalWinRate}</div>
-                </div>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+              <Trophy className={`w-5 h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
+              <span>{t.totalStatistics}</span>
+            </h2>
+            
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors">
+                <Medal className="w-5 h-5 text-green-400 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-green-400">{playerData?.totalStats?.wins || 0}</div>
+                <div className="text-gray-500 text-xs">{t.totalWins}</div>
+              </div>
+              <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-red-500/30 transition-colors">
+                <Target className="w-5 h-5 text-red-400 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-red-400">{playerData?.totalStats?.losses || 0}</div>
+                <div className="text-gray-500 text-xs">{t.totalLosses}</div>
+              </div>
+              <div className={`bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}>
+                <TrendingUp className={`w-5 h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} mx-auto mb-2`} />
+                <div className={`text-2xl font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{getTotalWinRate()}</div>
+                <div className="text-gray-500 text-xs">{t.totalWinRate}</div>
               </div>
             </div>
-          )}
-
-          {/* Stats */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>
-              <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-                <TrendingUp className={`w-5 h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
-              <span>{t.statistics} ({isHardcore ? 'Hardcore' : 'CDL'})</span>
-              </h2>
-            
-            {playerStats && (playerStats.wins > 0 || playerStats.losses > 0 || playerStats.points > 0) ? (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className={`bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}>
-                  <Trophy className={`w-5 h-5 text-${accentColor}-400 mx-auto mb-2`} />
-                  <div className={`text-2xl font-bold text-${accentColor}-400`}>{playerStats.points}</div>
-                  <div className="text-gray-500 text-xs">{t.points}</div>
-                </div>
-                <div className={`bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors`}>
-                  <Medal className="w-5 h-5 text-green-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-green-400">{playerStats.wins}</div>
-                  <div className="text-gray-500 text-xs">{t.wins}</div>
-                </div>
-                <div className={`bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-red-500/30 transition-colors`}>
-                  <Target className="w-5 h-5 text-red-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-red-400">{playerStats.losses}</div>
-                  <div className="text-gray-500 text-xs">{t.losses}</div>
-                </div>
-                <div className={`bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-yellow-500/30 transition-colors`}>
-                  <TrendingUp className="w-5 h-5 text-yellow-400 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-yellow-400">{getWinRate()}</div>
-                  <div className="text-gray-500 text-xs">{t.winRate}</div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <Shield className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500">
-                  {t.notRanked}
-                </p>
-              </div>
-            )}
-                    </div>
+          </div>
 
           {/* Streak si disponible */}
           {ranking && ranking.currentStreak > 0 && (

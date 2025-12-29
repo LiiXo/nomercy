@@ -1,11 +1,55 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import Match from '../models/Match.js';
 import RankedMatch from '../models/RankedMatch.js';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
+import AppSettings from '../models/AppSettings.js';
+import Map from '../models/Map.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
+
+// Configure multer for dispute evidence upload
+const disputeEvidenceStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/dispute-evidence');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'evidence-' + req.params.matchId + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const disputeEvidenceUpload = multer({
+  storage: disputeEvidenceStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Type de fichier non autorisé. Seuls les images sont acceptées.'), false);
+    }
+  }
+});
+
+// Helper function to check if user is admin or staff
+const isAdminOrStaff = (user) => {
+  return user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+};
 
 // Obtenir les matchs disponibles pour un ladder
 router.get('/available/:ladderId', async (req, res) => {
@@ -132,6 +176,38 @@ router.get('/my-active', verifyToken, async (req, res) => {
     res.json({ success: true, matches });
   } catch (error) {
     console.error('Get my active matches error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Obtenir le nombre de matchs en cours par ladder
+router.get('/in-progress/count', async (req, res) => {
+  try {
+    const { mode = 'hardcore' } = req.query;
+
+    // Compter les matchs en cours pour chaque ladder
+    const squadTeamCount = await Match.countDocuments({
+      ladderId: 'squad-team',
+      mode,
+      status: { $in: ['accepted', 'in_progress'] }
+    });
+
+    const duoTrioCount = await Match.countDocuments({
+      ladderId: 'duo-trio',
+      mode,
+      status: { $in: ['accepted', 'in_progress'] }
+    });
+
+    res.json({ 
+      success: true, 
+      counts: {
+        'squad-team': squadTeamCount,
+        'duo-trio': duoTrioCount,
+        total: squadTeamCount + duoTrioCount
+      }
+    });
+  } catch (error) {
+    console.error('Get in-progress matches count error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -325,14 +401,19 @@ router.get('/:matchId', verifyToken, async (req, res) => {
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles')
       .populate('dispute.reportedBy', 'name tag')
-      .populate('dispute.resolvedBy', 'username');
+      .populate('dispute.resolvedBy', 'username')
+      .populate('dispute.evidence.uploadedBy', 'username')
+      .populate('dispute.evidence.squad', 'name tag');
 
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
 
+    console.log('[GET MATCH] challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
+    console.log('[GET MATCH] opponentRoster:', JSON.stringify(match.opponentRoster, null, 2));
+
     // Vérifier l'accès : participant ou staff
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'cdl_manager', 'hardcore_manager'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     const isParticipant = user.squad && (
       match.challenger?._id.toString() === user.squad._id.toString() ||
       match.opponent?._id.toString() === user.squad._id.toString()
@@ -364,7 +445,7 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     }
 
     const user = await User.findById(req.user._id).populate('squad');
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'cdl_manager', 'hardcore_manager'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
     const match = await Match.findById(matchId);
     
@@ -397,13 +478,25 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     match.chat.push(newMessage);
     await match.save();
 
+    // Message avec les infos de l'utilisateur
+    const messageWithUser = {
+      ...newMessage,
+      user: { _id: user._id, username: user.username, roles: user.roles }
+    };
+
+    // Émettre le message via Socket.io pour mise à jour en temps réel
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${matchId}`).emit('newChatMessage', {
+        matchId,
+        message: messageWithUser
+      });
+    }
+
     // Retourner le message avec les infos de l'utilisateur
     res.json({ 
       success: true, 
-      message: {
-        ...newMessage,
-        user: { _id: user._id, username: user.username, roles: user.roles }
-      }
+      message: messageWithUser
     });
   } catch (error) {
     console.error('Send chat message error:', error);
@@ -417,6 +510,25 @@ router.post('/', verifyToken, async (req, res) => {
     const { ladderId, gameMode, teamSize, isReady, scheduledAt, description, mapType } = req.body;
     
     const user = await User.findById(req.user._id).populate('squad');
+    
+    // Debug logs
+    console.log('[MATCH CREATE] User ID:', user._id);
+    console.log('[MATCH CREATE] User roles:', user.roles);
+    console.log('[MATCH CREATE] Is admin/staff:', isAdminOrStaff(user));
+    
+    // Vérifier si le ladder posting est désactivé (sauf pour admin/staff)
+    if (!isAdminOrStaff(user)) {
+      const settings = await AppSettings.getSettings();
+      console.log('[MATCH CREATE] Ladder posting enabled:', settings.features?.ladderPosting?.enabled);
+      if (!settings.features?.ladderPosting?.enabled) {
+        return res.status(403).json({ 
+          success: false, 
+          message: settings.features?.ladderPosting?.disabledMessage || 'La création de matchs ladder est temporairement désactivée.' 
+        });
+      }
+    } else {
+      console.log('[MATCH CREATE] User is admin/staff, bypassing ladder check');
+    }
     
     if (!user.squad) {
       return res.status(400).json({ success: false, message: 'Vous devez avoir une escouade' });
@@ -517,6 +629,8 @@ router.post('/', verifyToken, async (req, res) => {
     // Déterminer le mode basé sur le ladder ou l'escouade
     const mode = squad.mode === 'both' ? 'hardcore' : squad.mode;
 
+    console.log('[CREATE MATCH] Received roster:', JSON.stringify(req.body.roster, null, 2));
+    
     const match = new Match({
       challenger: squad._id,
       ladderId,
@@ -528,10 +642,11 @@ router.post('/', verifyToken, async (req, res) => {
       scheduledAt: matchDate,
       description: description || '',
       createdBy: user._id,
-      challengerRoster: req.body.roster ? { players: req.body.roster } : { players: [] }
+      challengerRoster: req.body.roster || []
     });
 
     await match.save();
+    console.log('[CREATE MATCH] Saved match with challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
 
     const populatedMatch = await Match.findById(match._id)
       .populate('challenger', 'name tag color logo members')
@@ -550,6 +665,17 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     const { matchId } = req.params;
     
     const user = await User.findById(req.user._id).populate('squad');
+    
+    // Vérifier si le ladder matchmaking est désactivé (sauf pour admin/staff)
+    if (!isAdminOrStaff(user)) {
+      const settings = await AppSettings.getSettings();
+      if (!settings.features?.ladderMatchmaking?.enabled) {
+        return res.status(403).json({ 
+          success: false, 
+          message: settings.features?.ladderMatchmaking?.disabledMessage || 'Les matchs ladder sont temporairement désactivés.' 
+        });
+      }
+    }
     
     if (!user.squad) {
       return res.status(400).json({ success: false, message: 'Vous devez avoir une escouade' });
@@ -611,8 +737,42 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     match.hostTeam = Math.random() < 0.5 ? match.challenger : squad._id;
     
     // Ajouter le roster de l'adversaire
+    console.log('[ACCEPT MATCH] Received roster:', JSON.stringify(req.body.roster, null, 2));
     if (req.body.roster) {
-      match.opponentRoster = { players: req.body.roster };
+      match.opponentRoster = req.body.roster;
+    }
+    console.log('[ACCEPT MATCH] OpponentRoster assigned:', JSON.stringify(match.opponentRoster, null, 2));
+
+    // Si le match est en mode random, piocher 3 maps aléatoires depuis la DB
+    if (match.mapType === 'random') {
+      try {
+        // Récupérer les maps disponibles pour ce ladder et mode de jeu
+        const availableMaps = await Map.find({
+          isActive: true,
+          ladders: match.ladderId,
+          gameModes: match.gameMode
+        });
+
+        if (availableMaps.length >= 3) {
+          // Mélanger et prendre 3 maps
+          const shuffled = availableMaps.sort(() => 0.5 - Math.random());
+          match.randomMaps = shuffled.slice(0, 3).map((map, index) => ({
+            name: map.name,
+            image: map.image,
+            order: index + 1
+          }));
+        } else if (availableMaps.length > 0) {
+          // S'il y a moins de 3 maps, prendre toutes celles disponibles
+          match.randomMaps = availableMaps.map((map, index) => ({
+            name: map.name,
+            image: map.image,
+            order: index + 1
+          }));
+        }
+      } catch (mapError) {
+        console.error('Error fetching random maps:', mapError);
+        // Continuer sans maps si erreur
+      }
     }
     
     // Si c'est un match "ready", il passe directement en cours
@@ -810,6 +970,19 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       confirmed: true,
       confirmedAt: new Date()
     };
+
+    // Déterminer le nom du gagnant
+    const winnerName = winnerId === match.challenger._id.toString() 
+      ? match.challenger.name 
+      : match.opponent.name;
+
+    // Ajouter un message système dans le chat
+    match.chat.push({
+      messageType: 'result_declared',
+      messageParams: { squadName: user.squad.name, winnerName },
+      isSystem: true,
+      createdAt: new Date()
+    });
     
     await match.save();
 
@@ -931,6 +1104,21 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles');
+
+    // Émettre via Socket.io pour mise à jour en temps réel
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${matchId}`).emit('matchUpdate', { 
+        type: 'completed',
+        match: populatedMatch
+      });
+      // Envoyer aussi le message système dans le chat
+      const systemMessage = populatedMatch.chat[populatedMatch.chat.length - 1];
+      io.to(`match-${matchId}`).emit('newChatMessage', {
+        matchId,
+        message: systemMessage
+      });
+    }
 
     res.json({ 
       success: true, 
@@ -1193,8 +1381,17 @@ router.post('/:matchId/dispute', verifyToken, async (req, res) => {
       isDisputed: true,
       disputedBy: user._id,
       disputedAt: new Date(),
-      reason: reason || 'Aucune raison fournie'
+      reason: reason || 'Aucune raison fournie',
+      reportedBy: user.squad._id
     };
+
+    // Ajouter un message système dans le chat
+    match.chat.push({
+      messageType: 'dispute_reported',
+      messageParams: { squadName: user.squad.name, reason: reason || '' },
+      isSystem: true,
+      createdAt: new Date()
+    });
     
     await match.save();
 
@@ -1205,9 +1402,25 @@ router.post('/:matchId/dispute', verifyToken, async (req, res) => {
       .populate('createdBy', 'username')
       .populate('acceptedBy', 'username')
       .populate('hostTeam', 'name tag')
+      .populate('dispute.reportedBy', 'name tag')
       .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles');
+
+    // Émettre via Socket.io pour mise à jour en temps réel
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${matchId}`).emit('matchUpdate', { 
+        type: 'disputed',
+        match: populatedMatch
+      });
+      // Envoyer aussi le message système dans le chat
+      const systemMessage = populatedMatch.chat[populatedMatch.chat.length - 1];
+      io.to(`match-${matchId}`).emit('newChatMessage', {
+        matchId,
+        message: systemMessage
+      });
+    }
 
     res.json({ 
       success: true, 
@@ -1220,11 +1433,322 @@ router.post('/:matchId/dispute', verifyToken, async (req, res) => {
   }
 });
 
+// Upload preuve pour un litige
+router.post('/:matchId/dispute-evidence', verifyToken, disputeEvidenceUpload.single('evidence'), async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { description } = req.body;
+    
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Aucun fichier uploadé' });
+    }
+
+    const match = await Match.findById(matchId);
+    
+    if (!match) {
+      // Supprimer le fichier uploadé
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Vérifier que le match est en litige
+    if (match.status !== 'disputed') {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ce match n\'est pas en litige' 
+      });
+    }
+
+    // Vérifier que l'utilisateur fait partie du match ou est staff
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isParticipant = user.squad && (
+      match.challenger.toString() === user.squad._id.toString() ||
+      match.opponent?.toString() === user.squad._id.toString()
+    );
+
+    if (!isParticipant && !isStaff) {
+      fs.unlinkSync(req.file.path);
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Vous ne participez pas à ce match' 
+      });
+    }
+
+    // Limiter le nombre de preuves par équipe (max 5)
+    const mySquadId = user.squad?._id?.toString();
+    const existingEvidence = match.dispute?.evidence?.filter(e => 
+      e.squad?.toString() === mySquadId
+    ) || [];
+    
+    if (existingEvidence.length >= 5 && !isStaff) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous avez atteint la limite de 5 preuves par équipe' 
+      });
+    }
+
+    // Ajouter la preuve
+    const evidenceUrl = `/uploads/dispute-evidence/${req.file.filename}`;
+    
+    if (!match.dispute.evidence) {
+      match.dispute.evidence = [];
+    }
+    
+    match.dispute.evidence.push({
+      uploadedBy: user._id,
+      squad: user.squad?._id || null,
+      imageUrl: evidenceUrl,
+      description: description?.substring(0, 200) || '',
+      uploadedAt: new Date()
+    });
+
+    // Ajouter un message système dans le chat
+    match.chat.push({
+      messageType: 'evidence_added',
+      messageParams: { username: user.username },
+      isSystem: true,
+      createdAt: new Date()
+    });
+
+    await match.save();
+
+    // Repeupler le match
+    const populatedMatch = await Match.findById(matchId)
+      .populate('challenger', 'name tag color logo members registeredLadders')
+      .populate('opponent', 'name tag color logo members registeredLadders')
+      .populate('createdBy', 'username')
+      .populate('acceptedBy', 'username')
+      .populate('hostTeam', 'name tag')
+      .populate('dispute.reportedBy', 'name tag')
+      .populate('dispute.evidence.uploadedBy', 'username')
+      .populate('dispute.evidence.squad', 'name tag')
+      .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
+      .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
+      .populate('chat.user', 'username roles');
+
+    // Émettre via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${matchId}`).emit('matchUpdate', { match: populatedMatch });
+    }
+
+    res.json({ 
+      success: true, 
+      match: populatedMatch,
+      message: 'Preuve ajoutée avec succès' 
+    });
+  } catch (error) {
+    console.error('Upload dispute evidence error:', error);
+    // Nettoyer le fichier en cas d'erreur
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Supprimer une preuve de litige (staff uniquement)
+router.delete('/:matchId/dispute-evidence/:evidenceId', verifyToken, async (req, res) => {
+  try {
+    const { matchId, evidenceId } = req.params;
+    
+    const user = await User.findById(req.user._id);
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    
+    if (!isStaff) {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+    }
+
+    const match = await Match.findById(matchId);
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Trouver et supprimer la preuve
+    const evidenceIndex = match.dispute?.evidence?.findIndex(e => e._id.toString() === evidenceId);
+    
+    if (evidenceIndex === -1 || evidenceIndex === undefined) {
+      return res.status(404).json({ success: false, message: 'Preuve non trouvée' });
+    }
+
+    const evidence = match.dispute.evidence[evidenceIndex];
+    
+    // Supprimer le fichier
+    const filePath = path.join(__dirname, '../..', evidence.imageUrl);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Retirer de la liste
+    match.dispute.evidence.splice(evidenceIndex, 1);
+    await match.save();
+
+    res.json({ success: true, message: 'Preuve supprimée' });
+  } catch (error) {
+    console.error('Delete dispute evidence error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Demander l'annulation d'un match (nécessite confirmation des deux équipes)
+router.post('/:matchId/cancel-request', verifyToken, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    if (!user.squad) {
+      return res.status(400).json({ success: false, message: 'Vous devez avoir une escouade' });
+    }
+
+    const match = await Match.findById(matchId)
+      .populate('challenger', 'name tag color logo members')
+      .populate('opponent', 'name tag color logo members');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Vérifier que le match est en cours ou accepté
+    if (!['accepted', 'in_progress'].includes(match.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ce match ne peut pas être annulé' 
+      });
+    }
+
+    // Vérifier que l'utilisateur fait partie du match
+    const isChallenger = match.challenger._id.toString() === user.squad._id.toString();
+    const isOpponent = match.opponent._id.toString() === user.squad._id.toString();
+
+    if (!isChallenger && !isOpponent) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Vous ne participez pas à ce match' 
+      });
+    }
+
+    // Vérifier que l'utilisateur est leader ou officier
+    const member = user.squad.members?.find(m => 
+      (m.user?._id || m.user).toString() === user._id.toString()
+    ) || await Squad.findById(user.squad._id).then(s => s.members.find(m => m.user.toString() === user._id.toString()));
+    
+    if (!member || (member.role !== 'leader' && member.role !== 'officer')) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Seuls les leaders et officiers peuvent demander l\'annulation' 
+      });
+    }
+
+    // Initialiser cancelRequests si non existant
+    if (!match.cancelRequests) {
+      match.cancelRequests = [];
+    }
+
+    // Vérifier si l'équipe a déjà demandé l'annulation
+    const alreadyRequested = match.cancelRequests.some(
+      r => r.squad.toString() === user.squad._id.toString()
+    );
+
+    if (alreadyRequested) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous avez déjà demandé l\'annulation de ce match' 
+      });
+    }
+
+    // Ajouter la demande d'annulation
+    match.cancelRequests.push({
+      squad: user.squad._id,
+      requestedAt: new Date()
+    });
+
+    // Vérifier si les deux équipes ont demandé l'annulation
+    const challengerRequested = match.cancelRequests.some(
+      r => r.squad.toString() === match.challenger._id.toString()
+    );
+    const opponentRequested = match.cancelRequests.some(
+      r => r.squad.toString() === match.opponent._id.toString()
+    );
+
+    let message = '';
+    if (challengerRequested && opponentRequested) {
+      // Les deux équipes ont accepté, annuler le match
+      match.status = 'cancelled';
+      message = 'Les deux équipes ont accepté l\'annulation. Le match est annulé.';
+      
+      // Ajouter un message système au chat
+      match.chat.push({
+        messageType: 'match_cancelled_mutual',
+        isSystem: true,
+        createdAt: new Date()
+      });
+    } else {
+      message = 'Demande d\'annulation envoyée. En attente de la confirmation de l\'adversaire.';
+      
+      // Ajouter un message dans le chat
+      match.chat.push({
+        user: user._id,
+        squad: user.squad._id,
+        messageType: 'cancel_requested',
+        messageParams: { squadName: user.squad.name },
+        isSystem: true,
+        createdAt: new Date()
+      });
+    }
+    
+    await match.save();
+
+    // Repeupler le match avec toutes les données
+    const populatedMatch = await Match.findById(matchId)
+      .populate('challenger', 'name tag color logo members registeredLadders')
+      .populate('opponent', 'name tag color logo members registeredLadders')
+      .populate('createdBy', 'username')
+      .populate('acceptedBy', 'username')
+      .populate('hostTeam', 'name tag')
+      .populate('cancelRequests.squad', 'name tag')
+      .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
+      .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
+      .populate('chat.user', 'username roles');
+
+    // Émettre via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${matchId}`).emit('matchUpdate', { 
+        type: 'cancelRequest',
+        match: populatedMatch,
+        requestedBy: user.squad._id
+      });
+      // Envoyer aussi le message système dans le chat
+      const systemMessage = populatedMatch.chat[populatedMatch.chat.length - 1];
+      io.to(`match-${matchId}`).emit('newChatMessage', {
+        matchId,
+        message: systemMessage
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      match: populatedMatch,
+      cancelled: match.status === 'cancelled',
+      message
+    });
+  } catch (error) {
+    console.error('Cancel request error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Obtenir tous les litiges en attente (admin/staff)
 router.get('/disputes/pending', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'cdl_manager', 'hardcore_manager'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -1248,10 +1772,10 @@ router.get('/disputes/pending', verifyToken, async (req, res) => {
 router.post('/:matchId/resolve', verifyToken, async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { winnerId, resolution } = req.body;
+    const { winnerId, resolution, cancel } = req.body;
     
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'cdl_manager', 'hardcore_manager'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -1384,7 +1908,32 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
       };
     }
 
-    match.status = 'completed';
+    // Si cancel est true, annuler le match au lieu de le terminer
+    if (cancel) {
+      match.status = 'cancelled';
+      // Ajouter un message système
+      match.chat.push({
+        messageType: 'match_cancelled_staff',
+        messageParams: { reason: resolution || '' },
+        isSystem: true,
+        createdAt: new Date()
+      });
+    } else {
+      match.status = 'completed';
+      // Ajouter un message système pour la victoire attribuée
+      if (winnerId) {
+        const winnerName = winnerId === match.challenger._id.toString() 
+          ? match.challenger.name 
+          : match.opponent.name;
+        match.chat.push({
+          messageType: 'victory_assigned_staff',
+          messageParams: { winnerName },
+          isSystem: true,
+          createdAt: new Date()
+        });
+      }
+    }
+
     match.dispute.resolvedBy = user._id;
     match.dispute.resolvedAt = new Date();
     match.dispute.resolution = resolution || 'Résolu par le staff';
@@ -1403,6 +1952,10 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles');
 
+    // Emit via Socket.io
+    const io = req.app.get('io');
+    io.to(`match-${matchId}`).emit('matchUpdate', { match: populatedMatch });
+
     res.json({ 
       success: true, 
       match: populatedMatch,
@@ -1420,7 +1973,7 @@ router.post('/:matchId/cancel-dispute', verifyToken, async (req, res) => {
     const { matchId } = req.params;
     
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'cdl_manager', 'hardcore_manager'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -1450,6 +2003,13 @@ router.post('/:matchId/cancel-dispute', verifyToken, async (req, res) => {
       resolvedAt: new Date(),
       resolution: 'Litige annulé par le staff'
     };
+
+    // Ajouter un message système dans le chat
+    match.chat.push({
+      messageType: 'dispute_removed_staff',
+      isSystem: true,
+      createdAt: new Date()
+    });
     
     await match.save();
 
@@ -1463,6 +2023,10 @@ router.post('/:matchId/cancel-dispute', verifyToken, async (req, res) => {
       .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles');
+
+    // Emit via Socket.io
+    const io = req.app.get('io');
+    io.to(`match-${matchId}`).emit('matchUpdate', { match: populatedMatch });
 
     res.json({ 
       success: true, 

@@ -125,7 +125,27 @@ const matchSchema = new mongoose.Schema({
     winner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Squad'
-    }
+    },
+    // Preuves uploadées par les équipes
+    evidence: [{
+      uploadedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      squad: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Squad'
+      },
+      imageUrl: String,
+      description: {
+        type: String,
+        maxlength: 200
+      },
+      uploadedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }]
   },
   // Description/message optionnel
   description: {
@@ -211,6 +231,14 @@ const matchSchema = new mongoose.Schema({
     isSystem: {
       type: Boolean,
       default: false
+    },
+    messageType: {
+      type: String,
+      default: null
+    },
+    messageParams: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     },
     createdAt: {
       type: Date,
