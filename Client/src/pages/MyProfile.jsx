@@ -43,13 +43,6 @@ const MyProfile = () => {
   // Ranking state from DB
   const [ranking, setRanking] = useState(null);
   const [loadingRanking, setLoadingRanking] = useState(true);
-  
-  // Squad state
-  const [squad, setSquad] = useState(null);
-  const [loadingSquad, setLoadingSquad] = useState(true);
-  const [showLeaveModal, setShowLeaveModal] = useState(false);
-  const [leaveError, setLeaveError] = useState('');
-  const [leavingSquad, setLeavingSquad] = useState(false);
 
   // Account deletion state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -84,11 +77,10 @@ const MyProfile = () => {
     setAvatarPreview(user?.avatar || null);
   }, [user?.avatar]);
 
-  // Fetch user purchases, ranking, and squad
+  // Fetch user purchases and ranking
   useEffect(() => {
     fetchPurchases();
     fetchRanking();
-    fetchSquad();
   }, [selectedMode]);
 
   const fetchPurchases = async () => {
@@ -124,23 +116,6 @@ const MyProfile = () => {
     }
   };
 
-  const fetchSquad = async () => {
-    setLoadingSquad(true);
-    try {
-      const response = await fetch(`${API_URL}/squads/my-squad`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSquad(data.squad);
-      }
-    } catch (err) {
-      console.error('Error fetching squad:', err);
-    } finally {
-      setLoadingSquad(false);
-    }
-  };
-
   const handleDeleteAccount = async () => {
     setLoadingDeletion(true);
     setDeleteError('');
@@ -161,43 +136,6 @@ const MyProfile = () => {
       setDeleteError(texts[language]?.errorOccurred || 'Une erreur est survenue');
     } finally {
       setLoadingDeletion(false);
-    }
-  };
-
-  const handleLeaveSquad = () => {
-    // Check if user is leader with other members
-    const isLeader = squad?.members?.some(m => 
-      (m.user?._id === user?.id || m.user === user?.id) && m.role === 'leader'
-    );
-    const hasOtherMembers = squad?.members?.length > 1;
-    
-    if (isLeader && hasOtherMembers) {
-      setLeaveError(texts[language]?.cannotLeaveAsLeader || texts.en.cannotLeaveAsLeader);
-    } else {
-      setLeaveError('');
-    }
-    setShowLeaveModal(true);
-  };
-
-  const confirmLeaveSquad = async () => {
-    setLeavingSquad(true);
-    try {
-      const response = await fetch(`${API_URL}/squads/leave`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSquad(null);
-        setShowLeaveModal(false);
-      } else {
-        setLeaveError(data.message);
-      }
-    } catch (err) {
-      console.error('Error leaving squad:', err);
-      setLeaveError(texts[language]?.errorOccurred || 'Une erreur est survenue');
-    } finally {
-      setLeavingSquad(false);
     }
   };
 
@@ -1156,122 +1094,6 @@ const MyProfile = () => {
             </div>
           )}
 
-          {/* Squad Section */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-6 mb-6`}>
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-              <Users className={`w-5 h-5 text-${accentColor}-400`} />
-              <span>{t.mySquad}</span>
-            </h2>
-            
-            {loadingSquad ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className={`w-6 h-6 text-${accentColor}-400 animate-spin`} />
-              </div>
-            ) : squad ? (
-              /* Afficher l'escouade */
-              <div className="space-y-4">
-                <Link 
-                  to={`/squad/${squad._id}`}
-                  className="flex items-center gap-4 p-4 bg-dark-800/50 rounded-xl hover:bg-dark-800/70 transition-colors"
-                >
-                  <div 
-                    className="w-14 h-14 rounded-xl flex items-center justify-center border-2 overflow-hidden"
-                    style={{ backgroundColor: squad.color + '30', borderColor: squad.color }}
-                  >
-                    {squad.logo ? (
-                      <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <Users className="w-7 h-7" style={{ color: squad.color }} />
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-white font-bold text-lg hover:underline">{squad.name}</p>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-400">[{squad.tag}]</span>
-                    </div>
-                    <p className="text-gray-500 text-sm">{squad.members?.length || 1} {t.members}</p>
-                    {squad.description && (
-                      <p className="text-gray-400 text-xs mt-1">{squad.description}</p>
-                    )}
-                  </div>
-                </Link>
-                
-                {/* Membres de l'escouade */}
-                {squad.members && squad.members.length > 0 && (
-                  <div className="p-4 bg-dark-800/30 rounded-xl">
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">{t.members}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {squad.members.map((member) => (
-                        <Link
-                          to={`/player/${member.user?._id}`}
-                          key={member.user?._id || member._id}
-                          className="flex items-center gap-2 px-3 py-1.5 bg-dark-800/50 rounded-lg hover:bg-dark-700/50 transition-colors"
-                        >
-                          <img 
-                            src={
-                              member.user?.avatarUrl 
-                                ? member.user.avatarUrl 
-                                : (member.user?.discordId && member.user?.discordAvatar)
-                                  ? `https://cdn.discordapp.com/avatars/${member.user.discordId}/${member.user.discordAvatar}.png`
-                                  : 'https://cdn.discordapp.com/embed/avatars/0.png'
-                            }
-                            alt=""
-                            className="w-6 h-6 rounded-full"
-                            onError={(e) => { e.target.src = 'https://cdn.discordapp.com/embed/avatars/0.png'; }}
-                          />
-                          <span className="text-sm text-white hover:underline">{member.user?.username || member.user?.discordUsername || 'Unknown'}</span>
-                          {member.role === 'leader' && (
-                            <Crown className="w-3 h-3 text-yellow-400" />
-                          )}
-                          {member.role === 'officer' && (
-                            <Shield className="w-3 h-3 text-blue-400" />
-                          )}
-                        </Link>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Boutons d'action */}
-                <div className="flex gap-2">
-                  {/* Bouton gérer - visible pour leader et officiers */}
-                  {squad.members?.some(m => 
-                    (m.user?._id === user?.id || m.user === user?.id) && 
-                    (m.role === 'leader' || m.role === 'officer')
-                  ) && (
-                    <Link
-                      to="/squad-management"
-                      className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 rounded-lg transition-colors font-medium`}
-                    >
-                      <Settings className="w-4 h-4" />
-                      {t.manageSquad}
-                    </Link>
-                  )}
-                  
-                  {/* Bouton quitter */}
-                  <button
-                    onClick={handleLeaveSquad}
-                    className={`${squad.members?.some(m => 
-                      (m.user?._id === user?.id || m.user === user?.id) && 
-                      (m.role === 'leader' || m.role === 'officer')
-                    ) ? 'flex-1' : 'w-full'} py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors`}
-                  >
-                    {t.leaveSquad}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Bouton pour aller à la page my-squad */
-              <Link
-                to="/my-squad"
-                className={`w-full flex items-center justify-center gap-2 px-4 py-4 rounded-xl bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-medium hover:opacity-90 transition-all shadow-lg`}
-              >
-                <Users className="w-5 h-5" />
-                <span>{t.goToSquadPage}</span>
-              </Link>
-            )}
-          </div>
-
           {/* My Purchases - Temporairement caché */}
           {false && (
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-6`}>
@@ -1359,22 +1181,16 @@ const MyProfile = () => {
               <p className="text-gray-400 text-sm">{t.deleteAccountWarning}</p>
               <button
                 onClick={() => setShowDeleteModal(true)}
-                disabled={user.isBanned || !!squad}
+                disabled={user.isBanned}
                 className="w-full py-3 px-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-medium rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={
-                  user.isBanned 
-                    ? t.cannotDeleteBanned 
-                    : squad 
-                      ? t.cannotDeleteWithSquad 
-                      : ''
-                }
+                title={user.isBanned ? t.cannotDeleteBanned : ''}
               >
                 <Trash2 className="w-5 h-5" />
                 {t.deleteAccount}
               </button>
-              {(user.isBanned || squad) && (
+              {user.isBanned && (
                 <p className="text-xs text-red-400 text-center">
-                  {user.isBanned ? t.cannotDeleteBanned : t.cannotDeleteWithSquad}
+                  {t.cannotDeleteBanned}
                 </p>
               )}
             </div>
@@ -1419,54 +1235,6 @@ const MyProfile = () => {
                   t.confirmDelete
                 )}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Leave Squad Modal */}
-      {showLeaveModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`bg-dark-900 border border-${accentColor}-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl`}>
-            <div className="text-center mb-6">
-              <div className={`w-16 h-16 mx-auto mb-4 rounded-full bg-${accentColor}-500/20 flex items-center justify-center`}>
-                {leaveError ? (
-                  <AlertCircle className={`w-8 h-8 text-${accentColor}-400`} />
-                ) : (
-                  <Users className={`w-8 h-8 text-${accentColor}-400`} />
-                )}
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">{t.leaveSquad}</h3>
-              {leaveError ? (
-                <p className="text-red-400 text-sm">{leaveError}</p>
-              ) : (
-                <p className="text-gray-400 text-sm">{t.confirmLeaveSquad}</p>
-              )}
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowLeaveModal(false);
-                  setLeaveError('');
-                }}
-                className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-colors font-medium"
-              >
-                {t.cancel}
-              </button>
-              {!leaveError && (
-                <button
-                  onClick={confirmLeaveSquad}
-                  disabled={leavingSquad}
-                  className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {leavingSquad ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    t.confirm
-                  )}
-                </button>
-              )}
             </div>
           </div>
         </div>

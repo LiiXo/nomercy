@@ -9,6 +9,8 @@ import Match from '../models/Match.js';
 import ShopItem from '../models/ShopItem.js';
 import Trophy from '../models/Trophy.js';
 import Announcement from '../models/Announcement.js';
+import AccountDeletion from '../models/AccountDeletion.js';
+import Ranking from '../models/Ranking.js';
 import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -644,6 +646,7 @@ router.get('/by-id/:id/squad', async (req, res) => {
     res.json({
       success: true,
       squad: {
+        _id: user.squad._id,
         id: user.squad._id,
         name: user.squad.name,
         tag: user.squad.tag,
@@ -746,18 +749,6 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
       });
     }
 
-    // Check if user has a squad
-    if (req.user.squad) {
-      return res.status(403).json({
-        success: false,
-        message: 'Vous devez quitter votre escouade avant de supprimer votre compte.'
-      });
-    }
-
-    // Import necessary models
-    const AccountDeletion = (await import('../models/AccountDeletion.js')).default;
-    const Ranking = (await import('../models/Ranking.js')).default;
-    
     // Get user's rankings
     const rankings = await Ranking.find({ user: userId });
     
@@ -782,6 +773,31 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
       deletedBy: 'self',
       status: 'completed'
     });
+
+    // If user has a squad, remove them from it
+    if (req.user.squad) {
+      const squad = await Squad.findById(req.user.squad);
+      if (squad) {
+        // Remove user from squad members
+        squad.members = squad.members.filter(
+          m => m.user.toString() !== userId.toString()
+        );
+        
+        // If user was the leader and squad is now empty, delete the squad
+        if (squad.isLeader(userId) && squad.members.length === 0) {
+          await Squad.findByIdAndDelete(squad._id);
+        } else if (squad.isLeader(userId) && squad.members.length > 0) {
+          // Transfer leadership to the first officer or first member
+          const newLeader = squad.members.find(m => m.role === 'officer') || squad.members[0];
+          squad.leader = newLeader.user;
+          newLeader.role = 'leader';
+          await squad.save();
+        } else {
+          // Just save the squad without the deleted member
+          await squad.save();
+        }
+      }
+    }
 
     // Delete user's rankings
     await Ranking.deleteMany({ user: userId });
@@ -1211,10 +1227,6 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
         message: 'Impossible de supprimer un administrateur'
       });
     }
-
-    // Import necessary models
-    const AccountDeletion = (await import('../models/AccountDeletion.js')).default;
-    const Ranking = (await import('../models/Ranking.js')).default;
     
     // Get user's rankings
     const rankings = await Ranking.find({ user: user._id });
@@ -1242,6 +1254,31 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
       status: 'completed'
     });
 
+    // If user has a squad, remove them from it
+    if (user.squad) {
+      const squad = await Squad.findById(user.squad);
+      if (squad) {
+        // Remove user from squad members
+        squad.members = squad.members.filter(
+          m => m.user.toString() !== user._id.toString()
+        );
+        
+        // If user was the leader and squad is now empty, delete the squad
+        if (squad.isLeader(user._id) && squad.members.length === 0) {
+          await Squad.findByIdAndDelete(squad._id);
+        } else if (squad.isLeader(user._id) && squad.members.length > 0) {
+          // Transfer leadership to the first officer or first member
+          const newLeader = squad.members.find(m => m.role === 'officer') || squad.members[0];
+          squad.leader = newLeader.user;
+          newLeader.role = 'leader';
+          await squad.save();
+        } else {
+          // Just save the squad without the deleted member
+          await squad.save();
+        }
+      }
+    }
+
     // Delete user's rankings
     await Ranking.deleteMany({ user: user._id });
     
@@ -1265,7 +1302,6 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
 router.get('/admin/deleted-accounts', verifyToken, requireStaff, async (req, res) => {
   try {
     const { page = 1, limit = 20, search = '' } = req.query;
-    const AccountDeletion = (await import('../models/AccountDeletion.js')).default;
 
     const query = { status: 'completed' };
     if (search) {

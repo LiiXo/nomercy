@@ -63,10 +63,19 @@ const startServer = async () => {
   // Track which pages each socket has joined (socket.rooms is empty on disconnect)
   const socketPages = new Map();
 
+  // Helper function to broadcast total online users count
+  const broadcastTotalOnlineUsers = () => {
+    const totalOnline = io.engine.clientsCount;
+    io.emit('totalOnlineUsers', totalOnline);
+  };
+
   // Socket.io event handlers
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     socketPages.set(socket.id, new Set());
+    
+    // Emit total online users count to all clients
+    broadcastTotalOnlineUsers();
 
     socket.on('joinPage', ({ page }) => {
       socket.join(page);
@@ -104,6 +113,9 @@ const startServer = async () => {
         });
         socketPages.delete(socket.id);
       }
+      
+      // Emit updated total online users count
+      broadcastTotalOnlineUsers();
     });
   });
 

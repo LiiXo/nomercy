@@ -356,7 +356,7 @@ const PlayerProfile = () => {
                 )}
                 {squad && (
                   <Link
-                    to={`/squad/${squad._id}`}
+                    to={`/squad/${squad.id || squad._id}`}
                     className="flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white font-medium hover:bg-white/10 hover:border-white/20 transition-colors"
                   >
                     <div 

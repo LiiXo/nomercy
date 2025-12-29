@@ -6,10 +6,9 @@ import { useMode } from '../ModeContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   Users, Crown, Shield, UserMinus, Settings, Plus, Search, 
-  Loader2, AlertCircle, Trophy, Medal, ChevronRight, Star,
-  TrendingUp, Target, Swords, Calendar, Sparkles, Eye, 
-  UserPlus, Lock, Unlock, Globe, Copy, Check, ArrowRight,
-  Flame, Zap, Award, X, MessageSquare, Clock, ExternalLink
+  Loader2, AlertCircle, Trophy, Medal, ChevronRight,
+  Target, Swords, Calendar, Sparkles, Globe, Copy, Check, ArrowRight,
+  Zap, Award, X, MessageSquare, Clock, ExternalLink
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -40,6 +39,13 @@ const MySquad = () => {
   const [squadDescription, setSquadDescription] = useState('');
   const [creatingSquad, setCreatingSquad] = useState(false);
   const [createError, setCreateError] = useState('');
+  
+  // Edit squad states
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editTag, setEditTag] = useState('');
+  const [updatingSquad, setUpdatingSquad] = useState(false);
+  const [editError, setEditError] = useState('');
   
   // Copied state
   const [copied, setCopied] = useState(false);
@@ -101,6 +107,13 @@ const MySquad = () => {
       position: 'Position',
       nameTooShort: 'Le nom doit faire au moins 3 caractères',
       tagInvalid: 'Le tag doit faire entre 2 et 5 caractères',
+      editSquadInfo: 'Modifier les informations',
+      editSquadTitle: 'Modifier le nom et le tag',
+      newName: 'Nouveau nom',
+      newTag: 'Nouveau tag',
+      save: 'Enregistrer',
+      saving: 'Enregistrement...',
+      editSuccess: 'Informations mises à jour avec succès',
     },
     en: {
       title: 'My Squad',
@@ -157,6 +170,13 @@ const MySquad = () => {
       position: 'Position',
       nameTooShort: 'Name must be at least 3 characters',
       tagInvalid: 'Tag must be 2-5 characters',
+      editSquadInfo: 'Edit information',
+      editSquadTitle: 'Edit name and tag',
+      newName: 'New name',
+      newTag: 'New tag',
+      save: 'Save',
+      saving: 'Saving...',
+      editSuccess: 'Information updated successfully',
     },
     de: {
       title: 'Mein Squad',
@@ -213,6 +233,13 @@ const MySquad = () => {
       position: 'Position',
       nameTooShort: 'Name muss mindestens 3 Zeichen haben',
       tagInvalid: 'Tag muss 2-5 Zeichen haben',
+      editSquadInfo: 'Informationen bearbeiten',
+      editSquadTitle: 'Name und Tag bearbeiten',
+      newName: 'Neuer Name',
+      newTag: 'Neuer Tag',
+      save: 'Speichern',
+      saving: 'Speichern...',
+      editSuccess: 'Informationen erfolgreich aktualisiert',
     },
     it: {
       title: 'La mia Squad',
@@ -269,6 +296,13 @@ const MySquad = () => {
       position: 'Posizione',
       nameTooShort: 'Il nome deve avere almeno 3 caratteri',
       tagInvalid: 'Il tag deve avere 2-5 caratteri',
+      editSquadInfo: 'Modifica informazioni',
+      editSquadTitle: 'Modifica nome e tag',
+      newName: 'Nuovo nome',
+      newTag: 'Nuovo tag',
+      save: 'Salva',
+      saving: 'Salvataggio...',
+      editSuccess: 'Informazioni aggiornate con successo',
     },
   };
 
@@ -452,6 +486,60 @@ const MySquad = () => {
     navigator.clipboard.writeText(`[${squad.tag}]`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Open edit dialog
+  const handleOpenEdit = () => {
+    setEditName(squad.name);
+    setEditTag(squad.tag);
+    setEditError('');
+    setShowEditDialog(true);
+  };
+
+  // Update squad name and tag
+  const handleUpdateSquad = async (e) => {
+    e.preventDefault();
+    setEditError('');
+    
+    if (!editName.trim() || editName.length < 3) {
+      setEditError(t.nameTooShort);
+      return;
+    }
+    if (!editTag.trim() || editTag.length < 2 || editTag.length > 5) {
+      setEditError(t.tagInvalid);
+      return;
+    }
+    
+    setUpdatingSquad(true);
+    try {
+      const response = await fetch(`${API_URL}/squads/${squad._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: editName.trim(),
+          tag: editTag.trim()
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSquad(data.squad);
+        setShowEditDialog(false);
+        setEditName('');
+        setEditTag('');
+        setError('');
+        // Show success message temporarily
+        setError(t.editSuccess);
+        setTimeout(() => setError(''), 3000);
+      } else {
+        setEditError(data.message || 'Error updating squad');
+      }
+    } catch (err) {
+      console.error('Error updating squad:', err);
+      setEditError('Server error');
+    } finally {
+      setUpdatingSquad(false);
+    }
   };
 
   // Loading state
@@ -673,30 +761,6 @@ const MySquad = () => {
                     </div>
                   </div>
                 </div>
-
-                {/* Features Preview */}
-                <div className="border-t border-white/5 px-8 py-6 bg-dark-800/30">
-                  <div className="grid grid-cols-3 gap-6">
-                    <div className="text-center">
-                      <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
-                        <Swords className={`w-5 h-5 text-${accentColor}-400`} />
-                      </div>
-                      <p className="text-xs text-gray-500">Matchs 5v5</p>
-                    </div>
-                    <div className="text-center">
-                      <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
-                        <Trophy className={`w-5 h-5 text-${accentColor}-400`} />
-                      </div>
-                      <p className="text-xs text-gray-500">Tournois</p>
-                    </div>
-                    <div className="text-center">
-                      <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/10 flex items-center justify-center mx-auto mb-2`}>
-                        <TrendingUp className={`w-5 h-5 text-${accentColor}-400`} />
-                      </div>
-                      <p className="text-xs text-gray-500">Rankings</p>
-                    </div>
-                  </div>
-                </div>
               </div>
             )}
           </div>
@@ -821,6 +885,15 @@ const MySquad = () => {
                         <Copy className="w-3.5 h-3.5" />
                       )}
                     </button>
+                    {isLeaderOrOfficer && squad.leader?._id === user?._id && (
+                      <button
+                        onClick={handleOpenEdit}
+                        className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white text-sm rounded-lg transition-colors"
+                        title={t.editSquadInfo}
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                   {squad.description && (
                     <p className="text-gray-400 text-sm mb-3 max-w-xl">{squad.description}</p>
@@ -1093,6 +1166,99 @@ const MySquad = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Squad Dialog */}
+      {showEditDialog && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className={`bg-dark-900 border ${borderColor} rounded-2xl max-w-md w-full p-6 shadow-2xl`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">{t.editSquadTitle}</h3>
+              <button
+                onClick={() => {
+                  setShowEditDialog(false);
+                  setEditError('');
+                }}
+                className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"
+                disabled={updatingSquad}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateSquad} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  {t.squadNameLabel}
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-white/20 transition-colors"
+                  placeholder={t.squadNamePlaceholder}
+                  disabled={updatingSquad}
+                  required
+                  minLength={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">
+                  {t.tagLabel}
+                </label>
+                <input
+                  type="text"
+                  value={editTag}
+                  onChange={(e) => setEditTag(e.target.value.replace(/[^A-Za-z0-9]/g, ''))}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-white/20 transition-colors"
+                  placeholder={t.tagPlaceholder}
+                  disabled={updatingSquad}
+                  required
+                  minLength={2}
+                  maxLength={5}
+                />
+              </div>
+
+              {editError && (
+                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl">
+                  <p className="text-red-400 text-sm">{editError}</p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditDialog(false);
+                    setEditError('');
+                  }}
+                  className="flex-1 px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white font-medium hover:bg-dark-700 transition-colors"
+                  disabled={updatingSquad}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingSquad}
+                  className={`flex-1 px-4 py-3 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-xl text-white font-semibold transition-all hover:scale-105 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2`}
+                >
+                  {updatingSquad ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      {t.saving}
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-5 h-5" />
+                      {t.save}
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

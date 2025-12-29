@@ -28,6 +28,8 @@ const SquadManagement = () => {
   const [addingFakePlayer, setAddingFakePlayer] = useState(false);
   
   // Settings form
+  const [squadName, setSquadName] = useState('');
+  const [squadTag, setSquadTag] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
   const [color, setColor] = useState('#ef4444');
@@ -64,6 +66,8 @@ const SquadManagement = () => {
       requests: 'Demandes',
       settings: 'Paramètres',
       back: 'Retour au profil',
+      squadName: 'Nom de l\'escouade',
+      squadTag: 'Tag de l\'escouade',
       leader: 'Leader',
       officer: 'Officier',
       member: 'Membre',
@@ -139,6 +143,8 @@ const SquadManagement = () => {
       requests: 'Requests',
       settings: 'Settings',
       back: 'Back to profile',
+      squadName: 'Squad name',
+      squadTag: 'Squad tag',
       leader: 'Leader',
       officer: 'Officer',
       member: 'Member',
@@ -214,6 +220,8 @@ const SquadManagement = () => {
       requests: 'Anfragen',
       settings: 'Einstellungen',
       back: 'Zurück zum Profil',
+      squadName: 'Squad-Name',
+      squadTag: 'Squad-Tag',
       leader: 'Leader',
       officer: 'Offizier',
       member: 'Mitglied',
@@ -283,6 +291,8 @@ const SquadManagement = () => {
       requests: 'Richieste',
       settings: 'Impostazioni',
       back: 'Torna al profilo',
+      squadName: 'Nome squadra',
+      squadTag: 'Tag squadra',
       leader: 'Leader',
       officer: 'Ufficiale',
       member: 'Membro',
@@ -366,6 +376,8 @@ const SquadManagement = () => {
       
       if (data.success && data.squad) {
         setSquad(data.squad);
+        setSquadName(data.squad.name || '');
+        setSquadTag(data.squad.tag || '');
         setDescription(data.squad.description || '');
         setIsPublic(data.squad.isPublic);
         setColor(data.squad.color || '#ef4444');
@@ -847,12 +859,20 @@ const SquadManagement = () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ description, isPublic, color })
+        body: JSON.stringify({ 
+          name: squadName, 
+          tag: squadTag, 
+          description, 
+          isPublic, 
+          color 
+        })
       });
       const data = await response.json();
       
       if (data.success) {
         setSquad(data.squad);
+        setSquadName(data.squad.name);
+        setSquadTag(data.squad.tag);
         setSuccess(t.settingsSaved);
       } else {
         setError(data.message);
@@ -1306,6 +1326,38 @@ const SquadManagement = () => {
             {/* Settings Tab */}
             {activeTab === 'settings' && isLeader && (
               <div className="space-y-6">
+                {/* Squad Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t.squadName}
+                  </label>
+                  <input
+                    type="text"
+                    value={squadName}
+                    onChange={(e) => setSquadName(e.target.value)}
+                    placeholder="Ex: Les Invincibles"
+                    maxLength={50}
+                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all`}
+                  />
+                  <p className="text-gray-500 text-xs mt-1">{squadName.length}/50</p>
+                </div>
+
+                {/* Squad Tag */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t.squadTag}
+                  </label>
+                  <input
+                    type="text"
+                    value={squadTag}
+                    onChange={(e) => setSquadTag(e.target.value.replace(/[^A-Za-z0-9]/g, ''))}
+                    placeholder="Ex: INV"
+                    maxLength={5}
+                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 transition-all`}
+                  />
+                  <p className="text-gray-500 text-xs mt-1">{squadTag.length}/5 - {language === 'fr' ? '2 minimum' : language === 'de' ? 'Mindestens 2' : language === 'it' ? 'Minimo 2' : 'Minimum 2'}</p>
+                </div>
+
                 {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">

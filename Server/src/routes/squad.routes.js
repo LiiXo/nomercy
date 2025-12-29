@@ -156,7 +156,7 @@ router.post('/create', verifyToken, async (req, res) => {
     const existingSquad = await Squad.findOne({
       $or: [
         { name: { $regex: new RegExp(`^${name}$`, 'i') } },
-        { tag: tag.toUpperCase() }
+        { tag: { $regex: new RegExp(`^${tag}$`, 'i') } }
       ]
     });
     
@@ -170,7 +170,7 @@ router.post('/create', verifyToken, async (req, res) => {
     // Create squad
     const squad = new Squad({
       name,
-      tag: tag.toUpperCase(),
+      tag: tag.trim(),
       description: description || '',
       leader: userId,
       members: [{
@@ -848,7 +848,7 @@ router.put('/:squadId', verifyToken, async (req, res) => {
   try {
     const { squadId } = req.params;
     const userId = req.user._id;
-    const { description, isPublic, color, logo } = req.body;
+    const { name, tag, description, isPublic, color, logo } = req.body;
     
     const squad = await Squad.findById(squadId);
     if (!squad) {
@@ -857,6 +857,70 @@ router.put('/:squadId', verifyToken, async (req, res) => {
     
     if (!squad.isLeader(userId)) {
       return res.status(403).json({ success: false, message: 'Seul le leader peut modifier l\'escouade' });
+    }
+    
+    // Validate and update name if provided
+    if (name !== undefined && name !== squad.name) {
+      if (!name || name.trim().length < 3) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Le nom d\'escouade doit faire au moins 3 caractères.' 
+        });
+      }
+      
+      if (!isValidSquadName(name.trim())) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Le nom d\'escouade ne peut contenir que des lettres, chiffres, espaces, tirets et underscores.' 
+        });
+      }
+      
+      // Check if name already exists (excluding current squad)
+      const existingSquadWithName = await Squad.findOne({
+        name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
+        _id: { $ne: squadId }
+      });
+      
+      if (existingSquadWithName) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Ce nom d\'escouade existe déjà.' 
+        });
+      }
+      
+      squad.name = name.trim();
+    }
+    
+    // Validate and update tag if provided
+    if (tag !== undefined && tag !== squad.tag) {
+      if (!tag || tag.trim().length < 2 || tag.trim().length > 5) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Le tag doit faire entre 2 et 5 caractères.' 
+        });
+      }
+      
+      if (!isValidSquadTag(tag.trim())) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Le tag ne peut contenir que des lettres et chiffres (pas de caractères spéciaux).' 
+        });
+      }
+      
+      // Check if tag already exists (excluding current squad)
+      const existingSquadWithTag = await Squad.findOne({
+        tag: { $regex: new RegExp(`^${tag.trim()}$`, 'i') },
+        _id: { $ne: squadId }
+      });
+      
+      if (existingSquadWithTag) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Ce tag d\'escouade existe déjà.' 
+        });
+      }
+      
+      squad.tag = tag.trim();
     }
     
     if (description !== undefined) squad.description = description;
@@ -1033,7 +1097,7 @@ router.get('/check/:type/:value', async (req, res) => {
     if (type === 'name') {
       query = { name: { $regex: new RegExp(`^${value}$`, 'i') } };
     } else if (type === 'tag') {
-      query = { tag: value.toUpperCase() };
+      query = { tag: { $regex: new RegExp(`^${value}$`, 'i') } };
     } else {
       return res.status(400).json({ success: false, message: 'Type invalide' });
     }

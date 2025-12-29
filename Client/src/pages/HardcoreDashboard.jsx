@@ -312,7 +312,7 @@ const HardcoreDashboard = () => {
   const [duoTrioMatches, setDuoTrioMatches] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
   const socketRef = useRef(null);
-  const [onlineViewers, setOnlineViewers] = useState(0);
+  const [totalOnlineUsers, setTotalOnlineUsers] = useState(0);
   const [showPostMatch, setShowPostMatch] = useState(null);
   const [postingMatch, setPostingMatch] = useState(false);
   const [acceptingMatch, setAcceptingMatch] = useState(null);
@@ -438,7 +438,7 @@ const HardcoreDashboard = () => {
       socket.emit('joinPage', { page: 'hardcore-dashboard' });
     });
 
-    socket.on('viewerCount', (count) => setOnlineViewers(count));
+    socket.on('totalOnlineUsers', (count) => setTotalOnlineUsers(count));
 
     socket.on('matchCreated', (data) => {
       if (data.mode === 'hardcore') {
@@ -997,12 +997,12 @@ const HardcoreDashboard = () => {
 
           {/* Available Matches Section */}
           <section className="mb-12">
-            {/* Online viewers */}
+            {/* Online users */}
             <div className="flex justify-center mb-6">
               <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full glass">
                 <div className="w-2 h-2 bg-neon-green rounded-full animate-pulse" />
                 <Users className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300 text-sm font-medium">{onlineViewers} {language === 'fr' ? 'en ligne' : 'online'}</span>
+                <span className="text-gray-300 text-sm font-medium">{totalOnlineUsers} {language === 'fr' ? 'en ligne' : language === 'de' ? 'online' : language === 'it' ? 'online' : 'online'}</span>
               </div>
             </div>
 
@@ -1312,94 +1312,92 @@ const HardcoreDashboard = () => {
 
             <div className="grid md:grid-cols-2 gap-6">
               {/* Top Players */}
-              <div className="glass-card rounded-2xl overflow-hidden neon-border-red">
+              <div className="glass-card rounded-2xl overflow-hidden neon-border-red flex flex-col">
                 <div className="px-6 py-4 border-b border-white/5 bg-gradient-to-r from-neon-red/10 to-transparent">
                   <h3 className="font-display text-xl text-white flex items-center gap-3">
                     <Users className="w-5 h-5 text-neon-red" />
                     {language === 'fr' ? 'TOP 10 JOUEURS' : 'TOP 10 PLAYERS'}
                   </h3>
                 </div>
-                {loadingPlayers ? (
-                  <div className="flex justify-center py-12">
-                    <Loader2 className="w-6 h-6 text-neon-red animate-spin" />
-                  </div>
-                ) : topPlayers.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">{language === 'fr' ? 'Aucun joueur classé' : 'No ranked players'}</div>
-                ) : (
-                  <div className="divide-y divide-white/5">
-                    {topPlayers.map((player) => (
-                      <div key={player.rank} className={`px-6 py-3 hover:bg-white/5 transition-all ${player.rank <= 3 ? 'bg-gradient-to-r from-yellow-500/5 to-transparent' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 w-14">
-                              {player.rank === 1 && <Medal className="w-4 h-4 text-yellow-500" />}
-                              {player.rank === 2 && <Medal className="w-4 h-4 text-gray-400" />}
-                              {player.rank === 3 && <Medal className="w-4 h-4 text-amber-600" />}
-                              <span className={`font-bold text-sm ${player.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{player.rank}</span>
+                <div className="flex-1 min-h-[520px]">
+                  {loadingPlayers ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-6 h-6 text-neon-red animate-spin" />
+                    </div>
+                  ) : topPlayers.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">{language === 'fr' ? 'Aucun joueur classé' : 'No ranked players'}</div>
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {topPlayers.map((player) => (
+                        <div key={player.rank} className={`px-6 py-3 hover:bg-white/5 transition-all ${player.rank <= 3 ? 'bg-gradient-to-r from-yellow-500/5 to-transparent' : ''}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 w-14">
+                                {player.rank === 1 && <Medal className="w-4 h-4 text-yellow-500" />}
+                                {player.rank === 2 && <Medal className="w-4 h-4 text-gray-400" />}
+                                {player.rank === 3 && <Medal className="w-4 h-4 text-amber-600" />}
+                                <span className={`font-bold text-sm ${player.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{player.rank}</span>
+                              </div>
+                              <img src={player.avatar || getDefaultAvatar(player.player)} alt="" className={`w-8 h-8 rounded-full ${player.rank <= 3 ? 'ring-2 ring-offset-1 ring-offset-dark-900 ' + (player.rank === 1 ? 'ring-yellow-500' : player.rank === 2 ? 'ring-gray-400' : 'ring-amber-600') : ''}`} />
+                              <Link to={`/player/${player.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${player.rank === 1 ? 'text-yellow-500' : player.rank === 2 ? 'text-gray-300' : player.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
+                                {player.player}
+                              </Link>
                             </div>
-                            <img src={player.avatar || getDefaultAvatar(player.player)} alt="" className={`w-8 h-8 rounded-full ${player.rank <= 3 ? 'ring-2 ring-offset-1 ring-offset-dark-900 ' + (player.rank === 1 ? 'ring-yellow-500' : player.rank === 2 ? 'ring-gray-400' : 'ring-amber-600') : ''}`} />
-                            <Link to={`/player/${player.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${player.rank === 1 ? 'text-yellow-500' : player.rank === 2 ? 'text-gray-300' : player.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
-                              {player.player}
-                            </Link>
+                            <span className="text-neon-red font-bold text-sm">{player.points.toLocaleString()} XP</span>
                           </div>
-                          <span className="text-neon-red font-bold text-sm">{player.points.toLocaleString()} XP</span>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Top Squads */}
-              <div className="glass-card rounded-2xl overflow-hidden neon-border-red">
+              <div className="glass-card rounded-2xl overflow-hidden neon-border-red flex flex-col">
                 <div className="px-6 py-4 border-b border-white/5 bg-gradient-to-r from-neon-red/10 to-transparent">
                   <h3 className="font-display text-xl text-white flex items-center gap-3">
                     <Shield className="w-5 h-5 text-neon-orange" />
                     {language === 'fr' ? 'TOP 10 ESCOUADES' : 'TOP 10 SQUADS'}
                   </h3>
                 </div>
-                {loadingSquads ? (
-                  <div className="flex justify-center py-12">
-                    <Loader2 className="w-6 h-6 text-neon-orange animate-spin" />
-                  </div>
-                ) : topSquads.length === 0 ? (
-                  <div className="text-center py-12 text-gray-500">{language === 'fr' ? 'Aucune escouade classée' : 'No ranked squads'}</div>
-                ) : (
-                  <div className="divide-y divide-white/5">
-                    {topSquads.map((squad) => (
-                      <div key={squad.rank} className={`px-6 py-3 hover:bg-white/5 transition-all ${squad.rank <= 3 ? 'bg-gradient-to-r from-yellow-500/5 to-transparent' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="flex items-center gap-2 w-14">
-                              {squad.rank === 1 && <Medal className="w-4 h-4 text-yellow-500" />}
-                              {squad.rank === 2 && <Medal className="w-4 h-4 text-gray-400" />}
-                              {squad.rank === 3 && <Medal className="w-4 h-4 text-amber-600" />}
-                              <span className={`font-bold text-sm ${squad.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{squad.rank}</span>
-                            </div>
-                            {squad.logo ? (
-                              <img src={squad.logo} alt="" className="w-7 h-7 rounded object-contain" />
-                            ) : (
-                              <div className="w-7 h-7 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: squad.color + '30', color: squad.color }}>
-                                {squad.tag?.charAt(0) || 'S'}
+                <div className="flex-1 min-h-[520px]">
+                  {loadingSquads ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="w-6 h-6 text-neon-orange animate-spin" />
+                    </div>
+                  ) : topSquads.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500">{language === 'fr' ? 'Aucune escouade classée' : 'No ranked squads'}</div>
+                  ) : (
+                    <div className="divide-y divide-white/5">
+                      {topSquads.map((squad) => (
+                        <div key={squad.rank} className={`px-6 py-3 hover:bg-white/5 transition-all ${squad.rank <= 3 ? 'bg-gradient-to-r from-yellow-500/5 to-transparent' : ''}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 w-14">
+                                {squad.rank === 1 && <Medal className="w-4 h-4 text-yellow-500" />}
+                                {squad.rank === 2 && <Medal className="w-4 h-4 text-gray-400" />}
+                                {squad.rank === 3 && <Medal className="w-4 h-4 text-amber-600" />}
+                                <span className={`font-bold text-sm ${squad.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{squad.rank}</span>
                               </div>
-                            )}
-                            <Link to={`/squad/${squad.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${squad.rank === 1 ? 'text-yellow-500' : squad.rank === 2 ? 'text-gray-300' : squad.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
-                              {squad.team}
-                              {squad.tag && <span className="text-gray-500 ml-1 text-xs">[{squad.tag}]</span>}
-                            </Link>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="hidden sm:flex items-center gap-2 text-xs">
-                              <span className="text-neon-green">{squad.totalWins}W</span>
-                              <span className="text-neon-red">{squad.totalLosses}L</span>
+                              {squad.logo ? (
+                                <img src={squad.logo} alt="" className="w-8 h-8 rounded object-contain" />
+                              ) : (
+                                <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: squad.color + '30', color: squad.color }}>
+                                  {squad.tag?.charAt(0) || 'S'}
+                                </div>
+                              )}
+                              <Link to={`/squad/${squad.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${squad.rank === 1 ? 'text-yellow-500' : squad.rank === 2 ? 'text-gray-300' : squad.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
+                                {squad.team}
+                                {squad.tag && <span className="text-gray-500 ml-1 text-xs">[{squad.tag}]</span>}
+                              </Link>
                             </div>
-                            <span className="text-neon-red font-bold text-sm">{squad.points} pts</span>
+                            <span className="text-neon-red font-bold text-sm">{squad.points.toLocaleString()} PTS</span>
                           </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </section>
