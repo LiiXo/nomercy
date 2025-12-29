@@ -7,7 +7,7 @@ import {
   Users, Archive, MoreVertical, Ban, AlertCircle, CheckCheck,
   UserPlus, Shield, ImagePlus
 } from 'lucide-react';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
@@ -344,9 +344,9 @@ const Messages = () => {
     }
   };
   
-  const getUserAvatar = (participant) => {
-    if (participant.avatar) return participant.avatar;
-    if (participant.avatarUrl) return participant.avatarUrl;
+  const getUserAvatarLocal = (participant) => {
+    if (participant.avatar) return getAvatarUrl(participant.avatar);
+    if (participant.avatarUrl) return getAvatarUrl(participant.avatarUrl);
     if (participant.discordAvatar) return participant.discordAvatar;
     return getDefaultAvatar(participant.username || 'User');
   };
@@ -445,7 +445,7 @@ const Messages = () => {
                         <div className="relative">
                           {conv.participants.length > 0 && (
                             <img
-                              src={getUserAvatar(conv.participants[0])}
+                              src={getUserAvatarLocal(conv.participants[0])}
                               alt=""
                               className="w-12 h-12 rounded-full object-cover bg-dark-800"
                               onError={(e) => {
@@ -505,7 +505,7 @@ const Messages = () => {
                     {selectedConversation.participants.filter(p => p._id !== user.id).map((p, idx) => (
                       <div key={idx} className="flex items-center gap-2 lg:gap-3 min-w-0">
                         <img
-                          src={getUserAvatar(p)}
+                          src={getUserAvatarLocal(p)}
                           alt=""
                           className="w-8 h-8 lg:w-10 lg:h-10 rounded-full object-cover bg-dark-800 flex-shrink-0"
                           onError={(e) => {
@@ -577,7 +577,7 @@ const Messages = () => {
                           >
                             <div className={`flex gap-3 max-w-[70%] ${isOwn ? 'flex-row-reverse' : ''}`}>
                               <img
-                                src={getUserAvatar(msg.sender || {})}
+                                src={getUserAvatarLocal(msg.sender || {})}
                                 alt=""
                                 className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-dark-800"
                                 onError={(e) => {
@@ -744,7 +744,7 @@ const Messages = () => {
                       className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors"
                     >
                       <img
-                        src={u.avatar || u.avatarUrl || u.discordAvatar || getDefaultAvatar(u.username)}
+                        src={getAvatarUrl(u.avatar || u.avatarUrl) || u.discordAvatar || getDefaultAvatar(u.username)}
                         alt=""
                         className="w-10 h-10 rounded-full object-cover bg-dark-800"
                         onError={(e) => {

@@ -9,6 +9,8 @@ import {
   CheckCircle, XCircle, AlertTriangle, Crown
 } from 'lucide-react';
 
+import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
+
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
 const MatchSheet = () => {
@@ -954,7 +956,7 @@ const MatchSheet = () => {
                     {match.challengerRoster.map((p, idx) => {
                       const player = p.user;
                       if (!player) return null;
-                      const avatar = player.avatarUrl || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png');
+                      const avatar = getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username));
                       return (
                         <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                           <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
@@ -991,7 +993,7 @@ const MatchSheet = () => {
                       {match.opponentRoster.map((p, idx) => {
                         const player = p.user;
                         if (!player) return null;
-                        const avatar = player.avatarUrl || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png');
+                        const avatar = getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username));
                         return (
                           <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                             <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />

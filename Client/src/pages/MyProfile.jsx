@@ -32,6 +32,10 @@ const MyProfile = () => {
   const [bannerPreview, setBannerPreview] = useState(user?.banner || null);
   const [uploadingBanner, setUploadingBanner] = useState(false);
   
+  // Avatar upload state
+  const [avatarPreview, setAvatarPreview] = useState(user?.avatar || null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  
   // Purchases state
   const [purchases, setPurchases] = useState([]);
   const [loadingPurchases, setLoadingPurchases] = useState(true);
@@ -74,6 +78,11 @@ const MyProfile = () => {
       setBannerPreview(user.banner);
     }
   }, [user?.banner]);
+
+  // Update avatar preview when user.avatar changes
+  useEffect(() => {
+    setAvatarPreview(user?.avatar || null);
+  }, [user?.avatar]);
 
   // Fetch user purchases, ranking, and squad
   useEffect(() => {
@@ -220,7 +229,7 @@ const MyProfile = () => {
     return () => clearTimeout(timer);
   }, [username, user?.username, isEditing, checkUsername]);
 
-  const handleBannerChange = (e) => {
+  const handleBannerChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -237,17 +246,15 @@ const MyProfile = () => {
       return;
     }
 
-    setBannerFile(file);
+    // Show preview immediately
     setBannerPreview(URL.createObjectURL(file));
-  };
-
-  const handleBannerUpload = async () => {
-    if (!bannerFile) return;
-
+    
+    // Upload automatically
     setUploadingBanner(true);
+    setError('');
     try {
       const formData = new FormData();
-      formData.append('banner', bannerFile);
+      formData.append('banner', file);
 
       const response = await fetch(`${API_URL}/users/upload-banner`, {
         method: 'POST',
@@ -262,11 +269,13 @@ const MyProfile = () => {
         await refreshUser();
         setTimeout(() => setSuccess(''), 3000);
       } else {
-        setError(data.message);
+        setError(data.message || 'Upload failed');
+        setBannerPreview(user?.banner || null);
       }
     } catch (err) {
       console.error('Banner upload error:', err);
       setError(texts[language]?.errorOccurred || 'An error occurred');
+      setBannerPreview(user?.banner || null);
     } finally {
       setUploadingBanner(false);
     }
@@ -291,6 +300,79 @@ const MyProfile = () => {
       }
     } catch (err) {
       console.error('Banner delete error:', err);
+      setError(texts[language]?.errorOccurred || 'An error occurred');
+    }
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (10MB max)
+    if (file.size > 10 * 1024 * 1024) {
+      setError(texts[language]?.avatarTooLarge || 'Avatar file must be less than 10MB');
+      return;
+    }
+
+    // Check file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      setError(texts[language]?.avatarInvalidType || 'Only PNG, JPEG, JPG and GIF files are allowed');
+      return;
+    }
+
+    // Show preview immediately
+    setAvatarPreview(URL.createObjectURL(file));
+    
+    // Upload automatically
+    setUploadingAvatar(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await fetch(`${API_URL}/users/upload-avatar`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(texts[language]?.avatarUploaded || 'Avatar uploaded successfully!');
+        await refreshUser();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(data.message || 'Upload failed');
+        setAvatarPreview(user?.avatar || null);
+      }
+    } catch (err) {
+      console.error('Avatar upload error:', err);
+      setError(texts[language]?.errorOccurred || 'An error occurred');
+      setAvatarPreview(user?.avatar || null);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarDelete = async () => {
+    try {
+      const response = await fetch(`${API_URL}/users/delete-avatar`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setAvatarPreview(null);
+        await refreshUser();
+        setSuccess(texts[language]?.avatarDeleted || 'Avatar deleted, reverted to Discord avatar!');
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      console.error('Avatar delete error:', err);
       setError(texts[language]?.errorOccurred || 'An error occurred');
     }
   };
@@ -471,7 +553,15 @@ const MyProfile = () => {
       bannerDeleted: 'Bannière supprimée !',
       bannerTooLarge: 'La bannière doit faire moins de 10MB',
       bannerInvalidType: 'Seuls les fichiers PNG, JPEG, JPG et GIF sont autorisés',
-      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB',
+      avatar: 'Avatar',
+      uploadAvatar: 'Changer l\'avatar',
+      deleteAvatar: 'Revenir à Discord',
+      avatarUploaded: 'Avatar téléchargé !',
+      avatarDeleted: 'Avatar supprimé, retour à Discord !',
+      avatarTooLarge: 'L\'avatar doit faire moins de 10MB',
+      avatarInvalidType: 'Seuls les fichiers PNG, JPEG, JPG et GIF sont autorisés',
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
     },
     en: {
       back: 'Back',
@@ -548,7 +638,15 @@ const MyProfile = () => {
       bannerDeleted: 'Banner deleted!',
       bannerTooLarge: 'Banner must be less than 10MB',
       bannerInvalidType: 'Only PNG, JPEG, JPG and GIF files are allowed',
-      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB',
+      avatar: 'Avatar',
+      uploadAvatar: 'Change avatar',
+      deleteAvatar: 'Revert to Discord',
+      avatarUploaded: 'Avatar uploaded!',
+      avatarDeleted: 'Avatar deleted, reverted to Discord!',
+      avatarTooLarge: 'Avatar must be less than 10MB',
+      avatarInvalidType: 'Only PNG, JPEG, JPG and GIF files are allowed',
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
     },
     de: {
       back: 'Zurück',
@@ -625,7 +723,15 @@ const MyProfile = () => {
       bannerDeleted: 'Banner gelöscht!',
       bannerTooLarge: 'Banner muss kleiner als 10MB sein',
       bannerInvalidType: 'Nur PNG, JPEG, JPG und GIF Dateien sind erlaubt',
-      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB',
+      avatar: 'Avatar',
+      uploadAvatar: 'Avatar ändern',
+      deleteAvatar: 'Zurück zu Discord',
+      avatarUploaded: 'Avatar hochgeladen!',
+      avatarDeleted: 'Avatar gelöscht, zurück zu Discord!',
+      avatarTooLarge: 'Avatar muss kleiner als 10MB sein',
+      avatarInvalidType: 'Nur PNG, JPEG, JPG und GIF Dateien sind erlaubt',
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
     },
     it: {
       back: 'Indietro',
@@ -702,7 +808,15 @@ const MyProfile = () => {
       bannerDeleted: 'Banner eliminato!',
       bannerTooLarge: 'Il banner deve essere inferiore a 10MB',
       bannerInvalidType: 'Sono consentiti solo file PNG, JPEG, JPG e GIF',
-      bannerInfo: 'PNG, JPEG, GIF - Max 10MB'
+      bannerInfo: 'PNG, JPEG, GIF - Max 10MB',
+      avatar: 'Avatar',
+      uploadAvatar: 'Cambia avatar',
+      deleteAvatar: 'Torna a Discord',
+      avatarUploaded: 'Avatar caricato!',
+      avatarDeleted: 'Avatar eliminato, tornato a Discord!',
+      avatarTooLarge: 'L\'avatar deve essere inferiore a 10MB',
+      avatarInvalidType: 'Sono consentiti solo file PNG, JPEG, JPG e GIF',
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
     }
   };
 
@@ -893,6 +1007,73 @@ const MyProfile = () => {
                   <p className="text-xs text-gray-500 mt-1 text-right">{bio.length}/500</p>
                 </div>
 
+                {/* Avatar Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.avatar}</label>
+                  <div className="flex items-center gap-4">
+                    {/* Avatar Preview */}
+                    <div className="relative">
+                      <div className={`w-20 h-20 rounded-full border-2 border-${accentColor}-500/50 overflow-hidden`}>
+                        <img 
+                          src={
+                            avatarPreview?.startsWith('blob:') 
+                              ? avatarPreview 
+                              : avatarPreview?.startsWith('/uploads/') 
+                                ? `https://api-nomercy.ggsecure.io${avatarPreview}`
+                                : user?.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`
+                          }
+                          alt="Avatar preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      {uploadingAvatar && (
+                        <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Upload/Delete Buttons */}
+                    <div className="flex flex-col gap-2 flex-1">
+                      <label className={`cursor-pointer ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>
+                        <div className={`px-4 py-2 bg-dark-800/50 border border-white/10 rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all flex items-center justify-center gap-2 text-sm`}>
+                          {uploadingAvatar ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Upload...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Edit3 className="w-4 h-4" />
+                              {t.uploadAvatar}
+                            </>
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/gif"
+                          onChange={handleAvatarChange}
+                          className="hidden"
+                          disabled={uploadingAvatar}
+                        />
+                      </label>
+                      
+                      {/* Show delete button only if user has custom avatar */}
+                      {user?.avatar?.startsWith('/uploads/avatars/') && (
+                        <button
+                          type="button"
+                          onClick={handleAvatarDelete}
+                          className="px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 hover:bg-red-500/20 transition-all text-sm flex items-center justify-center gap-2"
+                        >
+                          <X className="w-4 h-4" />
+                          {t.deleteAvatar}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">{t.avatarInfo}</p>
+                </div>
+
                 {/* Banner Upload */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">{t.banner}</label>
@@ -903,41 +1084,41 @@ const MyProfile = () => {
                         alt="Banner preview" 
                         className="w-full h-32 object-cover"
                       />
-                      <button
-                        onClick={handleBannerDelete}
-                        type="button"
-                        className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
-                      >
-                        <X className="w-4 h-4 text-white" />
-                      </button>
+                      {uploadingBanner && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <Loader2 className="w-8 h-8 text-white animate-spin" />
+                        </div>
+                      )}
+                      {!uploadingBanner && (
+                        <button
+                          onClick={handleBannerDelete}
+                          type="button"
+                          className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
+                        >
+                          <X className="w-4 h-4 text-white" />
+                        </button>
+                      )}
                     </div>
                   )}
-                  <div className="flex gap-2">
-                    <label className="flex-1 cursor-pointer">
-                      <div className={`px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all`}>
-                        {bannerFile ? bannerFile.name : t.uploadBanner}
-                      </div>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/gif"
-                        onChange={handleBannerChange}
-                        className="hidden"
-                      />
-                    </label>
-                    {bannerFile && (
-                      <button
-                        onClick={handleBannerUpload}
-                        disabled={uploadingBanner}
-                        className={`px-4 py-3 bg-gradient-to-r ${gradientFrom} ${gradientTo} hover:opacity-90 disabled:opacity-50 text-white font-medium rounded-xl transition-all flex items-center gap-2`}
-                      >
-                        {uploadingBanner ? (
+                  <label className={`block cursor-pointer ${uploadingBanner ? 'pointer-events-none opacity-50' : ''}`}>
+                    <div className={`px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all flex items-center justify-center gap-2`}>
+                      {uploadingBanner ? (
+                        <>
                           <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4" />
-                        )}
-                      </button>
-                    )}
-                  </div>
+                          <span>Upload en cours...</span>
+                        </>
+                      ) : (
+                        t.uploadBanner
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/gif"
+                      onChange={handleBannerChange}
+                      className="hidden"
+                      disabled={uploadingBanner}
+                    />
+                  </label>
                   <p className="text-xs text-gray-500 mt-1">{t.bannerInfo}</p>
                 </div>
 

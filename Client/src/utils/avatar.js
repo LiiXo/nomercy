@@ -21,6 +21,23 @@ export const getDefaultAvatar = (name) => {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=${colors[colorIndex]}&color=fff&size=128&bold=true`;
 };
 
+const API_URL = 'https://api-nomercy.ggsecure.io';
+
+/**
+ * Get the full avatar URL, handling custom uploads and Discord avatars
+ * @param {string} avatar - The avatar path or URL
+ * @returns {string} - The full avatar URL
+ */
+export const getAvatarUrl = (avatar) => {
+  if (!avatar) return null;
+  // Custom uploaded avatar - needs API URL prefix
+  if (avatar.startsWith('/uploads/')) {
+    return `${API_URL}${avatar}`;
+  }
+  // Already a full URL (Discord, etc.)
+  return avatar;
+};
+
 /**
  * Get the avatar URL for a user, falling back to default if none is set
  * @param {object} user - User object with avatar property
@@ -28,9 +45,20 @@ export const getDefaultAvatar = (name) => {
  */
 export const getUserAvatar = (user) => {
   if (!user) return getDefaultAvatar(null);
-  if (user.avatar) return user.avatar;
+  
+  // Check for avatar (can be custom upload or Discord URL)
+  if (user.avatar) {
+    return getAvatarUrl(user.avatar);
+  }
+  
+  // Check for avatarUrl (virtual from backend)
+  if (user.avatarUrl) {
+    return getAvatarUrl(user.avatarUrl);
+  }
+  
   return getDefaultAvatar(user.username || user.discordUsername);
 };
+
 
 
 

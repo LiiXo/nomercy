@@ -4,6 +4,8 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock } from 'lucide-react';
 
+import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
+
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
 const PlayerProfile = () => {
@@ -336,7 +338,7 @@ const PlayerProfile = () => {
                   isHardcore ? 'border-red-500/50' : 'border-cyan-500/50'
                 } bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center text-5xl font-bold text-dark-950 overflow-hidden transition-all duration-300 group-hover:scale-105`} 
                   style={{ 
-                    backgroundImage: playerData.avatar ? `url(${playerData.avatar})` : 'none', 
+                    backgroundImage: playerData.avatar ? `url(${getAvatarUrl(playerData.avatar)})` : 'none', 
                     backgroundSize: 'cover', 
                     backgroundPosition: 'center',
                   }}>

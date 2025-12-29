@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { Trophy, Users, Shield, Medal, Target, ChevronLeft, ChevronRight, Crown, Clock, MapPin, Shuffle, Play, Filter, X, Coins, Loader2, Zap } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -127,7 +127,7 @@ const CDLDashboard = () => {
             rank: idx + 1,
             id: r.user?._id,
             player: r.user?.username || (language === 'fr' ? 'Compte supprimé' : 'Deleted account'),
-            avatar: r.user?.avatarUrl || r.user?.avatar || null,
+            avatar: getAvatarUrl(r.user?.avatarUrl || r.user?.avatar) || null,
             points: r.points
           })));
         }
@@ -511,7 +511,7 @@ const CDLDashboard = () => {
                           </div>
                           {player.avatar && (
                             <img 
-                              src={player.avatar} 
+                              src={getAvatarUrl(player.avatar) || player.avatar} 
                               alt="" 
                               className="w-6 h-6 rounded-full"
                               onError={(e) => e.target.style.display = 'none'}

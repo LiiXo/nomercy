@@ -1,9 +1,46 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const router = express.Router();
+
+// Configure multer for squad banner upload
+const squadBannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/squad-banners');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'squad-banner-' + req.params.squadId + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const squadBannerUpload = multer({
+  storage: squadBannerStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG, JPEG, JPG and GIF files are allowed'));
+    }
+  }
+});
 
 // Regex for validating squad names and tags (no special characters)
 // Allows letters (including accented), numbers, spaces, hyphens, underscores
@@ -711,6 +748,101 @@ router.post('/:squadId/kick/:userId', verifyToken, async (req, res) => {
   }
 });
 
+// Upload squad banner (leader only)
+router.post('/:squadId/upload-banner', verifyToken, squadBannerUpload.single('banner'), async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const userId = req.user._id;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    if (!squad.isLeader(userId)) {
+      // Delete uploaded file
+      fs.unlinkSync(req.file.path);
+      return res.status(403).json({ success: false, message: 'Seul le leader peut modifier la bannière' });
+    }
+
+    // Delete old banner if exists
+    if (squad.banner) {
+      const oldBannerPath = path.join(__dirname, '../../uploads/squad-banners', path.basename(squad.banner));
+      if (fs.existsSync(oldBannerPath)) {
+        fs.unlinkSync(oldBannerPath);
+      }
+    }
+
+    // Save banner URL
+    const bannerUrl = `/uploads/squad-banners/${req.file.filename}`;
+    squad.banner = bannerUrl;
+    await squad.save();
+
+    res.json({
+      success: true,
+      message: 'Bannière téléchargée avec succès',
+      bannerUrl
+    });
+  } catch (error) {
+    console.error('Squad banner upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Erreur lors du téléchargement de la bannière'
+    });
+  }
+});
+
+// Delete squad banner (leader only)
+router.delete('/:squadId/delete-banner', verifyToken, async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const userId = req.user._id;
+
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+
+    if (!squad.isLeader(userId)) {
+      return res.status(403).json({ success: false, message: 'Seul le leader peut supprimer la bannière' });
+    }
+
+    if (!squad.banner) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucune bannière à supprimer'
+      });
+    }
+
+    // Delete banner file
+    const bannerPath = path.join(__dirname, '../../uploads/squad-banners', path.basename(squad.banner));
+    if (fs.existsSync(bannerPath)) {
+      fs.unlinkSync(bannerPath);
+    }
+
+    squad.banner = null;
+    await squad.save();
+
+    res.json({
+      success: true,
+      message: 'Bannière supprimée avec succès'
+    });
+  } catch (error) {
+    console.error('Squad banner delete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la suppression de la bannière'
+    });
+  }
+});
+
 // Update squad settings (leader only)
 router.put('/:squadId', verifyToken, async (req, res) => {
   try {
@@ -779,9 +911,9 @@ router.post('/:squadId/generate-invite', verifyToken, async (req, res) => {
       if (!existing) isUnique = true;
     }
     
-    // Set expiration to 7 days from now
+    // Set expiration to 15 minutes from now
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    expiresAt.setTime(expiresAt.getTime() + 15 * 60 * 1000);
     
     squad.inviteCode = inviteCode;
     squad.inviteCodeExpiresAt = expiresAt;

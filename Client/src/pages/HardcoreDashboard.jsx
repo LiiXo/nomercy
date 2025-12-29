@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { io } from 'socket.io-client';
 import { Trophy, Users, Skull, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap } from 'lucide-react';
 
@@ -912,7 +912,7 @@ const HardcoreDashboard = () => {
             rank: idx + 1,
             id: r.user?._id,
             player: r.user?.username || 'Deleted',
-            avatar: r.user?.avatarUrl || r.user?.avatar || null,
+            avatar: getAvatarUrl(r.user?.avatarUrl || r.user?.avatar) || null,
             points: r.points
           })));
         }
@@ -1453,7 +1453,7 @@ const HardcoreDashboard = () => {
                 {mySquad.members?.map((member) => {
                   const memberUser = member.user;
                   const isSelected = selectedRoster.includes(memberUser._id);
-                  const avatar = memberUser.avatarUrl || memberUser.avatar || getDefaultAvatar(memberUser.username);
+                  const avatar = getAvatarUrl(memberUser.avatarUrl || memberUser.avatar) || getDefaultAvatar(memberUser.username);
                   
                   return (
                     <div
@@ -1488,7 +1488,7 @@ const HardcoreDashboard = () => {
               {selectedHelper ? (
                 <div className="p-3 rounded-xl bg-yellow-500/20 border border-yellow-500/50">
                   <div className="flex items-center gap-3">
-                    <img src={selectedHelper.avatarUrl || selectedHelper.avatar || getDefaultAvatar(selectedHelper.username)} alt="" className="w-9 h-9 rounded-full object-cover" />
+                    <img src={getAvatarUrl(selectedHelper.avatarUrl || selectedHelper.avatar) || getDefaultAvatar(selectedHelper.username)} alt="" className="w-9 h-9 rounded-full object-cover" />
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-medium text-sm truncate">{selectedHelper.username}</p>
                       {selectedHelper.activisionId && <p className="text-gray-500 text-xs truncate">{selectedHelper.activisionId}</p>}
@@ -1513,7 +1513,7 @@ const HardcoreDashboard = () => {
                     <div className="absolute top-full left-0 right-0 mt-2 glass rounded-xl overflow-hidden z-10 shadow-xl">
                       {helperSearchResults.map((user) => (
                         <div key={user._id} onClick={() => selectHelper(user)} className="p-3 hover:bg-white/5 cursor-pointer flex items-center gap-3">
-                          <img src={user.avatarUrl || user.avatar || getDefaultAvatar(user.username)} alt="" className="w-8 h-8 rounded-full object-cover" />
+                          <img src={getAvatarUrl(user.avatarUrl || user.avatar) || getDefaultAvatar(user.username)} alt="" className="w-8 h-8 rounded-full object-cover" />
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm truncate">{user.username}</p>
                             {user.activisionId && <p className="text-gray-500 text-xs truncate">{user.activisionId}</p>}

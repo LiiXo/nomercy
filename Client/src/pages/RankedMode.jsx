@@ -10,6 +10,8 @@ import {
   ChevronRight, ChevronLeft, AlertCircle, Check, User
 } from 'lucide-react';
 
+import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
+
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
@@ -1072,7 +1074,7 @@ const RankedMode = () => {
                       >
                         <div className="relative">
                           <img
-                            src={player.user?.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${player.user?.username}`}
+                            src={getAvatarUrl(player.user?.avatar || player.user?.avatarUrl) || getDefaultAvatar(player.user?.username)}
                             alt={player.user?.username}
                             className="w-10 h-10 rounded-full object-cover border-2 border-dark-600"
                           />

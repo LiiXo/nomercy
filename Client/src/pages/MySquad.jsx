@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   Users, Crown, Shield, UserMinus, Settings, Plus, Search, 
   Loader2, AlertCircle, Trophy, Medal, ChevronRight, Star,
@@ -433,7 +433,7 @@ const MySquad = () => {
   // Get avatar
   const getAvatar = (member) => {
     const u = member.user || member;
-    return u.avatarUrl || u.avatar || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username));
+    return getAvatarUrl(u.avatarUrl || u.avatar) || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username));
   };
 
   // Check if user is leader or officer
@@ -748,13 +748,27 @@ const MySquad = () => {
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${borderColor} overflow-hidden shadow-xl mb-6`}>
             {/* Banner */}
             <div className="relative h-32 sm:h-40">
-              <div 
-                className="absolute inset-0"
-                style={{ 
-                  background: `linear-gradient(135deg, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}40 0%, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}10 50%, transparent 100%)`
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/50 to-transparent" />
+              {squad.banner ? (
+                <>
+                  <img 
+                    src={squad.banner.startsWith('/uploads') ? `https://api-nomercy.ggsecure.io${squad.banner}` : squad.banner}
+                    alt="Squad banner"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/50 to-transparent" />
+                </>
+              ) : (
+                <>
+                  <div 
+                    className="absolute inset-0"
+                    style={{ 
+                      background: `linear-gradient(135deg, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}40 0%, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}10 50%, transparent 100%)`
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/50 to-transparent" />
+                </>
+              )}
               
               {/* Quick Actions */}
               <div className="absolute top-4 right-4 flex gap-2">
@@ -987,9 +1001,9 @@ const MySquad = () => {
                   </h2>
                 </div>
                 <div className="p-4">
-                  {squad.ladderRegistrations && squad.ladderRegistrations.length > 0 ? (
+                  {squad.registeredLadders && squad.registeredLadders.length > 0 ? (
                     <div className="space-y-2">
-                      {squad.ladderRegistrations.map((ladder, idx) => (
+                      {squad.registeredLadders.map((ladder, idx) => (
                         <div
                           key={idx}
                           className={`flex items-center justify-between p-3 rounded-xl bg-${accentColor}-500/10 border border-${accentColor}-500/20`}

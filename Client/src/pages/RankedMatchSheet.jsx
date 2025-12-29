@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { io } from 'socket.io-client';
 import { 
   ArrowLeft, Trophy, Users, Clock, Coins, Send, Loader2, 
@@ -272,7 +272,7 @@ const RankedMatchSheet = () => {
   const getAvatar = (player) => {
     if (!player) return getDefaultAvatar('?');
     const u = player.user || player;
-    return u.avatarUrl || u.avatar || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username || '?'));
+    return getAvatarUrl(u.avatarUrl || u.avatar) || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username || '?'));
   };
 
   // Fetch match data

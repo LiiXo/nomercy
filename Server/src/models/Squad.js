@@ -114,6 +114,12 @@ const squadSchema = new mongoose.Schema({
     default: ''
   },
   
+  // Banner image (uploaded)
+  banner: {
+    type: String, // Banner image URL (PNG, JPEG, GIF - max 10MB)
+    default: null
+  },
+  
   // Banner color
   color: {
     type: String,

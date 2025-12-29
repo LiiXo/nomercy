@@ -42,6 +42,12 @@ const startServer = async () => {
   const app = express();
   const httpServer = createServer(app);
   const PORT = process.env.PORT || 5000;
+  
+  // Import path for static files
+  const path = (await import('path')).default;
+  const { fileURLToPath } = await import('url');
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
 
   // Socket.io configuration
   const io = new Server(httpServer, {
@@ -123,6 +129,9 @@ const startServer = async () => {
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
   app.use(cookieParser());
   app.use(passport.initialize());
+
+  // Serve static files from uploads directory
+  app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
   // Routes
   app.use('/api/auth', authRoutes);

@@ -46,6 +46,36 @@ const bannerUpload = multer({
   }
 });
 
+// Configure multer for avatar upload
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../uploads/avatars');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'avatar-' + req.user._id + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG, JPEG, JPG and GIF files are allowed'));
+    }
+  }
+});
+
 // Search users (for finding helpers, etc.)
 router.get('/search', async (req, res) => {
   try {
@@ -223,6 +253,75 @@ router.delete('/delete-banner', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting banner'
+    });
+  }
+});
+
+// Upload avatar
+router.post('/upload-avatar', verifyToken, avatarUpload.single('avatar'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    // Delete old custom avatar if exists (not Discord avatar)
+    if (req.user.avatar && req.user.avatar.startsWith('/uploads/avatars/')) {
+      const oldAvatarPath = path.join(__dirname, '../../uploads/avatars', path.basename(req.user.avatar));
+      if (fs.existsSync(oldAvatarPath)) {
+        fs.unlinkSync(oldAvatarPath);
+      }
+    }
+
+    // Save avatar URL
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    req.user.avatar = avatarUrl;
+    await req.user.save();
+
+    res.json({
+      success: true,
+      message: 'Avatar uploaded successfully',
+      avatarUrl
+    });
+  } catch (error) {
+    console.error('Avatar upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Error uploading avatar'
+    });
+  }
+});
+
+// Delete avatar (revert to Discord avatar)
+router.delete('/delete-avatar', verifyToken, async (req, res) => {
+  try {
+    if (!req.user.avatar || !req.user.avatar.startsWith('/uploads/avatars/')) {
+      return res.status(400).json({
+        success: false,
+        message: 'No custom avatar to delete'
+      });
+    }
+
+    // Delete avatar file
+    const avatarPath = path.join(__dirname, '../../uploads/avatars', path.basename(req.user.avatar));
+    if (fs.existsSync(avatarPath)) {
+      fs.unlinkSync(avatarPath);
+    }
+
+    req.user.avatar = null; // Will fallback to Discord avatar via avatarUrl virtual
+    await req.user.save();
+
+    res.json({
+      success: true,
+      message: 'Avatar deleted successfully'
+    });
+  } catch (error) {
+    console.error('Avatar delete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting avatar'
     });
   }
 });

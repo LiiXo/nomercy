@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { getDefaultAvatar } from '../utils/avatar';
+import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   ArrowLeft, Trophy, Medal, Shield, Users, Calendar, Crown, Loader2, 
   AlertCircle, TrendingUp, Target, UserPlus, Lock, Check, X, Send, Award,
@@ -336,8 +336,8 @@ const SquadProfile = () => {
 
   // Get member avatar
   const getMemberAvatar = (member) => {
-    if (member.user?.avatar) return member.user.avatar;
-    if (member.user?.avatarUrl) return member.user.avatarUrl;
+    if (member.user?.avatar) return getAvatarUrl(member.user.avatar);
+    if (member.user?.avatarUrl) return getAvatarUrl(member.user.avatarUrl);
     return getDefaultAvatar(member.user?.username);
   };
 
@@ -485,7 +485,21 @@ const SquadProfile = () => {
           </button>
 
           {/* Header */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-8 mb-6`}>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-6`}>
+            {/* Banner */}
+            {squad.banner && (
+              <div className="w-full h-32 sm:h-40 relative overflow-hidden">
+                <img 
+                  src={squad.banner.startsWith('/uploads') ? `https://api-nomercy.ggsecure.io${squad.banner}` : squad.banner}
+                  alt="Squad banner"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-dark-900/80"></div>
+              </div>
+            )}
+            
+            <div className={`p-8 ${squad.banner ? '-mt-12 relative' : ''}`}>
             <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
               <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6">
                 <div className="relative">
@@ -594,10 +608,12 @@ const SquadProfile = () => {
                     {joinStatus.reason}
                   </div>
                 ) : null}
+              </div>
             </div>
           </div>
+          </div>
 
-            {/* Trophies Section */}
+          {/* Trophies Section */}
             {(() => {
               // Combine default trophies and squad-specific trophies
               const squadTrophyIds = squad.trophies?.map(t => t.trophy?._id || t.trophy) || [];
@@ -654,7 +670,6 @@ const SquadProfile = () => {
                 </div>
               );
             })()}
-          </div>
 
           {/* Stats */}
           <div className="grid md:grid-cols-4 gap-4 mb-6">
@@ -855,8 +870,8 @@ const SquadProfile = () => {
               </div>
             )}
           </div>
-            </div>
-          </div>
+        </div>
+      </div>
 
       {/* Join Request Modal */}
       {showJoinModal && (
@@ -1029,7 +1044,7 @@ const SquadProfile = () => {
                             {selectedMatch.challengerRoster?.map((p, idx) => (
                               <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                                 <img 
-                                  src={p.user?.avatarUrl || getDefaultAvatar(p.user?.username)}
+                                  src={getAvatarUrl(p.user?.avatarUrl || p.user?.avatar) || getDefaultAvatar(p.user?.username)}
                                   alt=""
                                   className="w-8 h-8 rounded-full"
                                 />
@@ -1079,7 +1094,7 @@ const SquadProfile = () => {
                             {selectedMatch.opponentRoster?.map((p, idx) => (
                               <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                                 <img 
-                                  src={p.user?.avatarUrl || getDefaultAvatar(p.user?.username)}
+                                  src={getAvatarUrl(p.user?.avatarUrl || p.user?.avatar) || getDefaultAvatar(p.user?.username)}
                                   alt=""
                                   className="w-8 h-8 rounded-full"
                                 />

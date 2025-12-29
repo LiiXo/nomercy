@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import GameModeRulesEditor from '../components/GameModeRulesEditor';
+import { getAvatarUrl } from '../utils/avatar';
 import { 
   ArrowLeft, Shield, Package, Users, BarChart3, Plus, Edit2, Trash2, 
   Save, X, Loader2, Search, ChevronDown, Eye, EyeOff, Coins, TrendingUp,
@@ -1216,7 +1217,7 @@ const AdminPanel = () => {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={user.avatarUrl || '/avatar.jpg'}
+                            src={getAvatarUrl(user.avatarUrl || user.avatar) || '/avatar.jpg'}
                             alt=""
                             className="w-10 h-10 rounded-full"
                           />
@@ -1546,7 +1547,7 @@ const AdminPanel = () => {
                       {squad.members.map((member, idx) => {
                         const userId = member.user?._id || member.user;
                         const username = member.user?.username || member.user?.discordUsername || 'Inconnu';
-                        const avatarUrl = member.user?.avatarUrl || '/avatar.jpg';
+                        const avatarUrl = getAvatarUrl(member.user?.avatarUrl || member.user?.avatar) || '/avatar.jpg';
                         const isLeader = userId?.toString() === squad.leader?._id?.toString() || userId?.toString() === squad.leader?.toString();
                         
                         return (
@@ -2373,7 +2374,7 @@ const renderDisputes = () => {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <img
-                            src={ranking.user?.avatarUrl || '/avatar.jpg'}
+                            src={getAvatarUrl(ranking.user?.avatarUrl || ranking.user?.avatar) || '/avatar.jpg'}
                                 alt=""
                             className="w-10 h-10 rounded-full"
                               />
@@ -3867,7 +3868,7 @@ const renderDisputes = () => {
                 <p className="text-sm text-purple-400">Administrateur</p>
                 </div>
               <img
-                src={user?.avatarUrl || '/avatar.jpg'}
+                src={getAvatarUrl(user?.avatarUrl || user?.avatar) || '/avatar.jpg'}
                 alt="Avatar"
                 className="w-12 h-12 rounded-full border-2 border-purple-500"
               />

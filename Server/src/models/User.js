@@ -116,7 +116,13 @@ const userSchema = new mongoose.Schema({
 
 // Virtual for full avatar URL
 userSchema.virtual('avatarUrl').get(function() {
+  // If custom avatar is set (uploaded), return full URL
+  if (this.avatar && this.avatar.startsWith('/uploads/avatars/')) {
+    return `https://api-nomercy.ggsecure.io${this.avatar}`;
+  }
+  // If avatar is already a full URL, return it
   if (this.avatar) return this.avatar;
+  // Fallback to Discord avatar
   if (this.discordAvatar && this.discordId) {
     return `https://cdn.discordapp.com/avatars/${this.discordId}/${this.discordAvatar}.png`;
   }

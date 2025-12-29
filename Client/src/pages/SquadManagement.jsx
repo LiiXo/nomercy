@@ -43,6 +43,10 @@ const SquadManagement = () => {
   // Logo upload
   const [uploadingLogo, setUploadingLogo] = useState(false);
   
+  // Banner upload
+  const [banner, setBanner] = useState('');
+  const [uploadingBanner, setUploadingBanner] = useState(false);
+  
   // Confirm modals
   const [confirmAction, setConfirmAction] = useState(null);
   const [ladderToUnregister, setLadderToUnregister] = useState(null);
@@ -109,6 +113,12 @@ const SquadManagement = () => {
       uploadLogo: 'Uploader un logo',
       logoHint: 'Image ou GIF (max 5MB)',
       removeLogo: 'Supprimer le logo',
+      squadBanner: 'Bannière de l\'escouade',
+      uploadBanner: 'Uploader une bannière',
+      bannerHint: 'PNG, JPEG, GIF - Max 10MB',
+      removeBanner: 'Supprimer la bannière',
+      bannerUploaded: 'Bannière téléchargée !',
+      bannerDeleted: 'Bannière supprimée !',
       ladders: 'Classements',
       registeredLadders: 'Classements inscrits',
       noLadders: 'Aucune inscription à un classement',
@@ -178,6 +188,12 @@ const SquadManagement = () => {
       uploadLogo: 'Upload logo',
       logoHint: 'Image or GIF (max 5MB)',
       removeLogo: 'Remove logo',
+      squadBanner: 'Squad banner',
+      uploadBanner: 'Upload banner',
+      bannerHint: 'PNG, JPEG, GIF - Max 10MB',
+      removeBanner: 'Remove banner',
+      bannerUploaded: 'Banner uploaded!',
+      bannerDeleted: 'Banner deleted!',
       ladders: 'Rankings',
       registeredLadders: 'Registered ladders',
       noLadders: 'Not registered to any ladder',
@@ -354,6 +370,7 @@ const SquadManagement = () => {
         setIsPublic(data.squad.isPublic);
         setColor(data.squad.color || '#ef4444');
         setLogo(data.squad.logo || '');
+        setBanner(data.squad.banner || '');
         setInviteCode(data.squad.inviteCode || '');
         setInviteExpires(data.squad.inviteCodeExpiresAt || null);
       } else {
@@ -725,6 +742,91 @@ const SquadManagement = () => {
       setError('Erreur serveur');
     } finally {
       setUploadingLogo(false);
+    }
+  };
+
+  // Handle banner upload
+  const handleBannerUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Check file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setError(language === 'fr' 
+        ? 'Le fichier est trop volumineux (max 10MB)' 
+        : 'File is too large (max 10MB)');
+      return;
+    }
+    
+    // Check file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/jpg'];
+    if (!allowedTypes.includes(file.type)) {
+      setError(language === 'fr' ? 'Type de fichier non supporté' : 'File type not supported');
+      return;
+    }
+    
+    setUploadingBanner(true);
+    setError('');
+    
+    try {
+      const formData = new FormData();
+      formData.append('banner', file);
+      
+      const response = await fetch(`${API_URL}/squads/${squad._id}/upload-banner`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setBanner(data.bannerUrl);
+        setSuccess(t.bannerUploaded || 'Banner uploaded!');
+        // Refresh squad data
+        const squadResponse = await fetch(`${API_URL}/squads/my-squad`, { credentials: 'include' });
+        const squadData = await squadResponse.json();
+        if (squadData.success) {
+          setSquad(squadData.squad);
+        }
+      } else {
+        setError(data.message || 'Upload error');
+      }
+    } catch (err) {
+      console.error('Banner upload error:', err);
+      setError(language === 'fr' ? 'Erreur serveur' : 'Server error');
+    } finally {
+      setUploadingBanner(false);
+    }
+  };
+
+  // Remove banner
+  const handleRemoveBanner = async () => {
+    try {
+      setUploadingBanner(true);
+      const response = await fetch(`${API_URL}/squads/${squad._id}/delete-banner`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setBanner('');
+        setSuccess(t.bannerDeleted || 'Banner deleted!');
+        // Refresh squad data
+        const squadResponse = await fetch(`${API_URL}/squads/my-squad`, { credentials: 'include' });
+        const squadData = await squadResponse.json();
+        if (squadData.success) {
+          setSquad(squadData.squad);
+        }
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      setError('Erreur serveur');
+    } finally {
+      setUploadingBanner(false);
     }
   };
 
@@ -1312,6 +1414,68 @@ const SquadManagement = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Squad Banner */}
+                {isLeader && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-3">
+                      <Image className="w-4 h-4 inline mr-2" />
+                      {t.squadBanner}
+                    </label>
+                    
+                    {/* Banner Preview */}
+                    {banner && (
+                      <div className="mb-3 relative rounded-xl overflow-hidden border border-white/10">
+                        <img 
+                          src={banner.startsWith('/uploads') ? `https://api-nomercy.ggsecure.io${banner}` : banner}
+                          alt="Squad banner" 
+                          className="w-full h-32 object-cover"
+                        />
+                        {uploadingBanner && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-white animate-spin" />
+                          </div>
+                        )}
+                        {!uploadingBanner && (
+                          <button
+                            onClick={handleRemoveBanner}
+                            type="button"
+                            className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
+                          >
+                            <X className="w-4 h-4 text-white" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Upload Button */}
+                    <label className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg cursor-pointer transition-colors ${
+                      uploadingBanner 
+                        ? 'bg-gray-700/50 text-gray-500 pointer-events-none' 
+                        : `bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30`
+                    }`}>
+                      {uploadingBanner ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-sm font-medium">Upload en cours...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span className="text-sm font-medium">{t.uploadBanner}</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/gif,image/jpg"
+                        onChange={handleBannerUpload}
+                        disabled={uploadingBanner}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-gray-500 text-xs mt-2">{t.bannerHint}</p>
+                  </div>
+                )}
 
                 {/* Invite Link */}
                 <div>
