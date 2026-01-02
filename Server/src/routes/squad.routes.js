@@ -58,6 +58,44 @@ const isValidSquadTag = (tag) => {
   return VALID_TAG_REGEX.test(tag);
 };
 
+// Get all squads (public, with pagination and search)
+router.get('/all', async (req, res) => {
+  try {
+    const { page = 1, limit = 30, search = '' } = req.query;
+    
+    const query = { isDeleted: { $ne: true } };
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { tag: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    const squads = await Squad.find(query)
+      .select('name tag color logo description members mode stats createdAt isPublic')
+      .sort({ 'stats.totalPoints': -1, 'stats.totalWins': -1, createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await Squad.countDocuments(query);
+    
+    res.json({
+      success: true,
+      squads,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get all squads error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Get user's current squad
 router.get('/my-squad', verifyToken, async (req, res) => {
   try {

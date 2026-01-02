@@ -21,6 +21,7 @@ import RankedMode from './pages/RankedMode';
 import Shop from './pages/Shop';
 import PlayerProfile from './pages/PlayerProfile';
 import SquadProfile from './pages/SquadProfile';
+import AllSquads from './pages/AllSquads';
 import SetupProfile from './pages/SetupProfile';
 import MyProfile from './pages/MyProfile';
 import SquadManagement from './pages/SquadManagement';
@@ -351,6 +352,16 @@ function AppContent() {
               <ProtectedRoute>
                 <PageTransition>
                   <PlayerProfile />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/squads" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <AllSquads />
                 </PageTransition>
               </ProtectedRoute>
             } 

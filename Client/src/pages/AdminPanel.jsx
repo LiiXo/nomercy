@@ -2033,7 +2033,7 @@ const renderDisputes = () => {
                         <code className="text-gray-500 text-xs">{match._id}</code>
                       </div>
                       <h3 className="text-white font-bold text-lg">
-                        {match.challengerInfo?.name} [{match.challengerInfo?.tag}] vs {match.opponentInfo?.name} [{match.opponentInfo?.tag}]
+                        {match.challenger?.name || match.challengerInfo?.name || 'Team 1'} [{match.challenger?.tag || match.challengerInfo?.tag || '???'}] vs {match.opponent?.name || match.opponentInfo?.name || 'Team 2'} [{match.opponent?.tag || match.opponentInfo?.tag || '???'}]
                       </h3>
                       <p className="text-gray-400 text-sm">
                         Mode: {match.mode} • Ladder: {match.ladder} • {formatDate(match.createdAt)}

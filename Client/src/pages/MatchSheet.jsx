@@ -56,6 +56,11 @@ const MatchSheet = () => {
   const [rewardsConfig, setRewardsConfig] = useState(null);
   const [showCombatReport, setShowCombatReport] = useState(false);
   const [hasSeenCombatReport, setHasSeenCombatReport] = useState(false);
+  
+  // GGSecure status tracking for PC players
+  const [ggsecureStatuses, setGgsecureStatuses] = useState({});
+  const ggsecureStatusesRef = useRef({});
+  const lastGGSecureMessageRef = useRef({}); // Track last message sent for each player to avoid duplicates
 
   // Translations
   const t = {
@@ -615,6 +620,123 @@ const MatchSheet = () => {
     const interval = setInterval(() => fetchMatchData(false), 30000);
     return () => clearInterval(interval);
   }, [initialLoadDone, matchId]);
+
+  // GGSecure status monitoring for PC players
+  const checkPlayerGGSecure = async (playerId) => {
+    try {
+      const response = await fetch(`${API_URL}/users/anticheat-status/${playerId}`);
+      const data = await response.json();
+      return data.isOnline || false;
+    } catch {
+      return null; // Error checking, don't change status
+    }
+  };
+
+  const sendGGSecureStatusMessage = async (playerId, username, isOnline) => {
+    // Avoid sending duplicate messages within 30 seconds
+    const now = Date.now();
+    const lastSent = lastGGSecureMessageRef.current[playerId];
+    if (lastSent && (now - lastSent.time) < 30000 && lastSent.status === isOnline) {
+      console.log(`[GGSecure] Skipping duplicate message for ${username}`);
+      return;
+    }
+    
+    // Check if someone else already sent this message recently (by checking chat history)
+    const recentGGSecureMsg = messages.slice(-10).find(m => 
+      m.isSystem && m.message?.includes(username) && m.message?.includes('GGSecure')
+    );
+    if (recentGGSecureMsg) {
+      const msgTime = new Date(recentGGSecureMsg.createdAt).getTime();
+      if ((now - msgTime) < 30000) {
+        console.log(`[GGSecure] Message already exists in chat for ${username}`);
+        lastGGSecureMessageRef.current[playerId] = { time: now, status: isOnline };
+        return;
+      }
+    }
+    
+    try {
+      await fetch(`${API_URL}/matches/${matchId}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          message: `🛡️ GGSecure ${isOnline ? 'ON' : 'OFF'} - ${username}`,
+          isSystemGGSecure: true
+        })
+      });
+      lastGGSecureMessageRef.current[playerId] = { time: now, status: isOnline };
+    } catch (err) {
+      console.error('Error sending GGSecure status message:', err);
+    }
+  };
+
+  // Check GGSecure status for all PC players in rosters
+  const checkAllGGSecureStatuses = async () => {
+    if (!match || (match.status !== 'in_progress' && match.status !== 'accepted')) return;
+    
+    // Get all PC players from both rosters
+    const allPlayers = [];
+    
+    if (match.challengerRoster) {
+      match.challengerRoster.forEach(p => {
+        if (p.user?.platform === 'PC') {
+          allPlayers.push({ 
+            id: p.user._id, 
+            username: p.user.username,
+            platform: p.user.platform
+          });
+        }
+      });
+    }
+    
+    if (match.opponentRoster) {
+      match.opponentRoster.forEach(p => {
+        if (p.user?.platform === 'PC') {
+          allPlayers.push({ 
+            id: p.user._id, 
+            username: p.user.username,
+            platform: p.user.platform
+          });
+        }
+      });
+    }
+    
+    if (allPlayers.length === 0) return;
+    
+    // Check each PC player's status
+    for (const player of allPlayers) {
+      const isOnline = await checkPlayerGGSecure(player.id);
+      
+      // Skip if error checking
+      if (isOnline === null) continue;
+      
+      const previousStatus = ggsecureStatusesRef.current[player.id];
+      
+      // If status changed (and we had a previous status to compare)
+      if (previousStatus !== undefined && previousStatus !== isOnline) {
+        console.log(`[GGSecure] Status changed for ${player.username}: ${previousStatus} -> ${isOnline}`);
+        // Send message to chat
+        await sendGGSecureStatusMessage(player.id, player.username, isOnline);
+      }
+      
+      // Update status
+      ggsecureStatusesRef.current[player.id] = isOnline;
+      setGgsecureStatuses(prev => ({ ...prev, [player.id]: isOnline }));
+    }
+  };
+
+  // Start GGSecure monitoring when match is in progress
+  useEffect(() => {
+    if (!match || (match.status !== 'in_progress' && match.status !== 'accepted')) return;
+    
+    // Initial check
+    checkAllGGSecureStatuses();
+    
+    // Check every 15 seconds
+    const interval = setInterval(checkAllGGSecureStatuses, 15000);
+    
+    return () => clearInterval(interval);
+  }, [match?.status, match?.challengerRoster, match?.opponentRoster]);
 
   // Socket.io connection for real-time updates
   useEffect(() => {
@@ -1572,6 +1694,17 @@ const MatchSheet = () => {
                 ref={chatContainerRef}
                 className={`flex-1 bg-dark-950/50 rounded-lg p-2 sm:p-3 mb-2 sm:mb-3 overflow-y-auto max-h-[200px] sm:max-h-[250px] min-h-[120px] border ${match.status === 'disputed' ? 'border-orange-500/20' : 'border-white/5'}`}
               >
+                {/* Warning Message */}
+                <div className="mb-3 px-3 py-2 bg-orange-500/10 border border-orange-500/30 rounded-lg text-xs text-orange-400 text-center">
+                  ⚠️ {language === 'fr' 
+                    ? 'Rappel : Tout débordement, insulte ou comportement toxique peut entraîner des sanctions graves (ban temporaire ou permanent).' 
+                    : language === 'de'
+                      ? 'Erinnerung: Jegliche Beleidigungen oder toxisches Verhalten kann zu schweren Sanktionen führen (temporäre oder permanente Sperre).'
+                      : language === 'it'
+                        ? 'Promemoria: Qualsiasi insulto o comportamento tossico può comportare sanzioni gravi (ban temporaneo o permanente).'
+                        : 'Reminder: Any insults or toxic behavior may result in severe sanctions (temporary or permanent ban).'}
+                </div>
+                
                 {messages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
                     <p className="text-gray-600 text-sm">💬</p>
@@ -1726,8 +1859,25 @@ const MatchSheet = () => {
                             {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                           </div>
                           <div className="flex items-center gap-1">
-                            {player.platform && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                            {player.platform === 'PC' && (
+                              <span 
+                                className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                  ggsecureStatuses[player._id] === true 
+                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                                    : ggsecureStatuses[player._id] === false
+                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                    : 'bg-blue-500/20 text-blue-400'
+                                }`}
+                                title={ggsecureStatuses[player._id] === true ? 'GGSecure Online' : ggsecureStatuses[player._id] === false ? 'GGSecure Offline' : 'PC Player'}
+                              >
+                                {ggsecureStatuses[player._id] !== undefined && (
+                                  <span className={`w-1.5 h-1.5 rounded-full ${ggsecureStatuses[player._id] ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                                )}
+                                PC
+                              </span>
+                            )}
+                            {player.platform && player.platform !== 'PC' && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
                                 {player.platform}
                               </span>
                             )}
@@ -1768,8 +1918,25 @@ const MatchSheet = () => {
                               {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                             </div>
                             <div className="flex items-center gap-1">
-                              {player.platform && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                              {player.platform === 'PC' && (
+                                <span 
+                                  className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
+                                    ggsecureStatuses[player._id] === true 
+                                      ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                                      : ggsecureStatuses[player._id] === false
+                                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                      : 'bg-blue-500/20 text-blue-400'
+                                  }`}
+                                  title={ggsecureStatuses[player._id] === true ? 'GGSecure Online' : ggsecureStatuses[player._id] === false ? 'GGSecure Offline' : 'PC Player'}
+                                >
+                                  {ggsecureStatuses[player._id] !== undefined && (
+                                    <span className={`w-1.5 h-1.5 rounded-full ${ggsecureStatuses[player._id] ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                                  )}
+                                  PC
+                                </span>
+                              )}
+                              {player.platform && player.platform !== 'PC' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
                                   {player.platform}
                                 </span>
                               )}

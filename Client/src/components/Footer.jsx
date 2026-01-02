@@ -22,6 +22,7 @@ const Footer = () => {
     { label: t('rules'), href: '/rules', icon: <BookOpen className="w-3.5 h-3.5" />, isLink: true },
     { label: t('anticheat'), href: '/anticheat', icon: <Shield className="w-3.5 h-3.5" />, isLink: true },
     { label: 'Squad Hub', href: '/squad-hub', icon: <Users className="w-3.5 h-3.5" />, isLink: true },
+    { label: language === 'fr' ? 'Toutes les Escouades' : 'All Squads', href: '/squads', icon: <Users className="w-3.5 h-3.5" />, isLink: true },
   ];
 
   const legalLinks = [

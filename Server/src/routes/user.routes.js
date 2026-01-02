@@ -107,6 +107,11 @@ router.get('/search', async (req, res) => {
 
 // Check anticheat status for a player (GGSecure integration)
 // L'ID GGSecure est l'_id du joueur NoMercy
+// ID du projet NoMercy sur GGSecure
+const GGSECURE_PROJECT_ID = '693cef61be96745c4607e233';
+// Clé API GGSecure (à configurer dans .env : GGSECURE_API_KEY=votre_cle)
+const GGSECURE_API_KEY = process.env.GGSECURE_API_KEY;
+
 router.get('/anticheat-status/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -122,17 +127,58 @@ router.get('/anticheat-status/:userId', async (req, res) => {
       return res.json({ success: true, isOnline: true, reason: 'not_pc' });
     }
     
-    // Appeler l'API GGSecure en temps réel avec l'ID du joueur NoMercy
+    // Vérifier si la clé API est configurée
+    if (!GGSECURE_API_KEY) {
+      console.warn('[GGSecure] API key not configured! Add GGSECURE_API_KEY to .env file');
+      // Si pas de clé API, on laisse passer pour ne pas bloquer
+      return res.json({ 
+        success: true, 
+        isOnline: true, 
+        reason: 'api_key_missing',
+        message: 'GGSecure API key not configured'
+      });
+    }
+    
+    // Appeler l'API GGSecure en temps réel
     try {
-      const ggsecureResponse = await fetch(`https://api.ggsecure.io/api/v1/fingerprints/player/${userId}`);
-      const ggsecureData = await ggsecureResponse.json();
+      // L'endpoint qui a renvoyé 401 (donc qui existe et nécessite auth)
+      const ggsecureUrl = `https://api.ggsecure.io/api/v1/fingerprints/player/${userId}`;
       
-      if (ggsecureData.success && ggsecureData.data) {
-        const isOnline = ggsecureData.data.isOnline === true;
-        const isBanned = ggsecureData.data.banned === true;
+      console.log(`[GGSecure] Checking status for user ${user.username} (${userId})`);
+      
+      const response = await fetch(ggsecureUrl, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${GGSECURE_API_KEY}`,
+          'X-API-Key': GGSECURE_API_KEY
+        }
+      });
+      
+      console.log(`[GGSecure] HTTP ${response.status} from API`);
+      
+      if (response.ok) {
+        const ggsecureData = await response.json();
+        console.log(`[GGSecure] Response for ${user.username}:`, JSON.stringify(ggsecureData));
+        
+        // Vérifier isOnline dans différentes structures de réponse possibles
+        const isOnline = ggsecureData.data?.isOnline === true || 
+                         ggsecureData.isOnline === true ||
+                         ggsecureData.data?.online === true ||
+                         ggsecureData.online === true ||
+                         ggsecureData.data?.status === 'online' ||
+                         ggsecureData.status === 'online' ||
+                         ggsecureData.connected === true ||
+                         ggsecureData.data?.connected === true;
+        
+        const isBanned = ggsecureData.data?.banned === true || 
+                         ggsecureData.banned === true ||
+                         ggsecureData.data?.isBanned === true ||
+                         ggsecureData.isBanned === true;
         
         // Si le joueur est banni sur GGSecure, il ne peut pas jouer
         if (isBanned) {
+          console.log(`[GGSecure] User ${user.username} is BANNED`);
           return res.json({ 
             success: true, 
             isOnline: false, 
@@ -141,21 +187,39 @@ router.get('/anticheat-status/:userId', async (req, res) => {
           });
         }
         
+        console.log(`[GGSecure] User ${user.username} isOnline: ${isOnline}`);
         return res.json({ 
           success: true, 
           isOnline: isOnline
         });
-      } else {
-        // L'API GGSecure n'a pas trouvé le joueur (jamais lancé GGSecure)
+      } else if (response.status === 404) {
+        // Joueur non trouvé dans GGSecure
+        console.log(`[GGSecure] User ${user.username} not found in GGSecure`);
         return res.json({ 
           success: true, 
           isOnline: false, 
           reason: 'not_registered',
           message: 'Player not registered in GGSecure'
         });
+      } else if (response.status === 401) {
+        console.error('[GGSecure] Authentication failed - check API key');
+        return res.json({ 
+          success: true, 
+          isOnline: true, 
+          reason: 'auth_failed',
+          message: 'GGSecure authentication failed'
+        });
+      } else {
+        console.log(`[GGSecure] Unexpected HTTP ${response.status}`);
+        return res.json({ 
+          success: true, 
+          isOnline: true, 
+          reason: 'api_error',
+          message: `GGSecure returned HTTP ${response.status}`
+        });
       }
     } catch (ggsecureError) {
-      console.error('GGSecure API error:', ggsecureError);
+      console.error('[GGSecure] API error:', ggsecureError.message);
       // En cas d'erreur avec l'API GGSecure, on laisse passer pour ne pas bloquer
       return res.json({ 
         success: true, 
@@ -841,26 +905,36 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
 
     // If user has a squad, remove them from it
     if (req.user.squad) {
-      const squad = await Squad.findById(req.user.squad);
-      if (squad) {
-        // Remove user from squad members
-        squad.members = squad.members.filter(
-          m => m.user.toString() !== userId.toString()
-        );
-        
-        // If user was the leader and squad is now empty, delete the squad
-        if (squad.isLeader(userId) && squad.members.length === 0) {
-          await Squad.findByIdAndDelete(squad._id);
-        } else if (squad.isLeader(userId) && squad.members.length > 0) {
-          // Transfer leadership to the first officer or first member
-          const newLeader = squad.members.find(m => m.role === 'officer') || squad.members[0];
-          squad.leader = newLeader.user;
-          newLeader.role = 'leader';
-          await squad.save();
-        } else {
-          // Just save the squad without the deleted member
-          await squad.save();
+      try {
+        const squad = await Squad.findById(req.user.squad);
+        if (squad) {
+          // Check if user is the leader (with null safety)
+          const isUserLeader = squad.leader && squad.leader.toString() === userId.toString();
+          
+          // Remove user from squad members
+          squad.members = squad.members.filter(
+            m => m.user && m.user.toString() !== userId.toString()
+          );
+          
+          // If user was the leader and squad is now empty, delete the squad
+          if (isUserLeader && squad.members.length === 0) {
+            await Squad.findByIdAndDelete(squad._id);
+          } else if (isUserLeader && squad.members.length > 0) {
+            // Transfer leadership to the first officer or first member
+            const newLeader = squad.members.find(m => m.role === 'officer') || squad.members[0];
+            if (newLeader && newLeader.user) {
+              squad.leader = newLeader.user;
+              newLeader.role = 'leader';
+              await squad.save();
+            }
+          } else {
+            // Just save the squad without the deleted member
+            await squad.save();
+          }
         }
+      } catch (squadError) {
+        console.error('Error removing user from squad:', squadError);
+        // Continue with account deletion even if squad update fails
       }
     }
 
@@ -897,6 +971,7 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
 
     const users = await User.find(query)
       .populate('bannedBy', 'username discordUsername')
+      .populate('squad', 'name tag')
       .select('-__v')
       .sort({ createdAt: -1 })
       .limit(limit * 1)

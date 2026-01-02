@@ -10,7 +10,7 @@ import User from '../models/User.js';
 import AppSettings from '../models/AppSettings.js';
 import Map from '../models/Map.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
-import { getSquadMatchRewards } from '../utils/configHelper.js';
+import { getSquadMatchRewards, getRewardsConfig } from '../utils/configHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +51,21 @@ const disputeEvidenceUpload = multer({
 const isAdminOrStaff = (user) => {
   return user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 };
+
+// Obtenir la configuration publique des récompenses (pour RankingsInfo)
+router.get('/public-config', async (req, res) => {
+  try {
+    const config = await getRewardsConfig();
+    res.json({
+      success: true,
+      squadMatchRewards: config.squadMatchRewards,
+      rankedMatchRewards: config.rankedMatchRewards
+    });
+  } catch (error) {
+    console.error('Get public config error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 // Obtenir les matchs disponibles pour un ladder
 router.get('/available/:ladderId', async (req, res) => {
@@ -296,6 +311,8 @@ router.get('/history/:squadId', async (req, res) => {
       .populate('challenger', 'name tag color logo')
       .populate('opponent', 'name tag color logo')
       .populate('result.winner', 'name tag')
+      .populate('challengerRoster.user', 'username avatar avatarUrl')
+      .populate('opponentRoster.user', 'username avatar avatarUrl')
       .sort({ 'result.confirmedAt': -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit));
@@ -442,7 +459,7 @@ router.get('/:matchId', verifyToken, async (req, res) => {
 router.post('/:matchId/chat', verifyToken, async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { message } = req.body;
+    const { message, isSystemGGSecure } = req.body;
 
     if (!message || message.trim().length === 0) {
       return res.status(400).json({ success: false, message: 'Message requis' });
@@ -476,10 +493,11 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
 
     // Ajouter le message
     const newMessage = {
-      user: user._id,
-      squad: user.squad?._id || null,
+      user: isSystemGGSecure ? null : user._id,
+      squad: isSystemGGSecure ? null : (user.squad?._id || null),
       message: message.trim(),
-      isStaff: isStaff,
+      isStaff: isStaff && !isSystemGGSecure,
+      isSystem: isSystemGGSecure || false,
       createdAt: new Date()
     };
 
@@ -492,7 +510,7 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     // Message avec les infos de l'utilisateur
     const messageWithUser = {
       ...newMessage,
-      user: { _id: user._id, username: user.username, roles: user.roles }
+      user: isSystemGGSecure ? null : { _id: user._id, username: user.username, roles: user.roles }
     };
 
     // Émettre le message via Socket.io pour mise à jour en temps réel

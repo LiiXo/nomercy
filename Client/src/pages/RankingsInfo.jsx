@@ -1,19 +1,42 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { 
   ArrowLeft, Info, Trophy, Users, Clock, Target, 
   TrendingUp, Award, Shield, Zap, Star, Crown,
-  Calendar, CheckCircle, XCircle, AlertTriangle
+  Calendar, CheckCircle, XCircle, AlertTriangle, Coins, Loader2
 } from 'lucide-react';
+
+const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
 const RankingsInfo = () => {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { selectedMode } = useMode();
+  
+  const [config, setConfig] = useState(null);
+  const [loadingConfig, setLoadingConfig] = useState(true);
 
   const isHardcore = selectedMode === 'hardcore';
+  
+  // Fetch config on mount
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const response = await fetch(`${API_URL}/matches/public-config`);
+        const data = await response.json();
+        if (data.success) {
+          setConfig(data);
+        }
+      } catch (err) {
+        console.error('Error fetching config:', err);
+      } finally {
+        setLoadingConfig(false);
+      }
+    };
+    fetchConfig();
+  }, []);
   
   const colors = {
     primary: isHardcore ? 'red' : 'cyan',
@@ -437,31 +460,77 @@ const RankingsInfo = () => {
               </div>
               <p className="text-gray-300 leading-relaxed mb-6">{t.pointsSystemDesc}</p>
               
-              <div className="grid md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-5 h-5 text-green-400" />
-                    <h3 className="font-bold text-white">{t.victoryPoints}</h3>
-                  </div>
-                  <p className="text-green-400 text-sm">{t.victoryPointsDesc}</p>
+              {loadingConfig ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className={`w-8 h-8 animate-spin ${colors.text}`} />
                 </div>
+              ) : config?.squadMatchRewards ? (
+                <div className="space-y-6">
+                  {/* Squad Match Rewards */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-purple-400" />
+                      {language === 'fr' ? 'Matchs Squad (Ladder)' : 'Squad Matches (Ladder)'}
+                    </h3>
+                    <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+                        <Trophy className="w-6 h-6 text-green-400 mx-auto mb-2" />
+                        <p className="text-green-400 font-bold text-xl">+{config.squadMatchRewards.ladderPointsWin || 20}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Points Victoire' : 'Win Points'}</p>
+                      </div>
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
+                        <Target className="w-6 h-6 text-red-400 mx-auto mb-2" />
+                        <p className="text-red-400 font-bold text-xl">-{config.squadMatchRewards.ladderPointsLoss || 10}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Points Défaite' : 'Loss Points'}</p>
+                      </div>
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
+                        <Coins className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
+                        <p className="text-yellow-400 font-bold text-xl">+{config.squadMatchRewards.playerCoinsWin || 50}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Pièces Victoire' : 'Win Coins'}</p>
+                      </div>
+                      <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 text-center">
+                        <Zap className="w-6 h-6 text-cyan-400 mx-auto mb-2" />
+                        <p className="text-cyan-400 font-bold text-xl">{config.squadMatchRewards.playerXPWinMin || 450}-{config.squadMatchRewards.playerXPWinMax || 550}</p>
+                        <p className="text-gray-400 text-xs">XP {language === 'fr' ? 'Victoire' : 'Win'}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className={`${colors.bg} border ${colors.border} rounded-xl p-4`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className={`w-5 h-5 ${colors.text}`} />
+                      <h3 className="font-bold text-white">{t.rankingCalc}</h3>
+                    </div>
+                    <p className={`${colors.text} text-sm`}>{t.rankingCalcDesc}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="w-5 h-5 text-green-400" />
+                      <h3 className="font-bold text-white">{t.victoryPoints}</h3>
+                    </div>
+                    <p className="text-green-400 text-sm">{t.victoryPointsDesc}</p>
+                  </div>
 
-                <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <XCircle className="w-5 h-5 text-red-400" />
-                    <h3 className="font-bold text-white">{t.defeatPoints}</h3>
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <XCircle className="w-5 h-5 text-red-400" />
+                      <h3 className="font-bold text-white">{t.defeatPoints}</h3>
+                    </div>
+                    <p className="text-red-400 text-sm">{t.defeatPointsDesc}</p>
                   </div>
-                  <p className="text-red-400 text-sm">{t.defeatPointsDesc}</p>
-                </div>
 
-                <div className={`${colors.bg} border ${colors.border} rounded-xl p-4`}>
-                  <div className="flex items-center gap-2 mb-2">
-                    <TrendingUp className={`w-5 h-5 ${colors.text}`} />
-                    <h3 className="font-bold text-white">{t.rankingCalc}</h3>
+                  <div className={`${colors.bg} border ${colors.border} rounded-xl p-4`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className={`w-5 h-5 ${colors.text}`} />
+                      <h3 className="font-bold text-white">{t.rankingCalc}</h3>
+                    </div>
+                    <p className={`${colors.text} text-sm`}>{t.rankingCalcDesc}</p>
                   </div>
-                  <p className={`${colors.text} text-sm`}>{t.rankingCalcDesc}</p>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Registration */}

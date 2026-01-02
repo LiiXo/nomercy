@@ -23,6 +23,7 @@ const Navbar = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [squadRequestsCount, setSquadRequestsCount] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [disputesCount, setDisputesCount] = useState(0);
 
   const languageRef = useRef(null);
   const userMenuRef = useRef(null);
@@ -141,6 +142,32 @@ const Navbar = () => {
     };
   }, [isAuthenticated]);
 
+  // Fetch disputes count
+  useEffect(() => {
+    const fetchDisputesCount = async () => {
+      if (!isAuthenticated) {
+        setDisputesCount(0);
+        return;
+      }
+      
+      try {
+        const response = await fetch('https://api-nomercy.ggsecure.io/api/matches/my-disputes', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        if (data.success) {
+          setDisputesCount(data.disputes?.length || 0);
+        }
+      } catch (err) {
+        console.error('Error fetching disputes:', err);
+      }
+    };
+
+    fetchDisputesCount();
+    const interval = setInterval(fetchDisputesCount, 60000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
   const isActive = (path) => location.pathname === path;
 
   const handleChangeMode = () => {
@@ -154,6 +181,7 @@ const Navbar = () => {
     { path: `/${selectedMode}`, label: t('home'), icon: Home },
     { path: `/${selectedMode}/rankings`, label: t('rankings'), icon: Trophy },
     { path: `/${selectedMode}/ranked`, label: t('rankedMode'), icon: Medal },
+    { path: '/squad-hub', label: 'Squad Hub', icon: Users },
   ];
 
   const isHardcore = selectedMode === 'hardcore';
@@ -340,9 +368,14 @@ const Navbar = () => {
                         )}
                       </Link>
 
-                      <Link to="/my-disputes" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-orange-400 hover:text-orange-300 hover:bg-orange-500/10 transition-colors">
-                        <AlertTriangle className="w-4 h-4" />
-                        <span>{language === 'fr' ? 'Mes Litiges' : 'My Disputes'}</span>
+                      <Link to="/my-disputes" onClick={() => setUserMenuOpen(false)} className="flex items-center justify-between px-4 py-3 text-sm text-orange-400 hover:text-orange-300 hover:bg-orange-500/10 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <AlertTriangle className="w-4 h-4" />
+                          <span>{language === 'fr' ? 'Mes Litiges' : 'My Disputes'}</span>
+                        </div>
+                        {disputesCount > 0 && (
+                          <span className="px-2 py-0.5 text-xs font-bold bg-orange-500 text-white rounded-full">{disputesCount}</span>
+                        )}
                       </Link>
 
                       {isStaff() && (

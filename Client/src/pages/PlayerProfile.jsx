@@ -48,6 +48,7 @@ const PlayerProfile = () => {
       totalWins: 'Victoires Totales',
       totalLosses: 'Défaites Totales',
       totalWinRate: 'Ratio de Victoire',
+      totalMatches: 'Matchs Joués',
       notRanked: 'Pas encore classé dans ce mode',
       winStreak: 'victoires consécutives',
       best: 'Record',
@@ -74,6 +75,7 @@ const PlayerProfile = () => {
       totalWins: 'Total Wins',
       totalLosses: 'Total Losses',
       totalWinRate: 'Win Ratio',
+      totalMatches: 'Matches Played',
       notRanked: 'Not ranked in this mode yet',
       winStreak: 'win streak',
       matchHistory: 'Match History',
@@ -100,6 +102,7 @@ const PlayerProfile = () => {
       totalWins: 'Gesamtsiege',
       totalLosses: 'Gesamtniederlagen',
       totalWinRate: 'Siegverhältnis',
+      totalMatches: 'Gespielte Matches',
       notRanked: 'In diesem Modus noch nicht platziert',
       winStreak: 'Siegesserie',
       best: 'Rekord',
@@ -126,6 +129,7 @@ const PlayerProfile = () => {
       totalWins: 'Vittorie Totali',
       totalLosses: 'Sconfitte Totali',
       totalWinRate: 'Rapporto Vittorie',
+      totalMatches: 'Partite Giocate',
       notRanked: 'Non ancora classificato in questa modalità',
       winStreak: 'serie di vittorie',
       best: 'Record',
@@ -442,7 +446,12 @@ const PlayerProfile = () => {
               <span>{t.totalStatistics}</span>
             </h2>
             
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-purple-500/30 transition-colors">
+                <Swords className="w-5 h-5 text-purple-400 mx-auto mb-2" />
+                <div className="text-2xl font-bold text-purple-400">{(playerData?.stats?.wins || 0) + (playerData?.stats?.losses || 0)}</div>
+                <div className="text-gray-500 text-xs">{t.totalMatches}</div>
+              </div>
               <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors">
                 <Medal className="w-5 h-5 text-green-400 mx-auto mb-2" />
                 <div className="text-2xl font-bold text-green-400">{playerData?.stats?.wins || 0}</div>
@@ -492,12 +501,17 @@ const PlayerProfile = () => {
             ) : matchHistory.length > 0 ? (
             <div className="space-y-3">
                 {matchHistory.map((match) => {
-                  const isWinner = match.playerResult === 'win';
-                  
                   // Get playerSquadId handling both string IDs and populated objects
                   const playerSquadId = match.playerSquad?._id || match.playerSquad;
                   const challengerId = match.challenger?._id || match.challenger;
-                  const opponentId = match.opponent?._id || match.opponent;
+                  
+                  // Get winner ID (can be object or string)
+                  const winnerId = typeof match.result?.winner === 'object' 
+                    ? match.result?.winner?._id 
+                    : match.result?.winner;
+                  
+                  // Determine if player won by comparing their squad with the winner
+                  const isWinner = playerSquadId?.toString?.() === winnerId?.toString?.();
                   
                   // Determine if player was challenger or opponent
                   const playerWasChallenger = playerSquadId?.toString?.() === challengerId?.toString?.();
