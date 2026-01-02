@@ -71,6 +71,7 @@ const userSchema = new mongoose.Schema({
   // Game Stats (global - all modes combined)
   stats: {
     points: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
     rank: { type: Number, default: 0 }

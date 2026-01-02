@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 
@@ -41,6 +41,7 @@ const PlayerProfile = () => {
       statistics: 'Statistiques',
       totalStatistics: 'Statistiques Totales',
       points: 'Points',
+      xp: 'Expérience',
       wins: 'Victoires',
       losses: 'Défaites',
       winRate: 'Win Rate',
@@ -66,6 +67,7 @@ const PlayerProfile = () => {
       statistics: 'Statistics',
       totalStatistics: 'Total Statistics',
       points: 'Points',
+      xp: 'Experience',
       wins: 'Wins',
       losses: 'Losses',
       winRate: 'Win Rate',
@@ -91,6 +93,7 @@ const PlayerProfile = () => {
       statistics: 'Statistiken',
       totalStatistics: 'Gesamtstatistiken',
       points: 'Punkte',
+      xp: 'Erfahrung',
       wins: 'Siege',
       losses: 'Niederlagen',
       winRate: 'Siegquote',
@@ -116,6 +119,7 @@ const PlayerProfile = () => {
       statistics: 'Statistiche',
       totalStatistics: 'Statistiche Totali',
       points: 'Punti',
+      xp: 'Esperienza',
       wins: 'Vittorie',
       losses: 'Sconfitte',
       winRate: 'Win Rate',
@@ -231,11 +235,12 @@ const PlayerProfile = () => {
 
   // Get player stats (global stats)
   const getPlayerStats = () => {
-    const userStats = playerData?.stats || { points: 0, wins: 0, losses: 0 };
+    const userStats = playerData?.stats || { points: 0, wins: 0, losses: 0, xp: 0 };
     
     // Use global user stats
     return {
       points: userStats.points || 0,
+      xp: userStats.xp || 0,
       wins: userStats.wins || 0,
       losses: userStats.losses || 0,
       rank: userStats.rank || ranking?.rank || 999
@@ -254,10 +259,10 @@ const PlayerProfile = () => {
 
   // Calculate total win rate
   const getTotalWinRate = () => {
-    if (!playerData?.totalStats) return '0%';
-    const total = playerData.totalStats.wins + playerData.totalStats.losses;
+    if (!playerData?.stats) return '0%';
+    const total = (playerData.stats.wins || 0) + (playerData.stats.losses || 0);
     if (total === 0) return '0%';
-    return `${Math.round((playerData.totalStats.wins / total) * 100)}%`;
+    return `${Math.round((playerData.stats.wins / total) * 100)}%`;
   };
 
   // Get rank for ornament (use ranking.rank from DB)
@@ -349,9 +354,16 @@ const PlayerProfile = () => {
               <h1 className="text-3xl font-bold text-white mb-5">{playerData.username || playerData.discordUsername || 'Utilisateur'}</h1>
               
               <div className="flex flex-wrap items-center justify-center gap-3 text-sm mb-4">
-                {playerStats && playerStats.points > 0 && (
-                  <span className={`px-3 py-1.5 bg-${accentColor}-500/20 border border-${accentColor}-500/30 rounded-lg text-${accentColor}-400 font-medium`}>
-                    {playerStats.points} pts
+                {playerStats && playerStats.xp > 0 && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-cyan-400 font-medium">
+                    <Zap className="w-4 h-4" />
+                    {playerStats.xp.toLocaleString()} XP
+                  </span>
+                )}
+                {playerData?.gold !== undefined && playerData.gold > 0 && (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/20 border border-yellow-500/30 rounded-lg text-yellow-400 font-medium">
+                    <Coins className="w-4 h-4" />
+                    {playerData.gold.toLocaleString()} Gold
                   </span>
                 )}
                 {squad && (
@@ -433,12 +445,12 @@ const PlayerProfile = () => {
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors">
                 <Medal className="w-5 h-5 text-green-400 mx-auto mb-2" />
-                <div className="text-2xl font-bold text-green-400">{playerData?.totalStats?.wins || 0}</div>
+                <div className="text-2xl font-bold text-green-400">{playerData?.stats?.wins || 0}</div>
                 <div className="text-gray-500 text-xs">{t.totalWins}</div>
               </div>
               <div className="bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-red-500/30 transition-colors">
                 <Target className="w-5 h-5 text-red-400 mx-auto mb-2" />
-                <div className="text-2xl font-bold text-red-400">{playerData?.totalStats?.losses || 0}</div>
+                <div className="text-2xl font-bold text-red-400">{playerData?.stats?.losses || 0}</div>
                 <div className="text-gray-500 text-xs">{t.totalLosses}</div>
               </div>
               <div className={`bg-dark-800/50 rounded-lg p-4 text-center border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}>
@@ -481,8 +493,20 @@ const PlayerProfile = () => {
             <div className="space-y-3">
                 {matchHistory.map((match) => {
                   const isWinner = match.playerResult === 'win';
-                  const playerSquadId = match.playerSquad?._id;
-                  const opponent = playerSquadId === match.challenger?._id ? match.opponent : match.challenger;
+                  
+                  // Get playerSquadId handling both string IDs and populated objects
+                  const playerSquadId = match.playerSquad?._id || match.playerSquad;
+                  const challengerId = match.challenger?._id || match.challenger;
+                  const opponentId = match.opponent?._id || match.opponent;
+                  
+                  // Determine if player was challenger or opponent
+                  const playerWasChallenger = playerSquadId?.toString?.() === challengerId?.toString?.();
+                  
+                  // Get opponent info correctly
+                  const opponent = playerWasChallenger ? match.opponent : match.challenger;
+                  const opponentInfo = playerWasChallenger ? match.opponentInfo : match.challengerInfo;
+                  const opponentName = opponent?.name || opponentInfo?.name || (language === 'fr' ? 'Équipe supprimée' : 'Deleted team');
+                  const opponentLinkId = opponent?._id;
                   
                   return (
                     <div 
@@ -511,17 +535,19 @@ const PlayerProfile = () => {
                           <span>{match.teamSize}v{match.teamSize}</span>
                         </div>
                         
-                        {opponent && (
-                          <div className="flex items-center gap-1">
-                            <span className="text-gray-500 text-sm">{t.vs}</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-gray-500 text-sm">{t.vs}</span>
+                          {opponentLinkId ? (
                             <Link 
-                              to={`/squad/${opponent._id}`}
+                              to={`/squad/${opponentLinkId}`}
                               className="text-white hover:text-yellow-400 transition-colors text-sm font-medium"
                             >
-                              {opponent.name}
+                              {opponentName}
                             </Link>
-                          </div>
-                        )}
+                          ) : (
+                            <span className="text-gray-400 italic text-sm">{opponentName}</span>
+                          )}
+                        </div>
                   </div>
 
                       <div className="flex items-center gap-1 text-gray-500 text-xs">

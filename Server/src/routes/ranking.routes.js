@@ -100,14 +100,14 @@ router.get('/top-players/:mode', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
 
-    // Fetch users with stats, sorted by EXPERIENCE (include fake users for testing)
+    // Fetch users with stats, sorted by XP (stats.xp)
     const users = await User.find({
       isBanned: { $ne: true },
       isDeleted: { $ne: true },
       username: { $ne: null, $exists: true } // Exclude users with null username
     })
-      .select('username avatar discordAvatar discordId stats experience')
-      .sort({ 'experience': -1 }) // Tri par expérience au lieu des points
+      .select('username avatar discordAvatar discordId stats')
+      .sort({ 'stats.xp': -1 }) // Tri par XP (stats.xp)
       .limit(parseInt(limit));
 
     const rankings = users.map((u, index) => ({
@@ -119,8 +119,8 @@ router.get('/top-players/:mode', async (req, res) => {
         discordAvatar: u.discordAvatar,
         discordId: u.discordId
       },
-      points: u.experience || 0, // On retourne l'XP dans le champ "points" pour compatibilité
-      experience: u.experience || 0, // Ajout explicite de l'XP
+      points: u.stats?.xp || 0, // On retourne l'XP dans le champ "points" pour compatibilité
+      xp: u.stats?.xp || 0, // XP explicite
       wins: u.stats?.wins || 0,
       losses: u.stats?.losses || 0
     }));

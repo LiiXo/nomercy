@@ -523,44 +523,6 @@ const SquadProfile = () => {
                   <div className="flex items-center gap-3 justify-center md:justify-start flex-wrap">
                     <h1 className="text-3xl font-bold text-white">{squad.name}</h1>
                     <span className="text-gray-500 text-xl">[{squad.tag}]</span>
-                    
-                    {/* Level Badge */}
-                    {squad.level !== undefined && (
-                      <div className={`relative group cursor-default ${
-                        squad.level >= 90 ? 'animate-pulse' : ''
-                      }`}>
-                        <div className={`px-3 py-1.5 rounded-lg font-bold text-sm flex items-center gap-1.5 ${
-                          squad.level >= 100 ? 'bg-gradient-to-r from-yellow-500 via-amber-400 to-yellow-500 text-dark-950 shadow-lg shadow-yellow-500/50' :
-                          squad.level >= 75 ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' :
-                          squad.level >= 50 ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/30' :
-                          squad.level >= 25 ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/30' :
-                          'bg-gradient-to-r from-gray-600 to-gray-700 text-white'
-                        }`}>
-                          <Star className={`w-4 h-4 ${squad.level >= 100 ? 'text-dark-950' : 'text-white'}`} />
-                          <span>Lv.{squad.level}</span>
-                        </div>
-                        
-                        {/* Tooltip with XP progress */}
-                        {squad.levelProgress && squad.level < 100 && (
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                            <div className="bg-dark-900 border border-white/20 rounded-lg p-3 shadow-xl min-w-[160px]">
-                              <p className="text-white text-xs font-medium text-center mb-2">
-                                {squad.levelProgress.current} / {squad.levelProgress.required} XP
-                              </p>
-                              <div className="h-2 bg-dark-800 rounded-full overflow-hidden">
-                                <div 
-                                  className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-300"
-                                  style={{ width: `${squad.levelProgress.percentage}%` }}
-                                />
-                              </div>
-                              <p className="text-gray-400 text-[10px] text-center mt-1">
-                                {squad.levelProgress.percentage}% → Lv.{squad.level + 1}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                   {squad.description && (
                     <p className="text-gray-400 mt-2 max-w-md">{squad.description}</p>

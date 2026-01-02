@@ -10,6 +10,7 @@ import User from '../models/User.js';
 import AppSettings from '../models/AppSettings.js';
 import Map from '../models/Map.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
+import { getSquadMatchRewards } from '../utils/configHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -412,15 +413,22 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     console.log('[GET MATCH] challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
     console.log('[GET MATCH] opponentRoster:', JSON.stringify(match.opponentRoster, null, 2));
 
-    // Vérifier l'accès : participant ou staff
+    // Vérifier l'accès : membre d'une des deux équipes ou staff
     const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
-    const isParticipant = user.squad && (
-      match.challenger?._id.toString() === user.squad._id.toString() ||
-      match.opponent?._id.toString() === user.squad._id.toString()
+    
+    // Vérifier si l'utilisateur est membre d'une des deux équipes
+    const userSquadId = user.squad?._id?.toString() || user.squad?.toString();
+    const challengerId = match.challenger?._id?.toString();
+    const opponentId = match.opponent?._id?.toString();
+    
+    const isParticipant = userSquadId && (
+      challengerId === userSquadId || opponentId === userSquadId
     );
 
+    console.log(`[GET MATCH] Access check - User squad: ${userSquadId}, Challenger: ${challengerId}, Opponent: ${opponentId}, isParticipant: ${isParticipant}, isStaff: ${isStaff}`);
+
     if (!isStaff && !isParticipant) {
-      return res.status(403).json({ success: false, message: 'Accès non autorisé' });
+      return res.status(403).json({ success: false, message: 'Accès non autorisé - Vous devez être membre d\'une des équipes' });
     }
 
     res.json({ success: true, match, isStaff });
@@ -454,9 +462,12 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     }
 
     // Vérifier que l'utilisateur fait partie d'une des équipes OU est staff
-    const isParticipant = user.squad && (
-      match.challenger.toString() === user.squad._id.toString() ||
-      (match.opponent && match.opponent.toString() === user.squad._id.toString())
+    const userSquadId = user.squad?._id?.toString() || user.squad?.toString();
+    const challengerId = match.challenger?.toString();
+    const opponentId = match.opponent?.toString();
+    
+    const isParticipant = userSquadId && (
+      challengerId === userSquadId || opponentId === userSquadId
     );
 
     if (!isParticipant && !isStaff) {
@@ -652,6 +663,16 @@ router.post('/', verifyToken, async (req, res) => {
       .populate('challenger', 'name tag color logo members')
       .populate('createdBy', 'username');
 
+    // Émettre via Socket.io pour mise à jour temps réel sur le dashboard
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hardcore-dashboard').emit('matchCreated', {
+        match: populatedMatch,
+        ladderId,
+        mode
+      });
+    }
+
     res.status(201).json({ success: true, match: populatedMatch });
   } catch (error) {
     console.error('Create match error:', error);
@@ -792,6 +813,17 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
       .populate('createdBy', 'username')
       .populate('acceptedBy', 'username');
 
+    // Émettre via Socket.io pour mise à jour temps réel sur le dashboard
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hardcore-dashboard').emit('matchAccepted', {
+        matchId: match._id,
+        match: populatedMatch,
+        ladderId: match.ladderId,
+        mode: match.mode
+      });
+    }
+
     res.json({ success: true, match: populatedMatch });
   } catch (error) {
     console.error('Accept match error:', error);
@@ -892,6 +924,16 @@ router.delete('/:matchId', verifyToken, async (req, res) => {
     match.status = 'cancelled';
     await match.save();
 
+    // Émettre via Socket.io pour mise à jour temps réel sur le dashboard
+    const io = req.app.get('io');
+    if (io) {
+      io.to('hardcore-dashboard').emit('matchCancelled', {
+        matchId: match._id,
+        ladderId: match.ladderId,
+        mode: match.mode
+      });
+    }
+
     res.json({ success: true, message: 'Match annulé' });
   } catch (error) {
     console.error('Cancel match error:', error);
@@ -991,12 +1033,19 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       ? match.opponent._id.toString() 
       : match.challenger._id.toString();
 
-    // Points à attribuer selon le ladder
-    const pointsWin = match.ladderId === 'duo-trio' ? 25 : 30;
-    const pointsLoss = match.ladderId === 'duo-trio' ? 15 : 20;
+    // Récupérer les valeurs configurées dans l'admin panel
+    const rewardsConfig = await getSquadMatchRewards();
+    
+    console.log(`[MATCH RESULT] Full rewardsConfig:`, JSON.stringify(rewardsConfig, null, 2));
+    
+    // Points à attribuer (depuis la config) - avec valeurs par défaut
+    const pointsWin = rewardsConfig.ladderPointsWin ?? 20;
+    const pointsLoss = rewardsConfig.ladderPointsLoss ?? 10;
+    const generalPointsWin = rewardsConfig.generalSquadPointsWin ?? 15;
+    const generalPointsLoss = rewardsConfig.generalSquadPointsLoss ?? 7;
 
     console.log(`[MATCH RESULT] Match ${matchId} - Winner: ${winnerId}, Loser: ${loserId}`);
-    console.log(`[MATCH RESULT] Ladder: ${match.ladderId}, Points Win: ${pointsWin}, Points Loss: ${pointsLoss}`);
+    console.log(`[MATCH RESULT] Config - Ladder Points Win: ${pointsWin}, Loss: ${pointsLoss}, General Win: ${generalPointsWin}, Loss: ${generalPointsLoss}`);
 
     // 1. Mettre à jour le classement (ladder) du gagnant
     const winnerUpdate = await Squad.findOneAndUpdate(
@@ -1005,13 +1054,13 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         $inc: {
           'registeredLadders.$.points': pointsWin,
           'registeredLadders.$.wins': 1,
-          'stats.wins': 1,
-          'stats.totalPoints': pointsWin
+          'stats.totalWins': 1,
+          'stats.totalPoints': generalPointsWin
         }
       },
       { new: true }
     );
-    console.log(`[MATCH RESULT] Winner squad updated: ${winnerUpdate?.name}, New ladder points: ${winnerUpdate?.registeredLadders?.find(l => l.ladderId === match.ladderId)?.points}`);
+    console.log(`[MATCH RESULT] Winner squad updated: ${winnerUpdate?.name}, Ladder +${pointsWin}, Total +${generalPointsWin}`);
 
     // 2. Mettre à jour le classement (ladder) du perdant (empêcher les points négatifs)
     const loserSquad = await Squad.findById(loserId);
@@ -1022,7 +1071,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       
       // Calculer les nouveaux points (minimum 0)
       const newLadderPoints = Math.max(0, currentLadderPoints - pointsLoss);
-      const newTotalPoints = Math.max(0, currentTotalPoints - pointsLoss);
+      const newTotalPoints = Math.max(0, currentTotalPoints - generalPointsLoss);
       const actualLadderLoss = currentLadderPoints - newLadderPoints;
       const actualTotalLoss = currentTotalPoints - newTotalPoints;
 
@@ -1032,43 +1081,90 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
           $inc: {
             'registeredLadders.$.points': -actualLadderLoss,
             'registeredLadders.$.losses': 1,
-            'stats.losses': 1,
+            'stats.totalLosses': 1,
             'stats.totalPoints': -actualTotalLoss
           }
         },
         { new: true }
       );
-      console.log(`[MATCH RESULT] Loser squad updated: ${loserUpdate?.name}, New ladder points: ${loserUpdate?.registeredLadders?.find(l => l.ladderId === match.ladderId)?.points}`);
+      console.log(`[MATCH RESULT] Loser squad updated: ${loserUpdate?.name}, Ladder -${actualLadderLoss}, Total -${actualTotalLoss}`);
     }
 
     // 3. Mettre à jour les stats individuelles des joueurs du roster
-    const isWinnerChallenger = winnerId === match.challenger._id.toString();
+    const challengerIdStr = match.challenger._id.toString();
+    const opponentIdStr = match.opponent._id.toString();
+    const winnerIdStr = winnerId.toString();
+    
+    const isWinnerChallenger = winnerIdStr === challengerIdStr;
     const winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
     const loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
+    
+    console.log(`[MATCH RESULT] DEBUG - winnerId: ${winnerIdStr}, challengerId: ${challengerIdStr}, opponentId: ${opponentIdStr}`);
+    console.log(`[MATCH RESULT] DEBUG - isWinnerChallenger: ${isWinnerChallenger}`);
+    console.log(`[MATCH RESULT] DEBUG - Winner team: ${isWinnerChallenger ? match.challenger.name : match.opponent.name}`);
+    console.log(`[MATCH RESULT] DEBUG - Loser team: ${isWinnerChallenger ? match.opponent.name : match.challenger.name}`);
 
-    // Points individuels à attribuer selon le ladder
-    const playerPointsWin = match.ladderId === 'duo-trio' ? 15 : 20;
-    const playerPointsLoss = match.ladderId === 'duo-trio' ? 10 : 12;
+    // Récompenses individuelles (depuis la config) - Plus de points joueur, seulement Gold et XP
+    const playerCoinsWin = rewardsConfig.playerCoinsWin ?? 50;
+    const playerCoinsLoss = rewardsConfig.playerCoinsLoss ?? 25;
+    const playerXPWinMin = rewardsConfig.playerXPWinMin ?? 450;
+    const playerXPWinMax = rewardsConfig.playerXPWinMax ?? 550;
 
+    console.log(`[MATCH RESULT] Player config - Coins Win: ${playerCoinsWin}, Coins Loss: ${playerCoinsLoss}, XP: ${playerXPWinMin}-${playerXPWinMax}`);
     console.log(`[MATCH RESULT] Winner roster: ${winnerRoster?.length || 0} players, Loser roster: ${loserRoster?.length || 0} players`);
+
+    // Stocker les récompenses attribuées pour le rapport de combat
+    const rewardsGiven = {
+      winners: {
+        coins: playerCoinsWin,
+        xpGained: []
+      },
+      losers: {
+        coins: playerCoinsLoss
+      },
+      squad: {
+        ladderPointsWin: pointsWin,
+        ladderPointsLoss: pointsLoss,
+        generalPointsWin: generalPointsWin,
+        generalPointsLoss: generalPointsLoss
+      }
+    };
 
     // Mettre à jour les stats GLOBALES des joueurs gagnants (depuis le roster)
     if (winnerRoster && winnerRoster.length > 0) {
+      console.log(`[MATCH RESULT] Processing ${winnerRoster.length} winner players...`);
       for (const rosterEntry of winnerRoster) {
         const playerId = rosterEntry.user?._id || rosterEntry.user;
+        console.log(`[MATCH RESULT] Winner roster entry:`, JSON.stringify(rosterEntry));
+        console.log(`[MATCH RESULT] Extracted playerId: ${playerId}`);
+        
         if (playerId) {
+          // XP aléatoire entre min et max
+          const xpGained = Math.floor(Math.random() * (playerXPWinMax - playerXPWinMin + 1)) + playerXPWinMin;
+          rewardsGiven.winners.xpGained.push({ oderId: playerId.toString(), xp: xpGained });
+          
+          console.log(`[MATCH RESULT] Updating player ${playerId} with: goldCoins +${playerCoinsWin}, xp +${xpGained}, wins +1`);
+          
           const updatedPlayer = await User.findByIdAndUpdate(playerId, {
             $inc: { 
-              goldCoins: 50,
-              'stats.points': playerPointsWin,
+              goldCoins: playerCoinsWin,
+              'stats.xp': xpGained,
               'stats.wins': 1
             }
           }, { new: true });
-          console.log(`[MATCH RESULT] Winner player ${updatedPlayer?.username}: +${playerPointsWin} pts, +50 coins, new total: ${updatedPlayer?.stats?.points} pts`);
+          
+          if (updatedPlayer) {
+            console.log(`[MATCH RESULT] ✅ Winner player ${updatedPlayer.username}: goldCoins=${updatedPlayer.goldCoins}, xp=${updatedPlayer.stats?.xp}, wins=${updatedPlayer.stats?.wins}`);
+          } else {
+            console.log(`[MATCH RESULT] ❌ FAILED to update player ${playerId} - player not found!`);
+          }
+        } else {
+          console.log(`[MATCH RESULT] ⚠️ No playerId found in roster entry`);
         }
       }
     } else {
-      console.log(`[MATCH RESULT] WARNING: Winner roster is empty or not found!`);
+      console.log(`[MATCH RESULT] ⚠️ WARNING: Winner roster is empty or not found!`);
+      console.log(`[MATCH RESULT] winnerRoster value:`, winnerRoster);
     }
 
     // Mettre à jour les stats GLOBALES des joueurs perdants (depuis le roster)
@@ -1076,24 +1172,23 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       for (const rosterEntry of loserRoster) {
         const playerId = rosterEntry.user?._id || rosterEntry.user;
         if (playerId) {
-          // Récupérer le joueur pour éviter les points négatifs
-          const player = await User.findById(playerId);
-          if (player) {
-            const currentPoints = player.stats?.points || 0;
-            const actualLoss = Math.min(playerPointsLoss, currentPoints);
-            const updatedPlayer = await User.findByIdAndUpdate(playerId, {
-              $inc: { 
-                'stats.points': -actualLoss,
-                'stats.losses': 1
-              }
-            }, { new: true });
-            console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: -${actualLoss} pts, new total: ${updatedPlayer?.stats?.points} pts`);
-          }
+          // Les perdants gagnent quand même des coins de consolation
+          const updatedPlayer = await User.findByIdAndUpdate(playerId, {
+            $inc: { 
+              goldCoins: playerCoinsLoss,
+              'stats.losses': 1
+            }
+          }, { new: true });
+          console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: +${playerCoinsLoss} coins consolation`);
         }
       }
     } else {
       console.log(`[MATCH RESULT] WARNING: Loser roster is empty or not found!`);
     }
+
+    // Sauvegarder les récompenses dans le match pour le rapport de combat
+    match.result.rewardsGiven = rewardsGiven;
+    await match.save();
 
     const populatedMatch = await Match.findById(matchId)
       .populate('challenger', 'name tag color logo members registeredLadders')
@@ -1269,9 +1364,14 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
       ? match.opponent._id.toString() 
       : match.challenger._id.toString();
 
-    // Points à attribuer selon le ladder
-    const pointsWin = match.ladderId === 'duo-trio' ? 25 : 30;
-    const pointsLoss = match.ladderId === 'duo-trio' ? 15 : 20;
+    // Récupérer les valeurs configurées dans l'admin panel
+    const rewardsConfigConfirm = await getSquadMatchRewards();
+    
+    // Points à attribuer (depuis la config)
+    const pointsWin = rewardsConfigConfirm.ladderPointsWin;
+    const pointsLoss = rewardsConfigConfirm.ladderPointsLoss;
+    const generalPointsWin = rewardsConfigConfirm.generalSquadPointsWin;
+    const generalPointsLoss = rewardsConfigConfirm.generalSquadPointsLoss;
 
     // Mettre à jour le gagnant
     await Squad.findOneAndUpdate(
@@ -1281,7 +1381,7 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
           'registeredLadders.$.points': pointsWin,
           'registeredLadders.$.wins': 1,
           'stats.totalWins': 1,
-          'stats.totalPoints': pointsWin
+          'stats.totalPoints': generalPointsWin
         }
       }
     );
@@ -1295,7 +1395,7 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
       
       // Calculer les nouveaux points (minimum 0)
       const newLadderPointsConfirm = Math.max(0, currentLadderPointsConfirm - pointsLoss);
-      const newTotalPointsConfirm = Math.max(0, currentTotalPointsConfirm - pointsLoss);
+      const newTotalPointsConfirm = Math.max(0, currentTotalPointsConfirm - generalPointsLoss);
       const actualLadderLossConfirm = currentLadderPointsConfirm - newLadderPointsConfirm;
       const actualTotalLossConfirm = currentTotalPointsConfirm - newTotalPointsConfirm;
 
@@ -1464,9 +1564,12 @@ router.post('/:matchId/dispute-evidence', verifyToken, disputeEvidenceUpload.sin
 
     // Vérifier que l'utilisateur fait partie du match ou est staff
     const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
-    const isParticipant = user.squad && (
-      match.challenger.toString() === user.squad._id.toString() ||
-      match.opponent?.toString() === user.squad._id.toString()
+    const userSquadId = user.squad?._id?.toString() || user.squad?.toString();
+    const challengerId = match.challenger?.toString();
+    const opponentId = match.opponent?.toString();
+    
+    const isParticipant = userSquadId && (
+      challengerId === userSquadId || opponentId === userSquadId
     );
 
     if (!isParticipant && !isStaff) {
@@ -1812,8 +1915,15 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
         ? match.opponent._id.toString() 
         : match.challenger._id.toString();
 
-      const pointsWin = match.ladderId === 'duo-trio' ? 25 : 30;
-      const pointsLoss = match.ladderId === 'duo-trio' ? 15 : 20;
+      // Récupérer les valeurs configurées dans l'admin panel
+      const rewardsConfigResolve = await getSquadMatchRewards();
+      
+      // Points à attribuer (depuis la config) - avec valeurs par défaut
+      const pointsWin = rewardsConfigResolve.ladderPointsWin ?? 20;
+      const pointsLoss = rewardsConfigResolve.ladderPointsLoss ?? 10;
+      const generalPointsWin = rewardsConfigResolve.generalSquadPointsWin ?? 15;
+      const generalPointsLoss = rewardsConfigResolve.generalSquadPointsLoss ?? 7;
+      const playerCoinsWin = rewardsConfigResolve.playerCoinsWin ?? 50;
 
       // Mettre à jour le gagnant
       await Squad.findOneAndUpdate(
@@ -1822,8 +1932,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
           $inc: {
             'registeredLadders.$.points': pointsWin,
             'registeredLadders.$.wins': 1,
-            'stats.wins': 1,
-            'stats.totalPoints': pointsWin
+            'stats.totalWins': 1,
+            'stats.totalPoints': generalPointsWin
           }
         }
       );
@@ -1836,7 +1946,7 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
         const currentTotalPoints = loserSquad.stats?.totalPoints || 0;
         
         const newLadderPoints = Math.max(0, currentLadderPoints - pointsLoss);
-        const newTotalPoints = Math.max(0, currentTotalPoints - pointsLoss);
+        const newTotalPoints = Math.max(0, currentTotalPoints - generalPointsLoss);
         const actualLadderLoss = currentLadderPoints - newLadderPoints;
         const actualTotalLoss = currentTotalPoints - newTotalPoints;
 
@@ -1846,7 +1956,7 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
             $inc: {
               'registeredLadders.$.points': -actualLadderLoss,
               'registeredLadders.$.losses': 1,
-              'stats.losses': 1,
+              'stats.totalLosses': 1,
               'stats.totalPoints': -actualTotalLoss
             }
           }
@@ -1858,19 +1968,30 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
       const winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
       const loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
 
-      // Points individuels à attribuer selon le ladder
-      const playerPointsWin = match.ladderId === 'duo-trio' ? 15 : 20;
-      const playerPointsLoss = match.ladderId === 'duo-trio' ? 10 : 12;
+      // Récupérer les valeurs complètes de la config - avec valeurs par défaut
+      const playerCoinsLoss = rewardsConfigResolve.playerCoinsLoss ?? 25;
+      const playerXPWinMin = rewardsConfigResolve.playerXPWinMin ?? 450;
+      const playerXPWinMax = rewardsConfigResolve.playerXPWinMax ?? 550;
+
+      // Stocker les récompenses pour le rapport de combat
+      const rewardsGiven = {
+        winners: { coins: playerCoinsWin, xpGained: [] },
+        losers: { coins: playerCoinsLoss },
+        squad: { ladderPointsWin: pointsWin, ladderPointsLoss: pointsLoss, generalPointsWin, generalPointsLoss }
+      };
 
       // Mettre à jour les stats GLOBALES des joueurs gagnants (depuis le roster)
       if (winnerRoster && winnerRoster.length > 0) {
         for (const rosterEntry of winnerRoster) {
           const playerId = rosterEntry.user?._id || rosterEntry.user;
           if (playerId) {
+            const xpGained = Math.floor(Math.random() * (playerXPWinMax - playerXPWinMin + 1)) + playerXPWinMin;
+            rewardsGiven.winners.xpGained.push({ oderId: playerId.toString(), xp: xpGained });
+            
             await User.findByIdAndUpdate(playerId, {
               $inc: { 
-                goldCoins: 50,
-                'stats.points': playerPointsWin,
+                goldCoins: playerCoinsWin,
+                'stats.xp': xpGained,
                 'stats.wins': 1
               }
             });
@@ -1883,18 +2004,13 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
         for (const rosterEntry of loserRoster) {
           const playerId = rosterEntry.user?._id || rosterEntry.user;
           if (playerId) {
-            // Récupérer le joueur pour éviter les points négatifs
-            const player = await User.findById(playerId);
-            if (player) {
-              const currentPoints = player.stats?.points || 0;
-              const actualLoss = Math.min(playerPointsLoss, currentPoints);
-              await User.findByIdAndUpdate(playerId, {
-                $inc: { 
-                  'stats.points': -actualLoss,
-                  'stats.losses': 1
-                }
-              });
-            }
+            // Les perdants gagnent quand même des coins de consolation
+            await User.findByIdAndUpdate(playerId, {
+              $inc: { 
+                goldCoins: playerCoinsLoss,
+                'stats.losses': 1
+              }
+            });
           }
         }
       }
@@ -1904,7 +2020,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
         reportedBy: null,
         reportedAt: new Date(),
         confirmed: true,
-        confirmedAt: new Date()
+        confirmedAt: new Date(),
+        rewardsGiven
       };
     }
 

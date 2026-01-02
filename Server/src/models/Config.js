@@ -16,31 +16,27 @@ const configSchema = new mongoose.Schema({
     enum: ['rewards']
   },
   
-  // Récompenses pour les matchs squad (top général)
+  // Récompenses pour les matchs squad (ladder)
   squadMatchRewards: {
-    // Points ladder
+    // Points ladder escouade (dans le classement du ladder spécifique)
     ladderPointsWin: { type: Number, default: 20 },
     ladderPointsLoss: { type: Number, default: 10 },
     
-    // Points classement général escouade
+    // Points classement général escouade (top escouades toutes confondues)
     generalSquadPointsWin: { type: Number, default: 15 },
     generalSquadPointsLoss: { type: Number, default: 7 },
     
-    // Points joueur individuel
-    playerPointsWin: { type: Number, default: 15 },
-    playerPointsLoss: { type: Number, default: 5 },
+    // Points joueur individuel (classement joueurs)
+    playerPointsWin: { type: Number, default: 20 },
+    playerPointsLoss: { type: Number, default: 10 },
     
-    // XP escouade
-    squadXPWinDuoTrio: { type: Number, default: 150 },
-    squadXPWinSquadTeam: { type: Number, default: 200 },
+    // Coins joueur
+    playerCoinsWin: { type: Number, default: 50 },
+    playerCoinsLoss: { type: Number, default: 25 },
     
-    // XP joueur
-    playerXPWinMin: { type: Number, default: 500 },
-    playerXPWinMax: { type: Number, default: 600 },
-    playerXPLossPercent: { type: Number, default: 20 }, // Pourcentage de l'XP gagnant
-    
-    // Coins
-    playerCoinsWin: { type: Number, default: 50 }
+    // XP joueur (gain aléatoire entre min et max pour les gagnants, 0 pour les perdants)
+    playerXPWinMin: { type: Number, default: 450 },
+    playerXPWinMax: { type: Number, default: 550 }
   },
   
   // Récompenses pour le mode classé - utilise Mixed pour les clés dynamiques avec espaces

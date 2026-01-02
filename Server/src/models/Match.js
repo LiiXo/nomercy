@@ -188,6 +188,11 @@ const matchSchema = new mongoose.Schema({
     forfeitReason: {
       type: String,
       maxlength: 200
+    },
+    // Récompenses attribuées (pour rapport de combat)
+    rewardsGiven: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     }
   },
   // Qui a créé le match

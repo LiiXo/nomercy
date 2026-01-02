@@ -57,6 +57,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get squad match rewards (public - for match sheet display)
+router.get('/rewards/squad', async (req, res) => {
+  try {
+    const config = await Config.getOrCreate();
+    const rewards = config.squadMatchRewards || {
+      ladderPointsWin: 20,
+      ladderPointsLoss: 10,
+      generalSquadPointsWin: 15,
+      generalSquadPointsLoss: 7,
+      playerPointsWin: 20,
+      playerPointsLoss: 10,
+      playerCoinsWin: 50,
+      playerCoinsLoss: 25,
+      playerXPWinMin: 450,
+      playerXPWinMax: 550
+    };
+    res.json({ success: true, rewards });
+  } catch (error) {
+    console.error('Get squad rewards config error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Get config by key
 router.get('/:key', async (req, res) => {
   try {

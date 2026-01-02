@@ -51,14 +51,12 @@ export const getSquadMatchRewards = async () => {
     ladderPointsLoss: 10,
     generalSquadPointsWin: 15,
     generalSquadPointsLoss: 7,
-    playerPointsWin: 15,
-    playerPointsLoss: 5,
-    squadXPWinDuoTrio: 150,
-    squadXPWinSquadTeam: 200,
-    playerXPWinMin: 500,
-    playerXPWinMax: 600,
-    playerXPLossPercent: 20,
-    playerCoinsWin: 50
+    playerPointsWin: 20,
+    playerPointsLoss: 10,
+    playerCoinsWin: 50,
+    playerCoinsLoss: 25,
+    playerXPWinMin: 450,
+    playerXPWinMax: 550
   };
 };
 

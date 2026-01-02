@@ -7,7 +7,7 @@ import { io } from 'socket.io-client';
 import { 
   ArrowLeft, Trophy, Users, Clock, Coins, Send, Loader2, 
   TrendingUp, TrendingDown, Minus, Shield, Swords, MessageCircle,
-  CheckCircle, XCircle, AlertTriangle, Crown, Home, Map, Ban
+  CheckCircle, XCircle, AlertTriangle, Crown, Home, Map, Ban, Zap
 } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
@@ -20,7 +20,7 @@ const MatchSheet = () => {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { selectedMode } = useMode();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, refreshUser } = useAuth();
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
@@ -53,11 +53,9 @@ const MatchSheet = () => {
   const [evidenceDescription, setEvidenceDescription] = useState('');
   const evidenceInputRef = useRef(null);
   const socketRef = useRef(null);
-
-  // Points configuration
-  const POINTS_WIN = 25;
-  const POINTS_LOSS = -10;
-  const COINS_WIN = 50;
+  const [rewardsConfig, setRewardsConfig] = useState(null);
+  const [showCombatReport, setShowCombatReport] = useState(false);
+  const [hasSeenCombatReport, setHasSeenCombatReport] = useState(false);
 
   // Translations
   const t = {
@@ -580,10 +578,35 @@ const MatchSheet = () => {
     }
   };
 
+  // Fetch rewards configuration
+  useEffect(() => {
+    const fetchRewardsConfig = async () => {
+      try {
+        const response = await fetch(`${API_URL}/config/rewards/squad`);
+        const data = await response.json();
+        if (data.success) {
+          setRewardsConfig(data.rewards);
+        }
+      } catch (err) {
+        console.error('Error fetching rewards config:', err);
+      }
+    };
+    fetchRewardsConfig();
+  }, []);
+
   useEffect(() => {
     fetchMatchData(true);
     fetchMySquad();
   }, [matchId, isAuthenticated]);
+
+  // Show combat report when match is completed
+  useEffect(() => {
+    const isMatchParticipant = mySquad && (mySquad._id === match?.challenger?._id || mySquad._id === match?.opponent?._id);
+    if (match?.status === 'completed' && match?.result?.rewardsGiven && !hasSeenCombatReport && isMatchParticipant) {
+      setShowCombatReport(true);
+      setHasSeenCombatReport(true);
+    }
+  }, [match?.status, match?.result?.rewardsGiven, hasSeenCombatReport, mySquad, match?.challenger?._id, match?.opponent?._id]);
 
   // Poll for updates every 30 seconds (silent, only after initial load)
   useEffect(() => {
@@ -1037,12 +1060,13 @@ const MatchSheet = () => {
 
   // Calculate potential rank after win/loss
   const getPotentialRank = (isWin) => {
-    if (!ladderData || !mySquad) return null;
+    if (!ladderData || !mySquad || !rewardsConfig) return null;
     
     const currentRank = getCurrentRank();
     const myLadderData = mySquad.registeredLadders?.find(l => l.ladderId === match?.ladderId);
     const currentPoints = myLadderData?.points || 0;
-    const newPoints = currentPoints + (isWin ? POINTS_WIN : POINTS_LOSS);
+    const pointsChange = isWin ? (rewardsConfig.playerPointsWin || 20) : -(rewardsConfig.playerPointsLoss || 10);
+    const newPoints = Math.max(0, currentPoints + pointsChange);
     
     // Count how many squads would be ahead
     let newRank = 1;
@@ -1266,6 +1290,93 @@ const MatchSheet = () => {
                 )}
               </div>
             </div>
+
+            {/* Rewards Display */}
+            {rewardsConfig && match.status !== 'completed' && (
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 mb-4`}>
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                  <Trophy className={`w-4 h-4 text-${accentColor}-400`} />
+                  {language === 'fr' ? 'Enjeux du match' : 'Match Stakes'}
+                  <span className={`ml-auto text-xs px-2 py-0.5 rounded bg-${accentColor}-500/20 text-${accentColor}-400`}>
+                    {match.ladderId === 'duo-trio' ? 'Duo/Trio' : 'Squad/Team'}
+                  </span>
+                </h3>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Si victoire */}
+                  <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <p className="text-green-400 text-xs font-semibold mb-3 uppercase border-b border-green-500/20 pb-2">
+                      {language === 'fr' ? '🏆 Victoire' : '🏆 Victory'}
+                    </p>
+                    <div className="space-y-2">
+                      {/* Escouade - Ladder */}
+                      <div className="pb-2 border-b border-white/5">
+                        <p className="text-gray-500 text-[10px] uppercase mb-1">{language === 'fr' ? 'Escouade' : 'Squad'}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">Ladder {match.ladderId === 'duo-trio' ? 'D/T' : 'S/T'}</span>
+                          <span className="text-green-400 text-sm font-bold">+{rewardsConfig.ladderPointsWin} pts</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-gray-400 text-xs">{language === 'fr' ? 'Top Général' : 'General Top'}</span>
+                          <span className="text-green-400 text-sm font-bold">+{rewardsConfig.generalSquadPointsWin} pts</span>
+                        </div>
+                      </div>
+                      {/* Joueur */}
+                      <div>
+                        <p className="text-gray-500 text-[10px] uppercase mb-1">{language === 'fr' ? 'Joueur' : 'Player'}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">Gold</span>
+                          <span className="text-yellow-400 text-sm font-bold flex items-center gap-1">
+                            <Coins className="w-3 h-3" />+{rewardsConfig.playerCoinsWin}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-gray-400 text-xs">XP</span>
+                          <span className="text-cyan-400 text-sm font-bold flex items-center gap-1">
+                            <Zap className="w-3 h-3" />+{rewardsConfig.playerXPWinMin}-{rewardsConfig.playerXPWinMax}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Si défaite */}
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <p className="text-red-400 text-xs font-semibold mb-3 uppercase border-b border-red-500/20 pb-2">
+                      {language === 'fr' ? '💔 Défaite' : '💔 Defeat'}
+                    </p>
+                    <div className="space-y-2">
+                      {/* Escouade - Ladder */}
+                      <div className="pb-2 border-b border-white/5">
+                        <p className="text-gray-500 text-[10px] uppercase mb-1">{language === 'fr' ? 'Escouade' : 'Squad'}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">Ladder {match.ladderId === 'duo-trio' ? 'D/T' : 'S/T'}</span>
+                          <span className="text-red-400 text-sm font-bold">-{rewardsConfig.ladderPointsLoss} pts</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-gray-400 text-xs">{language === 'fr' ? 'Top Général' : 'General Top'}</span>
+                          <span className="text-red-400 text-sm font-bold">-{rewardsConfig.generalSquadPointsLoss} pts</span>
+                        </div>
+                      </div>
+                      {/* Joueur */}
+                      <div>
+                        <p className="text-gray-500 text-[10px] uppercase mb-1">{language === 'fr' ? 'Joueur' : 'Player'}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">Gold</span>
+                          <span className="text-yellow-400 text-sm font-bold flex items-center gap-1">
+                            <Coins className="w-3 h-3" />+{rewardsConfig.playerCoinsLoss}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-gray-400 text-xs">XP</span>
+                          <span className="text-gray-500 text-sm">—</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Host Team Display */}
             {match.hostTeam && match.opponent && (
@@ -1916,6 +2027,123 @@ const MatchSheet = () => {
               className="w-full mt-4 py-2 bg-dark-800 hover:bg-dark-700 border border-white/10 rounded-lg text-gray-400 text-sm transition-colors"
             >
               {language === 'fr' ? 'Annuler' : 'Cancel'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Combat Report Modal */}
+      {showCombatReport && match?.result?.rewardsGiven && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+          <div className={`bg-dark-900 rounded-2xl border ${
+            match.result.winner === mySquad?._id 
+              ? 'border-green-500/50 shadow-lg shadow-green-500/20' 
+              : 'border-red-500/50 shadow-lg shadow-red-500/20'
+          } p-6 max-w-md w-full`}>
+            {/* Header */}
+            <div className="text-center mb-6">
+              {match.result.winner === mySquad?._id ? (
+                <>
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center animate-pulse">
+                    <Trophy className="w-10 h-10 text-white" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-green-400 mb-1">
+                    {language === 'fr' ? 'VICTOIRE !' : 'VICTORY!'}
+                  </h2>
+                  <p className="text-gray-400">
+                    {language === 'fr' ? 'Félicitations ! Voici vos gains :' : 'Congratulations! Here are your rewards:'}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center">
+                    <XCircle className="w-10 h-10 text-white" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-red-400 mb-1">
+                    {language === 'fr' ? 'DÉFAITE' : 'DEFEAT'}
+                  </h2>
+                  <p className="text-gray-400">
+                    {language === 'fr' ? 'Ne baissez pas les bras ! Voici le bilan :' : 'Don\'t give up! Here\'s the summary:'}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Rewards/Losses */}
+            <div className="space-y-3 mb-6">
+              {match.result.winner === mySquad?._id ? (
+                <>
+                  {/* Gold gagné */}
+                  <div className="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                    <span className="text-gray-300 flex items-center gap-2">
+                      <Coins className="w-5 h-5 text-yellow-400" />
+                      Gold
+                    </span>
+                    <span className="text-yellow-400 font-bold text-lg">+{match.result.rewardsGiven?.winners?.coins || 50}</span>
+                  </div>
+                  {/* XP gagnée */}
+                  <div className="flex items-center justify-between p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-xl">
+                    <span className="text-gray-300 flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-cyan-400" />
+                      XP
+                    </span>
+                    <span className="text-cyan-400 font-bold text-lg">
+                      +{match.result.rewardsGiven?.winners?.xpGained?.[0]?.xp || '450-550'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Gold de consolation */}
+                  <div className="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                    <span className="text-gray-300 flex items-center gap-2">
+                      <Coins className="w-5 h-5 text-yellow-400" />
+                      Gold ({language === 'fr' ? 'consolation' : 'consolation'})
+                    </span>
+                    <span className="text-yellow-400 font-bold text-lg">+{match.result.rewardsGiven?.losers?.coins || 25}</span>
+                  </div>
+                  {/* Pas d'XP */}
+                  <div className="flex items-center justify-between p-3 bg-gray-500/10 border border-gray-500/20 rounded-xl">
+                    <span className="text-gray-400 flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-gray-500" />
+                      XP
+                    </span>
+                    <span className="text-gray-500 font-medium">—</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Squad stats */}
+            <div className="p-3 bg-dark-800/50 border border-white/10 rounded-xl mb-4">
+              <p className="text-gray-500 text-xs uppercase mb-2">{language === 'fr' ? 'Escouade' : 'Squad'}</p>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Ladder</span>
+                <span className={match.result.winner === mySquad?._id ? 'text-green-400' : 'text-red-400'}>
+                  {match.result.winner === mySquad?._id 
+                    ? `+${match.result.rewardsGiven.squad.ladderPointsWin}` 
+                    : `-${match.result.rewardsGiven.squad.ladderPointsLoss}`} pts
+                </span>
+              </div>
+            </div>
+
+            {/* Close button */}
+            <button
+              onClick={async () => {
+                setShowCombatReport(false);
+                // Rafraîchir les données utilisateur pour mettre à jour le gold dans la navbar
+                await refreshUser();
+                // Rediriger vers l'accueil du mode
+                const redirectPath = match.mode === 'hardcore' ? '/hardcore' : '/cdl';
+                navigate(redirectPath);
+              }}
+              className={`w-full py-3 rounded-xl font-bold text-white transition-all ${
+                match.result.winner === mySquad?._id 
+                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700' 
+                  : 'bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700'
+              }`}
+            >
+              {language === 'fr' ? 'Continuer' : 'Continue'}
             </button>
           </div>
         </div>
