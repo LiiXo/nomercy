@@ -32,6 +32,8 @@ const Rankings = () => {
   const [selectedLadderForRules, setSelectedLadderForRules] = useState(null);
   const [ladderRules, setLadderRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
+  const [previousSeasonWinners, setPreviousSeasonWinners] = useState(null);
+  const [ladderSettings, setLadderSettings] = useState(null);
   
   const colors = {
     primary: isHardcore ? 'red' : 'cyan',
@@ -43,25 +45,51 @@ const Rankings = () => {
     bg: isHardcore ? 'bg-red-500/10' : 'bg-cyan-500/10',
   };
 
-  // Check if duo-trio is currently open (00:00 - 20:00 French time)
-  const isDuoTrioOpen = () => {
+  // Check if duo-trio is currently open based on settings
+  const isDuoTrioOpen = (settings) => {
+    // If time restriction is disabled, always open
+    if (settings && !settings.duoTrioTimeRestriction?.enabled) {
+      return true;
+    }
+    
+    const startHour = settings?.duoTrioTimeRestriction?.startHour ?? 0;
+    const endHour = settings?.duoTrioTimeRestriction?.endHour ?? 20;
+    
     const parisHour = parseInt(new Date().toLocaleString('en-US', { 
       timeZone: 'Europe/Paris', 
       hour: 'numeric', 
       hour12: false 
     }));
-    return parisHour < 20;
+    
+    return parisHour >= startHour && parisHour < endHour;
   };
 
-  const [duoTrioOpen, setDuoTrioOpen] = useState(isDuoTrioOpen);
+  const [duoTrioOpen, setDuoTrioOpen] = useState(true);
+
+  // Fetch ladder settings on mount
+  useEffect(() => {
+    const fetchLadderSettings = async () => {
+      try {
+        const response = await fetch(`${API_URL}/app-settings/public`);
+        const data = await response.json();
+        if (data.success && data.ladderSettings) {
+          setLadderSettings(data.ladderSettings);
+          setDuoTrioOpen(isDuoTrioOpen(data.ladderSettings));
+        }
+      } catch (err) {
+        console.error('Error fetching ladder settings:', err);
+      }
+    };
+    fetchLadderSettings();
+  }, []);
 
   // Update duo-trio status every minute
   useEffect(() => {
     const interval = setInterval(() => {
-      setDuoTrioOpen(isDuoTrioOpen());
+      setDuoTrioOpen(isDuoTrioOpen(ladderSettings));
     }, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [ladderSettings]);
 
   // Fetch ladder rules from API when modal opens
   useEffect(() => {
@@ -120,6 +148,13 @@ const Rankings = () => {
       closed: 'Fermé',
       alwaysOpen: 'Toujours ouvert',
       hours: '00h00 - 20h00',
+      nextSeason: 'Prochaine saison dans',
+      days: 'jours',
+      day: 'jour',
+      previousSeason: 'Saison précédente',
+      seasonChampions: 'Champions de la saison',
+      noHistory: 'Aucun historique de saison',
+      rewardPoints: 'pts attribués',
     },
     en: {
       duoTrio: 'Duo / Trio',
@@ -151,6 +186,13 @@ const Rankings = () => {
       closed: 'Closed',
       alwaysOpen: 'Always open',
       hours: '00:00 - 20:00',
+      nextSeason: 'Next season in',
+      days: 'days',
+      day: 'day',
+      previousSeason: 'Previous Season',
+      seasonChampions: 'Season Champions',
+      noHistory: 'No season history',
+      rewardPoints: 'pts awarded',
     },
     de: {
       duoTrio: 'Duo / Trio',
@@ -182,6 +224,13 @@ const Rankings = () => {
       closed: 'Geschlossen',
       alwaysOpen: 'Immer geöffnet',
       hours: '00:00 - 20:00',
+      nextSeason: 'Nächste Saison in',
+      days: 'Tagen',
+      day: 'Tag',
+      previousSeason: 'Vorherige Saison',
+      seasonChampions: 'Saison-Champions',
+      noHistory: 'Keine Saison-Historie',
+      rewardPoints: 'Pkt verliehen',
     },
     it: {
       duoTrio: 'Duo / Trio',
@@ -213,6 +262,13 @@ const Rankings = () => {
       closed: 'Chiuso',
       alwaysOpen: 'Sempre aperto',
       hours: '00:00 - 20:00',
+      nextSeason: 'Prossima stagione tra',
+      days: 'giorni',
+      day: 'giorno',
+      previousSeason: 'Stagione precedente',
+      seasonChampions: 'Campioni della stagione',
+      noHistory: 'Nessuno storico di stagione',
+      rewardPoints: 'pti assegnati',
     },
   }[language] || {
     duoTrio: 'Duo / Trio',
@@ -244,7 +300,25 @@ const Rankings = () => {
     closed: 'Closed',
     alwaysOpen: 'Always open',
     hours: '00:00 - 20:00',
+    nextSeason: 'Next season in',
+    days: 'days',
+    day: 'day',
+    previousSeason: 'Previous Season',
+    seasonChampions: 'Season Champions',
+    noHistory: 'No season history',
+    rewardPoints: 'pts awarded',
   };
+
+  // Calculate days until next season (first day of next month)
+  const getDaysUntilNextSeason = () => {
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const diffTime = nextMonth - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const daysUntilNextSeason = getDaysUntilNextSeason();
 
   // Set page title
   useEffect(() => {
@@ -323,7 +397,21 @@ const Rankings = () => {
   // Initial fetch
   useEffect(() => {
     fetchAllLeaderboards();
+    fetchPreviousSeasonWinners();
   }, []);
+
+  // Fetch previous season winners
+  const fetchPreviousSeasonWinners = async () => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/ladder/previous-winners`);
+      const data = await response.json();
+      if (data.success) {
+        setPreviousSeasonWinners(data);
+      }
+    } catch (err) {
+      console.error('Error fetching previous season winners:', err);
+    }
+  };
 
   // Find my squad's rank in each ladder
   useEffect(() => {
@@ -494,7 +582,7 @@ const Rankings = () => {
           <div className="mt-3 flex flex-wrap items-center gap-4 text-white/70 text-sm">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4" />
-              <span>{isDuoTrio ? txt.hours : txt.alwaysOpen}</span>
+              <span>{isDuoTrio && ladderSettings?.duoTrioTimeRestriction?.enabled ? txt.hours : txt.alwaysOpen}</span>
             </div>
             <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full">
               <Skull className="w-4 h-4 text-white" />
@@ -556,22 +644,26 @@ const Rankings = () => {
           )}
         </div>
 
-        {/* My Squad Position - Only if registered */}
-        {registered && mySquad && myRank && (
+        {/* My Squad Position - Show if registered (even without rank data) */}
+        {registered && mySquad && (
           <div className={`p-4 border-b border-white/10 bg-gradient-to-r ${colors.bg}`}>
             <p className="text-xs text-gray-400 uppercase tracking-wider mb-2">{txt.yourPosition}</p>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${
-                  myRank.rank === 1 ? 'bg-yellow-500/20 text-yellow-400' :
-                  myRank.rank === 2 ? 'bg-gray-400/20 text-gray-300' :
-                  myRank.rank === 3 ? 'bg-orange-500/20 text-orange-400' :
+                  myRank?.rank === 1 ? 'bg-yellow-500/20 text-yellow-400' :
+                  myRank?.rank === 2 ? 'bg-gray-400/20 text-gray-300' :
+                  myRank?.rank === 3 ? 'bg-orange-500/20 text-orange-400' :
                   `${colors.bg} ${colors.text}`
                 }`}>
-                  {myRank.rank <= 3 ? (
-                    <Crown className="w-5 h-5" />
+                  {myRank?.rank ? (
+                    myRank.rank <= 3 ? (
+                      <Crown className="w-5 h-5" />
+                    ) : (
+                      `#${myRank.rank}`
+                    )
                   ) : (
-                    `#${myRank.rank}`
+                    <span className="text-xs">—</span>
                   )}
                 </div>
                 <div>
@@ -580,11 +672,13 @@ const Rankings = () => {
                 </div>
               </div>
               <div className="text-right">
-                <p className={`font-bold text-lg ${colors.text}`}>{myRank.ladderPoints} {txt.points}</p>
+                <p className={`font-bold text-lg ${colors.text}`}>
+                  {myRank?.ladderPoints ?? 0} {txt.points}
+                </p>
                 <p className="text-sm text-gray-400">
-                  <span className="text-green-400">{myRank.ladderWins}{txt.wins}</span>
+                  <span className="text-green-400">{myRank?.ladderWins ?? 0}{txt.wins}</span>
                   <span className="mx-1">/</span>
-                  <span className="text-red-400">{myRank.ladderLosses}{txt.losses}</span>
+                  <span className="text-red-400">{myRank?.ladderLosses ?? 0}{txt.losses}</span>
                 </p>
               </div>
             </div>
@@ -763,6 +857,168 @@ const Rankings = () => {
               )}
             </div>
           </div>
+
+          {/* Next Season Countdown */}
+          <div className="mb-6 flex justify-center">
+            <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl ${colors.bg} border ${colors.border}`}>
+              <Clock className={`w-5 h-5 ${colors.text}`} />
+              <span className="text-gray-300 font-medium">
+                {txt.nextSeason} :
+              </span>
+              <span className={`font-bold text-xl ${colors.text}`}>
+                {daysUntilNextSeason} {daysUntilNextSeason === 1 ? txt.day : txt.days}
+              </span>
+            </div>
+          </div>
+
+          {/* Previous Season Winners */}
+          {previousSeasonWinners && (previousSeasonWinners.duoTrio || previousSeasonWinners.squadTeam) && (
+            <div className="mb-8">
+              <h2 className={`text-xl font-bold text-white mb-4 flex items-center gap-2`}>
+                <Trophy className={`w-6 h-6 ${colors.text}`} />
+                {txt.seasonChampions}
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Duo/Trio Previous Season */}
+                {previousSeasonWinners.duoTrio && (
+                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${colors.border} overflow-hidden`}>
+                    <div className={`p-4 border-b border-white/10 bg-gradient-to-r ${colors.gradient}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Crown className="w-5 h-5 text-yellow-400" />
+                          <div>
+                            <p className="text-white font-bold">{txt.duoTrio}</p>
+                            <p className="text-white/70 text-xs">{previousSeasonWinners.duoTrio.seasonName}</p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-white/60 bg-white/20 px-2 py-1 rounded-full">
+                          {txt.previousSeason}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-2">
+                      {previousSeasonWinners.duoTrio.winners?.map((winner) => (
+                        <Link
+                          key={winner.squad?._id || winner.squadName}
+                          to={winner.squad ? `/squad/${winner.squad._id}` : '#'}
+                          className={`flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all ${
+                            winner.rank === 1 ? 'bg-yellow-500/10 border border-yellow-500/30' :
+                            winner.rank === 2 ? 'bg-gray-400/10 border border-gray-400/30' :
+                            'bg-orange-500/10 border border-orange-500/30'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${
+                            winner.rank === 1 ? 'bg-yellow-500/30 text-yellow-400' :
+                            winner.rank === 2 ? 'bg-gray-400/30 text-gray-300' :
+                            'bg-orange-500/30 text-orange-400'
+                          }`}>
+                            {winner.rank === 1 ? <Crown className="w-5 h-5" /> :
+                             winner.rank === 2 ? <Medal className="w-5 h-5" /> :
+                             <Medal className="w-5 h-5" />}
+                          </div>
+                          <div 
+                            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: (winner.squad?.color || winner.squadColor || '#666') + '30' }}
+                          >
+                            {(winner.squad?.logo || winner.squadLogo) ? (
+                              <img src={winner.squad?.logo || winner.squadLogo} alt="" className="w-6 h-6 object-contain" />
+                            ) : (
+                              <Users className="w-4 h-4" style={{ color: winner.squad?.color || winner.squadColor || '#666' }} />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium truncate">{winner.squad?.name || winner.squadName}</p>
+                            <p className="text-gray-500 text-xs">[{winner.squad?.tag || winner.squadTag}]</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className={`font-bold ${
+                              winner.rank === 1 ? 'text-yellow-400' :
+                              winner.rank === 2 ? 'text-gray-300' :
+                              'text-orange-400'
+                            }`}>
+                              +{winner.rewardPoints} {txt.rewardPoints}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {winner.points} {txt.points}
+                            </p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Squad/Team Previous Season */}
+                {previousSeasonWinners.squadTeam && (
+                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${colors.border} overflow-hidden`}>
+                    <div className={`p-4 border-b border-white/10 bg-gradient-to-r ${colors.gradient}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Crown className="w-5 h-5 text-yellow-400" />
+                          <div>
+                            <p className="text-white font-bold">{txt.squadTeam}</p>
+                            <p className="text-white/70 text-xs">{previousSeasonWinners.squadTeam.seasonName}</p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-white/60 bg-white/20 px-2 py-1 rounded-full">
+                          {txt.previousSeason}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="p-4 space-y-2">
+                      {previousSeasonWinners.squadTeam.winners?.map((winner) => (
+                        <Link
+                          key={winner.squad?._id || winner.squadName}
+                          to={winner.squad ? `/squad/${winner.squad._id}` : '#'}
+                          className={`flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-all ${
+                            winner.rank === 1 ? 'bg-yellow-500/10 border border-yellow-500/30' :
+                            winner.rank === 2 ? 'bg-gray-400/10 border border-gray-400/30' :
+                            'bg-orange-500/10 border border-orange-500/30'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg ${
+                            winner.rank === 1 ? 'bg-yellow-500/30 text-yellow-400' :
+                            winner.rank === 2 ? 'bg-gray-400/30 text-gray-300' :
+                            'bg-orange-500/30 text-orange-400'
+                          }`}>
+                            {winner.rank === 1 ? <Crown className="w-5 h-5" /> :
+                             winner.rank === 2 ? <Medal className="w-5 h-5" /> :
+                             <Medal className="w-5 h-5" />}
+                          </div>
+                          <div 
+                            className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                            style={{ backgroundColor: (winner.squad?.color || winner.squadColor || '#666') + '30' }}
+                          >
+                            {(winner.squad?.logo || winner.squadLogo) ? (
+                              <img src={winner.squad?.logo || winner.squadLogo} alt="" className="w-6 h-6 object-contain" />
+                            ) : (
+                              <Users className="w-4 h-4" style={{ color: winner.squad?.color || winner.squadColor || '#666' }} />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white font-medium truncate">{winner.squad?.name || winner.squadName}</p>
+                            <p className="text-gray-500 text-xs">[{winner.squad?.tag || winner.squadTag}]</p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className={`font-bold ${
+                              winner.rank === 1 ? 'text-yellow-400' :
+                              winner.rank === 2 ? 'text-gray-300' :
+                              'text-orange-400'
+                            }`}>
+                              +{winner.rewardPoints} {txt.rewardPoints}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {winner.points} {txt.points}
+                            </p>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Leaderboards Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

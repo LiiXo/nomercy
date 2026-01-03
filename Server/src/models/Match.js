@@ -92,11 +92,13 @@ const matchSchema = new mongoose.Schema({
   // Roster de l'équipe challenger
   challengerRoster: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    username: { type: String }, // Sauvegardé pour l'historique même si compte supprimé
     isHelper: { type: Boolean, default: false }
   }],
   // Roster de l'équipe adversaire
   opponentRoster: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    username: { type: String }, // Sauvegardé pour l'historique même si compte supprimé
     isHelper: { type: Boolean, default: false }
   }],
   // Demandes d'annulation mutuelle

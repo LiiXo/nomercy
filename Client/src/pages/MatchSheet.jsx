@@ -61,6 +61,10 @@ const MatchSheet = () => {
   const [ggsecureStatuses, setGgsecureStatuses] = useState({});
   const ggsecureStatusesRef = useRef({});
   const lastGGSecureMessageRef = useRef({}); // Track last message sent for each player to avoid duplicates
+  
+  // Team form (last 5 matches)
+  const [challengerForm, setChallengerForm] = useState([]);
+  const [opponentForm, setOpponentForm] = useState([]);
 
   // Translations
   const t = {
@@ -140,7 +144,6 @@ const MatchSheet = () => {
       bothTeamsCancel: 'Les deux équipes doivent accepter l\'annulation.',
       randomMaps: 'Maps du match',
       map: 'Map',
-      hostTeam: 'Équipe hôte',
       gameModes: {
         'Search & Destroy': 'Recherche et Destruction',
         'Domination': 'Domination',
@@ -149,7 +152,6 @@ const MatchSheet = () => {
       },
       staffActions: 'Actions Staff',
       giveVictory: 'Donner la victoire',
-      cancelMatch: 'Annuler le match',
       removeDispute: 'Retirer le litige',
       selectTeam: 'Sélectionnez l\'équipe gagnante',
       evidence: 'Preuves',
@@ -163,11 +165,11 @@ const MatchSheet = () => {
       supportedFormats: 'Formats: JPG, PNG, GIF, WebP (max 5 Mo)',
       uploading: 'Envoi en cours...',
       systemMessages: {
-        result_declared: (p) => `🏆 ${p.squadName} a déclaré ${p.winnerName} vainqueur du match.`,
-        dispute_reported: (p) => `⚠️ ${p.squadName} a signalé un litige.${p.reason ? ` Raison: ${p.reason}` : ''}`,
+        result_declared: (p) => `🏆 ${p.playerName} a déclaré ${p.winnerName} vainqueur du match.`,
+        dispute_reported: (p) => `⚠️ ${p.playerName} a signalé un litige.${p.reason ? ` Raison: ${p.reason}` : ''}`,
         evidence_added: (p) => `📷 ${p.username} a ajouté une preuve au litige.`,
         match_cancelled_mutual: () => `⚠️ Match annulé d'un commun accord entre les deux équipes.`,
-        cancel_requested: (p) => `🔄 ${p.squadName} demande l'annulation du match.`,
+        cancel_requested: (p) => `🔄 ${p.playerName} demande l'annulation du match.`,
         match_cancelled_staff: (p) => `❌ Match annulé par le staff.${p.reason ? ` Raison: ${p.reason}` : ''}`,
         victory_assigned_staff: (p) => `👑 Le staff a attribué la victoire à ${p.winnerName}.`,
         dispute_removed_staff: () => `✅ Le litige a été retiré par le staff. Le match reprend.`,
@@ -249,7 +251,6 @@ const MatchSheet = () => {
       bothTeamsCancel: 'Both teams must agree to cancel.',
       randomMaps: 'Match maps',
       map: 'Map',
-      hostTeam: 'Host team',
       gameModes: {
         'Search & Destroy': 'Search & Destroy',
         'Domination': 'Domination',
@@ -258,7 +259,6 @@ const MatchSheet = () => {
       },
       staffActions: 'Staff Actions',
       giveVictory: 'Give victory',
-      cancelMatch: 'Cancel match',
       removeDispute: 'Remove dispute',
       selectTeam: 'Select the winning team',
       evidence: 'Evidence',
@@ -272,11 +272,11 @@ const MatchSheet = () => {
       supportedFormats: 'Formats: JPG, PNG, GIF, WebP (max 5 MB)',
       uploading: 'Uploading...',
       systemMessages: {
-        result_declared: (p) => `🏆 ${p.squadName} declared ${p.winnerName} as the match winner.`,
-        dispute_reported: (p) => `⚠️ ${p.squadName} reported a dispute.${p.reason ? ` Reason: ${p.reason}` : ''}`,
+        result_declared: (p) => `🏆 ${p.playerName} declared ${p.winnerName} as the match winner.`,
+        dispute_reported: (p) => `⚠️ ${p.playerName} reported a dispute.${p.reason ? ` Reason: ${p.reason}` : ''}`,
         evidence_added: (p) => `📷 ${p.username} added evidence to the dispute.`,
         match_cancelled_mutual: () => `⚠️ Match cancelled by mutual agreement.`,
-        cancel_requested: (p) => `🔄 ${p.squadName} is requesting match cancellation.`,
+        cancel_requested: (p) => `🔄 ${p.playerName} is requesting match cancellation.`,
         match_cancelled_staff: (p) => `❌ Match cancelled by staff.${p.reason ? ` Reason: ${p.reason}` : ''}`,
         victory_assigned_staff: (p) => `👑 Staff assigned victory to ${p.winnerName}.`,
         dispute_removed_staff: () => `✅ Dispute has been removed by staff. Match resumes.`,
@@ -358,7 +358,6 @@ const MatchSheet = () => {
       bothTeamsCancel: 'Beide Teams müssen dem Abbruch zustimmen.',
       randomMaps: 'Spielkarten',
       map: 'Karte',
-      hostTeam: 'Host-Team',
       gameModes: {
         'Search & Destroy': 'Suchen & Zerstören',
         'Domination': 'Herrschaft',
@@ -367,7 +366,6 @@ const MatchSheet = () => {
       },
       staffActions: 'Staff-Aktionen',
       giveVictory: 'Sieg geben',
-      cancelMatch: 'Spiel abbrechen',
       removeDispute: 'Streit entfernen',
       selectTeam: 'Wählen Sie das Gewinnerteam',
       evidence: 'Beweise',
@@ -381,11 +379,11 @@ const MatchSheet = () => {
       supportedFormats: 'Formate: JPG, PNG, GIF, WebP (max 5 MB)',
       uploading: 'Wird hochgeladen...',
       systemMessages: {
-        result_declared: (p) => `🏆 ${p.squadName} hat ${p.winnerName} als Sieger erklärt.`,
-        dispute_reported: (p) => `⚠️ ${p.squadName} hat einen Streit gemeldet.${p.reason ? ` Grund: ${p.reason}` : ''}`,
+        result_declared: (p) => `🏆 ${p.playerName} hat ${p.winnerName} als Sieger erklärt.`,
+        dispute_reported: (p) => `⚠️ ${p.playerName} hat einen Streit gemeldet.${p.reason ? ` Grund: ${p.reason}` : ''}`,
         evidence_added: (p) => `📷 ${p.username} hat einen Beweis hinzugefügt.`,
         match_cancelled_mutual: () => `⚠️ Spiel wurde einvernehmlich abgesagt.`,
-        cancel_requested: (p) => `🔄 ${p.squadName} beantragt die Absage.`,
+        cancel_requested: (p) => `🔄 ${p.playerName} beantragt die Absage.`,
         match_cancelled_staff: (p) => `❌ Spiel wurde vom Staff abgesagt.${p.reason ? ` Grund: ${p.reason}` : ''}`,
         victory_assigned_staff: (p) => `👑 Staff hat ${p.winnerName} den Sieg zugesprochen.`,
         dispute_removed_staff: () => `✅ Der Streit wurde vom Staff entfernt. Das Spiel wird fortgesetzt.`,
@@ -467,7 +465,6 @@ const MatchSheet = () => {
       bothTeamsCancel: 'Entrambe le squadre devono accettare l\'annullamento.',
       randomMaps: 'Mappe della partita',
       map: 'Mappa',
-      hostTeam: 'Squadra ospitante',
       gameModes: {
         'Search & Destroy': 'Cerca e Distruggi',
         'Domination': 'Dominazione',
@@ -476,7 +473,6 @@ const MatchSheet = () => {
       },
       staffActions: 'Azioni Staff',
       giveVictory: 'Dare la vittoria',
-      cancelMatch: 'Annulla partita',
       removeDispute: 'Rimuovi controversia',
       selectTeam: 'Seleziona la squadra vincente',
       evidence: 'Prove',
@@ -490,11 +486,11 @@ const MatchSheet = () => {
       supportedFormats: 'Formati: JPG, PNG, GIF, WebP (max 5 MB)',
       uploading: 'Caricamento...',
       systemMessages: {
-        result_declared: (p) => `🏆 ${p.squadName} ha dichiarato ${p.winnerName} vincitore.`,
-        dispute_reported: (p) => `⚠️ ${p.squadName} ha segnalato una controversia.${p.reason ? ` Motivo: ${p.reason}` : ''}`,
+        result_declared: (p) => `🏆 ${p.playerName} ha dichiarato ${p.winnerName} vincitore.`,
+        dispute_reported: (p) => `⚠️ ${p.playerName} ha segnalato una controversia.${p.reason ? ` Motivo: ${p.reason}` : ''}`,
         evidence_added: (p) => `📷 ${p.username} ha aggiunto una prova.`,
         match_cancelled_mutual: () => `⚠️ Partita annullata di comune accordo.`,
-        cancel_requested: (p) => `🔄 ${p.squadName} richiede l'annullamento.`,
+        cancel_requested: (p) => `🔄 ${p.playerName} richiede l'annullamento.`,
         match_cancelled_staff: (p) => `❌ Partita annullata dallo staff.${p.reason ? ` Motivo: ${p.reason}` : ''}`,
         victory_assigned_staff: (p) => `👑 Lo staff ha assegnato la vittoria a ${p.winnerName}.`,
         dispute_removed_staff: () => `✅ La controversia è stata rimossa dallo staff. La partita riprende.`,
@@ -604,6 +600,43 @@ const MatchSheet = () => {
     fetchMySquad();
   }, [matchId, isAuthenticated]);
 
+  // Fetch team form (last 5 matches) for both teams
+  const fetchTeamForm = async (squadId) => {
+    try {
+      const response = await fetch(`${API_URL}/matches/history/${squadId}?limit=5`);
+      const data = await response.json();
+      if (data.success && data.matches) {
+        return data.matches.map(m => {
+          // Handle both populated winner (object with _id) and non-populated (just ObjectId)
+          const winnerId = m.result?.winner?._id?.toString() || m.result?.winner?.toString();
+          return {
+            isWin: winnerId === squadId.toString(),
+            opponentName: m.challenger?._id?.toString() === squadId.toString() 
+              ? m.opponent?.name 
+              : m.challenger?.name
+          };
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching team form:', err);
+    }
+    return [];
+  };
+
+  useEffect(() => {
+    const loadTeamForms = async () => {
+      if (match?.challenger?._id) {
+        const form = await fetchTeamForm(match.challenger._id);
+        setChallengerForm(form);
+      }
+      if (match?.opponent?._id) {
+        const form = await fetchTeamForm(match.opponent._id);
+        setOpponentForm(form);
+      }
+    };
+    loadTeamForms();
+  }, [match?.challenger?._id, match?.opponent?._id]);
+
   // Show combat report when match is completed
   useEffect(() => {
     const isMatchParticipant = mySquad && (mySquad._id === match?.challenger?._id || mySquad._id === match?.opponent?._id);
@@ -622,6 +655,9 @@ const MatchSheet = () => {
   }, [initialLoadDone, matchId]);
 
   // GGSecure status monitoring for PC players
+  const ggsecureMonitoringStarted = useRef(false);
+  const ggsecureIntervalRef = useRef(null);
+  
   const checkPlayerGGSecure = async (playerId) => {
     try {
       const response = await fetch(`${API_URL}/users/anticheat-status/${playerId}`);
@@ -633,25 +669,13 @@ const MatchSheet = () => {
   };
 
   const sendGGSecureStatusMessage = async (playerId, username, isOnline) => {
-    // Avoid sending duplicate messages within 30 seconds
     const now = Date.now();
     const lastSent = lastGGSecureMessageRef.current[playerId];
-    if (lastSent && (now - lastSent.time) < 30000 && lastSent.status === isOnline) {
-      console.log(`[GGSecure] Skipping duplicate message for ${username}`);
-      return;
-    }
     
-    // Check if someone else already sent this message recently (by checking chat history)
-    const recentGGSecureMsg = messages.slice(-10).find(m => 
-      m.isSystem && m.message?.includes(username) && m.message?.includes('GGSecure')
-    );
-    if (recentGGSecureMsg) {
-      const msgTime = new Date(recentGGSecureMsg.createdAt).getTime();
-      if ((now - msgTime) < 30000) {
-        console.log(`[GGSecure] Message already exists in chat for ${username}`);
-        lastGGSecureMessageRef.current[playerId] = { time: now, status: isOnline };
-        return;
-      }
+    // Skip if we already sent a message for this exact status recently (60 seconds)
+    if (lastSent && lastSent.status === isOnline && (now - lastSent.time) < 60000) {
+      console.log(`[GGSecure] Skipping - same status message sent recently for ${username}`);
+      return;
     }
     
     try {
@@ -665,13 +689,14 @@ const MatchSheet = () => {
         })
       });
       lastGGSecureMessageRef.current[playerId] = { time: now, status: isOnline };
+      console.log(`[GGSecure] Message sent for ${username}: ${isOnline ? 'ON' : 'OFF'}`);
     } catch (err) {
       console.error('Error sending GGSecure status message:', err);
     }
   };
 
   // Check GGSecure status for all PC players in rosters
-  const checkAllGGSecureStatuses = async () => {
+  const checkAllGGSecureStatuses = async (isInitialCheck = false) => {
     if (!match || (match.status !== 'in_progress' && match.status !== 'accepted')) return;
     
     // Get all PC players from both rosters
@@ -712,31 +737,52 @@ const MatchSheet = () => {
       
       const previousStatus = ggsecureStatusesRef.current[player.id];
       
-      // If status changed (and we had a previous status to compare)
-      if (previousStatus !== undefined && previousStatus !== isOnline) {
-        console.log(`[GGSecure] Status changed for ${player.username}: ${previousStatus} -> ${isOnline}`);
-        // Send message to chat
+      // Only send message if:
+      // 1. This is NOT the initial check (we don't want to spam on page load)
+      // 2. We had a previous status to compare
+      // 3. The status actually changed
+      if (!isInitialCheck && previousStatus !== undefined && previousStatus !== isOnline) {
+        console.log(`[GGSecure] Status CHANGED for ${player.username}: ${previousStatus} -> ${isOnline}`);
         await sendGGSecureStatusMessage(player.id, player.username, isOnline);
       }
       
-      // Update status
+      // Update status (silently on initial check)
       ggsecureStatusesRef.current[player.id] = isOnline;
       setGgsecureStatuses(prev => ({ ...prev, [player.id]: isOnline }));
     }
   };
 
-  // Start GGSecure monitoring when match is in progress
+  // Start GGSecure monitoring when match is in progress - only once
   useEffect(() => {
-    if (!match || (match.status !== 'in_progress' && match.status !== 'accepted')) return;
+    if (!match || (match.status !== 'in_progress' && match.status !== 'accepted')) {
+      // Match not ready or finished, stop monitoring
+      if (ggsecureIntervalRef.current) {
+        clearInterval(ggsecureIntervalRef.current);
+        ggsecureIntervalRef.current = null;
+      }
+      ggsecureMonitoringStarted.current = false;
+      return;
+    }
     
-    // Initial check
-    checkAllGGSecureStatuses();
+    // Only start monitoring once
+    if (ggsecureMonitoringStarted.current) return;
+    ggsecureMonitoringStarted.current = true;
     
-    // Check every 15 seconds
-    const interval = setInterval(checkAllGGSecureStatuses, 15000);
+    console.log('[GGSecure] Starting monitoring...');
     
-    return () => clearInterval(interval);
-  }, [match?.status, match?.challengerRoster, match?.opponentRoster]);
+    // Initial check - silent, just to get initial statuses
+    checkAllGGSecureStatuses(true);
+    
+    // Check every 15 seconds - these can send messages if status changes
+    ggsecureIntervalRef.current = setInterval(() => checkAllGGSecureStatuses(false), 15000);
+    
+    return () => {
+      if (ggsecureIntervalRef.current) {
+        clearInterval(ggsecureIntervalRef.current);
+        ggsecureIntervalRef.current = null;
+      }
+    };
+  }, [match?.status, matchId]);
 
   // Socket.io connection for real-time updates
   useEffect(() => {
@@ -1305,6 +1351,25 @@ const MatchSheet = () => {
                   <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.challenger.tag}]</span>
                 )}
               </Link>
+              {/* Team Form - Last 5 matches */}
+              {challengerForm.length > 0 && (
+                <div className="flex items-center justify-center gap-1 mt-2">
+                  <span className="text-gray-500 text-[10px] mr-1">{language === 'fr' ? 'Forme:' : 'Form:'}</span>
+                  {challengerForm.map((m, idx) => (
+                    <div
+                      key={idx}
+                      className={`w-4 h-4 sm:w-5 sm:h-5 rounded text-[10px] sm:text-xs font-bold flex items-center justify-center ${
+                        m.isWin 
+                          ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      }`}
+                      title={m.opponentName}
+                    >
+                      {m.isWin ? 'V' : 'D'}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* VS */}
@@ -1322,25 +1387,46 @@ const MatchSheet = () => {
                 </span>
               )}
               {match.opponent ? (
-                <Link to={`/squad/${match.opponent?._id}`} className="group">
-                  {match.opponent?.logo ? (
-                    <img 
-                      src={match.opponent.logo} 
-                      alt={match.opponent.name}
-                      className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
-                      <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+                <>
+                  <Link to={`/squad/${match.opponent?._id}`} className="group">
+                    {match.opponent?.logo ? (
+                      <img 
+                        src={match.opponent.logo} 
+                        alt={match.opponent.name}
+                        className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
+                        <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+                      </div>
+                    )}
+                    <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamOpponent ? 'text-yellow-400' : 'text-white'}`}>
+                      {match.opponent?.name}
+                    </h3>
+                    {match.opponent?.tag && (
+                      <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.opponent.tag}]</span>
+                    )}
+                  </Link>
+                  {/* Team Form - Last 5 matches */}
+                  {opponentForm.length > 0 && (
+                    <div className="flex items-center justify-center gap-1 mt-2">
+                      <span className="text-gray-500 text-[10px] mr-1">{language === 'fr' ? 'Forme:' : 'Form:'}</span>
+                      {opponentForm.map((m, idx) => (
+                        <div
+                          key={idx}
+                          className={`w-4 h-4 sm:w-5 sm:h-5 rounded text-[10px] sm:text-xs font-bold flex items-center justify-center ${
+                            m.isWin 
+                              ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                              : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                          }`}
+                          title={m.opponentName}
+                        >
+                          {m.isWin ? 'V' : 'D'}
+                        </div>
+                      ))}
                     </div>
                   )}
-                  <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamOpponent ? 'text-yellow-400' : 'text-white'}`}>
-                    {match.opponent?.name}
-                  </h3>
-                  {match.opponent?.tag && (
-                    <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.opponent.tag}]</span>
-                  )}
-                </Link>
+                </>
               ) : (
                 <div className="opacity-50">
                   <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-dark-800 flex items-center justify-center border-2 border-dashed border-white/20">
@@ -1844,22 +1930,30 @@ const MatchSheet = () => {
                   <div className="space-y-2">
                     {match.challengerRoster.map((p, idx) => {
                       const player = p.user;
-                      if (!player) return null;
-                      const avatar = getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username));
+                      // Utiliser le username sauvegardé si le compte est supprimé
+                      const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur supprimé' : 'Deleted player');
+                      const isDeleted = !player;
+                      const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username))) : getDefaultAvatar(displayName);
                       return (
                         <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                           <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                           <div className="flex-1 min-w-0">
-                            <Link 
-                              to={`/player/${player._id}`} 
-                              className="text-white text-sm font-medium truncate hover:text-cyan-400 transition-colors cursor-pointer block"
-                            >
-                              {player.username}
-                            </Link>
-                            {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                            {isDeleted ? (
+                              <span className="text-gray-400 text-sm font-medium truncate block italic">
+                                {displayName}
+                              </span>
+                            ) : (
+                              <Link 
+                                to={`/player/${player._id}`} 
+                                className="text-white text-sm font-medium truncate hover:text-cyan-400 transition-colors cursor-pointer block"
+                              >
+                                {displayName}
+                              </Link>
+                            )}
+                            {player?.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                           </div>
                           <div className="flex items-center gap-1">
-                            {player.platform === 'PC' && (
+                            {player?.platform === 'PC' && (
                               <span 
                                 className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
                                   ggsecureStatuses[player._id] === true 
@@ -1876,7 +1970,7 @@ const MatchSheet = () => {
                                 PC
                               </span>
                             )}
-                            {player.platform && player.platform !== 'PC' && (
+                            {player?.platform && player.platform !== 'PC' && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
                                 {player.platform}
                               </span>
@@ -1903,22 +1997,30 @@ const MatchSheet = () => {
                     <div className="space-y-2">
                       {match.opponentRoster.map((p, idx) => {
                         const player = p.user;
-                        if (!player) return null;
-                        const avatar = getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username));
+                        // Utiliser le username sauvegardé si le compte est supprimé
+                        const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur supprimé' : 'Deleted player');
+                        const isDeleted = !player;
+                        const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username))) : getDefaultAvatar(displayName);
                         return (
                           <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                             <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                             <div className="flex-1 min-w-0">
-                              <Link 
-                                to={`/player/${player._id}`} 
-                                className="text-white text-sm font-medium truncate hover:text-purple-400 transition-colors cursor-pointer block"
-                              >
-                                {player.username}
-                              </Link>
-                              {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                              {isDeleted ? (
+                                <span className="text-gray-400 text-sm font-medium truncate block italic">
+                                  {displayName}
+                                </span>
+                              ) : (
+                                <Link 
+                                  to={`/player/${player._id}`} 
+                                  className="text-white text-sm font-medium truncate hover:text-purple-400 transition-colors cursor-pointer block"
+                                >
+                                  {displayName}
+                                </Link>
+                              )}
+                              {player?.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                             </div>
                             <div className="flex items-center gap-1">
-                              {player.platform === 'PC' && (
+                              {player?.platform === 'PC' && (
                                 <span 
                                   className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
                                     ggsecureStatuses[player._id] === true 
@@ -1935,7 +2037,7 @@ const MatchSheet = () => {
                                   PC
                                 </span>
                               )}
-                              {player.platform && player.platform !== 'PC' && (
+                              {player?.platform && player.platform !== 'PC' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
                                   {player.platform}
                                 </span>
@@ -2293,6 +2395,18 @@ const MatchSheet = () => {
                 </span>
               </div>
             </div>
+
+            {/* Dispute button */}
+            <button
+              onClick={() => {
+                setShowCombatReport(false);
+                setShowDisputeModal(true);
+              }}
+              className="w-full py-2.5 mb-3 rounded-xl font-medium text-orange-400 bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              {language === 'fr' ? 'Signaler un litige' : 'Report a dispute'}
+            </button>
 
             {/* Close button */}
             <button

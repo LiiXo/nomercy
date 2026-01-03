@@ -4,8 +4,8 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { 
   ArrowLeft, Info, Trophy, Users, Clock, Target, 
-  TrendingUp, Award, Shield, Zap, Star, Crown,
-  Calendar, CheckCircle, XCircle, AlertTriangle, Coins, Loader2
+  TrendingUp, Award, Shield, Crown,
+  CheckCircle, Coins, Loader2, AlertTriangle, Zap
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -20,14 +20,23 @@ const RankingsInfo = () => {
 
   const isHardcore = selectedMode === 'hardcore';
   
-  // Fetch config on mount
+  // Fetch config on mount (both match config and app settings)
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const response = await fetch(`${API_URL}/matches/public-config`);
-        const data = await response.json();
-        if (data.success) {
-          setConfig(data);
+        // Fetch match config
+        const configRes = await fetch(`${API_URL}/matches/public-config`);
+        const configData = await configRes.json();
+        
+        // Fetch app settings for ladder time restrictions
+        const settingsRes = await fetch(`${API_URL}/app-settings/public`);
+        const settingsData = await settingsRes.json();
+        
+        if (configData.success) {
+          setConfig({
+            ...configData,
+            ladderSettings: settingsData?.ladderSettings || null
+          });
         }
       } catch (err) {
         console.error('Error fetching config:', err);
@@ -94,17 +103,14 @@ const RankingsInfo = () => {
       matchRule1: 'Utiliser la feuille de match officielle pour organiser vos rencontres',
       matchRule2: 'Les deux équipes doivent être inscrites au même classement',
       matchRule3: 'Les preuves (captures d\'écran) sont obligatoires',
-      matchRule4: 'Le score doit être validé par les deux équipes',
-      matchRule5: 'En cas de litige, contacter le staff via le système de litiges',
+      matchRule4: 'En cas de litige, contacter le staff via le système de litiges',
       
       rewards: 'Récompenses',
       rewardsTitle: 'Récompenses de fin de saison',
       rewardsDesc: 'Les meilleures équipes de chaque classement recevront des récompenses exclusives :',
-      reward1: '1ère place : Badge exclusif + 10,000 pièces d\'or',
-      reward2: '2ème place : Badge exclusif + 7,500 pièces d\'or',
-      reward3: '3ème place : Badge exclusif + 5,000 pièces d\'or',
-      rewardTop10: 'Top 4-10 : 2,500 pièces d\'or',
-      rewardTop20: 'Top 11-20 : 1,000 pièces d\'or',
+      reward1: '1ère place : Trophée exclusif Or + 150 pts dans le top escouade',
+      reward2: '2ème place : Trophée exclusif Argent + 100 pts dans le top escouade',
+      reward3: '3ème place : Trophée exclusif Bronze + 75 pts dans le top escouade',
       
       tips: 'Conseils',
       tipsTitle: 'Conseils pour réussir',
@@ -170,17 +176,14 @@ const RankingsInfo = () => {
       matchRule1: 'Use the official match sheet to organize your matches',
       matchRule2: 'Both teams must be registered in the same ranking',
       matchRule3: 'Evidence (screenshots) is mandatory',
-      matchRule4: 'The score must be validated by both teams',
-      matchRule5: 'In case of dispute, contact staff via the dispute system',
+      matchRule4: 'In case of dispute, contact staff via the dispute system',
       
       rewards: 'Rewards',
       rewardsTitle: 'End of Season Rewards',
       rewardsDesc: 'The best teams in each ranking will receive exclusive rewards:',
-      reward1: '1st place: Exclusive badge + 10,000 gold coins',
-      reward2: '2nd place: Exclusive badge + 7,500 gold coins',
-      reward3: '3rd place: Exclusive badge + 5,000 gold coins',
-      rewardTop10: 'Top 4-10: 2,500 gold coins',
-      rewardTop20: 'Top 11-20: 1,000 gold coins',
+      reward1: '1st place: Exclusive Gold trophy + 150 pts in top squad',
+      reward2: '2nd place: Exclusive Silver trophy + 100 pts in top squad',
+      reward3: '3rd place: Exclusive Bronze trophy + 75 pts in top squad',
       
       tips: 'Tips',
       tipsTitle: 'Tips for Success',
@@ -246,17 +249,14 @@ const RankingsInfo = () => {
       matchRule1: 'Verwenden Sie das offizielle Match-Blatt',
       matchRule2: 'Beide Teams müssen in derselben Rangliste registriert sein',
       matchRule3: 'Beweise (Screenshots) sind obligatorisch',
-      matchRule4: 'Das Ergebnis muss von beiden Teams bestätigt werden',
-      matchRule5: 'Bei Streitigkeiten wenden Sie sich über das Streitbeilegungssystem an das Personal',
+      matchRule4: 'Bei Streitigkeiten wenden Sie sich über das Streitbeilegungssystem an das Personal',
       
       rewards: 'Belohnungen',
       rewardsTitle: 'Saisonendbelohnungen',
       rewardsDesc: 'Die besten Teams jeder Rangliste erhalten exklusive Belohnungen:',
-      reward1: '1. Platz: Exklusives Abzeichen + 10.000 Goldmünzen',
-      reward2: '2. Platz: Exklusives Abzeichen + 7.500 Goldmünzen',
-      reward3: '3. Platz: Exklusives Abzeichen + 5.000 Goldmünzen',
-      rewardTop10: 'Top 4-10: 2.500 Goldmünzen',
-      rewardTop20: 'Top 11-20: 1.000 Goldmünzen',
+      reward1: '1. Platz: Exklusiver Gold-Pokal + 150 Pkt. im Top-Squad',
+      reward2: '2. Platz: Exklusiver Silber-Pokal + 100 Pkt. im Top-Squad',
+      reward3: '3. Platz: Exklusiver Bronze-Pokal + 75 Pkt. im Top-Squad',
       
       tips: 'Tipps',
       tipsTitle: 'Erfolgstipps',
@@ -322,17 +322,14 @@ const RankingsInfo = () => {
       matchRule1: 'Utilizzare il foglio partita ufficiale per organizzare le partite',
       matchRule2: 'Entrambe le squadre devono essere registrate nella stessa classifica',
       matchRule3: 'Le prove (screenshot) sono obbligatorie',
-      matchRule4: 'Il punteggio deve essere convalidato da entrambe le squadre',
-      matchRule5: 'In caso di controversia, contattare lo staff tramite il sistema di controversie',
+      matchRule4: 'In caso di controversia, contattare lo staff tramite il sistema di controversie',
       
       rewards: 'Ricompense',
       rewardsTitle: 'Ricompense di Fine Stagione',
       rewardsDesc: 'Le migliori squadre di ogni classifica riceveranno ricompense esclusive:',
-      reward1: '1° posto: Badge esclusivo + 10.000 monete d\'oro',
-      reward2: '2° posto: Badge esclusivo + 7.500 monete d\'oro',
-      reward3: '3° posto: Badge esclusivo + 5.000 monete d\'oro',
-      rewardTop10: 'Top 4-10: 2.500 monete d\'oro',
-      rewardTop20: 'Top 11-20: 1.000 monete d\'oro',
+      reward1: '1° posto: Trofeo esclusivo Oro + 150 punti nel top squadra',
+      reward2: '2° posto: Trofeo esclusivo Argento + 100 punti nel top squadra',
+      reward3: '3° posto: Trofeo esclusivo Bronzo + 75 punti nel top squadra',
       
       tips: 'Consigli',
       tipsTitle: 'Consigli per il Successo',
@@ -432,8 +429,17 @@ const RankingsInfo = () => {
                   </div>
                   <p className="text-gray-400 text-sm mb-3">{t.duoTrioDesc}</p>
                   <div className="flex items-center gap-2 text-sm">
-                    <Clock className="w-4 h-4 text-orange-400" />
-                    <span className="text-gray-300">{t.duoTrioTime}</span>
+                    <Clock className={`w-4 h-4 ${
+                      config?.ladderSettings?.duoTrioTimeRestriction?.enabled === false 
+                        ? 'text-green-400' 
+                        : 'text-orange-400'
+                    }`} />
+                    <span className="text-gray-300">
+                      {config?.ladderSettings?.duoTrioTimeRestriction?.enabled === false
+                        ? (language === 'fr' ? 'Disponible 24h/24, 7j/7' : 'Available 24/7')
+                        : t.duoTrioTime
+                      }
+                    </span>
                   </div>
                 </div>
 
@@ -588,7 +594,7 @@ const RankingsInfo = () => {
               </div>
               <p className="text-gray-300 mb-4">{t.matchRulesDesc}</p>
               <div className="space-y-2">
-                {[t.matchRule1, t.matchRule2, t.matchRule3, t.matchRule4, t.matchRule5].map((rule, index) => (
+                {[t.matchRule1, t.matchRule2, t.matchRule3, t.matchRule4].map((rule, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 bg-dark-800/50 rounded-lg">
                     <CheckCircle className={`w-5 h-5 ${colors.text} flex-shrink-0 mt-0.5`} />
                     <p className="text-gray-300 text-sm">{rule}</p>
@@ -606,24 +612,34 @@ const RankingsInfo = () => {
               <p className="text-gray-300 mb-6">{t.rewardsDesc}</p>
               <div className="space-y-3">
                 <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/30 rounded-xl">
-                  <Crown className="w-8 h-8 text-yellow-400" />
-                  <p className="text-white font-medium">{t.reward1}</p>
+                  <div className="relative">
+                    <Crown className="w-8 h-8 text-yellow-400" />
+                    <Trophy className="w-4 h-4 text-yellow-300 absolute -bottom-1 -right-1" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{t.reward1}</p>
+                    <p className="text-yellow-400/70 text-xs">{language === 'fr' ? 'Trophée légendaire' : 'Legendary trophy'}</p>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-gray-400/20 to-gray-500/20 border border-gray-400/30 rounded-xl">
-                  <Award className="w-7 h-7 text-gray-300" />
-                  <p className="text-white font-medium">{t.reward2}</p>
+                <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-gray-300/20 to-gray-400/20 border border-gray-300/30 rounded-xl">
+                  <div className="relative">
+                    <Award className="w-7 h-7 text-gray-300" />
+                    <Trophy className="w-4 h-4 text-gray-200 absolute -bottom-1 -right-1" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{t.reward2}</p>
+                    <p className="text-gray-400/70 text-xs">{language === 'fr' ? 'Trophée épique' : 'Epic trophy'}</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-orange-600/20 to-orange-700/20 border border-orange-600/30 rounded-xl">
-                  <Award className="w-6 h-6 text-orange-400" />
-                  <p className="text-white font-medium">{t.reward3}</p>
-                </div>
-                <div className="flex items-center gap-4 p-4 bg-dark-800/50 border border-white/10 rounded-xl">
-                  <Star className={`w-6 h-6 ${colors.text}`} />
-                  <p className="text-gray-300 font-medium">{t.rewardTop10}</p>
-                </div>
-                <div className="flex items-center gap-4 p-4 bg-dark-800/50 border border-white/10 rounded-xl">
-                  <Zap className="w-6 h-6 text-blue-400" />
-                  <p className="text-gray-300 font-medium">{t.rewardTop20}</p>
+                  <div className="relative">
+                    <Award className="w-6 h-6 text-orange-400" />
+                    <Trophy className="w-4 h-4 text-orange-300 absolute -bottom-1 -right-1" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">{t.reward3}</p>
+                    <p className="text-orange-400/70 text-xs">{language === 'fr' ? 'Trophée rare' : 'Rare trophy'}</p>
+                  </div>
                 </div>
               </div>
             </div>

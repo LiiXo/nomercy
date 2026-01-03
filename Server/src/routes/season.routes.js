@@ -2,7 +2,9 @@ import express from 'express';
 import Season from '../models/Season.js';
 import Ranking from '../models/Ranking.js';
 import User from '../models/User.js';
+import LadderSeasonHistory from '../models/LadderSeasonHistory.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
+import { resetLadderSeason, resetAllLadderSeasons, getPreviousSeasonWinners, REWARD_POINTS } from '../services/ladderSeasonReset.service.js';
 
 const router = express.Router();
 
@@ -492,6 +494,146 @@ router.get('/admin/:seasonId/stats', verifyToken, requireStaff, async (req, res)
     });
   } catch (error) {
     console.error('Get season stats error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== LADDER SEASON ROUTES ====================
+
+// Get previous season winners for rankings page (public)
+router.get('/ladder/previous-winners', async (req, res) => {
+  try {
+    const winners = await getPreviousSeasonWinners();
+    
+    res.json({
+      success: true,
+      duoTrio: winners.duoTrio,
+      squadTeam: winners.squadTeam,
+      rewardPoints: REWARD_POINTS
+    });
+  } catch (error) {
+    console.error('Get previous season winners error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get ladder season history (public)
+router.get('/ladder/history/:ladderId', async (req, res) => {
+  try {
+    const { ladderId } = req.params;
+    const { limit = 12 } = req.query;
+    
+    if (!['duo-trio', 'squad-team'].includes(ladderId)) {
+      return res.status(400).json({ success: false, message: 'Ladder ID invalide' });
+    }
+    
+    const history = await LadderSeasonHistory.find({ ladderId })
+      .sort({ resetAt: -1 })
+      .limit(parseInt(limit))
+      .populate('winners.squad', 'name tag color logo')
+      .populate('winners.trophy', 'name icon color translations');
+    
+    res.json({ success: true, history });
+  } catch (error) {
+    console.error('Get ladder history error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reset a specific ladder season (admin only)
+router.post('/admin/ladder/:ladderId/reset', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { ladderId } = req.params;
+    
+    if (!['duo-trio', 'squad-team'].includes(ladderId)) {
+      return res.status(400).json({ success: false, message: 'Ladder ID invalide' });
+    }
+    
+    const result = await resetLadderSeason(ladderId, req.user._id);
+    
+    res.json({
+      success: true,
+      message: `Saison ${result.seasonName} terminée et réinitialisée pour ${result.ladderName}`,
+      result
+    });
+  } catch (error) {
+    console.error('Reset ladder season error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur serveur' });
+  }
+});
+
+// Reset all ladder seasons (admin only)
+router.post('/admin/ladder/reset-all', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await resetAllLadderSeasons(req.user._id);
+    
+    res.json({
+      success: true,
+      message: 'Toutes les saisons de ladder ont été réinitialisées',
+      duoTrio: {
+        seasonName: result.duoTrio.seasonName,
+        winners: result.duoTrio.winners,
+        totalSquadsReset: result.duoTrio.totalSquadsReset
+      },
+      squadTeam: {
+        seasonName: result.squadTeam.seasonName,
+        winners: result.squadTeam.winners,
+        totalSquadsReset: result.squadTeam.totalSquadsReset
+      }
+    });
+  } catch (error) {
+    console.error('Reset all ladder seasons error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur serveur' });
+  }
+});
+
+// Get ladder season statistics (admin/staff)
+router.get('/admin/ladder/stats', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const duoTrioHistory = await LadderSeasonHistory.find({ ladderId: 'duo-trio' })
+      .sort({ resetAt: -1 })
+      .limit(6);
+    
+    const squadTeamHistory = await LadderSeasonHistory.find({ ladderId: 'squad-team' })
+      .sort({ resetAt: -1 })
+      .limit(6);
+    
+    res.json({
+      success: true,
+      duoTrio: {
+        totalSeasons: await LadderSeasonHistory.countDocuments({ ladderId: 'duo-trio' }),
+        recentSeasons: duoTrioHistory
+      },
+      squadTeam: {
+        totalSeasons: await LadderSeasonHistory.countDocuments({ ladderId: 'squad-team' }),
+        recentSeasons: squadTeamHistory
+      },
+      rewardPoints: REWARD_POINTS
+    });
+  } catch (error) {
+    console.error('Get ladder stats error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Delete ladder season history (admin only)
+router.delete('/admin/ladder/history/:historyId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { historyId } = req.params;
+    
+    const history = await LadderSeasonHistory.findById(historyId);
+    if (!history) {
+      return res.status(404).json({ success: false, message: 'Historique non trouvé' });
+    }
+    
+    await LadderSeasonHistory.findByIdAndDelete(historyId);
+    
+    res.json({ 
+      success: true, 
+      message: `Historique de saison "${history.seasonName}" supprimé` 
+    });
+  } catch (error) {
+    console.error('Delete ladder history error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

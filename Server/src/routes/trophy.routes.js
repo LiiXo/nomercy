@@ -52,7 +52,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create trophy (admin only)
-router.post('/', verifyToken, requireAdmin, async (req, res) => {
+router.post('/admin/create', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { name, description, translations, icon, color, rarity, rarityName, isDefault, isActive } = req.body;
 
@@ -83,7 +83,7 @@ router.post('/', verifyToken, requireAdmin, async (req, res) => {
 });
 
 // Update trophy (admin only)
-router.put('/:id', verifyToken, requireAdmin, async (req, res) => {
+router.put('/admin/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { name, description, translations, icon, color, rarity, rarityName, isDefault, isActive } = req.body;
 
@@ -120,7 +120,7 @@ router.put('/:id', verifyToken, requireAdmin, async (req, res) => {
 });
 
 // Delete trophy (admin only)
-router.delete('/:id', verifyToken, requireAdmin, async (req, res) => {
+router.delete('/admin/:id', verifyToken, requireAdmin, async (req, res) => {
   try {
     const trophy = await Trophy.findById(req.params.id);
     if (!trophy) {

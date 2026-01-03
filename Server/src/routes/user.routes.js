@@ -460,7 +460,19 @@ router.delete('/delete-avatar', verifyToken, async (req, res) => {
 // Update profile
 router.put('/profile', verifyToken, async (req, res) => {
   try {
-    const { username, bio, avatar, activisionId } = req.body;
+    const { username, bio, avatar, activisionId, platform } = req.body;
+
+    // Validate platform if provided
+    if (platform !== undefined) {
+      const validPlatforms = ['PC', 'PlayStation', 'Xbox'];
+      if (!validPlatforms.includes(platform)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please select a valid platform (PC, PlayStation, or Xbox).'
+        });
+      }
+      req.user.platform = platform;
+    }
 
     // Validate username if provided
     if (username) {
@@ -898,6 +910,7 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
         losses: r.losses,
         rank: r.rank
       })),
+      scheduledFor: new Date(), // Required field - set to now for immediate deletion
       deletedAt: new Date(),
       deletedBy: 'self',
       status: 'completed'
@@ -1349,6 +1362,48 @@ router.put('/admin/:userId/gold/set', verifyToken, requireAdmin, async (req, res
   }
 });
 
+// Admin: Get deleted accounts (MUST be before /admin/:userId routes)
+router.get('/admin/deleted-accounts', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || '';
+
+    const query = { status: 'completed' };
+    if (search && search.trim()) {
+      query.$or = [
+        { username: { $regex: search.trim(), $options: 'i' } },
+        { discordUsername: { $regex: search.trim(), $options: 'i' } }
+      ];
+    }
+
+    const deletedAccounts = await AccountDeletion.find(query)
+      .sort({ deletedAt: -1 })
+      .limit(limit)
+      .skip((page - 1) * limit);
+
+    const total = await AccountDeletion.countDocuments(query);
+
+    res.json({
+      success: true,
+      deletedAccounts,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get deleted accounts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur',
+      details: error.message
+    });
+  }
+});
+
 // Admin: Get single user details
 router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
   try {
@@ -1378,7 +1433,7 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
 // Admin: Update user
 router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { username, goldCoins, roles, platform, activisionId, bio } = req.body;
+    const { username, goldCoins, roles, platform, activisionId, bio, stats } = req.body;
     
     const user = await User.findById(req.params.userId);
     if (!user) {
@@ -1395,6 +1450,15 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
     if (platform !== undefined) user.platform = platform;
     if (activisionId !== undefined) user.activisionId = activisionId;
     if (bio !== undefined) user.bio = bio;
+    
+    // Update stats including XP
+    if (stats !== undefined) {
+      if (stats.xp !== undefined) user.stats.xp = stats.xp;
+      if (stats.points !== undefined) user.stats.points = stats.points;
+      if (stats.wins !== undefined) user.stats.wins = stats.wins;
+      if (stats.losses !== undefined) user.stats.losses = stats.losses;
+      if (stats.rank !== undefined) user.stats.rank = stats.rank;
+    }
 
     await user.save();
 
@@ -1451,6 +1515,7 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
         losses: r.losses,
         rank: r.rank
       })),
+      scheduledFor: new Date(), // Required field - set to now for immediate deletion
       deletedAt: new Date(),
       deletedBy: 'admin',
       deletionReason: req.body.reason || null,
@@ -1494,45 +1559,6 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
     });
   } catch (error) {
     console.error('Delete user error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur'
-    });
-  }
-});
-
-// Admin: Get deleted accounts
-router.get('/admin/deleted-accounts', verifyToken, requireStaff, async (req, res) => {
-  try {
-    const { page = 1, limit = 20, search = '' } = req.query;
-
-    const query = { status: 'completed' };
-    if (search) {
-      query.$or = [
-        { username: { $regex: search, $options: 'i' } },
-        { discordUsername: { $regex: search, $options: 'i' } }
-      ];
-    }
-
-    const deletedAccounts = await AccountDeletion.find(query)
-      .sort({ deletedAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await AccountDeletion.countDocuments(query);
-
-    res.json({
-      success: true,
-      deletedAccounts,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Get deleted accounts error:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'

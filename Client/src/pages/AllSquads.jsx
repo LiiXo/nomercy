@@ -359,3 +359,5 @@ const AllSquads = () => {
 
 export default AllSquads;
 
+
+

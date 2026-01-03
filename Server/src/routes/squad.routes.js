@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
+import Match from '../models/Match.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -735,6 +736,22 @@ router.delete('/:squadId/disband', verifyToken, async (req, res) => {
       });
     }
     
+    // Check if squad has any pending disputes
+    const pendingDisputes = await Match.countDocuments({
+      $or: [
+        { challenger: squadId },
+        { opponent: squadId }
+      ],
+      status: 'disputed'
+    });
+    
+    if (pendingDisputes > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vous ne pouvez pas dissoudre votre escouade car vous avez ${pendingDisputes} litige(s) en cours. Veuillez attendre leur résolution.` 
+      });
+    }
+    
     // Remove squad reference from the leader
     await User.findByIdAndUpdate(leaderId, { $unset: { squad: 1 } });
     
@@ -1106,23 +1123,38 @@ router.delete('/:squadId/revoke-invite', verifyToken, async (req, res) => {
     const { squadId } = req.params;
     const userId = req.user._id;
     
+    // Validate squadId format
+    if (!squadId || !squadId.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ success: false, message: 'ID d\'escouade invalide' });
+    }
+    
     const squad = await Squad.findById(squadId);
     if (!squad) {
       return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
     }
     
-    if (!squad.canManage(userId)) {
+    // Check if user can manage - with additional null check
+    const userIdStr = userId?.toString?.() || userId;
+    const isLeader = squad.leader?.toString?.() === userIdStr;
+    const isOfficer = squad.members?.some(m => {
+      const memberUserId = m.user?.toString?.() || m.user?._id?.toString?.();
+      return memberUserId === userIdStr && m.role === 'officer';
+    });
+    
+    if (!isLeader && !isOfficer) {
       return res.status(403).json({ success: false, message: 'Permission refusée' });
     }
     
-    squad.inviteCode = null;
-    squad.inviteCodeExpiresAt = null;
-    await squad.save();
+    // Use $unset to remove the fields instead of setting to null
+    // This avoids unique index conflicts with other null values
+    await Squad.findByIdAndUpdate(squadId, {
+      $unset: { inviteCode: 1, inviteCodeExpiresAt: 1 }
+    });
     
     res.json({ success: true, message: 'Code d\'invitation révoqué' });
   } catch (error) {
     console.error('Revoke invite error:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
+    res.status(500).json({ success: false, message: 'Erreur serveur', details: error.message });
   }
 });
 
@@ -1393,7 +1425,7 @@ router.post('/:squadId/assign-trophy', verifyToken, async (req, res) => {
     const { trophyId, reason } = req.body;
 
     // Check if admin
-    if (req.user.role !== 'admin') {
+    if (!req.user.roles?.includes('admin')) {
       return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs' });
     }
 
@@ -1433,7 +1465,7 @@ router.delete('/:squadId/remove-trophy/:trophyId', verifyToken, async (req, res)
     const { squadId, trophyId } = req.params;
 
     // Check if admin
-    if (req.user.role !== 'admin') {
+    if (!req.user.roles?.includes('admin')) {
       return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs' });
     }
 
@@ -1457,7 +1489,7 @@ router.delete('/:squadId/remove-trophy/:trophyId', verifyToken, async (req, res)
 // Get all squads (for admin trophy assignment)
 router.get('/admin/all-trophies', verifyToken, async (req, res) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+    if (!req.user.roles?.includes('admin') && !req.user.roles?.includes('staff')) {
       return res.status(403).json({ success: false, message: 'Accès réservé' });
     }
 
@@ -1567,7 +1599,7 @@ router.post('/admin/:squadId/reset-progression', verifyToken, requireAdmin, asyn
 // Update squad (admin/staff)
 router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, tag, description, mode, color, maxMembers, experience, logo } = req.body;
+    const { name, tag, description, mode, color, maxMembers, experience, logo, stats } = req.body;
     
     const squad = await Squad.findById(req.params.squadId);
     if (!squad) {
@@ -1586,6 +1618,13 @@ router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
     if (maxMembers !== undefined) squad.maxMembers = maxMembers;
     if (experience !== undefined) squad.experience = experience;
     if (logo !== undefined) squad.logo = logo;
+    
+    // Update stats if provided (admin only for totalPoints)
+    if (stats !== undefined) {
+      if (stats.totalPoints !== undefined) squad.stats.totalPoints = parseInt(stats.totalPoints) || 0;
+      if (stats.totalWins !== undefined) squad.stats.totalWins = parseInt(stats.totalWins) || 0;
+      if (stats.totalLosses !== undefined) squad.stats.totalLosses = parseInt(stats.totalLosses) || 0;
+    }
 
     await squad.save();
 
@@ -1596,6 +1635,47 @@ router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
     });
   } catch (error) {
     console.error('Update squad error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Update squad ladder points (admin only)
+router.put('/admin/:squadId/ladder-points', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { ladderPoints } = req.body;
+    
+    const squad = await Squad.findById(req.params.squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Update ladder points
+    if (ladderPoints && typeof ladderPoints === 'object') {
+      for (const ladderId in ladderPoints) {
+        const ladderIndex = squad.registeredLadders.findIndex(l => l.ladderId === ladderId);
+        if (ladderIndex !== -1) {
+          squad.registeredLadders[ladderIndex].points = parseInt(ladderPoints[ladderId]) || 0;
+        }
+      }
+    }
+
+    await squad.save();
+
+    console.log(`[ADMIN] Squad ${squad.name} ladder points updated by admin`);
+
+    res.json({
+      success: true,
+      message: 'Points ladder mis à jour',
+      squad
+    });
+  } catch (error) {
+    console.error('Update squad ladder points error:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'
@@ -1656,8 +1736,11 @@ router.post('/admin/:squadId/kick/:memberId', verifyToken, requireStaff, async (
       });
     }
 
-    // Check if member exists in squad
-    const memberIndex = squad.members.findIndex(m => m.odId === memberId);
+    // Check if member exists in squad (compare with user._id or user reference)
+    const memberIndex = squad.members.findIndex(m => {
+      const memberUserId = m.user?._id?.toString() || m.user?.toString();
+      return memberUserId === memberId;
+    });
     if (memberIndex === -1) {
       return res.status(404).json({
         success: false,
@@ -1665,13 +1748,17 @@ router.post('/admin/:squadId/kick/:memberId', verifyToken, requireStaff, async (
       });
     }
 
+    // Get the user reference before removing
+    const memberToKick = squad.members[memberIndex];
+    const userIdToUpdate = memberToKick.user?._id || memberToKick.user;
+
     // Remove member from squad
     squad.members.splice(memberIndex, 1);
     await squad.save();
 
     // Update user's squad reference
-    await User.findOneAndUpdate(
-      { odId: memberId },
+    await User.findByIdAndUpdate(
+      userIdToUpdate,
       { $unset: { squad: 1 } }
     );
 

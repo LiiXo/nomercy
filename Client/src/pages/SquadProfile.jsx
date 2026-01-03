@@ -93,6 +93,7 @@ const SquadProfile = () => {
         'Team Deathmatch': 'Mêlée générale',
       },
       deletedTeam: 'Équipe supprimée',
+      deletedPlayer: 'Joueur supprimé',
     },
     en: {
       back: 'Back',
@@ -141,6 +142,7 @@ const SquadProfile = () => {
         'Team Deathmatch': 'Team Deathmatch',
       },
       deletedTeam: 'Deleted team',
+      deletedPlayer: 'Deleted player',
     },
     de: {
       back: 'Zurück',
@@ -189,6 +191,7 @@ const SquadProfile = () => {
         'Team Deathmatch': 'Team-Deathmatch',
       },
       deletedTeam: 'Gelöschtes Team',
+      deletedPlayer: 'Gelöschter Spieler',
     },
     it: {
       back: 'Indietro',
@@ -237,6 +240,7 @@ const SquadProfile = () => {
         'Team Deathmatch': 'Deathmatch a squadre',
       },
       deletedTeam: 'Squadra eliminata',
+      deletedPlayer: 'Giocatore eliminato',
     },
   };
   const t = texts[language] || texts.en;
@@ -576,62 +580,103 @@ const SquadProfile = () => {
           </div>
 
           {/* Trophies Section */}
-            {(() => {
-              // Combine default trophies and squad-specific trophies
-              const squadTrophyIds = squad.trophies?.map(t => t.trophy?._id || t.trophy) || [];
-              const squadEarnedTrophies = squad.trophies?.map(t => t.trophy).filter(Boolean) || [];
-              
-              // Get default trophies that squad doesn't already have
-              const defaultTrophiesToShow = defaultTrophies.filter(dt => !squadTrophyIds.includes(dt._id));
-              
-              // Combine and sort by rarity (highest first)
-              const allTrophies = [...squadEarnedTrophies, ...defaultTrophiesToShow]
-                .sort((a, b) => (b.rarity || 1) - (a.rarity || 1));
-              
-              if (allTrophies.length === 0) return null;
-              
-              const colorMap = {
-                amber: { bg: 'from-amber-500/20 to-orange-600/20', border: 'border-amber-500/30', text: 'text-amber-500', shadow: 'hover:shadow-amber-500/30' },
-                yellow: { bg: 'from-yellow-500/20 to-amber-600/20', border: 'border-yellow-500/30', text: 'text-yellow-500', shadow: 'hover:shadow-yellow-500/30' },
-                orange: { bg: 'from-orange-500/20 to-red-600/20', border: 'border-orange-500/30', text: 'text-orange-500', shadow: 'hover:shadow-orange-500/30' },
-                red: { bg: 'from-red-500/20 to-rose-600/20', border: 'border-red-500/30', text: 'text-red-500', shadow: 'hover:shadow-red-500/30' },
-                pink: { bg: 'from-pink-500/20 to-rose-600/20', border: 'border-pink-500/30', text: 'text-pink-500', shadow: 'hover:shadow-pink-500/30' },
-                purple: { bg: 'from-purple-500/20 to-pink-600/20', border: 'border-purple-500/30', text: 'text-purple-500', shadow: 'hover:shadow-purple-500/30' },
-                blue: { bg: 'from-blue-500/20 to-indigo-600/20', border: 'border-blue-500/30', text: 'text-blue-500', shadow: 'hover:shadow-blue-500/30' },
-                cyan: { bg: 'from-cyan-500/20 to-blue-600/20', border: 'border-cyan-500/30', text: 'text-cyan-500', shadow: 'hover:shadow-cyan-500/30' },
-                green: { bg: 'from-green-500/20 to-emerald-600/20', border: 'border-green-500/30', text: 'text-green-500', shadow: 'hover:shadow-green-500/30' },
-                emerald: { bg: 'from-emerald-500/20 to-teal-600/20', border: 'border-emerald-500/30', text: 'text-emerald-500', shadow: 'hover:shadow-emerald-500/30' },
-                gray: { bg: 'from-gray-500/20 to-slate-600/20', border: 'border-gray-500/30', text: 'text-gray-500', shadow: 'hover:shadow-gray-500/30' }
-              };
-              
-              return (
-                <div className="mt-6 pt-6 border-t border-white/10">
-                  <div className="flex items-center justify-center gap-4 flex-wrap">
-                    {allTrophies.map((trophy) => {
-                      const colors = colorMap[trophy.color] || colorMap.amber;
-                      const IconComponent = { Trophy, Award, Medal, Crown, Shield, Target }[trophy.icon] || Trophy;
-                      const trophyName = trophy.translations?.[language]?.name || trophy.name;
-                      const trophyDesc = trophy.translations?.[language]?.description || trophy.description;
-                      const isEarned = squadTrophyIds.includes(trophy._id);
-                      
-                      return (
-                        <div key={trophy._id} className="group relative">
-                          <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${colors.bg} ${colors.border} border flex items-center justify-center cursor-pointer hover:scale-110 transition-transform shadow-lg ${colors.shadow} ${isEarned ? 'ring-2 ring-offset-2 ring-offset-dark-900' : ''}`} style={isEarned ? { ringColor: trophy.color === 'amber' ? '#f59e0b' : undefined } : {}}>
-                            <IconComponent className={`w-7 h-7 ${colors.text}`} />
-                          </div>
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-dark-800 border border-white/20 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
-                            <p className="text-white font-semibold text-sm">{trophyName}</p>
-                            <p className="text-gray-400 text-xs">{trophyDesc}</p>
-                            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-dark-800"></div>
-                          </div>
+          {(() => {
+            // Combine default trophies and squad-specific trophies
+            const squadTrophyIds = squad.trophies?.map(t => t.trophy?._id || t.trophy) || [];
+            const squadEarnedTrophies = squad.trophies?.map(t => t.trophy).filter(Boolean) || [];
+            
+            // Get default trophies that squad doesn't already have
+            const defaultTrophiesToShow = defaultTrophies.filter(dt => !squadTrophyIds.includes(dt._id));
+            
+            // Combine and sort: earned first, then by rarity (highest first)
+            const allTrophies = [...squadEarnedTrophies, ...defaultTrophiesToShow]
+              .sort((a, b) => {
+                const aEarned = squadTrophyIds.includes(a._id) ? 1 : 0;
+                const bEarned = squadTrophyIds.includes(b._id) ? 1 : 0;
+                if (bEarned !== aEarned) return bEarned - aEarned;
+                return (b.rarity || 1) - (a.rarity || 1);
+              });
+            
+            if (allTrophies.length === 0) return null;
+            
+            const colorMap = {
+              amber: { bg: 'from-amber-500/20 to-orange-600/20', border: 'border-amber-500/40', text: 'text-amber-500', glow: 'shadow-amber-500/40' },
+              yellow: { bg: 'from-yellow-500/20 to-amber-600/20', border: 'border-yellow-500/40', text: 'text-yellow-500', glow: 'shadow-yellow-500/40' },
+              orange: { bg: 'from-orange-500/20 to-red-600/20', border: 'border-orange-500/40', text: 'text-orange-500', glow: 'shadow-orange-500/40' },
+              red: { bg: 'from-red-500/20 to-rose-600/20', border: 'border-red-500/40', text: 'text-red-500', glow: 'shadow-red-500/40' },
+              pink: { bg: 'from-pink-500/20 to-rose-600/20', border: 'border-pink-500/40', text: 'text-pink-500', glow: 'shadow-pink-500/40' },
+              purple: { bg: 'from-purple-500/20 to-pink-600/20', border: 'border-purple-500/40', text: 'text-purple-500', glow: 'shadow-purple-500/40' },
+              blue: { bg: 'from-blue-500/20 to-indigo-600/20', border: 'border-blue-500/40', text: 'text-blue-500', glow: 'shadow-blue-500/40' },
+              cyan: { bg: 'from-cyan-500/20 to-blue-600/20', border: 'border-cyan-500/40', text: 'text-cyan-500', glow: 'shadow-cyan-500/40' },
+              green: { bg: 'from-green-500/20 to-emerald-600/20', border: 'border-green-500/40', text: 'text-green-500', glow: 'shadow-green-500/40' },
+              emerald: { bg: 'from-emerald-500/20 to-teal-600/20', border: 'border-emerald-500/40', text: 'text-emerald-500', glow: 'shadow-emerald-500/40' },
+              gray: { bg: 'from-gray-500/20 to-slate-600/20', border: 'border-gray-500/40', text: 'text-gray-500', glow: 'shadow-gray-500/40' }
+            };
+            
+            return (
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>
+                <h2 className="text-lg font-bold text-white mb-5 flex items-center space-x-2">
+                  <Trophy className="w-5 h-5" style={{ color: squad.color }} />
+                  <span>{t.trophies}</span>
+                </h2>
+                
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+                  {allTrophies.map((trophy) => {
+                    const colors = colorMap[trophy.color] || colorMap.amber;
+                    const IconComponent = { Trophy, Award, Medal, Crown, Shield, Target }[trophy.icon] || Trophy;
+                    const trophyName = trophy.translations?.[language]?.name || trophy.name;
+                    const trophyDesc = trophy.translations?.[language]?.description || trophy.description;
+                    const isEarned = squadTrophyIds.includes(trophy._id);
+                    
+                    return (
+                      <div key={trophy._id} className="group relative flex flex-col items-center">
+                        {/* Trophy icon */}
+                        <div 
+                          className={`relative w-16 h-16 rounded-xl bg-gradient-to-br ${colors.bg} ${colors.border} border-2 flex items-center justify-center cursor-pointer transition-all duration-300 ${
+                            isEarned 
+                              ? `shadow-lg ${colors.glow} hover:scale-110` 
+                              : 'opacity-40 grayscale hover:opacity-60 hover:grayscale-[50%]'
+                          }`}
+                        >
+                          <IconComponent className={`w-8 h-8 ${colors.text}`} />
+                          {isEarned && (
+                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                              <Check className="w-3 h-3 text-white" />
+                            </div>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
+                        
+                        {/* Trophy name below icon */}
+                        <p className={`mt-2 text-xs font-medium text-center line-clamp-2 ${isEarned ? 'text-white' : 'text-gray-500'}`}>
+                          {trophyName}
+                        </p>
+                        
+                        {/* Tooltip on hover */}
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-4 py-3 bg-dark-800 border border-white/20 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 min-w-[180px] shadow-xl">
+                          <div className="flex items-center gap-2 mb-1">
+                            <IconComponent className={`w-4 h-4 ${colors.text}`} />
+                            <p className="text-white font-bold text-sm">{trophyName}</p>
+                          </div>
+                          <p className="text-gray-400 text-xs">{trophyDesc}</p>
+                          {isEarned ? (
+                            <div className="mt-2 flex items-center gap-1 text-green-400 text-xs font-medium">
+                              <Check className="w-3 h-3" />
+                              {language === 'fr' ? 'Obtenu' : language === 'de' ? 'Erhalten' : language === 'it' ? 'Ottenuto' : 'Earned'}
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-gray-500 text-xs">
+                              {language === 'fr' ? 'Non obtenu' : language === 'de' ? 'Nicht erhalten' : language === 'it' ? 'Non ottenuto' : 'Not earned'}
+                            </div>
+                          )}
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-dark-800"></div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })()}
+              </div>
+            );
+          })()}
 
           {/* Stats */}
           <div className="grid md:grid-cols-4 gap-4 mb-6">
@@ -1003,26 +1048,47 @@ const SquadProfile = () => {
                         <div>
                           <p className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-bold">{t.roster}</p>
                           <div className="space-y-2">
-                            {selectedMatch.challengerRoster?.map((p, idx) => (
-                              <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
-                                <img 
-                                  src={getAvatarUrl(p.user?.avatarUrl || p.user?.avatar) || getDefaultAvatar(p.user?.username)}
-                                  alt=""
-                                  className="w-8 h-8 rounded-full"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <Link 
-                                    to={`/player/${p.user?._id}`}
-                                    className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
-                                  >
-                                    {p.user?.username}
-                                  </Link>
-                                  {p.isHelper && (
-                                    <span className="text-yellow-400 text-xs">Helper</span>
-                                  )}
+                            {selectedMatch.challengerRoster?.map((p, idx) => {
+                              // Utiliser le username sauvegardé si le compte est supprimé
+                              const displayName = p.user?.username || p.username || t.deletedPlayer;
+                              const isDeleted = !p.user;
+                              
+                              // Handle avatar with Discord fallback
+                              let playerAvatar = getAvatarUrl(p.user?.avatarUrl || p.user?.avatar);
+                              if (!playerAvatar && p.user?.discordId && p.user?.discordAvatar) {
+                                playerAvatar = `https://cdn.discordapp.com/avatars/${p.user.discordId}/${p.user.discordAvatar}.png`;
+                              }
+                              if (!playerAvatar) {
+                                playerAvatar = getDefaultAvatar(displayName);
+                              }
+                              
+                              return (
+                                <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                                  <img 
+                                    src={playerAvatar}
+                                    alt=""
+                                    className="w-8 h-8 rounded-full"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    {isDeleted ? (
+                                      <span className="text-gray-400 font-medium text-sm truncate block italic">
+                                        {displayName}
+                                      </span>
+                                    ) : (
+                                      <Link 
+                                        to={`/player/${p.user?._id}`}
+                                        className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
+                                      >
+                                        {displayName}
+                                      </Link>
+                                    )}
+                                    {p.isHelper && (
+                                      <span className="text-yellow-400 text-xs">Helper</span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -1053,26 +1119,47 @@ const SquadProfile = () => {
                         <div>
                           <p className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-bold">{t.roster}</p>
                           <div className="space-y-2">
-                            {selectedMatch.opponentRoster?.map((p, idx) => (
-                              <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
-                                <img 
-                                  src={getAvatarUrl(p.user?.avatarUrl || p.user?.avatar) || getDefaultAvatar(p.user?.username)}
-                                  alt=""
-                                  className="w-8 h-8 rounded-full"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <Link 
-                                    to={`/player/${p.user?._id}`}
-                                    className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
-                                  >
-                                    {p.user?.username}
-                                  </Link>
-                                  {p.isHelper && (
-                                    <span className="text-yellow-400 text-xs">Helper</span>
-                                  )}
+                            {selectedMatch.opponentRoster?.map((p, idx) => {
+                              // Utiliser le username sauvegardé si le compte est supprimé
+                              const displayName = p.user?.username || p.username || t.deletedPlayer;
+                              const isDeleted = !p.user;
+                              
+                              // Handle avatar with Discord fallback
+                              let playerAvatar = getAvatarUrl(p.user?.avatarUrl || p.user?.avatar);
+                              if (!playerAvatar && p.user?.discordId && p.user?.discordAvatar) {
+                                playerAvatar = `https://cdn.discordapp.com/avatars/${p.user.discordId}/${p.user.discordAvatar}.png`;
+                              }
+                              if (!playerAvatar) {
+                                playerAvatar = getDefaultAvatar(displayName);
+                              }
+                              
+                              return (
+                                <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                                  <img 
+                                    src={playerAvatar}
+                                    alt=""
+                                    className="w-8 h-8 rounded-full"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    {isDeleted ? (
+                                      <span className="text-gray-400 font-medium text-sm truncate block italic">
+                                        {displayName}
+                                      </span>
+                                    ) : (
+                                      <Link 
+                                        to={`/player/${p.user?._id}`}
+                                        className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
+                                      >
+                                        {displayName}
+                                      </Link>
+                                    )}
+                                    {p.isHelper && (
+                                      <span className="text-yellow-400 text-xs">Helper</span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       </div>

@@ -1,6 +1,7 @@
 import express from 'express';
 import Ranking from '../models/Ranking.js';
 import User from '../models/User.js';
+import Squad from '../models/Squad.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -87,6 +88,88 @@ router.get('/leaderboard/:mode', async (req, res) => {
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ success: false, message: 'Error fetching leaderboard' });
+  }
+});
+
+// Get single top player (most XP/experience) for homepage highlight
+router.get('/top-player', async (req, res) => {
+  try {
+    const { mode = 'hardcore' } = req.query;
+
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'Invalid mode' });
+    }
+
+    // Find user with most XP (experience)
+    const topUser = await User.findOne({
+      isBanned: { $ne: true },
+      isDeleted: { $ne: true },
+      username: { $ne: null, $exists: true },
+      'stats.xp': { $gt: 0 }
+    })
+      .select('username avatar avatarUrl discordAvatar discordId stats')
+      .sort({ 'stats.xp': -1 });
+
+    if (!topUser) {
+      return res.json({ success: true, player: null });
+    }
+
+    res.json({
+      success: true,
+      player: {
+        _id: topUser._id,
+        username: topUser.username,
+        avatar: topUser.avatar,
+        avatarUrl: topUser.avatarUrl,
+        discordAvatar: topUser.discordAvatar,
+        discordId: topUser.discordId,
+        xp: topUser.stats?.xp || 0,
+        wins: topUser.stats?.wins || 0,
+        losses: topUser.stats?.losses || 0,
+        points: topUser.stats?.points || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching top player:', error);
+    res.status(500).json({ success: false, message: 'Error fetching top player' });
+  }
+});
+
+// Get single top squad (most totalPoints from stats) for homepage highlight
+router.get('/top-squad', async (req, res) => {
+  try {
+    const { mode = 'hardcore' } = req.query;
+
+    // Find squad with most stats.totalPoints (Points Top Escouade)
+    const topSquad = await Squad.findOne({
+      isDeleted: { $ne: true },
+      'stats.totalPoints': { $gt: 0 }
+    })
+      .select('name tag logo color stats registeredLadders')
+      .sort({ 'stats.totalPoints': -1 })
+      .lean();
+
+    if (!topSquad) {
+      return res.json({ success: true, squad: null });
+    }
+
+    res.json({
+      success: true,
+      squad: {
+        _id: topSquad._id,
+        name: topSquad.name,
+        tag: topSquad.tag,
+        logo: topSquad.logo,
+        color: topSquad.color,
+        stats: topSquad.stats,
+        totalPoints: topSquad.stats?.totalPoints || 0,
+        totalWins: topSquad.stats?.totalWins || 0,
+        totalLosses: topSquad.stats?.totalLosses || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching top squad:', error);
+    res.status(500).json({ success: false, message: 'Error fetching top squad' });
   }
 });
 

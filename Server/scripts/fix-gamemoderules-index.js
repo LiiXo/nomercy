@@ -36,26 +36,29 @@ async function fixIndexes() {
       console.log(`  - ${index.name}:`, index.key);
     });
 
-    // Supprimer l'ancien index unique sur 'mode' seul s'il existe
-    try {
-      const modeIndex = indexes.find(idx => 
-        idx.name === 'mode_1' && 
-        Object.keys(idx.key).length === 1 && 
-        idx.key.mode === 1
-      );
+    // Liste des anciens index à supprimer
+    const oldIndexesToRemove = [
+      'mode_1',           // ancien index sur mode seul
+      'mode_1_location_1' // ancien index sans subType
+    ];
 
-      if (modeIndex) {
-        console.log('\n🗑️  Suppression de l\'ancien index mode_1...');
-        await collection.dropIndex('mode_1');
-        console.log('✅ Index mode_1 supprimé');
-      } else {
-        console.log('\n✅ Pas d\'ancien index mode_1 trouvé');
-      }
-    } catch (error) {
-      if (error.code === 27 || error.message.includes('index not found')) {
-        console.log('✅ Index mode_1 n\'existe pas (déjà supprimé)');
-      } else {
-        throw error;
+    for (const indexName of oldIndexesToRemove) {
+      try {
+        const oldIndex = indexes.find(idx => idx.name === indexName);
+
+        if (oldIndex) {
+          console.log(`\n🗑️  Suppression de l'ancien index ${indexName}...`);
+          await collection.dropIndex(indexName);
+          console.log(`✅ Index ${indexName} supprimé`);
+        } else {
+          console.log(`\n✅ Pas d'ancien index ${indexName} trouvé`);
+        }
+      } catch (error) {
+        if (error.code === 27 || error.message.includes('index not found')) {
+          console.log(`✅ Index ${indexName} n'existe pas (déjà supprimé)`);
+        } else {
+          throw error;
+        }
       }
     }
 
@@ -96,6 +99,8 @@ async function fixIndexes() {
 
 // Exécuter le script
 fixIndexes();
+
+
 
 
 

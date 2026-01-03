@@ -167,20 +167,27 @@ router.get('/my-matches', verifyToken, async (req, res) => {
   }
 });
 
-// Obtenir les matchs actifs (en cours) de ma squad
+// Obtenir les matchs actifs (en cours) de ma squad OU en tant qu'aide
 router.get('/my-active', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).populate('squad');
     
-    if (!user.squad) {
-      return res.json({ success: true, matches: [] });
+    // Construire les conditions de recherche
+    const orConditions = [];
+    
+    // Si l'utilisateur a une squad, inclure les matchs de sa squad
+    if (user.squad) {
+      orConditions.push({ challenger: user.squad._id });
+      orConditions.push({ opponent: user.squad._id });
     }
+    
+    // Inclure aussi les matchs où l'utilisateur est helper (aide)
+    // Utiliser $elemMatch pour s'assurer que les deux conditions s'appliquent au MÊME élément du tableau
+    orConditions.push({ challengerRoster: { $elemMatch: { user: user._id, isHelper: true } } });
+    orConditions.push({ opponentRoster: { $elemMatch: { user: user._id, isHelper: true } } });
 
     const matches = await Match.find({
-      $or: [
-        { challenger: user.squad._id },
-        { opponent: user.squad._id }
-      ],
+      $or: orConditions,
       status: { $in: ['accepted', 'in_progress'] }
     })
       .populate('challenger', 'name tag color logo members')
@@ -311,8 +318,8 @@ router.get('/history/:squadId', async (req, res) => {
       .populate('challenger', 'name tag color logo')
       .populate('opponent', 'name tag color logo')
       .populate('result.winner', 'name tag')
-      .populate('challengerRoster.user', 'username avatar avatarUrl')
-      .populate('opponentRoster.user', 'username avatar avatarUrl')
+      .populate('challengerRoster.user', 'username avatar avatarUrl discordId discordAvatar')
+      .populate('opponentRoster.user', 'username avatar avatarUrl discordId discordAvatar')
       .sort({ 'result.confirmedAt': -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit));
@@ -357,8 +364,8 @@ router.get('/player-history/:playerId', async (req, res) => {
       .populate('challenger', 'name tag color logo')
       .populate('opponent', 'name tag color logo')
       .populate('result.winner', 'name tag')
-      .populate('challengerRoster.user', 'username')
-      .populate('opponentRoster.user', 'username')
+      .populate('challengerRoster.user', 'username avatar avatarUrl discordId discordAvatar')
+      .populate('opponentRoster.user', 'username avatar avatarUrl discordId discordAvatar')
       .sort({ 'result.confirmedAt': -1, updatedAt: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit));
@@ -430,7 +437,7 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     console.log('[GET MATCH] challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
     console.log('[GET MATCH] opponentRoster:', JSON.stringify(match.opponentRoster, null, 2));
 
-    // Vérifier l'accès : membre d'une des deux équipes ou staff
+    // Vérifier l'accès : membre d'une des deux équipes, helper dans le roster, ou staff
     const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     // Vérifier si l'utilisateur est membre d'une des deux équipes
@@ -441,11 +448,20 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     const isParticipant = userSquadId && (
       challengerId === userSquadId || opponentId === userSquadId
     );
+    
+    // Vérifier si l'utilisateur est helper (aide) dans un des rosters
+    const isHelperInChallenger = match.challengerRoster?.some(r => 
+      r.isHelper && (r.user?._id?.toString() || r.user?.toString()) === user._id.toString()
+    );
+    const isHelperInOpponent = match.opponentRoster?.some(r => 
+      r.isHelper && (r.user?._id?.toString() || r.user?.toString()) === user._id.toString()
+    );
+    const isHelper = isHelperInChallenger || isHelperInOpponent;
 
-    console.log(`[GET MATCH] Access check - User squad: ${userSquadId}, Challenger: ${challengerId}, Opponent: ${opponentId}, isParticipant: ${isParticipant}, isStaff: ${isStaff}`);
+    console.log(`[GET MATCH] Access check - User squad: ${userSquadId}, Challenger: ${challengerId}, Opponent: ${opponentId}, isParticipant: ${isParticipant}, isHelper: ${isHelper}, isStaff: ${isStaff}`);
 
-    if (!isStaff && !isParticipant) {
-      return res.status(403).json({ success: false, message: 'Accès non autorisé - Vous devez être membre d\'une des équipes' });
+    if (!isStaff && !isParticipant && !isHelper) {
+      return res.status(403).json({ success: false, message: 'Accès non autorisé - Vous devez être membre d\'une des équipes ou aide dans le roster' });
     }
 
     res.json({ success: true, match, isStaff });
@@ -472,13 +488,15 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     const user = await User.findById(req.user._id).populate('squad');
     const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
-    const match = await Match.findById(matchId);
+    const match = await Match.findById(matchId)
+      .populate('challengerRoster.user', '_id')
+      .populate('opponentRoster.user', '_id');
     
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
 
-    // Vérifier que l'utilisateur fait partie d'une des équipes OU est staff
+    // Vérifier que l'utilisateur fait partie d'une des équipes, est helper, OU est staff
     const userSquadId = user.squad?._id?.toString() || user.squad?.toString();
     const challengerId = match.challenger?.toString();
     const opponentId = match.opponent?.toString();
@@ -486,8 +504,17 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     const isParticipant = userSquadId && (
       challengerId === userSquadId || opponentId === userSquadId
     );
+    
+    // Vérifier si l'utilisateur est helper (aide) dans un des rosters
+    const isHelperInChallenger = match.challengerRoster?.some(r => 
+      r.isHelper && (r.user?._id?.toString() || r.user?.toString()) === user._id.toString()
+    );
+    const isHelperInOpponent = match.opponentRoster?.some(r => 
+      r.isHelper && (r.user?._id?.toString() || r.user?.toString()) === user._id.toString()
+    );
+    const isHelper = isHelperInChallenger || isHelperInOpponent;
 
-    if (!isParticipant && !isStaff) {
+    if (!isParticipant && !isHelper && !isStaff) {
       return res.status(403).json({ success: false, message: 'Vous ne participez pas à ce match' });
     }
 
@@ -660,6 +687,20 @@ router.post('/', verifyToken, async (req, res) => {
 
     console.log('[CREATE MATCH] Received roster:', JSON.stringify(req.body.roster, null, 2));
     
+    // Enrichir le roster avec les usernames pour l'historique
+    let enrichedRoster = [];
+    if (req.body.roster && req.body.roster.length > 0) {
+      const userIds = req.body.roster.map(r => r.user);
+      const rosterUsers = await User.find({ _id: { $in: userIds } }).select('_id username');
+      const userMap = new Map(rosterUsers.map(u => [u._id.toString(), u.username]));
+      
+      enrichedRoster = req.body.roster.map(r => ({
+        user: r.user,
+        username: userMap.get(r.user.toString()) || 'Joueur inconnu',
+        isHelper: r.isHelper || false
+      }));
+    }
+    
     const match = new Match({
       challenger: squad._id,
       ladderId,
@@ -671,7 +712,7 @@ router.post('/', verifyToken, async (req, res) => {
       scheduledAt: matchDate,
       description: description || '',
       createdBy: user._id,
-      challengerRoster: req.body.roster || []
+      challengerRoster: enrichedRoster
     });
 
     await match.save();
@@ -775,10 +816,18 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     // Désigner une équipe hôte au hasard
     match.hostTeam = Math.random() < 0.5 ? match.challenger : squad._id;
     
-    // Ajouter le roster de l'adversaire
+    // Ajouter le roster de l'adversaire avec les usernames pour l'historique
     console.log('[ACCEPT MATCH] Received roster:', JSON.stringify(req.body.roster, null, 2));
-    if (req.body.roster) {
-      match.opponentRoster = req.body.roster;
+    if (req.body.roster && req.body.roster.length > 0) {
+      const userIds = req.body.roster.map(r => r.user);
+      const rosterUsers = await User.find({ _id: { $in: userIds } }).select('_id username');
+      const userMap = new Map(rosterUsers.map(u => [u._id.toString(), u.username]));
+      
+      match.opponentRoster = req.body.roster.map(r => ({
+        user: r.user,
+        username: userMap.get(r.user.toString()) || 'Joueur inconnu',
+        isHelper: r.isHelper || false
+      }));
     }
     console.log('[ACCEPT MATCH] OpponentRoster assigned:', JSON.stringify(match.opponentRoster, null, 2));
 
@@ -1039,7 +1088,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     // Ajouter un message système dans le chat
     match.chat.push({
       messageType: 'result_declared',
-      messageParams: { squadName: user.squad.name, winnerName },
+      messageParams: { playerName: user.username, winnerName },
       isSystem: true,
       createdAt: new Date()
     });
@@ -1506,7 +1555,7 @@ router.post('/:matchId/dispute', verifyToken, async (req, res) => {
     // Ajouter un message système dans le chat
     match.chat.push({
       messageType: 'dispute_reported',
-      messageParams: { squadName: user.squad.name, reason: reason || '' },
+      messageParams: { playerName: user.username, reason: reason || '' },
       isSystem: true,
       createdAt: new Date()
     });
@@ -1817,7 +1866,7 @@ router.post('/:matchId/cancel-request', verifyToken, async (req, res) => {
         user: user._id,
         squad: user.squad._id,
         messageType: 'cancel_requested',
-        messageParams: { squadName: user.squad.name },
+        messageParams: { playerName: user.username },
         isSystem: true,
         createdAt: new Date()
       });
@@ -2232,6 +2281,44 @@ router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => 
     });
   } catch (error) {
     console.error('Delete match error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Update match status (admin/staff)
+router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'accepted', 'in_progress', 'completed', 'disputed', 'cancelled', 'expired'];
+    
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Statut invalide'
+      });
+    }
+
+    const match = await Match.findById(req.params.matchId);
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'Match non trouvé'
+      });
+    }
+
+    match.status = status;
+    await match.save();
+
+    res.json({
+      success: true,
+      message: 'Statut du match mis à jour',
+      match
+    });
+  } catch (error) {
+    console.error('Update match status error:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'

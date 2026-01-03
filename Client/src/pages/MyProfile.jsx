@@ -22,6 +22,7 @@ const MyProfile = () => {
   const [username, setUsername] = useState(user?.username || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [activisionId, setActivisionId] = useState(user?.activisionId || '');
+  const [platform, setPlatform] = useState(user?.platform || '');
   const [usernameStatus, setUsernameStatus] = useState('current');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -329,6 +330,7 @@ const MyProfile = () => {
     if (username !== user?.username) updates.username = username;
     if (bio !== user?.bio) updates.bio = bio;
     if (activisionId !== user?.activisionId) updates.activisionId = activisionId;
+    if (platform !== user?.platform) updates.platform = platform;
 
     if (Object.keys(updates).length === 0) {
       setIsEditing(false);
@@ -351,6 +353,7 @@ const MyProfile = () => {
     setUsername(user?.username || '');
     setBio(user?.bio || '');
     setActivisionId(user?.activisionId || '');
+    setPlatform(user?.platform || '');
     setBannerFile(null);
     setBannerPreview(user?.banner || null);
     setIsEditing(false);
@@ -484,6 +487,8 @@ const MyProfile = () => {
       confirmDelete: 'Supprimer définitivement',
       dangerZone: 'Zone Dangereuse',
       activisionId: 'Activision ID',
+      platform: 'Plateforme',
+      selectPlatform: 'Sélectionnez une plateforme',
       banner: 'Bannière',
       uploadBanner: 'Télécharger bannière',
       deleteBanner: 'Supprimer bannière',
@@ -569,6 +574,8 @@ const MyProfile = () => {
       confirmDelete: 'Permanently delete',
       dangerZone: 'Danger Zone',
       activisionId: 'Activision ID',
+      platform: 'Platform',
+      selectPlatform: 'Select a platform',
       banner: 'Banner',
       uploadBanner: 'Upload banner',
       deleteBanner: 'Delete banner',
@@ -654,6 +661,8 @@ const MyProfile = () => {
       confirmDelete: 'Endgültig löschen',
       dangerZone: 'Gefahrenzone',
       activisionId: 'Activision ID',
+      platform: 'Plattform',
+      selectPlatform: 'Plattform auswählen',
       banner: 'Banner',
       uploadBanner: 'Banner hochladen',
       deleteBanner: 'Banner löschen',
@@ -739,6 +748,8 @@ const MyProfile = () => {
       confirmDelete: 'Elimina definitivamente',
       dangerZone: 'Zona Pericolosa',
       activisionId: 'Activision ID',
+      platform: 'Piattaforma',
+      selectPlatform: 'Seleziona una piattaforma',
       banner: 'Banner',
       uploadBanner: 'Carica banner',
       deleteBanner: 'Elimina banner',
@@ -929,6 +940,42 @@ const MyProfile = () => {
                     maxLength={50}
                     className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all`}
                   />
+                </div>
+
+                {/* Platform */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.platform}</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {['PC', 'PlayStation', 'Xbox'].map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPlatform(p)}
+                        className={`py-3 px-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${
+                          platform === p
+                            ? `bg-${accentColor}-500/20 border-${accentColor}-500/50 text-${accentColor}-400`
+                            : 'bg-dark-800/50 border-white/10 text-gray-400 hover:border-white/20'
+                        }`}
+                      >
+                        {p === 'PC' && (
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M20 3H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H4V5h16v10z"/>
+                          </svg>
+                        )}
+                        {p === 'PlayStation' && (
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M9.5 6.5v-4H11V7a2 2 0 1 1-4 0V4h1.5v3a.5.5 0 0 0 1 0zM16 6.5v-4h1.5V8a.5.5 0 0 0 1 0V6.5H20V8a2 2 0 1 1-4 0V2.5h1.5V6a.5.5 0 0 0 1 0v-.5h1V8a2 2 0 1 1-4 0v-1.5zM4 10.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zm1.5 1H11v9H5.5v-9z"/>
+                          </svg>
+                        )}
+                        {p === 'Xbox' && (
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M6.43 3.72A9.97 9.97 0 0 1 12 2c2.05 0 3.95.62 5.57 1.72-.37.15-.86.42-1.47.9-1.23.96-2.56 2.56-3.95 4.76L12 9.5l-.15-.12c-1.39-2.2-2.72-3.8-3.95-4.76-.61-.48-1.1-.75-1.47-.9zM2.05 12.9c-.03-.3-.05-.6-.05-.9 0-2.43.87-4.66 2.32-6.39.3.18.7.45 1.13.79 1.54 1.2 3.18 3.25 4.72 5.95l.18.3-.18.3c-1.54 2.7-3.18 4.75-4.72 5.95-.43.34-.83.61-1.13.79A9.93 9.93 0 0 1 2.05 12.9zm8.1 2.45c1.39 2.2 2.72 3.8 3.95 4.76.61.48 1.1.75 1.47.9A9.97 9.97 0 0 1 12 22a9.97 9.97 0 0 1-5.57-1.72c.37-.15.86-.42 1.47-.9 1.23-.96 2.56-2.56 3.95-4.76l.15-.12.15.12v-.27zm3.7-6.7c1.54-2.7 3.18-4.75 4.72-5.95.43-.34.83-.61 1.13-.79A9.93 9.93 0 0 1 22 12c0 .3-.02.6-.05.9a9.93 9.93 0 0 1-2.27 5.49c-.3-.18-.7-.45-1.13-.79-1.54-1.2-3.18-3.25-4.72-5.95l-.18-.3.18-.3.02.03z"/>
+                          </svg>
+                        )}
+                        <span className="font-medium">{p}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Bio */}

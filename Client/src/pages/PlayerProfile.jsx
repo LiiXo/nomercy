@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 
@@ -28,6 +28,8 @@ const PlayerProfile = () => {
   const [copied, setCopied] = useState(false);
   const [matchHistory, setMatchHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [showMatchDetails, setShowMatchDetails] = useState(false);
 
   // Traductions
   const texts = {
@@ -57,6 +59,18 @@ const PlayerProfile = () => {
       victory: 'Victoire',
       defeat: 'Défaite',
       vs: 'vs',
+      viewDetails: 'Voir détails',
+      matchDetails: 'Détails du match',
+      winner: 'Équipe gagnante',
+      loser: 'Équipe perdante',
+      roster: 'Roster',
+      deletedTeam: 'Équipe supprimée',
+      deletedPlayer: 'Joueur supprimé',
+      gameModes: {
+        'Search & Destroy': 'Recherche & Destruction',
+        'Domination': 'Domination',
+        'Team Deathmatch': 'Mêlée générale',
+      },
     },
     en: {
       back: 'Back',
@@ -84,6 +98,18 @@ const PlayerProfile = () => {
       defeat: 'Defeat',
       vs: 'vs',
       best: 'Best',
+      viewDetails: 'View details',
+      matchDetails: 'Match Details',
+      winner: 'Winning Team',
+      loser: 'Losing Team',
+      roster: 'Roster',
+      deletedTeam: 'Deleted team',
+      deletedPlayer: 'Deleted player',
+      gameModes: {
+        'Search & Destroy': 'Search & Destroy',
+        'Domination': 'Domination',
+        'Team Deathmatch': 'Team Deathmatch',
+      },
     },
     de: {
       back: 'Zurück',
@@ -111,6 +137,18 @@ const PlayerProfile = () => {
       victory: 'Sieg',
       defeat: 'Niederlage',
       vs: 'vs',
+      viewDetails: 'Details ansehen',
+      matchDetails: 'Spieldetails',
+      winner: 'Gewinnendes Team',
+      loser: 'Verlierendes Team',
+      roster: 'Aufstellung',
+      deletedTeam: 'Gelöschtes Team',
+      deletedPlayer: 'Gelöschter Spieler',
+      gameModes: {
+        'Search & Destroy': 'Suchen & Zerstören',
+        'Domination': 'Herrschaft',
+        'Team Deathmatch': 'Team-Deathmatch',
+      },
     },
     it: {
       back: 'Indietro',
@@ -138,6 +176,18 @@ const PlayerProfile = () => {
       victory: 'Vittoria',
       defeat: 'Sconfitta',
       vs: 'vs',
+      viewDetails: 'Vedi dettagli',
+      matchDetails: 'Dettagli partita',
+      winner: 'Squadra vincitrice',
+      loser: 'Squadra perdente',
+      roster: 'Formazione',
+      deletedTeam: 'Squadra eliminata',
+      deletedPlayer: 'Giocatore eliminato',
+      gameModes: {
+        'Search & Destroy': 'Cerca e Distruggi',
+        'Domination': 'Dominazione',
+        'Team Deathmatch': 'Deathmatch a squadre',
+      },
     },
   };
   const t = texts[language] || texts.en;
@@ -525,55 +575,82 @@ const PlayerProfile = () => {
                   return (
                     <div 
                       key={match._id}
-                      className={`flex items-center justify-between p-3 bg-dark-800/50 rounded-lg border ${
+                      className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
                         isWinner 
                           ? 'border-green-500/30' 
                           : 'border-red-500/30'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className={`px-2 py-0.5 rounded text-xs font-bold ${
-                          isWinner 
-                            ? 'bg-green-500/20 text-green-400' 
-                            : 'bg-red-500/20 text-red-400'
-                        }`}>
-                          {isWinner ? t.victory : t.defeat}
+                      {/* Mobile: Stack layout / Desktop: Row layout */}
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        {/* Top row on mobile: Result + Game mode + Format */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Result badge */}
+                          <div className={`px-2 py-1 rounded text-xs font-bold ${
+                            isWinner 
+                              ? 'bg-green-500/20 text-green-400' 
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {isWinner ? t.victory : t.defeat}
+                          </div>
+                          
+                          {/* Game mode */}
+                          <span className={`px-2 py-1 bg-${accentColor}-500/20 rounded text-xs font-medium text-${accentColor}-400`}>
+                            {t.gameModes?.[match.gameMode] || match.gameMode}
+                          </span>
+                          
+                          {/* Format */}
+                          <div className="flex items-center gap-1 text-gray-400 text-xs sm:text-sm">
+                            <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                            <span>{match.teamSize}v{match.teamSize}</span>
+                          </div>
                         </div>
                         
-                        <span className={`px-2 py-0.5 bg-${accentColor}-500/20 rounded text-xs text-${accentColor}-400`}>
-                          {match.gameMode}
-                        </span>
-                        
-                        <div className="flex items-center gap-1 text-gray-400 text-xs">
-                          <Users className="w-3 h-3" />
-                          <span>{match.teamSize}v{match.teamSize}</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
+                        {/* Opponent - separate row on mobile */}
+                        <div className="flex items-center gap-2">
                           <span className="text-gray-500 text-sm">{t.vs}</span>
                           {opponentLinkId ? (
                             <Link 
                               to={`/squad/${opponentLinkId}`}
-                              className="text-white hover:text-yellow-400 transition-colors text-sm font-medium"
+                              className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate max-w-[150px] sm:max-w-none"
                             >
                               {opponentName}
                             </Link>
                           ) : (
-                            <span className="text-gray-400 italic text-sm">{opponentName}</span>
+                            <span className="text-gray-400 italic text-sm truncate max-w-[150px] sm:max-w-none">{opponentName}</span>
                           )}
                         </div>
-                  </div>
+                        
+                        {/* Bottom row: Date + Button */}
+                        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                          {/* Date */}
+                          <div className="flex items-center gap-1.5 text-gray-500 text-xs sm:text-sm">
+                            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            <span>
+                              {new Date(match.createdAt).toLocaleDateString(
+                                language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                                { day: 'numeric', month: 'short' }
+                              )}
+                            </span>
+                          </div>
 
-                      <div className="flex items-center gap-1 text-gray-500 text-xs">
-                        <Clock className="w-3 h-3" />
-                        <span>
-                          {new Date(match.createdAt).toLocaleDateString(
-                            language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                            { day: 'numeric', month: 'short' }
+                          {/* View Details Button */}
+                          {match.status === 'completed' && (
+                            <button
+                              onClick={() => {
+                                setSelectedMatch(match);
+                                setShowMatchDetails(true);
+                              }}
+                              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 transition-colors flex items-center gap-1.5`}
+                            >
+                              <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              <span className="hidden sm:inline">{t.viewDetails}</span>
+                              <span className="sm:hidden">{language === 'fr' ? 'Voir' : 'View'}</span>
+                            </button>
                           )}
-                        </span>
-                </div>
-                  </div>
+                        </div>
+                      </div>
+                    </div>
                   );
                 })}
                 </div>
@@ -586,6 +663,212 @@ const PlayerProfile = () => {
           </div>
         </div>
       </div>
+
+      {/* Match Details Dialog */}
+      {showMatchDetails && selectedMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className={`p-6 border-b border-white/10 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <Swords className="w-6 h-6" />
+                  {t.matchDetails}
+                </h2>
+                <button 
+                  onClick={() => {
+                    setShowMatchDetails(false);
+                    setSelectedMatch(null);
+                  }}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+              
+              {/* Match Info */}
+              <div className="flex items-center gap-4 mt-4">
+                <span className={`px-3 py-1.5 bg-white/20 rounded-lg text-sm font-medium text-white`}>
+                  {t.gameModes?.[selectedMatch.gameMode] || selectedMatch.gameMode}
+                </span>
+                <div className="flex items-center gap-2 text-white/80 text-sm">
+                  <Users className="w-4 h-4" />
+                  <span>{selectedMatch.teamSize}v{selectedMatch.teamSize}</span>
+                </div>
+                <div className="flex items-center gap-2 text-white/80 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>
+                    {new Date(selectedMatch.createdAt).toLocaleDateString(
+                      language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                      { day: 'numeric', month: 'long', year: 'numeric' }
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                {(() => {
+                  const winnerId = typeof selectedMatch.result?.winner === 'object' 
+                    ? selectedMatch.result?.winner?._id 
+                    : selectedMatch.result?.winner;
+                  const challengerIsWinner = winnerId === selectedMatch.challenger?._id;
+                  const challengerName = selectedMatch.challenger?.name || selectedMatch.challengerInfo?.name || t.deletedTeam;
+                  const opponentName = selectedMatch.opponent?.name || selectedMatch.opponentInfo?.name || t.deletedTeam;
+                  
+                  return (
+                    <>
+                      {/* Challenger Team */}
+                      <div className={`p-5 rounded-xl border-2 ${
+                        challengerIsWinner 
+                          ? 'bg-green-500/10 border-green-500/50' 
+                          : 'bg-red-500/10 border-red-500/50'
+                      }`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            {challengerName}
+                          </h3>
+                          {challengerIsWinner ? (
+                            <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                              <Trophy className="w-3.5 h-3.5" />
+                              {t.winner}
+                            </div>
+                          ) : (
+                            <div className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                              {t.loser}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Roster */}
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-bold">{t.roster}</p>
+                          <div className="space-y-2">
+                            {selectedMatch.challengerRoster?.map((p, idx) => {
+                              // Utiliser le username sauvegardé si le compte est supprimé
+                              const displayName = p.user?.username || p.username || t.deletedPlayer;
+                              const isDeleted = !p.user;
+                              
+                              // Handle avatar with Discord fallback
+                              let playerAvatar = getAvatarUrl(p.user?.avatarUrl || p.user?.avatar);
+                              if (!playerAvatar && p.user?.discordId && p.user?.discordAvatar) {
+                                playerAvatar = `https://cdn.discordapp.com/avatars/${p.user.discordId}/${p.user.discordAvatar}.png`;
+                              }
+                              if (!playerAvatar) {
+                                playerAvatar = getDefaultAvatar(displayName);
+                              }
+                              
+                              return (
+                                <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                                  <img 
+                                    src={playerAvatar}
+                                    alt=""
+                                    className="w-8 h-8 rounded-full"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    {isDeleted ? (
+                                      <span className="text-gray-400 font-medium text-sm truncate block italic">
+                                        {displayName}
+                                      </span>
+                                    ) : (
+                                      <Link 
+                                        to={`/player/${p.user?._id}`}
+                                        className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
+                                      >
+                                        {displayName}
+                                      </Link>
+                                    )}
+                                    {p.isHelper && (
+                                      <span className="text-yellow-400 text-xs">Helper</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Opponent Team */}
+                      <div className={`p-5 rounded-xl border-2 ${
+                        !challengerIsWinner 
+                          ? 'bg-green-500/10 border-green-500/50' 
+                          : 'bg-red-500/10 border-red-500/50'
+                      }`}>
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            {opponentName}
+                          </h3>
+                          {!challengerIsWinner ? (
+                            <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                              <Trophy className="w-3.5 h-3.5" />
+                              {t.winner}
+                            </div>
+                          ) : (
+                            <div className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                              {t.loser}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Roster */}
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-gray-500 mb-3 font-bold">{t.roster}</p>
+                          <div className="space-y-2">
+                            {selectedMatch.opponentRoster?.map((p, idx) => {
+                              // Utiliser le username sauvegardé si le compte est supprimé
+                              const displayName = p.user?.username || p.username || t.deletedPlayer;
+                              const isDeleted = !p.user;
+                              
+                              // Handle avatar with Discord fallback
+                              let playerAvatar = getAvatarUrl(p.user?.avatarUrl || p.user?.avatar);
+                              if (!playerAvatar && p.user?.discordId && p.user?.discordAvatar) {
+                                playerAvatar = `https://cdn.discordapp.com/avatars/${p.user.discordId}/${p.user.discordAvatar}.png`;
+                              }
+                              if (!playerAvatar) {
+                                playerAvatar = getDefaultAvatar(displayName);
+                              }
+                              
+                              return (
+                                <div key={idx} className={`flex items-center gap-3 p-2.5 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                                  <img 
+                                    src={playerAvatar}
+                                    alt=""
+                                    className="w-8 h-8 rounded-full"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    {isDeleted ? (
+                                      <span className="text-gray-400 font-medium text-sm truncate block italic">
+                                        {displayName}
+                                      </span>
+                                    ) : (
+                                      <Link 
+                                        to={`/player/${p.user?._id}`}
+                                        className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate block"
+                                      >
+                                        {displayName}
+                                      </Link>
+                                    )}
+                                    {p.isHelper && (
+                                      <span className="text-yellow-400 text-xs">Helper</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

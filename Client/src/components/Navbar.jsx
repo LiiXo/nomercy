@@ -177,10 +177,12 @@ const Navbar = () => {
 
   const handleDiscordLogin = () => login();
 
+  // Build navigation links - ranked mode only visible to admin/staff
   const navLinks = [
     { path: `/${selectedMode}`, label: t('home'), icon: Home },
     { path: `/${selectedMode}/rankings`, label: t('rankings'), icon: Trophy },
-    { path: `/${selectedMode}/ranked`, label: t('rankedMode'), icon: Medal },
+    // Only show ranked mode to admin/staff users
+    ...(isStaff() ? [{ path: `/${selectedMode}/ranked`, label: t('rankedMode'), icon: Medal }] : []),
     { path: '/squad-hub', label: 'Squad Hub', icon: Users },
   ];
 

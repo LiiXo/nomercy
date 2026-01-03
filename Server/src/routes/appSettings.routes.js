@@ -18,7 +18,10 @@ router.get('/public', async (req, res) => {
       globalAlerts: settings.globalAlerts?.filter(a => a.active && (!a.expiresAt || new Date(a.expiresAt) > new Date())) || [],
       maintenance: settings.maintenance,
       banner: settings.banner,
-      staffAdminAccess: settings.staffAdminAccess
+      staffAdminAccess: settings.staffAdminAccess,
+      ladderSettings: settings.ladderSettings || {
+        duoTrioTimeRestriction: { enabled: true, startHour: 0, endHour: 20 }
+      }
     });
   } catch (error) {
     console.error('Error fetching public app settings:', error);
@@ -200,6 +203,49 @@ router.patch('/admin/maintenance', verifyToken, requireStaff, async (req, res) =
     res.json({ success: true, maintenance: settings.maintenance });
   } catch (error) {
     console.error('Error toggling maintenance:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update ladder settings (admin only)
+router.patch('/admin/ladder-settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { duoTrioTimeRestriction } = req.body;
+    
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    
+    // Initialize ladderSettings if not exists
+    if (!settings.ladderSettings) {
+      settings.ladderSettings = {
+        duoTrioTimeRestriction: { enabled: true, startHour: 0, endHour: 20 }
+      };
+    }
+    
+    if (duoTrioTimeRestriction) {
+      if (typeof duoTrioTimeRestriction.enabled === 'boolean') {
+        settings.ladderSettings.duoTrioTimeRestriction.enabled = duoTrioTimeRestriction.enabled;
+      }
+      if (typeof duoTrioTimeRestriction.startHour === 'number') {
+        settings.ladderSettings.duoTrioTimeRestriction.startHour = duoTrioTimeRestriction.startHour;
+      }
+      if (typeof duoTrioTimeRestriction.endHour === 'number') {
+        settings.ladderSettings.duoTrioTimeRestriction.endHour = duoTrioTimeRestriction.endHour;
+      }
+    }
+    
+    settings.markModified('ladderSettings');
+    await settings.save();
+    
+    res.json({ 
+      success: true, 
+      ladderSettings: settings.ladderSettings,
+      message: 'Paramètres ladder mis à jour'
+    });
+  } catch (error) {
+    console.error('Error updating ladder settings:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

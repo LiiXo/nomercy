@@ -112,7 +112,19 @@ const appSettingsSchema = new mongoose.Schema({
     announcements: { type: Boolean, default: true },
     hub: { type: Boolean, default: true },
     maps: { type: Boolean, default: true },
-    gamerules: { type: Boolean, default: true }
+    gamerules: { type: Boolean, default: true },
+    matches: { type: Boolean, default: true },
+    seasons: { type: Boolean, default: false } // Admin only by default
+  },
+  
+  // Ladder settings
+  ladderSettings: {
+    // Duo/Trio time restriction (00:00-20:00 French time)
+    duoTrioTimeRestriction: {
+      enabled: { type: Boolean, default: true }, // When false, ladder is always open
+      startHour: { type: Number, default: 0 },   // Start hour (0-23)
+      endHour: { type: Number, default: 20 }     // End hour (0-23)
+    }
   }
 }, {
   timestamps: true

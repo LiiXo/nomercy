@@ -38,6 +38,9 @@ const startServer = async () => {
   
   // Import Match model for cleanup job
   const Match = (await import('./models/Match.js')).default;
+  
+  // Import monthly reset service for ladder season reset
+  const { scheduleMonthlyLadderReset } = await import('./services/monthlyReset.service.js');
 
   const app = express();
   const httpServer = createServer(app);
@@ -223,6 +226,9 @@ const startServer = async () => {
       // Exécuter immédiatement puis toutes les 5 minutes
       cleanupExpiredMatches();
       setInterval(cleanupExpiredMatches, 5 * 60 * 1000);
+      
+      // Schedule monthly ladder season reset (runs at 00:05 on the 1st of each month)
+      scheduleMonthlyLadderReset();
     });
   } catch (err) {
     console.error('MongoDB connection error:', err);

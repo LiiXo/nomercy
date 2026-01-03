@@ -113,6 +113,7 @@ const AdminPanel = () => {
       tabs: [
         { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false },
         { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false },
+        { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false },
         { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false },
         { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false },
         { id: 'disputes', label: 'Litiges', icon: AlertTriangle, adminOnly: false },
@@ -122,6 +123,7 @@ const AdminPanel = () => {
       name: 'Contenu',
       tabs: [
         { id: 'shop', label: 'Boutique', icon: ShoppingBag, adminOnly: true },
+        { id: 'trophies', label: 'Trophées', icon: Trophy, adminOnly: true },
         { id: 'announcements', label: 'Annonces', icon: Megaphone, adminOnly: false },
         { id: 'hub', label: 'Hub', icon: Users, adminOnly: false },
         { id: 'maps', label: 'Cartes', icon: MapPin, adminOnly: false },
@@ -134,6 +136,7 @@ const AdminPanel = () => {
       tabs: [
         { id: 'application', label: 'Application', icon: Power, adminOnly: true },
         { id: 'config', label: 'Config', icon: Settings, adminOnly: true },
+        { id: 'seasons', label: 'Saisons', icon: Calendar, adminOnly: true },
         { id: 'system', label: 'Système', icon: Database, adminOnly: true },
       ]
     }
@@ -166,6 +169,115 @@ const AdminPanel = () => {
     duration: 'permanent', // 'permanent', '1h', '1d', '7d', '30d', 'custom'
     customDays: 7
   });
+
+  // Squad trophy modal state
+  const [showSquadTrophyModal, setShowSquadTrophyModal] = useState(false);
+  const [squadForTrophy, setSquadForTrophy] = useState(null);
+  const [selectedTrophyToAdd, setSelectedTrophyToAdd] = useState('');
+  const [trophyReason, setTrophyReason] = useState('');
+
+  // Squad ladder points modal state
+  const [showLadderPointsModal, setShowLadderPointsModal] = useState(false);
+  const [squadForLadderPoints, setSquadForLadderPoints] = useState(null);
+  const [ladderPointsEdit, setLadderPointsEdit] = useState({});
+
+  const openSquadTrophyModal = (squad) => {
+    setSquadForTrophy(squad);
+    setSelectedTrophyToAdd('');
+    setTrophyReason('');
+    setShowSquadTrophyModal(true);
+    // Fetch trophies if not already loaded
+    if (trophies.length === 0) {
+      fetchTrophies();
+    }
+  };
+
+  const openLadderPointsModal = (squad) => {
+    setSquadForLadderPoints(squad);
+    // Initialize ladder points edit state with current values
+    const points = {};
+    if (squad.registeredLadders) {
+      squad.registeredLadders.forEach(ladder => {
+        points[ladder.ladderId] = ladder.points || 0;
+      });
+    }
+    setLadderPointsEdit(points);
+    setShowLadderPointsModal(true);
+  };
+
+  const handleUpdateLadderPoints = async () => {
+    if (!squadForLadderPoints) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/squads/admin/${squadForLadderPoints._id}/ladder-points`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ladderPoints: ladderPointsEdit })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Points ladder mis à jour avec succès');
+        setShowLadderPointsModal(false);
+        fetchSquads();
+      } else {
+        setError(data.message || 'Erreur lors de la mise à jour');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour des points');
+    }
+  };
+
+  const handleAssignTrophy = async () => {
+    if (!squadForTrophy || !selectedTrophyToAdd) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/squads/${squadForTrophy._id}/assign-trophy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          trophyId: selectedTrophyToAdd, 
+          reason: trophyReason || 'Attribué par admin' 
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Trophée attribué avec succès');
+        setSelectedTrophyToAdd('');
+        setTrophyReason('');
+        fetchSquads();
+        // Update local state
+        setSquadForTrophy(data.squad);
+      } else {
+        setError(data.message || 'Erreur lors de l\'attribution');
+      }
+    } catch (err) {
+      setError('Erreur lors de l\'attribution');
+    }
+  };
+
+  const handleRemoveTrophy = async (trophyId) => {
+    if (!squadForTrophy) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/squads/${squadForTrophy._id}/remove-trophy/${trophyId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Trophée retiré avec succès');
+        fetchSquads();
+        // Update local state
+        setSquadForTrophy(data.squad);
+      } else {
+        setError(data.message || 'Erreur lors du retrait');
+      }
+    } catch (err) {
+      setError('Erreur lors du retrait');
+    }
+  };
 
   useEffect(() => {
     const titles = {
@@ -221,6 +333,8 @@ const AdminPanel = () => {
           break;
         case 'shop':
           await fetchShopItems();
+          break;
+        case 'trophies':
           await fetchTrophies();
           break;
         case 'disputes':
@@ -243,6 +357,12 @@ const AdminPanel = () => {
           break;
         case 'gamerules':
           await fetchGameRules();
+          break;
+        case 'matches':
+          await fetchLadderMatches();
+          break;
+        case 'seasons':
+          await fetchLadderSeasonHistory();
           break;
         case 'config':
           await fetchConfig();
@@ -1692,16 +1812,42 @@ const AdminPanel = () => {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-400">Membres</span>
                     <span className="text-white font-medium">{squad.members?.length || 0}/{squad.maxMembers}</span>
-                          </div>
+                  </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-400">Mode</span>
                     <span className="text-white font-medium">{squad.mode}</span>
-                            </div>
+                  </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-400">Level</span>
                     <span className="text-white font-medium">{squad.level || 1}</span>
                   </div>
-                          </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Points Top Escouade</span>
+                    <span className="text-amber-400 font-bold">{squad.stats?.totalPoints || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">W/L</span>
+                    <span className="text-white font-medium">{squad.stats?.totalWins || 0}W - {squad.stats?.totalLosses || 0}L</span>
+                  </div>
+                </div>
+
+                {/* Ladder Points */}
+                {squad.registeredLadders && squad.registeredLadders.length > 0 && (
+                  <div className="mb-4 p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-lg">
+                    <p className="text-xs text-purple-400 mb-2 font-medium flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      Points Ladder
+                    </p>
+                    <div className="space-y-1.5">
+                      {squad.registeredLadders.map((ladder, idx) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span className="text-gray-300 text-xs">{ladder.ladderName || ladder.ladderId}</span>
+                          <span className="text-purple-400 font-bold">{ladder.points} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Members list */}
                 {squad.members && squad.members.length > 0 && (
@@ -1746,20 +1892,52 @@ const AdminPanel = () => {
                   </div>
                 )}
 
+                {/* Trophies */}
+                {squad.trophies && squad.trophies.length > 0 && (
+                  <div className="mb-4 flex items-center gap-2 flex-wrap">
+                    {squad.trophies.slice(0, 3).map((t, i) => (
+                      <div key={i} className="w-6 h-6 bg-yellow-500/20 rounded-full flex items-center justify-center">
+                        <Trophy className="w-3 h-3 text-yellow-400" />
+                      </div>
+                    ))}
+                    {squad.trophies.length > 3 && (
+                      <span className="text-xs text-gray-400">+{squad.trophies.length - 3}</span>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2">
-                              <button
+                  <button
                     onClick={() => openEditModal('squad', squad)}
                     className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
-                              >
+                  >
                     Modifier
-                              </button>
-                              <button
+                  </button>
+                  {userIsAdmin && squad.registeredLadders && squad.registeredLadders.length > 0 && (
+                    <button
+                      onClick={() => openLadderPointsModal(squad)}
+                      className="py-2 px-3 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                      title="Modifier les points Ladder"
+                    >
+                      <TrendingUp className="w-4 h-4" />
+                    </button>
+                  )}
+                  {userIsAdmin && (
+                    <button
+                      onClick={() => openSquadTrophyModal(squad)}
+                      className="py-2 px-3 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-colors"
+                      title="Gérer les trophées"
+                    >
+                      <Trophy className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
                     onClick={() => setDeleteConfirm({ type: 'squad', id: squad._id })}
                     className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))
                           )}
@@ -1792,178 +1970,197 @@ const AdminPanel = () => {
   };
 
   const renderShop = () => {
-    const currentSubTab = activeSubTab || 'items';
-
     return (
       <div className="space-y-4">
-        {/* Sub-tabs */}
-        <div className="flex items-center gap-4 border-b border-white/10 pb-4">
-                          <button
-            onClick={() => setActiveSubTab('items')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              currentSubTab === 'items' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
-            }`}
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Items de la Boutique</h2>
+          <button
+            onClick={() => openCreateModal('shopItem')}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
           >
-            Items Boutique
-                          </button>
-                        <button
-            onClick={() => setActiveSubTab('trophies')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              currentSubTab === 'trophies' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            Trophées
-                        </button>
-                      </div>
+            <Plus className="w-5 h-5" />
+            Nouvel Item
+          </button>
+        </div>
 
-        {currentSubTab === 'items' ? (
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">Items de la Boutique</h2>
-                          <button
-                onClick={() => openCreateModal('shopItem')}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
-                          >
-                <Plus className="w-5 h-5" />
-                Nouvel Item
-                          </button>
-                      </div>
-
-            {/* Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {shopItems.length === 0 ? (
-                <div className="col-span-full text-center text-gray-400 py-8">
-                  Aucun item trouvé
-                </div>
-              ) : (
-                shopItems.map((item) => (
-                  <div
-                    key={item._id}
-                    className={`bg-dark-800/50 border rounded-xl p-4 hover:border-white/20 transition-all ${
-                      item.isActive ? 'border-white/10' : 'border-gray-700/50 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className={`px-2 py-1 text-xs font-medium rounded bg-${getRarityColor(item.rarity)}-500/20 text-${getRarityColor(item.rarity)}-400`}>
-                        {item.rarity}
-                                </span>
-                      {!item.isActive && (
-                        <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
-                          Inactif
-                        </span>
-                      )}
-                            </div>
-
-                    <h3 className="text-white font-bold mb-2">{item.name}</h3>
-                    <p className="text-gray-400 text-sm mb-3 line-clamp-2">{item.description}</p>
-
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-1 text-yellow-400">
-                              <Coins className="w-4 h-4" />
-                        <span className="font-bold">{item.price}</span>
-                            </div>
-                      <span className="text-xs text-gray-500">{item.category}</span>
-                              </div>
-
-                    <div className="flex items-center gap-2">
-                                <button
-                        onClick={() => openEditModal('shopItem', item)}
-                        className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
-                                >
-                        Modifier
-                                </button>
-                                  <button
-                        onClick={() => setDeleteConfirm({ type: 'shopItem', id: item._id })}
-                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                                  >
-                        <Trash2 className="w-4 h-4" />
-                                  </button>
-                            </div>
-                </div>
-                ))
-              )}
+        {/* Items Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {shopItems.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-8">
+              Aucun item trouvé
             </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">Trophées</h2>
-                  <button
-                onClick={() => openCreateModal('trophy')}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
-                  >
-                <Plus className="w-5 h-5" />
-                Nouveau Trophée
-                  </button>
-              </div>
-
-            {/* Trophies Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {trophies.length === 0 ? (
-                <div className="col-span-full text-center text-gray-400 py-8">
-                  Aucun trophée trouvé
+          ) : (
+            shopItems.map((item) => (
+              <div
+                key={item._id}
+                className={`bg-dark-800/50 border rounded-xl p-4 hover:border-white/20 transition-all ${
+                  item.isActive ? 'border-white/10' : 'border-gray-700/50 opacity-60'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span className={`px-2 py-1 text-xs font-medium rounded bg-${getRarityColor(item.rarity)}-500/20 text-${getRarityColor(item.rarity)}-400`}>
+                    {item.rarity}
+                  </span>
+                  {!item.isActive && (
+                    <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
+                      Inactif
+                    </span>
+                  )}
                 </div>
-              ) : (
-                trophies.map((trophy) => {
-                  const IconComp = { Trophy, Award, Medal, Star, Crown, Shield, Zap, Target }[trophy.icon] || Trophy;
-                    
-                    return (
-                      <div 
-                      key={trophy._id}
-                      className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
+
+                <h3 className="text-white font-bold mb-2">{item.name}</h3>
+                <p className="text-gray-400 text-sm mb-3 line-clamp-2">{item.description}</p>
+
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-1 text-yellow-400">
+                    <Coins className="w-4 h-4" />
+                    <span className="font-bold">{item.price}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">{item.category}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openEditModal('shopItem', item)}
+                    className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
+                  >
+                    Modifier
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm({ type: 'shopItem', id: item._id })}
+                    className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTrophies = () => {
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">Gestion des Trophées</h2>
+          <button
+            onClick={() => openCreateModal('trophy')}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-bold rounded-lg hover:opacity-90 transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            Nouveau Trophée
+          </button>
+        </div>
+
+        {/* Info */}
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+          <p className="text-yellow-400 text-sm">
+            Les trophées peuvent être attribués aux escouades depuis la gestion des escouades. Créez ici les trophées disponibles.
+          </p>
+        </div>
+
+        {/* Trophies Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {trophies.length === 0 ? (
+            <div className="col-span-full text-center text-gray-400 py-8">
+              Aucun trophée trouvé
+            </div>
+          ) : (
+            trophies.map((trophy) => {
+              const IconComp = { Trophy, Award, Medal, Star, Crown, Shield, Zap, Target }[trophy.icon] || Trophy;
+              const colorMap = {
+                amber: '#f59e0b',
+                yellow: '#eab308',
+                orange: '#f97316',
+                red: '#ef4444',
+                pink: '#ec4899',
+                purple: '#a855f7',
+                blue: '#3b82f6',
+                cyan: '#06b6d4',
+                green: '#22c55e',
+                emerald: '#10b981',
+                gray: '#6b7280'
+              };
+              const iconColor = colorMap[trophy.color] || '#f59e0b';
+                
+              return (
+                <div 
+                  key={trophy._id}
+                  className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
+                >
+                  <div className="flex items-start gap-4 mb-4">
+                    <div
+                      className="w-14 h-14 rounded-xl flex items-center justify-center"
+                      style={{ backgroundColor: `${iconColor}30` }}
                     >
-                      <div className="flex items-start gap-4 mb-4">
-                        <div
-                          className="w-14 h-14 rounded-xl flex items-center justify-center"
-                          style={{ 
-                            backgroundColor: trophy.color ? `var(--color-${trophy.color}-500, #f59e0b)30` : '#f59e0b30',
-                          }}
-                        >
-                          <IconComp className="w-7 h-7" style={{ color: `var(--color-${trophy.color}-500, #f59e0b)` }} />
-                            </div>
-                        <div className="flex-1">
-                          <h3 className="text-white font-bold mb-1">{trophy.name}</h3>
-                          <p className="text-gray-400 text-sm">{trophy.description}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-xs text-gray-500">Rareté: {trophy.rarity}/5</span>
-                        {trophy.isActive ? (
-                          <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
-                            Actif
-                                  </span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
-                            Inactif
-                                  </span>
-                                )}
-                              </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => openEditModal('trophy', trophy)}
-                          className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
-                        >
-                          Modifier
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm({ type: 'trophy', id: trophy._id })}
-                          className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <IconComp className="w-7 h-7" style={{ color: iconColor }} />
                     </div>
-                  );
-                })
-                                )}
-                              </div>
-                            </div>
-        )}
-                          </div>
+                    <div className="flex-1">
+                      <h3 className="text-white font-bold mb-1">{trophy.name}</h3>
+                      <p className="text-gray-400 text-sm">{trophy.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-1 text-xs font-medium rounded ${
+                        trophy.rarityName === 'legendary' ? 'bg-yellow-500/20 text-yellow-400' :
+                        trophy.rarityName === 'epic' ? 'bg-purple-500/20 text-purple-400' :
+                        trophy.rarityName === 'rare' ? 'bg-blue-500/20 text-blue-400' :
+                        trophy.rarityName === 'uncommon' ? 'bg-green-500/20 text-green-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {trophy.rarityName || 'common'}
+                      </span>
+                      <span className="text-xs text-gray-500">Niv. {trophy.rarity}/5</span>
+                    </div>
+                    {trophy.isDefault && (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-cyan-500/20 text-cyan-400">
+                        Par défaut
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4">
+                    {trophy.isActive ? (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
+                        Actif
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
+                        Inactif
+                      </span>
+                    )}
+                    <span className="text-xs text-gray-500">
+                      {new Date(trophy.createdAt).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openEditModal('trophy', trophy)}
+                      className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
+                    >
+                      Modifier
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm({ type: 'trophy', id: trophy._id })}
+                      className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
     );
   };
 
@@ -2276,6 +2473,123 @@ const renderDisputes = () => {
                 </div>
               );
             })}
+          </div>
+        </div>
+
+        {/* Ladder Settings */}
+        <div className="bg-dark-800/50 border border-amber-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-400" />
+            Paramètres Ladder
+          </h3>
+          
+          {/* Duo/Trio Time Restriction */}
+          <div className="bg-dark-900/50 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-white font-medium">Restriction horaire Duo/Trio</h4>
+                <p className="text-gray-500 text-xs">
+                  {appSettings.ladderSettings?.duoTrioTimeRestriction?.enabled 
+                    ? `Ouvert de ${appSettings.ladderSettings?.duoTrioTimeRestriction?.startHour || 0}h à ${appSettings.ladderSettings?.duoTrioTimeRestriction?.endHour || 20}h (heure française)`
+                    : 'Le ladder Duo/Trio est toujours ouvert'}
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  const newEnabled = !appSettings.ladderSettings?.duoTrioTimeRestriction?.enabled;
+                  try {
+                    const response = await fetch(`${API_URL}/app-settings/admin/ladder-settings`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ 
+                        duoTrioTimeRestriction: { enabled: newEnabled }
+                      })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                      setSuccess(newEnabled ? 'Restriction horaire activée' : 'Ladder Duo/Trio toujours ouvert');
+                      fetchAppSettings();
+                    } else {
+                      setError(data.message || 'Erreur');
+                    }
+                  } catch (err) {
+                    setError('Erreur lors de la modification');
+                  }
+                }}
+                className={`relative w-12 h-6 rounded-full transition-colors ${
+                  appSettings.ladderSettings?.duoTrioTimeRestriction?.enabled ? 'bg-amber-500' : 'bg-dark-700'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                  appSettings.ladderSettings?.duoTrioTimeRestriction?.enabled ? 'translate-x-6' : ''
+                }`} />
+              </button>
+            </div>
+            
+            {appSettings.ladderSettings?.duoTrioTimeRestriction?.enabled && (
+              <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <label className="text-gray-400 text-sm">De</label>
+                  <select
+                    value={appSettings.ladderSettings?.duoTrioTimeRestriction?.startHour || 0}
+                    onChange={async (e) => {
+                      try {
+                        const response = await fetch(`${API_URL}/app-settings/admin/ladder-settings`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ 
+                            duoTrioTimeRestriction: { startHour: parseInt(e.target.value) }
+                          })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                          fetchAppSettings();
+                        }
+                      } catch (err) {
+                        setError('Erreur');
+                      }
+                    }}
+                    className="px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-amber-500/50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{i}h</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-gray-400 text-sm">à</label>
+                  <select
+                    value={appSettings.ladderSettings?.duoTrioTimeRestriction?.endHour || 20}
+                    onChange={async (e) => {
+                      try {
+                        const response = await fetch(`${API_URL}/app-settings/admin/ladder-settings`, {
+                          method: 'PATCH',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ 
+                            duoTrioTimeRestriction: { endHour: parseInt(e.target.value) }
+                          })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                          fetchAppSettings();
+                        }
+                      } catch (err) {
+                        setError('Erreur');
+                      }
+                    }}
+                    className="px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-amber-500/50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{i}h</option>
+                    ))}
+                  </select>
+                </div>
+                <span className="text-gray-500 text-sm">(heure française)</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2697,85 +3011,6 @@ const renderDisputes = () => {
     );
   };
 
-  const renderSeasons = () => {
-    return (
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">Gestion des Saisons</h2>
-                <button
-            onClick={() => openCreateModal('season')}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
-                >
-            <Plus className="w-5 h-5" />
-            Nouvelle Saison
-                </button>
-              </div>
-
-        {/* Seasons Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {seasons.length === 0 ? (
-            <div className="col-span-full text-center text-gray-400 py-8">
-              Aucune saison trouvée
-                </div>
-          ) : (
-            seasons.map((season) => (
-                    <div 
-                key={season._id}
-                className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-white/20 transition-all"
-                    >
-                <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-purple-400" />
-                    <span className="text-white font-bold">Saison {season.number}</span>
-                                </div>
-                  <span className={`px-2 py-1 text-xs font-medium rounded ${
-                    season.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                    season.status === 'upcoming' ? 'bg-blue-500/20 text-blue-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    {season.status}
-                  </span>
-                            </div>
-
-                <h3 className="text-white font-bold mb-2">{season.name}</h3>
-                <div className="space-y-2 mb-4">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">Mode</span>
-                    <span className="text-white">{season.mode}</span>
-                                </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">Début</span>
-                    <span className="text-white">{new Date(season.startDate).toLocaleDateString('fr-FR')}</span>
-                            </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-400">Fin</span>
-                    <span className="text-white">{new Date(season.endDate).toLocaleDateString('fr-FR')}</span>
-                          </div>
-                          </div>
-
-                <div className="flex items-center gap-2">
-                          <button
-                    onClick={() => openEditModal('season', season)}
-                    className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium"
-                          >
-                    Modifier
-                          </button>
-                          <button
-                    onClick={() => setDeleteConfirm({ type: 'season', id: season._id })}
-                    className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                          >
-                    <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-            ))
-          )}
-                    </div>
-                </div>
-    );
-  };
-
   const renderHub = () => {
     return (
       <div className="space-y-4">
@@ -3007,6 +3242,92 @@ const renderDisputes = () => {
       }
     };
 
+    const handleLadderSeasonReset = async () => {
+      if (!window.confirm(`Voulez-vous vraiment réinitialiser les saisons de TOUS les ladders (Duo/Trio et Squad/Team) ?\n\n- Les 3 premières équipes recevront des points (150, 100, 75) dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ladder seront remis à zéro\n\nCette action est irréversible!`)) {
+        return;
+      }
+
+      try {
+        setSaving(true);
+        const response = await fetch(`${API_URL}/seasons/admin/ladder/reset-all`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          let message = `Saisons de ladder réinitialisées avec succès!\n\n`;
+          
+          if (data.duoTrio?.winners?.length > 0) {
+            message += `Duo/Trio - ${data.duoTrio.seasonName}:\n`;
+            data.duoTrio.winners.forEach(w => {
+              message += `  ${w.rank}. ${w.squadName} (+${w.points} pts, ${w.trophy})\n`;
+            });
+          }
+          
+          if (data.squadTeam?.winners?.length > 0) {
+            message += `\nSquad/Team - ${data.squadTeam.seasonName}:\n`;
+            data.squadTeam.winners.forEach(w => {
+              message += `  ${w.rank}. ${w.squadName} (+${w.points} pts, ${w.trophy})\n`;
+            });
+          }
+          
+          setSuccess(message);
+        } else {
+          setError(data.message || 'Erreur lors de la réinitialisation des saisons ladder');
+        }
+      } catch (err) {
+        console.error('Ladder season reset error:', err);
+        setError('Erreur lors de la réinitialisation des saisons ladder');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const handleSingleLadderSeasonReset = async (ladderId) => {
+      const ladderName = ladderId === 'duo-trio' ? 'Duo/Trio' : 'Squad/Team';
+      
+      if (!window.confirm(`Voulez-vous vraiment réinitialiser la saison du ladder ${ladderName} ?\n\n- Les 3 premières équipes recevront des points dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ce ladder seront remis à zéro\n\nCette action est irréversible!`)) {
+        return;
+      }
+
+      try {
+        setSaving(true);
+        const response = await fetch(`${API_URL}/seasons/admin/ladder/${ladderId}/reset`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          let message = `Saison ${ladderName} réinitialisée!\n\n`;
+          
+          if (data.result?.winners?.length > 0) {
+            message += `Gagnants - ${data.result.seasonName}:\n`;
+            data.result.winners.forEach(w => {
+              message += `  ${w.rank}. ${w.squadName} (+${w.points} pts, ${w.trophy})\n`;
+            });
+            message += `\n${data.result.totalSquadsReset} équipes ont été réinitialisées.`;
+          } else {
+            message += `Aucune équipe dans le top 3 pour cette saison.`;
+          }
+          
+          setSuccess(message);
+        } else {
+          setError(data.message || `Erreur lors de la réinitialisation du ladder ${ladderName}`);
+        }
+      } catch (err) {
+        console.error('Single ladder season reset error:', err);
+        setError(`Erreur lors de la réinitialisation du ladder ${ladderName}`);
+      } finally {
+        setSaving(false);
+      }
+    };
+
     return (
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-white">Configuration Globale</h2>
@@ -3039,6 +3360,61 @@ const renderDisputes = () => {
             </button>
                   </div>
                 </div>
+
+        {/* Ladder Season Reset */}
+        <div className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 border border-purple-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-purple-400" />
+            Reset Saison Ladder
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Réinitialise les deux ladders (Duo/Trio et Squad/Team). Cette action:
+          </p>
+          <ul className="text-gray-400 text-sm mb-4 list-disc list-inside space-y-1">
+            <li>Attribue les points aux 3 premières équipes (150, 100, 75 pts dans le Top 10 Escouade)</li>
+            <li>Génère et attribue un trophée unique de saison aux 3 premières équipes</li>
+            <li>Remet à zéro les stats des deux ladders (points, victoires, défaites)</li>
+            <li>Enregistre l'historique pour affichage sur la page des classements</li>
+          </ul>
+          <div className="flex flex-wrap gap-4">
+            <button
+              onClick={handleLadderSeasonReset}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/30 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <RefreshCw className="w-5 h-5" />
+              )}
+              Reset Toutes les Saisons Ladder
+            </button>
+            <button
+              onClick={() => handleSingleLadderSeasonReset('duo-trio')}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Users className="w-5 h-5" />
+              )}
+              Reset Duo/Trio
+            </button>
+            <button
+              onClick={() => handleSingleLadderSeasonReset('squad-team')}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/30 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Shield className="w-5 h-5" />
+              )}
+              Reset Squad/Team
+            </button>
+          </div>
+        </div>
 
         {/* Squad Match Rewards */}
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
@@ -3374,6 +3750,441 @@ const renderDisputes = () => {
     );
   };
 
+  // ==================== MATCHES TAB ====================
+  const [ladderMatches, setLadderMatches] = useState([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
+  const [matchToEdit, setMatchToEdit] = useState(null);
+  const [matchToDelete, setMatchToDelete] = useState(null);
+
+  const fetchLadderMatches = async () => {
+    setMatchesLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/matches/admin/all?status=${matchesFilter}&limit=50`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setLadderMatches(data.matches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching matches:', err);
+    } finally {
+      setMatchesLoading(false);
+    }
+  };
+
+  const handleDeleteMatch = async (matchId) => {
+    try {
+      const response = await fetch(`${API_URL}/matches/admin/${matchId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Match supprimé avec succès');
+        setMatchToDelete(null);
+        fetchLadderMatches();
+      } else {
+        setError(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      setError('Erreur lors de la suppression');
+    }
+  };
+
+  const handleUpdateMatchStatus = async (matchId, status) => {
+    try {
+      const response = await fetch(`${API_URL}/matches/admin/${matchId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Statut du match mis à jour');
+        fetchLadderMatches();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour');
+    }
+  };
+
+  const renderMatches = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <Swords className="w-7 h-7 text-purple-400" />
+              Gestion des Matchs Ladder
+            </h2>
+            <p className="text-gray-400 mt-1">Modifier et supprimer les matchs ladder</p>
+          </div>
+          <button
+            onClick={fetchLadderMatches}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Actualiser
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-2">
+          {['all', 'pending', 'completed', 'disputed', 'cancelled'].map((filter) => (
+            <button
+              key={filter}
+              onClick={() => {
+                setMatchesFilter(filter);
+                setTimeout(fetchLadderMatches, 100);
+              }}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                matchesFilter === filter 
+                  ? 'bg-purple-500 text-white' 
+                  : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
+              }`}
+            >
+              {filter === 'all' ? 'Tous' : 
+               filter === 'pending' ? 'En attente' : 
+               filter === 'completed' ? 'Terminés' : 
+               filter === 'disputed' ? 'Litiges' : 'Annulés'}
+            </button>
+          ))}
+        </div>
+
+        {/* Matches List */}
+        {matchesLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+          </div>
+        ) : ladderMatches.length > 0 ? (
+          <div className="space-y-3">
+            {ladderMatches.map((match) => (
+              <div key={match._id} className="bg-dark-800/50 border border-white/10 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <div className="text-white font-medium">{match.challenger?.name || 'Équipe inconnue'}</div>
+                      <span className="text-gray-500">vs</span>
+                      <div className="text-white font-medium">{match.opponent?.name || 'En attente'}</div>
+                    </div>
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                      match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                      match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
+                      match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                      'bg-blue-500/20 text-blue-400'
+                    }`}>
+                      {match.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={match.status}
+                      onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
+                      className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
+                    >
+                      <option value="pending">En attente</option>
+                      <option value="accepted">Accepté</option>
+                      <option value="in_progress">En cours</option>
+                      <option value="completed">Terminé</option>
+                      <option value="disputed">Litige</option>
+                      <option value="cancelled">Annulé</option>
+                    </select>
+                    <button
+                      onClick={() => setMatchToDelete(match)}
+                      className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 text-gray-500 text-sm">
+                  Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} • 
+                  Ladder: {match.ladderId || 'N/A'} • 
+                  Format: {match.format || 'N/A'}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-20">
+            <Swords className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400">Aucun match trouvé</p>
+            <button
+              onClick={fetchLadderMatches}
+              className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+            >
+              Charger les matchs
+            </button>
+          </div>
+        )}
+
+        {/* Delete Match Modal */}
+        {matchToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold text-white mb-4">Supprimer le match ?</h3>
+              <p className="text-gray-400 mb-6">
+                Cette action est irréversible. Le match entre {matchToDelete.challenger?.name} et {matchToDelete.opponent?.name || 'N/A'} sera définitivement supprimé.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setMatchToDelete(null)}
+                  className="flex-1 py-3 bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDeleteMatch(matchToDelete._id)}
+                  className="flex-1 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ==================== SEASONS TAB ====================
+  const [ladderSeasonHistory, setLadderSeasonHistory] = useState({ duoTrio: [], squadTeam: [] });
+  const [seasonsLoading, setSeasonsLoading] = useState(false);
+  const [seasonToDelete, setSeasonToDelete] = useState(null);
+
+  const fetchLadderSeasonHistory = async () => {
+    setSeasonsLoading(true);
+    try {
+      const [duoTrioRes, squadTeamRes] = await Promise.all([
+        fetch(`${API_URL}/seasons/ladder/history/duo-trio?limit=24`, { credentials: 'include' }),
+        fetch(`${API_URL}/seasons/ladder/history/squad-team?limit=24`, { credentials: 'include' })
+      ]);
+      const duoTrioData = await duoTrioRes.json();
+      const squadTeamData = await squadTeamRes.json();
+      
+      setLadderSeasonHistory({
+        duoTrio: duoTrioData.success ? duoTrioData.history : [],
+        squadTeam: squadTeamData.success ? squadTeamData.history : []
+      });
+    } catch (err) {
+      console.error('Error fetching season history:', err);
+    } finally {
+      setSeasonsLoading(false);
+    }
+  };
+
+  const handleDeleteSeasonHistory = async (seasonId) => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/ladder/history/${seasonId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Historique de saison supprimé');
+        setSeasonToDelete(null);
+        fetchLadderSeasonHistory();
+      } else {
+        setError(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      setError('Erreur lors de la suppression');
+    }
+  };
+
+  const renderSeasons = () => {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <Calendar className="w-7 h-7 text-purple-400" />
+              Gestion des Saisons Ladder
+            </h2>
+            <p className="text-gray-400 mt-1">Historique des saisons et gagnants passés</p>
+          </div>
+          <button
+            onClick={fetchLadderSeasonHistory}
+            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Actualiser
+          </button>
+        </div>
+
+        {seasonsLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Duo/Trio History */}
+            <div className="bg-dark-800/50 border border-amber-500/30 rounded-xl overflow-hidden">
+              <div className="p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-400" />
+                  Duo/Trio - Historique
+                </h3>
+              </div>
+              <div className="p-4 max-h-[500px] overflow-y-auto">
+                {ladderSeasonHistory.duoTrio.length > 0 ? (
+                  <div className="space-y-4">
+                    {ladderSeasonHistory.duoTrio.map((season) => (
+                      <div key={season._id} className="bg-dark-900/50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h4 className="text-white font-medium">{season.seasonName}</h4>
+                            <p className="text-gray-500 text-xs">
+                              Reset: {new Date(season.resetAt).toLocaleDateString('fr-FR')}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setSeasonToDelete(season)}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {season.winners?.map((winner) => (
+                            <div key={winner.rank} className={`flex items-center justify-between p-2 rounded-lg ${
+                              winner.rank === 1 ? 'bg-yellow-500/10' :
+                              winner.rank === 2 ? 'bg-gray-500/10' :
+                              'bg-orange-500/10'
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                  winner.rank === 1 ? 'bg-yellow-500/30 text-yellow-400' :
+                                  winner.rank === 2 ? 'bg-gray-500/30 text-gray-300' :
+                                  'bg-orange-500/30 text-orange-400'
+                                }`}>
+                                  {winner.rank}
+                                </span>
+                                <span className="text-white text-sm">{winner.squadName}</span>
+                                <span className="text-gray-500 text-xs">[{winner.squadTag}]</span>
+                              </div>
+                              <span className="text-green-400 text-sm">+{winner.rewardPoints} pts</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-center py-8">Aucun historique</p>
+                )}
+              </div>
+            </div>
+
+            {/* Squad/Team History */}
+            <div className="bg-dark-800/50 border border-emerald-500/30 rounded-xl overflow-hidden">
+              <div className="p-4 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-b border-white/10">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-emerald-400" />
+                  Squad/Team - Historique
+                </h3>
+              </div>
+              <div className="p-4 max-h-[500px] overflow-y-auto">
+                {ladderSeasonHistory.squadTeam.length > 0 ? (
+                  <div className="space-y-4">
+                    {ladderSeasonHistory.squadTeam.map((season) => (
+                      <div key={season._id} className="bg-dark-900/50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <h4 className="text-white font-medium">{season.seasonName}</h4>
+                            <p className="text-gray-500 text-xs">
+                              Reset: {new Date(season.resetAt).toLocaleDateString('fr-FR')}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setSeasonToDelete(season)}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {season.winners?.map((winner) => (
+                            <div key={winner.rank} className={`flex items-center justify-between p-2 rounded-lg ${
+                              winner.rank === 1 ? 'bg-yellow-500/10' :
+                              winner.rank === 2 ? 'bg-gray-500/10' :
+                              'bg-orange-500/10'
+                            }`}>
+                              <div className="flex items-center gap-2">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                                  winner.rank === 1 ? 'bg-yellow-500/30 text-yellow-400' :
+                                  winner.rank === 2 ? 'bg-gray-500/30 text-gray-300' :
+                                  'bg-orange-500/30 text-orange-400'
+                                }`}>
+                                  {winner.rank}
+                                </span>
+                                <span className="text-white text-sm">{winner.squadName}</span>
+                                <span className="text-gray-500 text-xs">[{winner.squadTag}]</span>
+                              </div>
+                              <span className="text-green-400 text-sm">+{winner.rewardPoints} pts</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-center py-8">Aucun historique</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* No history message */}
+        {!seasonsLoading && ladderSeasonHistory.duoTrio.length === 0 && ladderSeasonHistory.squadTeam.length === 0 && (
+          <div className="text-center py-10">
+            <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+            <p className="text-gray-400 mb-4">Aucun historique de saison disponible</p>
+            <button
+              onClick={fetchLadderSeasonHistory}
+              className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+            >
+              Charger l'historique
+            </button>
+          </div>
+        )}
+
+        {/* Delete Season Modal */}
+        {seasonToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold text-white mb-4">Supprimer l'historique de saison ?</h3>
+              <p className="text-gray-400 mb-6">
+                Cette action est irréversible. L'historique de la saison "{seasonToDelete.seasonName}" sera définitivement supprimé.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSeasonToDelete(null)}
+                  className="flex-1 py-3 bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDeleteSeasonHistory(seasonToDelete._id)}
+                  className="flex-1 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderSystem = () => {
     const handleFullReset = async () => {
       if (confirmText !== 'RESET ALL') {
@@ -3513,17 +4324,42 @@ const renderDisputes = () => {
                 className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                 required
               />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Gold Coins</label>
+                <div className="relative">
+                  <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-yellow-400" />
+                  <input
+                    type="number"
+                    value={formData.goldCoins || 500}
+                    onChange={(e) => setFormData({ ...formData, goldCoins: parseInt(e.target.value) })}
+                    className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                    min={0}
+                  />
                 </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Gold Coins</label>
-              <input
-                type="number"
-                value={formData.goldCoins || 500}
-                onChange={(e) => setFormData({ ...formData, goldCoins: parseInt(e.target.value) })}
-                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-              />
               </div>
-                  <div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">XP (Expérience)</label>
+                <div className="relative">
+                  <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-purple-400" />
+                  <input
+                    type="number"
+                    value={formData.stats?.xp || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      stats: { 
+                        ...formData.stats, 
+                        xp: parseInt(e.target.value) || 0 
+                      } 
+                    })}
+                    className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                    min={0}
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Rôles</label>
               <div className="space-y-2">
                 {['user', 'staff', 'gerant_cdl', 'gerant_hardcore', 'admin'].map((role) => (
@@ -3544,8 +4380,8 @@ const renderDisputes = () => {
                     <span className="text-white capitalize">{role}</span>
                   </label>
                 ))}
-                  </div>
-                </div>
+              </div>
+            </div>
           </>
         );
 
@@ -3614,6 +4450,66 @@ const renderDisputes = () => {
                 max={20}
               />
                   </div>
+            
+            {/* Stats Section - Admin Only */}
+            {userIsAdmin && (
+              <div className="border-t border-white/10 pt-4 mt-4">
+                <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  Statistiques Escouade
+                </h4>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Points Top Escouade</label>
+                    <input
+                      type="number"
+                      value={formData.stats?.totalPoints ?? editingItem?.stats?.totalPoints ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        stats: { 
+                          ...formData.stats,
+                          totalPoints: parseInt(e.target.value) || 0 
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-amber-500/30 rounded-lg text-amber-400 focus:outline-none focus:border-amber-500/50 font-bold"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Victoires</label>
+                    <input
+                      type="number"
+                      value={formData.stats?.totalWins ?? editingItem?.stats?.totalWins ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        stats: { 
+                          ...formData.stats,
+                          totalWins: parseInt(e.target.value) || 0 
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-green-500/30 rounded-lg text-green-400 focus:outline-none focus:border-green-500/50"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Défaites</label>
+                    <input
+                      type="number"
+                      value={formData.stats?.totalLosses ?? editingItem?.stats?.totalLosses ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        stats: { 
+                          ...formData.stats,
+                          totalLosses: parseInt(e.target.value) || 0 
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-red-500/30 rounded-lg text-red-400 focus:outline-none focus:border-red-500/50"
+                      min={0}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         );
 
@@ -3723,81 +4619,106 @@ const renderDisputes = () => {
       case 'trophy':
         return (
           <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
-                  <input 
-                    type="text" 
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
+              <input 
+                type="text" 
                 value={formData.name || ''}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
                 required
-                  />
-                </div>
-                <div>
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Description *</label>
-                  <textarea 
+              <textarea 
                 value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    rows={2} 
+                rows={2} 
                 required
-                  />
-                </div>
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
-                  <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Icône</label>
-                    <select 
+                <select 
                   value={formData.icon || 'Trophy'}
                   onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    >
-                  <option value="Trophy">Trophy</option>
-                  <option value="Award">Award</option>
-                  <option value="Medal">Medal</option>
-                  <option value="Star">Star</option>
-                  <option value="Crown">Crown</option>
-                  <option value="Shield">Shield</option>
-                  <option value="Zap">Zap</option>
-                  <option value="Target">Target</option>
-                  <option value="Flame">Flame</option>
-                  <option value="Gem">Gem</option>
-                  <option value="Heart">Heart</option>
-                  <option value="Sword">Sword</option>
-                    </select>
-                  </div>
-                  <div>
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="Trophy">🏆 Trophy</option>
+                  <option value="Award">🎖️ Award</option>
+                  <option value="Medal">🥇 Medal</option>
+                  <option value="Star">⭐ Star</option>
+                  <option value="Crown">👑 Crown</option>
+                  <option value="Shield">🛡️ Shield</option>
+                  <option value="Zap">⚡ Zap</option>
+                  <option value="Target">🎯 Target</option>
+                  <option value="Flame">🔥 Flame</option>
+                  <option value="Gem">💎 Gem</option>
+                  <option value="Heart">❤️ Heart</option>
+                  <option value="Sword">⚔️ Sword</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Couleur</label>
-                    <select 
+                <select 
                   value={formData.color || 'amber'}
                   onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    >
-                  <option value="amber">Amber</option>
-                  <option value="yellow">Yellow</option>
-                  <option value="orange">Orange</option>
-                  <option value="red">Red</option>
-                  <option value="pink">Pink</option>
-                  <option value="purple">Purple</option>
-                  <option value="blue">Blue</option>
-                  <option value="cyan">Cyan</option>
-                  <option value="green">Green</option>
-                  <option value="emerald">Emerald</option>
-                  <option value="gray">Gray</option>
-                    </select>
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="amber">🟠 Amber</option>
+                  <option value="yellow">🟡 Yellow</option>
+                  <option value="orange">🟧 Orange</option>
+                  <option value="red">🔴 Red</option>
+                  <option value="pink">💗 Pink</option>
+                  <option value="purple">🟣 Purple</option>
+                  <option value="blue">🔵 Blue</option>
+                  <option value="cyan">🩵 Cyan</option>
+                  <option value="green">🟢 Green</option>
+                  <option value="emerald">💚 Emerald</option>
+                  <option value="gray">⚪ Gray</option>
+                </select>
               </div>
-                  </div>
-                  <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Rareté (1-5)</label>
-                    <input 
-                      type="number" 
-                value={formData.rarity || 1}
-                onChange={(e) => setFormData({ ...formData, rarity: parseInt(e.target.value) })}
-                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
-                min={1}
-                max={5}
-                    />
-                  </div>
-            <div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Niveau de rareté (1-5)</label>
+                <input 
+                  type="number" 
+                  value={formData.rarity || 1}
+                  onChange={(e) => setFormData({ ...formData, rarity: parseInt(e.target.value) })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50" 
+                  min={1}
+                  max={5}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Nom de rareté</label>
+                <select
+                  value={formData.rarityName || 'common'}
+                  onChange={(e) => setFormData({ ...formData, rarityName: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                >
+                  <option value="common">Commun</option>
+                  <option value="uncommon">Peu commun</option>
+                  <option value="rare">Rare</option>
+                  <option value="epic">Épique</option>
+                  <option value="legendary">Légendaire</option>
+                </select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.isDefault || false}
+                  onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white">Trophée par défaut (donné automatiquement à la création d'escouade)</span>
+              </label>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -3807,7 +4728,7 @@ const renderDisputes = () => {
                 />
                 <span className="text-white">Actif</span>
               </label>
-                </div>
+            </div>
           </>
         );
 
@@ -4089,6 +5010,8 @@ const renderDisputes = () => {
         return renderMessages();
       case 'shop':
         return renderShop();
+      case 'trophies':
+        return renderTrophies();
       case 'disputes':
         return renderDisputes();
       case 'announcements':
@@ -4099,10 +5022,14 @@ const renderDisputes = () => {
         return renderMaps();
       case 'gamerules':
         return renderGameRules();
+      case 'matches':
+        return renderMatches();
       case 'application':
         return renderApplication();
       case 'config':
         return renderConfig();
+      case 'seasons':
+        return renderSeasons();
       case 'system':
         return renderSystem();
       default:
@@ -4368,6 +5295,173 @@ const renderDisputes = () => {
               >
                 <Ban className="w-5 h-5" />
                 Bannir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Squad Trophy Modal */}
+      {showSquadTrophyModal && squadForTrophy && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowSquadTrophyModal(false)}></div>
+          <div className="relative bg-dark-900 border border-yellow-500/20 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-yellow-500/20 rounded-xl">
+                <Trophy className="w-6 h-6 text-yellow-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Gestion des Trophées</h3>
+                <p className="text-gray-400 text-sm">{squadForTrophy.name} [{squadForTrophy.tag}]</p>
+              </div>
+            </div>
+
+            {/* Current Trophies */}
+            <div className="mb-6">
+              <h4 className="text-white font-medium mb-3">Trophées actuels</h4>
+              {squadForTrophy.trophies && squadForTrophy.trophies.length > 0 ? (
+                <div className="space-y-2">
+                  {squadForTrophy.trophies.map((t, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                          <Trophy className="w-5 h-5 text-yellow-400" />
+                        </div>
+                        <div>
+                          <p className="text-white font-medium text-sm">
+                            {t.trophy?.name || t.trophy?.translations?.fr?.name || 'Trophée'}
+                          </p>
+                          <p className="text-gray-500 text-xs">{t.reason || 'Aucune raison'}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveTrophy(t.trophy?._id || t.trophy)}
+                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm py-4 text-center">Aucun trophée attribué</p>
+              )}
+            </div>
+
+            {/* Add Trophy */}
+            <div className="border-t border-white/10 pt-6">
+              <h4 className="text-white font-medium mb-3">Ajouter un trophée</h4>
+              <div className="space-y-3">
+                <select
+                  value={selectedTrophyToAdd}
+                  onChange={(e) => setSelectedTrophyToAdd(e.target.value)}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-yellow-500/50"
+                >
+                  <option value="">Sélectionner un trophée...</option>
+                  {trophies.filter(trophy => 
+                    !squadForTrophy.trophies?.some(t => 
+                      (t.trophy?._id || t.trophy) === trophy._id
+                    )
+                  ).map((trophy) => (
+                    <option key={trophy._id} value={trophy._id}>
+                      {trophy.name || trophy.translations?.fr?.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={trophyReason}
+                  onChange={(e) => setTrophyReason(e.target.value)}
+                  placeholder="Raison (optionnel)"
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-yellow-500/50"
+                />
+                <button
+                  onClick={handleAssignTrophy}
+                  disabled={!selectedTrophyToAdd}
+                  className="w-full py-3 bg-yellow-500 text-black font-bold rounded-xl hover:bg-yellow-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Trophy className="w-5 h-5" />
+                  Attribuer le trophée
+                </button>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSquadTrophyModal(false)}
+              className="w-full mt-6 py-3 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Squad Ladder Points Modal */}
+      {showLadderPointsModal && squadForLadderPoints && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowLadderPointsModal(false)}></div>
+          <div className="relative bg-dark-900 border border-purple-500/20 rounded-2xl p-6 max-w-lg w-full">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-purple-500/20 rounded-xl">
+                <TrendingUp className="w-6 h-6 text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Points Ladder</h3>
+                <p className="text-gray-400 text-sm">{squadForLadderPoints.name} [{squadForLadderPoints.tag}]</p>
+              </div>
+            </div>
+
+            {/* Ladder Points List */}
+            <div className="space-y-4">
+              {squadForLadderPoints.registeredLadders && squadForLadderPoints.registeredLadders.length > 0 ? (
+                squadForLadderPoints.registeredLadders.map((ladder, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-white/10">
+                    <div>
+                      <p className="text-white font-medium">{ladder.ladderName || ladder.ladderId}</p>
+                      <p className="text-gray-500 text-xs">ID: {ladder.ladderId}</p>
+                      <div className="flex items-center gap-4 mt-1 text-xs text-gray-400">
+                        <span>{ladder.wins || 0} V</span>
+                        <span>{ladder.losses || 0} D</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        value={ladderPointsEdit[ladder.ladderId] ?? ladder.points ?? 0}
+                        onChange={(e) => setLadderPointsEdit({
+                          ...ladderPointsEdit,
+                          [ladder.ladderId]: parseInt(e.target.value) || 0
+                        })}
+                        className="w-24 px-3 py-2 bg-dark-700 border border-purple-500/30 rounded-lg text-white text-center font-bold focus:outline-none focus:border-purple-500"
+                        min={0}
+                      />
+                      <span className="text-purple-400 text-sm">pts</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm py-4 text-center">Aucun ladder enregistré</p>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowLadderPointsModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleUpdateLadderPoints}
+                disabled={saving}
+                className="flex-1 py-3 px-4 bg-purple-500 text-white font-medium rounded-xl hover:bg-purple-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                  <>
+                    <Save className="w-5 h-5" />
+                    Sauvegarder
+                  </>
+                )}
               </button>
             </div>
           </div>

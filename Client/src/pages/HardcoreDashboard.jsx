@@ -345,6 +345,10 @@ const HardcoreDashboard = () => {
   const [appSettings, setAppSettings] = useState(null);
   const [inProgressCounts, setInProgressCounts] = useState({ 'squad-team': 0, 'duo-trio': 0, total: 0 });
   
+  // Top player and squad
+  const [topPlayer, setTopPlayer] = useState(null);
+  const [topSquad, setTopSquad] = useState(null);
+  
   // Roster selection states
   const [showRosterDialog, setShowRosterDialog] = useState(null);
   const [selectedRoster, setSelectedRoster] = useState([]);
@@ -398,6 +402,30 @@ const HardcoreDashboard = () => {
       }
     };
     fetchAppSettings();
+  }, []);
+
+  // Fetch top player and top squad for hardcore mode
+  useEffect(() => {
+    const fetchTopStats = async () => {
+      try {
+        // Fetch top player (by wins in hardcore mode)
+        const playerRes = await fetch(`${API_URL}/rankings/top-player?mode=hardcore`);
+        const playerData = await playerRes.json();
+        if (playerData.success && playerData.player) {
+          setTopPlayer(playerData.player);
+        }
+        
+        // Fetch top squad (by ladder points in hardcore)
+        const squadRes = await fetch(`${API_URL}/rankings/top-squad?mode=hardcore`);
+        const squadData = await squadRes.json();
+        if (squadData.success && squadData.squad) {
+          setTopSquad(squadData.squad);
+        }
+      } catch (err) {
+        console.error('Error fetching top stats:', err);
+      }
+    };
+    fetchTopStats();
   }, []);
 
   const gameModeApiNames = {
@@ -750,14 +778,32 @@ const HardcoreDashboard = () => {
   const isRegisteredToLadder = (ladderId) => mySquad?.registeredLadders?.some(l => l.ladderId === ladderId);
 
   const isDuoTrioOpen = () => {
+    // If time restriction is disabled in admin settings, always open
+    if (appSettings?.ladderSettings?.duoTrioTimeRestriction?.enabled === false) {
+      return true;
+    }
     const parisHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris', hour: 'numeric', hour12: false }));
-    return parisHour < 20;
+    const startHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.startHour ?? 0;
+    const endHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.endHour ?? 20;
+    return parisHour >= startHour && parisHour < endHour;
+  };
+  
+  // Get formatted time slot text
+  const getDuoTrioTimeText = () => {
+    if (appSettings?.ladderSettings?.duoTrioTimeRestriction?.enabled === false) {
+      return language === 'fr' ? '✓ Disponible 24h/24' : '✓ Available 24/7';
+    }
+    const startHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.startHour ?? 0;
+    const endHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.endHour ?? 20;
+    const isOpen = isDuoTrioOpen();
+    const timeStr = `${startHour.toString().padStart(2, '0')}h00 - ${endHour.toString().padStart(2, '0')}h00`;
+    return isOpen ? `✓ ${language === 'fr' ? 'Ouvert' : 'Open'} • ${timeStr}` : `✗ ${language === 'fr' ? 'Fermé' : 'Closed'} • ${timeStr}`;
   };
 
   const [myActiveMatches, setMyActiveMatches] = useState([]);
 
   const fetchMyActiveMatches = async () => {
-    if (!mySquad) return;
+    if (!isAuthenticated) return;
     try {
       const response = await fetch(`${API_URL}/matches/my-active`, { credentials: 'include' });
       const data = await response.json();
@@ -770,12 +816,12 @@ const HardcoreDashboard = () => {
   useEffect(() => {
     const refreshInterval = setInterval(() => {
       fetchMatches();
-      if (mySquad) fetchMyActiveMatches();
+      if (isAuthenticated) fetchMyActiveMatches();
     }, 30000);
     return () => clearInterval(refreshInterval);
-  }, [mySquad]);
+  }, [isAuthenticated]);
 
-  useEffect(() => { if (mySquad) fetchMyActiveMatches(); }, [mySquad]);
+  useEffect(() => { if (isAuthenticated) fetchMyActiveMatches(); }, [isAuthenticated]);
 
   // Callback for when countdown expires
   const handleCountdownExpire = () => fetchMatches(false);
@@ -1022,21 +1068,157 @@ const HardcoreDashboard = () => {
       
       <div className="relative z-10 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="mb-12">
-            <div className="flex items-center gap-5">
-              <div className="relative">
-                <div className="absolute inset-0 bg-neon-red blur-2xl opacity-40" />
-                <div className="relative w-16 h-16 bg-gradient-to-br from-neon-red to-neon-orange rounded-2xl flex items-center justify-center shadow-neon-red">
-                  <Skull className="w-8 h-8 text-white" />
+          {/* Header with Banner */}
+          <div className="relative mb-12 rounded-2xl overflow-hidden">
+            {/* Background Banner */}
+            <div className="absolute inset-0">
+              <img
+                src="/bo7.jpg"
+                alt="Call of Duty: Black Ops 7"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-dark-950 via-dark-950/85 to-dark-950/60"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-dark-950 via-transparent to-transparent"></div>
+            </div>
+            
+            {/* Content */}
+            <div className="relative z-10 px-6 py-8">
+              <div className="flex items-center gap-5">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-neon-red blur-2xl opacity-40" />
+                  <div className="relative w-16 h-16 bg-gradient-to-br from-neon-red to-neon-orange rounded-2xl flex items-center justify-center shadow-neon-red">
+                    <Skull className="w-8 h-8 text-white" />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <h1 className="text-4xl md:text-5xl font-display text-white mb-1">HARDCORE</h1>
-                <p className="text-gray-400">{t('hardcoreDashboardDesc')}</p>
+                <div>
+                  <h1 className="text-4xl md:text-5xl font-display text-white mb-1">HARDCORE</h1>
+                  <p className="text-gray-400">{t('hardcoreDashboardDesc')}</p>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Top Player & Top Squad Section */}
+          {(topPlayer || topSquad) && (
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-8">
+              {/* Top Player */}
+              {topPlayer && (
+                <Link
+                  to={`/player/${topPlayer._id}`}
+                  className="group relative w-full sm:w-auto"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative overflow-hidden glass-card rounded-2xl border border-yellow-500/30 hover:border-yellow-400/50 transition-all duration-300 transform group-hover:scale-[1.02]">
+                    {/* Animated background */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 via-orange-500/5 to-yellow-500/5 animate-pulse" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-orange-500 to-yellow-500 animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                    
+                    <div className="relative flex items-center gap-4 p-4 sm:p-5">
+                      {/* Crown icon with glow */}
+                      <div className="absolute -top-1 -left-1 z-10">
+                        <div className="relative">
+                          <Crown className="w-6 h-6 text-yellow-400 animate-bounce" style={{ animationDuration: '2s' }} />
+                          <div className="absolute inset-0 text-yellow-400 blur-sm animate-pulse">
+                            <Crown className="w-6 h-6" />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Avatar */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-yellow-500/30 rounded-full blur-md animate-pulse" />
+                        <img
+                          src={getAvatarUrl(topPlayer.avatarUrl || topPlayer.avatar) || '/avatar.jpg'}
+                          alt={topPlayer.username}
+                          className="relative w-14 h-14 rounded-full object-cover border-2 border-yellow-500/50 group-hover:border-yellow-400 transition-colors"
+                        />
+                      </div>
+                      
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-yellow-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <Trophy className="w-3 h-3" />
+                          {language === 'fr' ? 'Meilleur Joueur' : 'Top Player'}
+                        </p>
+                        <p className="text-white font-bold text-lg truncate group-hover:text-yellow-400 transition-colors">
+                          {topPlayer.username}
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          <span className="text-yellow-400 font-semibold">{(topPlayer.xp || 0).toLocaleString()}</span> XP
+                        </p>
+                      </div>
+                      
+                      {/* Decorative medal */}
+                      <div className="relative">
+                        <Medal className="w-8 h-8 text-yellow-500/30 group-hover:text-yellow-500/60 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              
+              {/* Top Squad */}
+              {topSquad && (
+                <Link
+                  to={`/squad/${topSquad._id}`}
+                  className="group relative w-full sm:w-auto"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative overflow-hidden glass-card rounded-2xl border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300 transform group-hover:scale-[1.02]">
+                    {/* Animated background */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-purple-500/5 animate-pulse" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                    
+                    <div className="relative flex items-center gap-4 p-4 sm:p-5">
+                      {/* Shield icon with glow */}
+                      <div className="absolute -top-1 -right-1 z-10">
+                        <div className="relative">
+                          <Shield className="w-6 h-6 text-purple-400 animate-bounce" style={{ animationDuration: '2.5s' }} />
+                          <div className="absolute inset-0 text-purple-400 blur-sm animate-pulse">
+                            <Shield className="w-6 h-6" />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Squad Logo */}
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-purple-500/30 rounded-xl blur-md animate-pulse" />
+                        <div 
+                          className="relative w-14 h-14 rounded-xl flex items-center justify-center border-2 border-purple-500/50 group-hover:border-purple-400 transition-colors"
+                          style={{ backgroundColor: (topSquad.color || '#a855f7') + '30' }}
+                        >
+                          {topSquad.logo ? (
+                            <img src={topSquad.logo} alt="" className="w-10 h-10 object-contain" />
+                          ) : (
+                            <Shield className="w-8 h-8" style={{ color: topSquad.color || '#a855f7' }} />
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-purple-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
+                          <Users className="w-3 h-3" />
+                          {language === 'fr' ? 'Meilleure Escouade' : 'Top Squad'}
+                        </p>
+                        <p className="text-white font-bold text-lg truncate group-hover:text-purple-400 transition-colors">
+                          {topSquad.name} <span className="text-gray-500">[{topSquad.tag}]</span>
+                        </p>
+                        <p className="text-gray-400 text-sm">
+                          <span className="text-purple-400 font-semibold">{(topSquad.totalPoints || topSquad.stats?.totalPoints || 0).toLocaleString()}</span> {language === 'fr' ? 'points' : 'points'}
+                        </p>
+                      </div>
+                      
+                      {/* Decorative trophy */}
+                      <div className="relative">
+                        <Trophy className="w-8 h-8 text-purple-500/30 group-hover:text-purple-500/60 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )}
+            </div>
+          )}
 
           {/* Available Matches Section */}
           <section className="mb-12">
@@ -1135,7 +1317,7 @@ const HardcoreDashboard = () => {
                   <div className={`mb-4 px-4 py-2.5 rounded-xl flex items-center gap-2 ${isDuoTrioOpen() ? 'bg-neon-green/10 border border-neon-green/30' : 'bg-neon-red/10 border border-neon-red/30'}`}>
                     <Clock className={`w-4 h-4 ${isDuoTrioOpen() ? 'text-neon-green' : 'text-neon-red'}`} />
                     <span className={`text-sm font-medium ${isDuoTrioOpen() ? 'text-neon-green' : 'text-neon-red'}`}>
-                      {isDuoTrioOpen() ? txt.openHours : txt.closedHours}
+                      {getDuoTrioTimeText()}
                     </span>
                   </div>
                 )}
