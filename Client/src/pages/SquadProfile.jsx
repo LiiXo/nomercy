@@ -531,7 +531,7 @@ const SquadProfile = () => {
                     <p className="text-gray-400 mt-2 max-w-md">{squad.description}</p>
                   )}
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-3 text-sm">
-                    <span className={`px-3 py-1.5 rounded-lg font-medium`} style={{ backgroundColor: squad.color === 'transparent' ? 'rgba(255,255,255,0.05)' : squad.color + '20', color: squad.color === 'transparent' ? '#9ca3af' : squad.color, border: squad.color === 'transparent' ? '1px solid rgba(255,255,255,0.1)' : `1px solid ${squad.color}50` }}>
+                    <span className={`px-3 py-1.5 rounded-lg font-bold text-white`} style={{ backgroundColor: squad.color === 'transparent' ? 'rgba(255,255,255,0.1)' : squad.color + '40', border: squad.color === 'transparent' ? '1px solid rgba(255,255,255,0.2)' : `1px solid ${squad.color}60` }}>
                       {squad.stats?.totalPoints || 0} pts
                     </span>
                     <span className="flex items-center space-x-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white">
@@ -681,7 +681,7 @@ const SquadProfile = () => {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
             <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-6 text-center`}>
               <Trophy className={`w-5 sm:w-6 h-5 sm:h-6 text-${accentColor}-400 mx-auto mb-1 sm:mb-2`} />
-              <div className="text-xl sm:text-3xl font-bold" style={{ color: squad.color }}>{squad.stats?.totalPoints || 0}</div>
+              <div className={`text-xl sm:text-3xl font-bold text-${accentColor}-400`}>{squad.stats?.totalPoints || 0}</div>
               <div className="text-gray-400 text-xs sm:text-sm">{t.points}</div>
             </div>
             <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-6 text-center`}>

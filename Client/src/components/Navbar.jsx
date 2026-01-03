@@ -165,7 +165,15 @@ const Navbar = () => {
 
     fetchDisputesCount();
     const interval = setInterval(fetchDisputesCount, 60000);
-    return () => clearInterval(interval);
+    
+    // Listen for dispute created event for real-time update
+    const handleDisputeCreated = () => fetchDisputesCount();
+    window.addEventListener('disputeCreated', handleDisputeCreated);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('disputeCreated', handleDisputeCreated);
+    };
   }, [isAuthenticated]);
 
   const isActive = (path) => location.pathname === path;

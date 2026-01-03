@@ -1163,13 +1163,43 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     const winnerIdStr = winnerId.toString();
     
     const isWinnerChallenger = winnerIdStr === challengerIdStr;
-    const winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
-    const loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
+    let winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
+    let loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
     
     console.log(`[MATCH RESULT] DEBUG - winnerId: ${winnerIdStr}, challengerId: ${challengerIdStr}, opponentId: ${opponentIdStr}`);
     console.log(`[MATCH RESULT] DEBUG - isWinnerChallenger: ${isWinnerChallenger}`);
     console.log(`[MATCH RESULT] DEBUG - Winner team: ${isWinnerChallenger ? match.challenger.name : match.opponent.name}`);
     console.log(`[MATCH RESULT] DEBUG - Loser team: ${isWinnerChallenger ? match.opponent.name : match.challenger.name}`);
+
+    // Fallback: si les rosters sont vides, utiliser les membres des escouades
+    if ((!winnerRoster || winnerRoster.length === 0) || (!loserRoster || loserRoster.length === 0)) {
+      console.log(`[MATCH RESULT] ⚠️ Roster(s) vide(s), récupération depuis les escouades...`);
+      
+      const winnerSquad = await Squad.findById(winnerId).populate('members.user', '_id username');
+      const loserSquad = await Squad.findById(loserId).populate('members.user', '_id username');
+      
+      if (!winnerRoster || winnerRoster.length === 0) {
+        if (winnerSquad?.members) {
+          winnerRoster = winnerSquad.members.slice(0, match.teamSize).map(m => ({
+            user: m.user,
+            username: m.user?.username || 'Unknown',
+            isHelper: false
+          }));
+          console.log(`[MATCH RESULT] ✅ Winner roster récupéré depuis l'escouade: ${winnerRoster.length} joueurs`);
+        }
+      }
+      
+      if (!loserRoster || loserRoster.length === 0) {
+        if (loserSquad?.members) {
+          loserRoster = loserSquad.members.slice(0, match.teamSize).map(m => ({
+            user: m.user,
+            username: m.user?.username || 'Unknown',
+            isHelper: false
+          }));
+          console.log(`[MATCH RESULT] ✅ Loser roster récupéré depuis l'escouade: ${loserRoster.length} joueurs`);
+        }
+      }
+    }
 
     // Récompenses individuelles (depuis la config) - Plus de points joueur, seulement Gold et XP
     const playerCoinsWin = rewardsConfig.playerCoinsWin ?? 50;
@@ -2032,8 +2062,38 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
 
       // Déterminer les rosters gagnant et perdant
       const isWinnerChallenger = winnerId === match.challenger._id.toString();
-      const winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
-      const loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
+      let winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
+      let loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
+
+      // Fallback: si les rosters sont vides, utiliser les membres des escouades
+      if ((!winnerRoster || winnerRoster.length === 0) || (!loserRoster || loserRoster.length === 0)) {
+        console.log(`[RESOLVE MATCH] ⚠️ Roster(s) vide(s), récupération depuis les escouades...`);
+        
+        const winnerSquadFallback = await Squad.findById(winnerId).populate('members.user', '_id username');
+        const loserSquadFallback = await Squad.findById(loserId).populate('members.user', '_id username');
+        
+        if (!winnerRoster || winnerRoster.length === 0) {
+          if (winnerSquadFallback?.members) {
+            winnerRoster = winnerSquadFallback.members.slice(0, match.teamSize).map(m => ({
+              user: m.user,
+              username: m.user?.username || 'Unknown',
+              isHelper: false
+            }));
+            console.log(`[RESOLVE MATCH] ✅ Winner roster récupéré: ${winnerRoster.length} joueurs`);
+          }
+        }
+        
+        if (!loserRoster || loserRoster.length === 0) {
+          if (loserSquadFallback?.members) {
+            loserRoster = loserSquadFallback.members.slice(0, match.teamSize).map(m => ({
+              user: m.user,
+              username: m.user?.username || 'Unknown',
+              isHelper: false
+            }));
+            console.log(`[RESOLVE MATCH] ✅ Loser roster récupéré: ${loserRoster.length} joueurs`);
+          }
+        }
+      }
 
       // Récupérer les valeurs complètes de la config - avec valeurs par défaut
       const playerCoinsLoss = rewardsConfigResolve.playerCoinsLoss ?? 25;

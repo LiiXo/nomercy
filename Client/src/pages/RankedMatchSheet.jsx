@@ -446,6 +446,8 @@ const RankedMatchSheet = () => {
         setMatch(data.match);
         setShowDisputeModal(false);
         setDisputeReason('');
+        // Dispatch event to update disputes count in Navbar
+        window.dispatchEvent(new Event('disputeCreated'));
       }
     } catch (err) {
       console.error('Error submitting dispute:', err);

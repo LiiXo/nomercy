@@ -112,3 +112,5 @@ const LadderSeasonHistory = mongoose.model('LadderSeasonHistory', ladderSeasonHi
 
 export default LadderSeasonHistory;
 
+
+

@@ -766,7 +766,10 @@ const HardcoreDashboard = () => {
         setMatchMessage({ type: 'success', text: txt.cancel + ' ✓' });
         const res = await fetch(`${API_URL}/matches/available/${ladderId}?mode=hardcore`);
         const resData = await res.json();
-        if (resData.success) setSquadTeamMatches(resData.matches);
+        if (resData.success) {
+          if (ladderId === 'squad-team') setSquadTeamMatches(resData.matches);
+          else if (ladderId === 'duo-trio') setDuoTrioMatches(resData.matches);
+        }
         setTimeout(() => setMatchMessage({ type: '', text: '' }), 3000);
       }
     } catch (err) {
@@ -1108,14 +1111,14 @@ const HardcoreDashboard = () => {
                   className="group relative w-full sm:w-auto"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="relative overflow-hidden glass-card rounded-2xl border border-yellow-500/30 hover:border-yellow-400/50 transition-all duration-300 transform group-hover:scale-[1.02]">
+                  <div className="relative glass-card rounded-2xl border border-yellow-500/30 hover:border-yellow-400/50 transition-all duration-300 transform group-hover:scale-[1.02] overflow-hidden">
                     {/* Animated background */}
                     <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/5 via-orange-500/5 to-yellow-500/5 animate-pulse" />
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-orange-500 to-yellow-500 animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
                     
-                    <div className="relative flex items-center gap-4 p-4 sm:p-5">
+                    <div className="relative flex items-center gap-4 p-5 sm:p-6">
                       {/* Crown icon with glow */}
-                      <div className="absolute -top-1 -left-1 z-10">
+                      <div className="absolute top-3 left-3 z-10">
                         <div className="relative">
                           <Crown className="w-6 h-6 text-yellow-400 animate-bounce" style={{ animationDuration: '2s' }} />
                           <div className="absolute inset-0 text-yellow-400 blur-sm animate-pulse">
@@ -1125,32 +1128,32 @@ const HardcoreDashboard = () => {
                       </div>
                       
                       {/* Avatar */}
-                      <div className="relative">
+                      <div className="relative ml-6">
                         <div className="absolute inset-0 bg-yellow-500/30 rounded-full blur-md animate-pulse" />
                         <img
                           src={getAvatarUrl(topPlayer.avatarUrl || topPlayer.avatar) || '/avatar.jpg'}
                           alt={topPlayer.username}
-                          className="relative w-14 h-14 rounded-full object-cover border-2 border-yellow-500/50 group-hover:border-yellow-400 transition-colors"
+                          className="relative w-16 h-16 rounded-full object-cover border-2 border-yellow-500/50 group-hover:border-yellow-400 transition-colors"
                         />
                       </div>
                       
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-yellow-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                          <Trophy className="w-3 h-3" />
+                        <p className="text-xs text-yellow-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <Trophy className="w-3.5 h-3.5" />
                           {language === 'fr' ? 'Meilleur Joueur' : 'Top Player'}
                         </p>
-                        <p className="text-white font-bold text-lg truncate group-hover:text-yellow-400 transition-colors">
+                        <p className="text-white font-bold text-xl truncate group-hover:text-yellow-400 transition-colors">
                           {topPlayer.username}
                         </p>
-                        <p className="text-gray-400 text-sm">
+                        <p className="text-gray-400 text-sm mt-0.5">
                           <span className="text-yellow-400 font-semibold">{(topPlayer.xp || 0).toLocaleString()}</span> XP
                         </p>
                       </div>
                       
                       {/* Decorative medal */}
                       <div className="relative">
-                        <Medal className="w-8 h-8 text-yellow-500/30 group-hover:text-yellow-500/60 transition-colors" />
+                        <Medal className="w-10 h-10 text-yellow-500/30 group-hover:text-yellow-500/60 transition-colors" />
                       </div>
                     </div>
                   </div>
@@ -1164,18 +1167,18 @@ const HardcoreDashboard = () => {
                   className="group relative w-full sm:w-auto"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 to-pink-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                  <div className="relative overflow-hidden glass-card rounded-2xl border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300 transform group-hover:scale-[1.02]">
+                  <div className="relative glass-card rounded-2xl border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300 transform group-hover:scale-[1.02] overflow-hidden">
                     {/* Animated background */}
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-purple-500/5 animate-pulse" />
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-purple-500 animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
                     
-                    <div className="relative flex items-center gap-4 p-4 sm:p-5">
-                      {/* Shield icon with glow */}
-                      <div className="absolute -top-1 -right-1 z-10">
+                    <div className="relative flex items-center gap-4 p-5 sm:p-6">
+                      {/* Trophy icon with glow */}
+                      <div className="absolute top-3 right-3 z-10">
                         <div className="relative">
-                          <Shield className="w-6 h-6 text-purple-400 animate-bounce" style={{ animationDuration: '2.5s' }} />
+                          <Trophy className="w-6 h-6 text-purple-400 animate-bounce" style={{ animationDuration: '2.5s' }} />
                           <div className="absolute inset-0 text-purple-400 blur-sm animate-pulse">
-                            <Shield className="w-6 h-6" />
+                            <Trophy className="w-6 h-6" />
                           </div>
                         </div>
                       </div>
@@ -1184,34 +1187,34 @@ const HardcoreDashboard = () => {
                       <div className="relative">
                         <div className="absolute inset-0 bg-purple-500/30 rounded-xl blur-md animate-pulse" />
                         <div 
-                          className="relative w-14 h-14 rounded-xl flex items-center justify-center border-2 border-purple-500/50 group-hover:border-purple-400 transition-colors"
+                          className="relative w-16 h-16 rounded-xl flex items-center justify-center border-2 border-purple-500/50 group-hover:border-purple-400 transition-colors overflow-hidden"
                           style={{ backgroundColor: (topSquad.color || '#a855f7') + '30' }}
                         >
                           {topSquad.logo ? (
-                            <img src={topSquad.logo} alt="" className="w-10 h-10 object-contain" />
+                            <img src={topSquad.logo} alt="" className="w-full h-full object-cover" />
                           ) : (
-                            <Shield className="w-8 h-8" style={{ color: topSquad.color || '#a855f7' }} />
+                            <Shield className="w-9 h-9" style={{ color: topSquad.color || '#a855f7' }} />
                           )}
                         </div>
                       </div>
                       
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-purple-400 font-semibold uppercase tracking-wider mb-0.5 flex items-center gap-1">
-                          <Users className="w-3 h-3" />
+                        <p className="text-xs text-purple-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />
                           {language === 'fr' ? 'Meilleure Escouade' : 'Top Squad'}
                         </p>
-                        <p className="text-white font-bold text-lg truncate group-hover:text-purple-400 transition-colors">
+                        <p className="text-white font-bold text-xl truncate group-hover:text-purple-400 transition-colors">
                           {topSquad.name} <span className="text-gray-500">[{topSquad.tag}]</span>
                         </p>
-                        <p className="text-gray-400 text-sm">
+                        <p className="text-gray-400 text-sm mt-0.5">
                           <span className="text-purple-400 font-semibold">{(topSquad.totalPoints || topSquad.stats?.totalPoints || 0).toLocaleString()}</span> {language === 'fr' ? 'points' : 'points'}
                         </p>
                       </div>
                       
                       {/* Decorative trophy */}
                       <div className="relative">
-                        <Trophy className="w-8 h-8 text-purple-500/30 group-hover:text-purple-500/60 transition-colors" />
+                        <Trophy className="w-10 h-10 text-purple-500/30 group-hover:text-purple-500/60 transition-colors" />
                       </div>
                     </div>
                   </div>

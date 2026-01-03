@@ -1,6 +1,7 @@
 import express from 'express';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 import Config from '../models/Config.js';
+import { clearConfigCache } from '../utils/configHelper.js';
 
 const router = express.Router();
 
@@ -36,6 +37,9 @@ router.put('/admin', verifyToken, requireAdmin, async (req, res) => {
     });
     
     await config.save();
+    
+    // Clear the config cache so new values are used immediately
+    clearConfigCache();
     
     res.json({ success: true, config });
   } catch (error) {

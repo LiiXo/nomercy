@@ -987,6 +987,8 @@ const MatchSheet = () => {
         setMatch(data.match);
         setShowDisputeModal(false);
         setDisputeReason('');
+        // Dispatch event to update disputes count in Navbar
+        window.dispatchEvent(new Event('disputeCreated'));
       } else {
         alert(data.message);
       }
