@@ -809,6 +809,45 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
       });
     }
 
+    // Vérifier le cooldown de 3h avant de pouvoir rejouer contre la même équipe
+    const REMATCH_COOLDOWN_HOURS = 3;
+    const cooldownThreshold = new Date(Date.now() - REMATCH_COOLDOWN_HOURS * 60 * 60 * 1000);
+    
+    // Chercher un match récent entre ces deux équipes (dans les deux sens)
+    const recentMatch = await Match.findOne({
+      $or: [
+        // Notre équipe était challenger, l'adversaire était opponent
+        { challenger: squad._id, opponent: match.challenger },
+        // Notre équipe était opponent, l'adversaire était challenger
+        { challenger: match.challenger, opponent: squad._id }
+      ],
+      // Match terminé, en cours, ou en litige (pas pending/cancelled/expired)
+      status: { $in: ['in_progress', 'completed', 'disputed', 'accepted'] },
+      // Le match a été accepté dans les 3 dernières heures
+      acceptedAt: { $gte: cooldownThreshold }
+    }).sort({ acceptedAt: -1 });
+
+    if (recentMatch) {
+      // Calculer le temps restant avant de pouvoir rejouer
+      const timeSinceMatch = Date.now() - new Date(recentMatch.acceptedAt).getTime();
+      const cooldownMs = REMATCH_COOLDOWN_HOURS * 60 * 60 * 1000;
+      const remainingMs = cooldownMs - timeSinceMatch;
+      
+      const remainingHours = Math.floor(remainingMs / (60 * 60 * 1000));
+      const remainingMinutes = Math.ceil((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Vous devez attendre avant de rejouer contre cette équipe',
+        errorCode: 'REMATCH_COOLDOWN',
+        cooldownData: {
+          hours: remainingHours,
+          minutes: remainingMinutes,
+          lastMatchAt: recentMatch.acceptedAt
+        }
+      });
+    }
+
     match.opponent = squad._id;
     match.acceptedAt = new Date();
     match.acceptedBy = user._id;
