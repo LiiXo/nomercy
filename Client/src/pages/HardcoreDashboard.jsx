@@ -1626,7 +1626,7 @@ const HardcoreDashboard = () => {
                               {squad.logo ? (
                                 <img src={squad.logo} alt="" className="w-8 h-8 rounded object-contain" />
                               ) : (
-                                <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold" style={{ backgroundColor: squad.color + '30', color: squad.color }}>
+                                <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold border border-white/10" style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30', color: squad.color === 'transparent' ? '#9ca3af' : squad.color }}>
                                   {squad.tag?.charAt(0) || 'S'}
                                 </div>
                               )}

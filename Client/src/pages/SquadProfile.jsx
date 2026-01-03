@@ -507,19 +507,18 @@ const SquadProfile = () => {
             <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-6">
               <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6">
                 <div className="relative">
-                  <div className="absolute inset-0 blur-2xl rounded-full" style={{ backgroundColor: squad.color + '40' }}></div>
+                  <div className="absolute inset-0 blur-2xl rounded-full" style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '40' }}></div>
                   <div 
-                    className="relative w-24 h-24 rounded-full flex items-center justify-center shadow-lg border-4 overflow-hidden"
+                    className="relative w-24 h-24 rounded-full flex items-center justify-center shadow-lg overflow-hidden border border-white/10"
                     style={{ 
-                      backgroundColor: squad.color + '30', 
-                      borderColor: squad.color,
-                      boxShadow: `0 0 30px ${squad.color}50`
+                      backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30', 
+                      boxShadow: squad.color === 'transparent' ? 'none' : `0 0 30px ${squad.color}50`
                     }}
                   >
                     {squad.logo ? (
                       <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
                     ) : (
-                      <Users className="w-12 h-12" style={{ color: squad.color }} />
+                      <Users className="w-12 h-12" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }} />
                     )}
                   </div>
                 </div>
@@ -532,7 +531,7 @@ const SquadProfile = () => {
                     <p className="text-gray-400 mt-2 max-w-md">{squad.description}</p>
                   )}
                   <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 mt-3 text-sm">
-                    <span className={`px-3 py-1.5 rounded-lg font-medium`} style={{ backgroundColor: squad.color + '20', color: squad.color, border: `1px solid ${squad.color}50` }}>
+                    <span className={`px-3 py-1.5 rounded-lg font-medium`} style={{ backgroundColor: squad.color === 'transparent' ? 'rgba(255,255,255,0.05)' : squad.color + '20', color: squad.color === 'transparent' ? '#9ca3af' : squad.color, border: squad.color === 'transparent' ? '1px solid rgba(255,255,255,0.1)' : `1px solid ${squad.color}50` }}>
                       {squad.stats?.totalPoints || 0} pts
                     </span>
                     <span className="flex items-center space-x-1.5 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-white">
@@ -614,13 +613,13 @@ const SquadProfile = () => {
             };
             
             return (
-              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>
-                <h2 className="text-lg font-bold text-white mb-5 flex items-center space-x-2">
-                  <Trophy className="w-5 h-5" style={{ color: squad.color }} />
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
+                <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-5 flex items-center space-x-2">
+                  <Trophy className="w-4 sm:w-5 h-4 sm:h-5" style={{ color: squad.color }} />
                   <span>{t.trophies}</span>
                 </h2>
                 
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-4">
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2 sm:gap-4">
                   {allTrophies.map((trophy) => {
                     const colors = colorMap[trophy.color] || colorMap.amber;
                     const IconComponent = { Trophy, Award, Medal, Crown, Shield, Target }[trophy.icon] || Trophy;
@@ -632,22 +631,22 @@ const SquadProfile = () => {
                       <div key={trophy._id} className="group relative flex flex-col items-center">
                         {/* Trophy icon */}
                         <div 
-                          className={`relative w-16 h-16 rounded-xl bg-gradient-to-br ${colors.bg} ${colors.border} border-2 flex items-center justify-center cursor-pointer transition-all duration-300 ${
+                          className={`relative w-12 sm:w-16 h-12 sm:h-16 rounded-lg sm:rounded-xl bg-gradient-to-br ${colors.bg} ${colors.border} border-2 flex items-center justify-center cursor-pointer transition-all duration-300 ${
                             isEarned 
                               ? `shadow-lg ${colors.glow} hover:scale-110` 
                               : 'opacity-40 grayscale hover:opacity-60 hover:grayscale-[50%]'
                           }`}
                         >
-                          <IconComponent className={`w-8 h-8 ${colors.text}`} />
+                          <IconComponent className={`w-6 sm:w-8 h-6 sm:h-8 ${colors.text}`} />
                           {isEarned && (
-                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
-                              <Check className="w-3 h-3 text-white" />
+                            <div className="absolute -top-0.5 sm:-top-1 -right-0.5 sm:-right-1 w-4 sm:w-5 h-4 sm:h-5 bg-green-500 rounded-full flex items-center justify-center shadow-lg">
+                              <Check className="w-2.5 sm:w-3 h-2.5 sm:h-3 text-white" />
                             </div>
                           )}
                         </div>
                         
                         {/* Trophy name below icon */}
-                        <p className={`mt-2 text-xs font-medium text-center line-clamp-2 ${isEarned ? 'text-white' : 'text-gray-500'}`}>
+                        <p className={`mt-1 sm:mt-2 text-[10px] sm:text-xs font-medium text-center line-clamp-2 ${isEarned ? 'text-white' : 'text-gray-500'}`}>
                           {trophyName}
                         </p>
                         
@@ -679,61 +678,57 @@ const SquadProfile = () => {
           })()}
 
           {/* Stats */}
-          <div className="grid md:grid-cols-4 gap-4 mb-6">
-            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 text-center`}>
-              <Trophy className={`w-6 h-6 text-${accentColor}-400 mx-auto mb-2`} />
-              <div className="text-3xl font-bold" style={{ color: squad.color }}>{squad.stats?.totalPoints || 0}</div>
-              <div className="text-gray-400 text-sm">{t.points}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6">
+            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-6 text-center`}>
+              <Trophy className={`w-5 sm:w-6 h-5 sm:h-6 text-${accentColor}-400 mx-auto mb-1 sm:mb-2`} />
+              <div className="text-xl sm:text-3xl font-bold" style={{ color: squad.color }}>{squad.stats?.totalPoints || 0}</div>
+              <div className="text-gray-400 text-xs sm:text-sm">{t.points}</div>
             </div>
-            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 text-center`}>
-              <Medal className="w-6 h-6 text-green-400 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-green-400">{squad.stats?.totalWins || 0}</div>
-              <div className="text-gray-400 text-sm">{t.wins}</div>
+            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-6 text-center`}>
+              <Medal className="w-5 sm:w-6 h-5 sm:h-6 text-green-400 mx-auto mb-1 sm:mb-2" />
+              <div className="text-xl sm:text-3xl font-bold text-green-400">{squad.stats?.totalWins || 0}</div>
+              <div className="text-gray-400 text-xs sm:text-sm">{t.wins}</div>
             </div>
-            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 text-center`}>
-              <Target className="w-6 h-6 text-red-400 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-red-400">{squad.stats?.totalLosses || 0}</div>
-              <div className="text-gray-400 text-sm">{t.losses}</div>
+            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-6 text-center`}>
+              <Target className="w-5 sm:w-6 h-5 sm:h-6 text-red-400 mx-auto mb-1 sm:mb-2" />
+              <div className="text-xl sm:text-3xl font-bold text-red-400">{squad.stats?.totalLosses || 0}</div>
+              <div className="text-gray-400 text-xs sm:text-sm">{t.losses}</div>
             </div>
-            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 text-center`}>
-              <TrendingUp className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-              <div className="text-3xl font-bold text-yellow-400">{getWinRate()}</div>
-              <div className="text-gray-400 text-sm">{t.winRate}</div>
+            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-6 text-center`}>
+              <TrendingUp className="w-5 sm:w-6 h-5 sm:h-6 text-yellow-400 mx-auto mb-1 sm:mb-2" />
+              <div className="text-xl sm:text-3xl font-bold text-yellow-400">{getWinRate()}</div>
+              <div className="text-gray-400 text-xs sm:text-sm">{t.winRate}</div>
             </div>
           </div>
 
           {/* Members */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6`}>
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-              <Users className="w-5 h-5" style={{ color: squad.color }} />
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 sm:p-6`}>
+            <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
+              <Users className="w-4 sm:w-5 h-4 sm:h-5" style={{ color: squad.color }} />
               <span>{t.members} ({squad.members?.length || 0})</span>
             </h2>
             
             {squad.members && squad.members.length > 0 ? (
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 {squad.members.map((member, index) => (
                   <Link 
                     key={member.user?._id || index} 
                     to={`/player/${member.user?._id}`}
-                    className={`flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}
+                    className={`flex items-center justify-between p-3 sm:p-4 bg-dark-800/50 rounded-lg border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                       <img 
                         src={getMemberAvatar(member)}
                         alt={member.user?.username}
-                        className={`w-12 h-12 rounded-full border-2 ${
-                          member.role === 'leader' ? 'border-yellow-500' : 
-                          member.role === 'officer' ? 'border-blue-500' : 
-                          'border-white/20'
-                        }`}
+                        className="w-10 sm:w-12 h-10 sm:h-12 rounded-full flex-shrink-0"
                         onError={(e) => { e.target.src = getDefaultAvatar(member.user?.username); }}
                       />
-                    <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-white font-semibold">{member.user?.username || member.user?.discordUsername || 'Unknown'}</span>
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="text-white font-semibold text-sm sm:text-base truncate">{member.user?.username || member.user?.discordUsername || 'Unknown'}</span>
                           {getRoleBadge(member.role)}
                     </div>
-                        <p className="text-gray-500 text-xs">
+                        <p className="text-gray-500 text-[10px] sm:text-xs">
                           {t.joinedAt} {new Date(member.joinedAt).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US')}
                         </p>
                     </div>
@@ -750,9 +745,9 @@ const SquadProfile = () => {
           </div>
           
           {/* Match History */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mt-6`}>
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-              <Swords className="w-5 h-5" style={{ color: squad.color }} />
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 sm:p-6 mt-4 sm:mt-6`}>
+            <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
+              <Swords className="w-4 sm:w-5 h-4 sm:h-5" style={{ color: squad.color }} />
               <span>{t.matchHistory}</span>
             </h2>
             
@@ -899,10 +894,10 @@ const SquadProfile = () => {
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <div 
-                      className="w-12 h-12 rounded-xl flex items-center justify-center"
-                      style={{ backgroundColor: squad.color + '30' }}
+                      className="w-12 h-12 rounded-xl flex items-center justify-center border border-white/10"
+                      style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30' }}
                     >
-                      <UserPlus className="w-6 h-6" style={{ color: squad.color }} />
+                      <UserPlus className="w-6 h-6" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }} />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-white">{t.joinSquad}</h3>
@@ -968,13 +963,13 @@ const SquadProfile = () => {
 
       {/* Match Details Dialog */}
       {showMatchDetails && selectedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className={`p-6 border-b border-white/10 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
+            <div className={`p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <Swords className="w-6 h-6" />
+                <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                  <Swords className="w-5 sm:w-6 h-5 sm:h-6" />
                   {t.matchDetails}
                 </h2>
                 <button 
@@ -982,27 +977,27 @@ const SquadProfile = () => {
                     setShowMatchDetails(false);
                     setSelectedMatch(null);
                   }}
-                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
                   <X className="w-5 h-5 text-white" />
                 </button>
               </div>
               
               {/* Match Info */}
-              <div className="flex items-center gap-4 mt-4">
-                <span className={`px-3 py-1.5 bg-white/20 rounded-lg text-sm font-medium text-white`}>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 sm:mt-4">
+                <span className={`px-2 sm:px-3 py-1 sm:py-1.5 bg-white/20 rounded-lg text-xs sm:text-sm font-medium text-white`}>
                   {t.gameModes?.[selectedMatch.gameMode] || selectedMatch.gameMode}
                 </span>
-                <div className="flex items-center gap-2 text-white/80 text-sm">
-                  <Users className="w-4 h-4" />
+                <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
+                  <Users className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                   <span>{selectedMatch.teamSize}v{selectedMatch.teamSize}</span>
                 </div>
-                <div className="flex items-center gap-2 text-white/80 text-sm">
-                  <Clock className="w-4 h-4" />
+                <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
+                  <Clock className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                   <span>
                     {new Date(selectedMatch.createdAt).toLocaleDateString(
                       language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                      { day: 'numeric', month: 'long', year: 'numeric' }
+                      { day: 'numeric', month: 'short', year: 'numeric' }
                     )}
                   </span>
                 </div>
@@ -1010,8 +1005,8 @@ const SquadProfile = () => {
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="grid md:grid-cols-2 gap-6">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
                 {(() => {
                   const winnerId = typeof selectedMatch.result?.winner === 'object' 
                     ? selectedMatch.result?.winner?._id 
@@ -1023,13 +1018,13 @@ const SquadProfile = () => {
                   return (
                     <>
                       {/* Challenger Team */}
-                      <div className={`p-5 rounded-xl border-2 ${
+                      <div className={`p-3 sm:p-5 rounded-xl border-2 ${
                         challengerIsWinner 
                           ? 'bg-green-500/10 border-green-500/50' 
                           : 'bg-red-500/10 border-red-500/50'
                       }`}>
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                          <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate">
                             {challengerName}
                           </h3>
                           {challengerIsWinner ? (
@@ -1094,13 +1089,13 @@ const SquadProfile = () => {
                       </div>
 
                       {/* Opponent Team */}
-                      <div className={`p-5 rounded-xl border-2 ${
+                      <div className={`p-3 sm:p-5 rounded-xl border-2 ${
                         !challengerIsWinner 
                           ? 'bg-green-500/10 border-green-500/50' 
                           : 'bg-red-500/10 border-red-500/50'
                       }`}>
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <div className="flex items-center justify-between mb-3 sm:mb-4">
+                          <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 truncate">
                             {opponentName}
                           </h3>
                           {!challengerIsWinner ? (

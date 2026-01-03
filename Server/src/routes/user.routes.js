@@ -1226,14 +1226,6 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
       });
     }
 
-    // Can't reset admin stats
-    if (user.roles.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Impossible de réinitialiser les stats d\'un admin.'
-      });
-    }
-
     // Import Match model
     const Match = (await import('../models/Match.js')).default;
 

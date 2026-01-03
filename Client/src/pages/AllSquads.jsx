@@ -256,16 +256,15 @@ const AllSquads = () => {
                     <div className="flex items-start gap-4">
                       {/* Logo */}
                       <div 
-                        className="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 border-2 overflow-hidden"
+                        className="w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden border border-white/10"
                         style={{ 
-                          backgroundColor: squad.color + '30', 
-                          borderColor: squad.color 
+                          backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30'
                         }}
                       >
                         {squad.logo ? (
                           <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
                         ) : (
-                          <Users className="w-8 h-8" style={{ color: squad.color }} />
+                          <Users className="w-8 h-8" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }} />
                         )}
                       </div>
 
@@ -290,7 +289,7 @@ const AllSquads = () => {
                             <Users className="w-3 h-3" />
                             {squad.members?.length || 0} {t.members}
                           </span>
-                          <span className="flex items-center gap-1" style={{ color: squad.color }}>
+                          <span className="flex items-center gap-1" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }}>
                             <Trophy className="w-3 h-3" />
                             {squad.stats?.totalPoints || 0} {t.points}
                           </span>

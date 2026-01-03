@@ -743,13 +743,13 @@ const Rankings = () => {
 
                   {/* Team Info */}
                   <div 
-                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: squad.color + '30' }}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 border border-white/10"
+                    style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30' }}
                   >
                     {squad.logo ? (
                       <img src={squad.logo} alt="" className="w-6 h-6 object-contain" />
                     ) : (
-                      <Users className="w-4 h-4" style={{ color: squad.color }} />
+                      <Users className="w-4 h-4" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -839,13 +839,13 @@ const Rankings = () => {
                   className="inline-flex items-center gap-3 px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 transition-colors"
                 >
                   <div 
-                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: mySquad.color + '30' }}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center border border-white/10"
+                    style={{ backgroundColor: mySquad.color === 'transparent' ? 'transparent' : mySquad.color + '30' }}
                   >
                     {mySquad.logo ? (
                       <img src={mySquad.logo} alt="" className="w-5 h-5 object-contain" />
                     ) : (
-                      <Users className="w-4 h-4" style={{ color: mySquad.color }} />
+                      <Users className="w-4 h-4" style={{ color: mySquad.color === 'transparent' ? '#9ca3af' : mySquad.color }} />
                     )}
                   </div>
                   <div>

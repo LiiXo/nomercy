@@ -653,20 +653,20 @@ const SquadHub = () => {
                         {/* Squad or Player Avatar */}
                         {post.type === 'recruitment' && post.squad ? (
                           <div 
-                            className="w-12 h-12 rounded-xl flex items-center justify-center border-2 overflow-hidden"
-                            style={{ backgroundColor: post.squad.color + '30', borderColor: post.squad.color }}
+                            className="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden border border-white/10"
+                            style={{ backgroundColor: post.squad.color === 'transparent' ? 'transparent' : post.squad.color + '30' }}
                           >
                             {post.squad.logo ? (
                               <img src={post.squad.logo} alt={post.squad.name} className="w-full h-full object-cover" />
                             ) : (
-                              <Users className="w-6 h-6" style={{ color: post.squad.color }} />
+                              <Users className="w-6 h-6" style={{ color: post.squad.color === 'transparent' ? '#9ca3af' : post.squad.color }} />
                             )}
                           </div>
                         ) : (
                           <img
                             src={post.author?.avatarUrl || getDefaultAvatar(post.author?.username)}
                             alt=""
-                            className="w-12 h-12 rounded-xl border-2 border-white/10"
+                            className="w-12 h-12 rounded-xl"
                             onError={(e) => { e.target.src = getDefaultAvatar(post.author?.username); }}
                           />
                         )}

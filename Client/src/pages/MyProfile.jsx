@@ -833,7 +833,7 @@ const MyProfile = () => {
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
               {/* Avatar */}
               <div className="relative flex-shrink-0">
-                <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full border-4 border-${accentColor}-500/50 overflow-hidden`}>
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden">
                   <img 
                     src={user.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`}
                     alt="Avatar"
@@ -902,29 +902,29 @@ const MyProfile = () => {
 
           {/* Edit Form */}
           {isEditing && (
-            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-6 mb-6`}>
-              <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-                <Edit3 className={`w-5 h-5 text-${accentColor}-400`} />
+            <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
+              <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
+                <Edit3 className={`w-4 sm:w-5 h-4 sm:h-5 text-${accentColor}-400`} />
                 <span>{t.editProfile}</span>
               </h2>
 
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {/* Username */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.username}</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.username}</label>
                   <div className="relative">
                     <input
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
                       maxLength={20}
-                      className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all`}
+                      className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-800/50 border border-white/10 rounded-lg sm:rounded-xl text-sm sm:text-base text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all`}
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-2">
-                      {usernameStatus === 'checking' && <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />}
-                      {usernameStatus === 'available' && <Check className="w-5 h-5 text-green-400" />}
-                      {usernameStatus === 'taken' && <X className="w-5 h-5 text-red-400" />}
-                      {usernameStatus === 'invalid' && <AlertCircle className="w-5 h-5 text-yellow-400" />}
+                      {usernameStatus === 'checking' && <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 text-gray-400 animate-spin" />}
+                      {usernameStatus === 'available' && <Check className="w-4 sm:w-5 h-4 sm:h-5 text-green-400" />}
+                      {usernameStatus === 'taken' && <X className="w-4 sm:w-5 h-4 sm:h-5 text-red-400" />}
+                      {usernameStatus === 'invalid' && <AlertCircle className="w-4 sm:w-5 h-4 sm:h-5 text-yellow-400" />}
                       {usernameStatus === 'current' && <span className="text-xs text-gray-500">{t.current}</span>}
                     </div>
                   </div>
@@ -932,47 +932,47 @@ const MyProfile = () => {
 
                 {/* Activision ID */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.activisionId}</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.activisionId}</label>
                   <input
                     type="text"
                     value={activisionId}
                     onChange={(e) => setActivisionId(e.target.value)}
                     maxLength={50}
-                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all`}
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-800/50 border border-white/10 rounded-lg sm:rounded-xl text-sm sm:text-base text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all`}
                   />
                 </div>
 
                 {/* Platform */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.platform}</label>
-                  <div className="grid grid-cols-3 gap-3">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.platform}</label>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
                     {['PC', 'PlayStation', 'Xbox'].map((p) => (
                       <button
                         key={p}
                         type="button"
                         onClick={() => setPlatform(p)}
-                        className={`py-3 px-4 rounded-xl border transition-all flex items-center justify-center gap-2 ${
+                        className={`py-2 sm:py-3 px-2 sm:px-4 rounded-lg sm:rounded-xl border transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
                           platform === p
                             ? `bg-${accentColor}-500/20 border-${accentColor}-500/50 text-${accentColor}-400`
                             : 'bg-dark-800/50 border-white/10 text-gray-400 hover:border-white/20'
                         }`}
                       >
                         {p === 'PC' && (
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M20 3H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H4V5h16v10z"/>
                           </svg>
                         )}
                         {p === 'PlayStation' && (
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M9.5 6.5v-4H11V7a2 2 0 1 1-4 0V4h1.5v3a.5.5 0 0 0 1 0zM16 6.5v-4h1.5V8a.5.5 0 0 0 1 0V6.5H20V8a2 2 0 1 1-4 0V2.5h1.5V6a.5.5 0 0 0 1 0v-.5h1V8a2 2 0 1 1-4 0v-1.5zM4 10.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zm1.5 1H11v9H5.5v-9z"/>
                           </svg>
                         )}
                         {p === 'Xbox' && (
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M6.43 3.72A9.97 9.97 0 0 1 12 2c2.05 0 3.95.62 5.57 1.72-.37.15-.86.42-1.47.9-1.23.96-2.56 2.56-3.95 4.76L12 9.5l-.15-.12c-1.39-2.2-2.72-3.8-3.95-4.76-.61-.48-1.1-.75-1.47-.9zM2.05 12.9c-.03-.3-.05-.6-.05-.9 0-2.43.87-4.66 2.32-6.39.3.18.7.45 1.13.79 1.54 1.2 3.18 3.25 4.72 5.95l.18.3-.18.3c-1.54 2.7-3.18 4.75-4.72 5.95-.43.34-.83.61-1.13.79A9.93 9.93 0 0 1 2.05 12.9zm8.1 2.45c1.39 2.2 2.72 3.8 3.95 4.76.61.48 1.1.75 1.47.9A9.97 9.97 0 0 1 12 22a9.97 9.97 0 0 1-5.57-1.72c.37-.15.86-.42 1.47-.9 1.23-.96 2.56-2.56 3.95-4.76l.15-.12.15.12v-.27zm3.7-6.7c1.54-2.7 3.18-4.75 4.72-5.95.43-.34.83-.61 1.13-.79A9.93 9.93 0 0 1 22 12c0 .3-.02.6-.05.9a9.93 9.93 0 0 1-2.27 5.49c-.3-.18-.7-.45-1.13-.79-1.54-1.2-3.18-3.25-4.72-5.95l-.18-.3.18-.3.02.03z"/>
                           </svg>
                         )}
-                        <span className="font-medium">{p}</span>
+                        <span className="font-medium text-xs sm:text-sm">{p === 'PlayStation' ? 'PS' : p}</span>
                       </button>
                     ))}
                   </div>
@@ -980,25 +980,25 @@ const MyProfile = () => {
 
                 {/* Bio */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.bio}</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.bio}</label>
                   <textarea
                     value={bio}
                     onChange={(e) => setBio(e.target.value)}
                     maxLength={500}
-                    rows={4}
+                    rows={3}
                     placeholder={t.bioPlaceholder}
-                    className={`w-full px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all resize-none`}
+                    className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-800/50 border border-white/10 rounded-lg sm:rounded-xl text-sm sm:text-base text-white placeholder-gray-500 focus:outline-none focus:border-${accentColor}-500/50 focus:ring-2 focus:ring-${accentColor}-500/20 transition-all resize-none`}
                   />
                   <p className="text-xs text-gray-500 mt-1 text-right">{bio.length}/500</p>
                 </div>
 
                 {/* Avatar Upload */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.avatar}</label>
-                  <div className="flex items-center gap-4">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.avatar}</label>
+                  <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
                     {/* Avatar Preview */}
-                    <div className="relative">
-                      <div className={`w-20 h-20 rounded-full border-2 border-${accentColor}-500/50 overflow-hidden`}>
+                    <div className="relative flex-shrink-0">
+                      <div className="w-16 sm:w-20 h-16 sm:h-20 rounded-full overflow-hidden">
                         <img 
                           src={
                             avatarPreview?.startsWith('blob:') 
@@ -1013,24 +1013,25 @@ const MyProfile = () => {
                       </div>
                       {uploadingAvatar && (
                         <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
-                          <Loader2 className="w-6 h-6 text-white animate-spin" />
+                          <Loader2 className="w-5 sm:w-6 h-5 sm:h-6 text-white animate-spin" />
                         </div>
                       )}
                     </div>
                     
                     {/* Upload/Delete Buttons */}
-                    <div className="flex flex-col gap-2 flex-1">
-                      <label className={`cursor-pointer ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>
-                        <div className={`px-4 py-2 bg-dark-800/50 border border-white/10 rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all flex items-center justify-center gap-2 text-sm`}>
+                    <div className="flex flex-row sm:flex-col gap-2 flex-1 w-full sm:w-auto">
+                      <label className={`flex-1 cursor-pointer ${uploadingAvatar ? 'pointer-events-none opacity-50' : ''}`}>
+                        <div className={`px-3 sm:px-4 py-2 bg-dark-800/50 border border-white/10 rounded-lg sm:rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all flex items-center justify-center gap-2 text-xs sm:text-sm`}>
                           {uploadingAvatar ? (
                             <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="w-3.5 sm:w-4 h-3.5 sm:h-4 animate-spin" />
                               <span>Upload...</span>
                             </>
                           ) : (
                             <>
-                              <Edit3 className="w-4 h-4" />
-                              {t.uploadAvatar}
+                              <Edit3 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                              <span className="hidden sm:inline">{t.uploadAvatar}</span>
+                              <span className="sm:hidden">Changer</span>
                             </>
                           )}
                         </div>
@@ -1048,49 +1049,50 @@ const MyProfile = () => {
                         <button
                           type="button"
                           onClick={handleAvatarDelete}
-                          className="px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 hover:bg-red-500/20 transition-all text-sm flex items-center justify-center gap-2"
+                          className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-lg sm:rounded-xl text-red-400 hover:bg-red-500/20 transition-all text-xs sm:text-sm flex items-center justify-center gap-2"
                         >
-                          <X className="w-4 h-4" />
-                          {t.deleteAvatar}
+                          <X className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                          <span className="hidden sm:inline">{t.deleteAvatar}</span>
+                          <span className="sm:hidden">Reset</span>
                         </button>
                       )}
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">{t.avatarInfo}</p>
+                  <p className="text-xs text-gray-500 mt-2 text-center sm:text-left">{t.avatarInfo}</p>
                 </div>
 
                 {/* Banner Upload */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">{t.banner}</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.banner}</label>
                   {bannerPreview && (
-                    <div className="mb-3 relative rounded-xl overflow-hidden border border-white/10">
+                    <div className="mb-2 sm:mb-3 relative rounded-lg sm:rounded-xl overflow-hidden border border-white/10">
                       <img 
                         src={bannerPreview.startsWith('blob:') ? bannerPreview : `https://api-nomercy.ggsecure.io${bannerPreview}`}
                         alt="Banner preview" 
-                        className="w-full h-32 object-cover"
+                        className="w-full h-24 sm:h-32 object-cover"
                       />
                       {uploadingBanner && (
                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                          <Loader2 className="w-8 h-8 text-white animate-spin" />
+                          <Loader2 className="w-6 sm:w-8 h-6 sm:h-8 text-white animate-spin" />
                         </div>
                       )}
                       {!uploadingBanner && (
                         <button
                           onClick={handleBannerDelete}
                           type="button"
-                          className="absolute top-2 right-2 p-2 bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
+                          className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 p-1.5 sm:p-2 bg-red-500/80 hover:bg-red-500 rounded-lg transition-colors"
                         >
-                          <X className="w-4 h-4 text-white" />
+                          <X className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-white" />
                         </button>
                       )}
                     </div>
                   )}
                   <label className={`block cursor-pointer ${uploadingBanner ? 'pointer-events-none opacity-50' : ''}`}>
-                    <div className={`px-4 py-3 bg-dark-800/50 border border-white/10 rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all flex items-center justify-center gap-2`}>
+                    <div className={`px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-800/50 border border-white/10 rounded-lg sm:rounded-xl text-center text-gray-400 hover:border-${accentColor}-500/50 transition-all flex items-center justify-center gap-2 text-sm`}>
                       {uploadingBanner ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          <span>Upload en cours...</span>
+                          <Loader2 className="w-3.5 sm:w-4 h-3.5 sm:h-4 animate-spin" />
+                          <span>Upload...</span>
                         </>
                       ) : (
                         t.uploadBanner
@@ -1109,29 +1111,29 @@ const MyProfile = () => {
 
                 {/* Error */}
                 {error && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-                    <p className="text-red-400 text-sm">{error}</p>
+                  <div className="p-2.5 sm:p-3 bg-red-500/10 border border-red-500/30 rounded-lg sm:rounded-xl">
+                    <p className="text-red-400 text-xs sm:text-sm">{error}</p>
                   </div>
                 )}
 
                 {/* Buttons */}
-                <div className="flex space-x-3">
+                <div className="flex gap-2 sm:gap-3 pt-1">
                   <button
                     onClick={handleCancel}
-                    className="flex-1 py-3 px-4 bg-dark-800 hover:bg-dark-700 border border-white/10 text-white font-medium rounded-xl transition-colors"
+                    className="flex-1 py-2.5 sm:py-3 px-3 sm:px-4 bg-dark-800 hover:bg-dark-700 border border-white/10 text-white font-medium rounded-lg sm:rounded-xl transition-colors text-sm sm:text-base"
                   >
                     {t.cancel}
                   </button>
                   <button
                     onClick={handleSave}
                     disabled={isSubmitting || (username !== user?.username && usernameStatus !== 'available' && usernameStatus !== 'current')}
-                    className={`flex-1 py-3 px-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-all flex items-center justify-center space-x-2`}
+                    className={`flex-1 py-2.5 sm:py-3 px-3 sm:px-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base`}
                   >
                     {isSubmitting ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
                     ) : (
                       <>
-                        <Save className="w-5 h-5" />
+                        <Save className="w-4 sm:w-5 h-4 sm:h-5" />
                         <span>{t.save}</span>
                       </>
                     )}
@@ -1218,21 +1220,21 @@ const MyProfile = () => {
           )}
 
           {/* Danger Zone - Account Deletion */}
-          <div className="bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-red-500/30 p-6 mt-6">
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5 text-red-400" />
+          <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-red-500/30 p-4 sm:p-6 mt-4 sm:mt-6">
+            <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
+              <AlertCircle className="w-4 sm:w-5 h-4 sm:h-5 text-red-400" />
               <span>{t.dangerZone}</span>
             </h2>
 
-            <div className="space-y-4">
-              <p className="text-gray-400 text-sm">{t.deleteAccountWarning}</p>
+            <div className="space-y-3 sm:space-y-4">
+              <p className="text-gray-400 text-xs sm:text-sm">{t.deleteAccountWarning}</p>
               <button
                 onClick={() => setShowDeleteModal(true)}
                 disabled={user.isBanned}
-                className="w-full py-3 px-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-medium rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-medium rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                 title={user.isBanned ? t.cannotDeleteBanned : ''}
               >
-                <Trash2 className="w-5 h-5" />
+                <Trash2 className="w-4 sm:w-5 h-4 sm:h-5" />
                 {t.deleteAccount}
               </button>
               {user.isBanned && (
@@ -1247,37 +1249,37 @@ const MyProfile = () => {
 
       {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-dark-900 border border-red-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
-                <Trash2 className="w-8 h-8 text-red-400" />
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-dark-900 border border-red-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-4 sm:mb-6">
+              <div className="w-12 sm:w-16 h-12 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-6 sm:w-8 h-6 sm:h-8 text-red-400" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">{t.deleteAccountTitle}</h3>
-              <p className="text-gray-400 text-sm mb-4">{t.deleteAccountConfirm}</p>
-              <p className="text-red-400 text-sm">{t.deleteAccountWarning}</p>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">{t.deleteAccountTitle}</h3>
+              <p className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-4">{t.deleteAccountConfirm}</p>
+              <p className="text-red-400 text-xs sm:text-sm">{t.deleteAccountWarning}</p>
               {deleteError && (
-                <p className="text-red-400 text-sm mt-3 p-2 bg-red-500/10 rounded">{deleteError}</p>
+                <p className="text-red-400 text-xs sm:text-sm mt-3 p-2 bg-red-500/10 rounded">{deleteError}</p>
               )}
             </div>
             
-            <div className="flex gap-3">
+            <div className="flex gap-2 sm:gap-3">
               <button
                 onClick={() => {
                   setShowDeleteModal(false);
                   setDeleteError('');
                 }}
-                className="flex-1 px-4 py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-xl transition-colors font-medium"
+                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg sm:rounded-xl transition-colors font-medium text-sm sm:text-base"
               >
                 {t.cancel}
               </button>
               <button
                 onClick={handleDeleteAccount}
                 disabled={loadingDeletion}
-                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg sm:rounded-xl transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base"
               >
                 {loadingDeletion ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
                 ) : (
                   t.confirmDelete
                 )}

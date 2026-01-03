@@ -28,8 +28,9 @@ const AvatarWithOrnament = ({
     if (rank === 1) return { color: 'border-yellow-400', glow: '0 0 20px rgba(251, 191, 36, 0.6)' };
     if (rank === 2) return { color: 'border-gray-300', glow: '0 0 18px rgba(209, 213, 219, 0.5)' };
     if (rank === 3) return { color: 'border-orange-600', glow: '0 0 18px rgba(234, 88, 12, 0.5)' };
+    // No colored circle for regular players
     return { 
-      color: isHardcore ? 'border-red-500/50' : 'border-cyan-500/50', 
+      color: 'border-transparent', 
       glow: 'none' 
     };
   };

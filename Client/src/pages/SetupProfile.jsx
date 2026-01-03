@@ -169,7 +169,7 @@ const SetupProfile = () => {
                 <img 
                   src={user.avatar || getDefaultAvatar(user.discordUsername || username)}
                   alt="Avatar"
-                  className="w-12 h-12 rounded-full border-2 border-[#5865F2]/50"
+                  className="w-12 h-12 rounded-full"
                 />
                 <div>
                   <p className="text-xs text-[#5865F2] font-medium mb-0.5">{t.discordAccount}</p>

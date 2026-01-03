@@ -360,6 +360,7 @@ const SquadManagement = () => {
   const t = texts[language] || texts.en;
 
   const predefinedColors = [
+    'transparent', // Option sans couleur
     '#ef4444', '#f97316', '#f59e0b', '#eab308', 
     '#84cc16', '#22c55e', '#14b8a6', '#06b6d4',
     '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7',
@@ -1025,13 +1026,13 @@ const SquadManagement = () => {
               </Link>
               <div className="flex items-center gap-2 sm:gap-3">
                 <div 
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center border-2"
-                  style={{ backgroundColor: squad.color + '30', borderColor: squad.color }}
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center overflow-hidden border border-white/10"
+                  style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30' }}
                 >
                   {squad.logo ? (
-                    <img src={squad.logo} alt={squad.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
+                    <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
                   ) : (
-                    <Users className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: squad.color }} />
+                    <Users className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }} />
                   )}
                 </div>
                 <div>
@@ -1138,7 +1139,7 @@ const SquadManagement = () => {
                           <img 
                             src={getMemberAvatar(member)}
                             alt={member.user?.username}
-                            className="w-12 h-12 rounded-full border-2 border-white/10 hover:border-white/30 transition-colors"
+                            className="w-12 h-12 rounded-full"
                           />
                         </Link>
                         <div>
@@ -1267,7 +1268,7 @@ const SquadManagement = () => {
                                   return getDefaultAvatar(u.username);
                                 })()}
                                 alt=""
-                                className="w-12 h-12 rounded-full border-2 border-white/10 hover:border-white/30 transition-colors"
+                                className="w-12 h-12 rounded-full"
                               />
                             </Link>
                             <div>
@@ -1423,10 +1424,23 @@ const SquadManagement = () => {
                         key={c}
                         onClick={() => setColor(c)}
                         className={`w-10 h-10 rounded-lg border-2 transition-all ${
-                          color === c ? 'border-white scale-110' : 'border-transparent hover:scale-105'
-                        }`}
-                        style={{ backgroundColor: c }}
-                      />
+                          color === c ? 'border-white scale-110' : 'border-white/20 hover:scale-105'
+                        } ${c === 'transparent' ? 'relative overflow-hidden' : ''}`}
+                        style={{ backgroundColor: c === 'transparent' ? 'transparent' : c }}
+                        title={c === 'transparent' ? 'Aucune couleur' : c}
+                      >
+                        {c === 'transparent' && (
+                          <>
+                            {/* Motif damier pour indiquer transparent */}
+                            <div className="absolute inset-0 opacity-30" style={{
+                              backgroundImage: 'linear-gradient(45deg, #666 25%, transparent 25%), linear-gradient(-45deg, #666 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #666 75%), linear-gradient(-45deg, transparent 75%, #666 75%)',
+                              backgroundSize: '8px 8px',
+                              backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px'
+                            }} />
+                            <X className="w-5 h-5 text-gray-400 relative z-10" />
+                          </>
+                        )}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -1441,7 +1455,7 @@ const SquadManagement = () => {
                     {/* Logo Preview */}
                     <div 
                       className="w-20 h-20 rounded-xl flex items-center justify-center border-2 border-dashed border-white/20 overflow-hidden"
-                      style={{ backgroundColor: color + '20' }}
+                      style={{ backgroundColor: color === 'transparent' ? 'transparent' : color + '20' }}
                     >
                       {logo ? (
                         <img src={logo} alt="Squad logo" className="w-full h-full object-cover" />

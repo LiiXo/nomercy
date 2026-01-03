@@ -410,7 +410,7 @@ const MySquad = () => {
 
     setLeaving(true);
     try {
-      const response = await fetch(`${API_URL}/squads/${squad._id}/leave`, {
+      const response = await fetch(`${API_URL}/squads/leave`, {
         method: 'POST',
         credentials: 'include'
       });
@@ -470,16 +470,18 @@ const MySquad = () => {
     return getAvatarUrl(u.avatarUrl || u.avatar) || (u.discordId ? `https://cdn.discordapp.com/avatars/${u.discordId}/${u.discordAvatar}.png` : getDefaultAvatar(u.username));
   };
 
-  // Check if user is leader or officer
-  const isLeaderOrOfficer = squad && (
+  // Check if user is leader
+  const isLeader = squad && (
     squad.leader?._id === user?._id || 
     squad.leader?._id === user?.id ||
     squad.leader === user?._id ||
-    squad.leader === user?.id ||
-    squad.members?.some(m => 
-      ((m.user?._id === user?._id || m.user?._id === user?.id) || (m.user === user?._id || m.user === user?.id)) && m.role === 'officer'
-    )
+    squad.leader === user?.id
   );
+
+  // Check if user is leader or officer
+  const isLeaderOrOfficer = isLeader || (squad && squad.members?.some(m => 
+    ((m.user?._id === user?._id || m.user?._id === user?.id) || (m.user === user?._id || m.user === user?.id)) && m.role === 'officer'
+  ));
 
   // Copy tag to clipboard
   const copyTag = () => {
@@ -827,7 +829,9 @@ const MySquad = () => {
                   <div 
                     className="absolute inset-0"
                     style={{ 
-                      background: `linear-gradient(135deg, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}40 0%, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}10 50%, transparent 100%)`
+                      background: squad.color === 'transparent' 
+                        ? 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 50%, transparent 100%)'
+                        : `linear-gradient(135deg, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}40 0%, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}10 50%, transparent 100%)`
                     }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/50 to-transparent" />
@@ -861,7 +865,7 @@ const MySquad = () => {
                 {/* Logo */}
                 <div 
                   className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl border-4 border-dark-900 flex items-center justify-center text-4xl font-black text-white shadow-2xl overflow-hidden flex-shrink-0"
-                  style={{ backgroundColor: squad.color || (isHardcore ? '#ef4444' : '#06b6d4') }}
+                  style={{ backgroundColor: squad.color === 'transparent' ? 'rgba(255,255,255,0.05)' : (squad.color || (isHardcore ? '#ef4444' : '#06b6d4')) }}
                 >
                   {squad.logo ? (
                     <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
@@ -1112,7 +1116,7 @@ const MySquad = () => {
               </div>
 
               {/* Leave Squad */}
-              {!isLeaderOrOfficer && (
+              {!isLeader && (
                 <button
                   onClick={() => setShowLeaveConfirm(true)}
                   className="w-full flex items-center justify-center gap-2 p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 transition-colors"

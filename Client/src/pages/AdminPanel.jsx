@@ -1352,17 +1352,17 @@ const AdminPanel = () => {
   const renderUsers = () => {
     return (
       <div className="space-y-4">
-          {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">Gestion des Utilisateurs</h2>
-          <div className="text-gray-400 text-sm">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Gestion des Utilisateurs</h2>
+          <div className="text-gray-400 text-xs sm:text-sm">
             {users.length} utilisateur(s) • Page {page}/{totalPages || 1}
           </div>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 sm:w-5 h-4 sm:h-5 text-gray-500" />
           <input
             type="text"
             value={searchTerm}
@@ -1371,24 +1371,79 @@ const AdminPanel = () => {
               setPage(1);
             }}
             placeholder="Rechercher un utilisateur..."
-            className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+            className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 bg-dark-800 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50"
           />
         </div>
 
-        {/* Users Table */}
-        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+        {/* Users - Mobile Cards */}
+        <div className="md:hidden space-y-3">
+          {users.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">Aucun utilisateur trouvé</div>
+          ) : (
+            users.map((user) => (
+              <div key={user._id} className="bg-dark-800/50 border border-white/10 rounded-xl p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <img
+                    src={getAvatarUrl(user.avatarUrl || user.avatar) || '/avatar.jpg'}
+                    alt=""
+                    className="w-12 h-12 rounded-full flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium truncate">{user.username || user.discordUsername || 'Sans identifiant'}</p>
+                    <p className="text-gray-500 text-xs truncate">{user.discordUsername}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {user.roles?.map((role) => (
+                        <span key={role} className={`px-1.5 py-0.5 text-[10px] font-medium rounded bg-${getRoleColor(role)}-500/20 text-${getRoleColor(role)}-400`}>
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {user.isBanned ? (
+                      <span className="px-2 py-0.5 text-[10px] font-medium rounded bg-red-500/20 text-red-400">Banni</span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-[10px] font-medium rounded bg-green-500/20 text-green-400">Actif</span>
+                    )}
+                    <div className="flex items-center gap-1 text-yellow-400 text-sm">
+                      <Coins className="w-3 h-3" />
+                      <span className="font-medium">{user.goldCoins || 0}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  {user.squad && (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Shield className="w-3 h-3 text-purple-400" />
+                      <span className="text-white truncate max-w-[120px]">{user.squad.name}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 ml-auto">
+                    <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>
+                    <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>
+                    <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`}><Ban className="w-4 h-4" /></button>
+                    <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Users Table - Desktop */}
+        <div className="hidden md:block bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-dark-900/50">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Utilisateur</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Discord</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Escouade</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Rôles</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Coins</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Utilisateur</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Discord</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Escouade</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Rôles</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Coins</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                  <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase hidden xl:table-cell">Date</th>
+                  <th className="px-4 lg:px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -1401,53 +1456,52 @@ const AdminPanel = () => {
                 ) : (
                   users.map((user) => (
                     <tr key={user._id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center gap-3">
                           <img
                             src={getAvatarUrl(user.avatarUrl || user.avatar) || '/avatar.jpg'}
                             alt=""
                             className="w-10 h-10 rounded-full"
                           />
-                <div>
-                            <p className="text-white font-medium">{user.username || user.discordUsername || 'Sans identifiant'}</p>
-                            <p className="text-gray-500 text-sm">{user._id}</p>
-                </div>
-              </div>
+                          <div className="min-w-0">
+                            <p className="text-white font-medium truncate">{user.username || user.discordUsername || 'Sans identifiant'}</p>
+                            <p className="text-gray-500 text-xs truncate max-w-[150px]">{user._id}</p>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <p className="text-white text-sm">{user.discordUsername}</p>
-                        <p className="text-gray-500 text-xs">{user.discordId}</p>
+                      <td className="px-4 lg:px-6 py-4">
+                        <p className="text-white text-sm truncate max-w-[120px]">{user.discordUsername}</p>
+                        <p className="text-gray-500 text-xs truncate">{user.discordId}</p>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         {user.squad ? (
                           <div className="flex items-center gap-2">
-                            <Shield className="w-4 h-4 text-purple-400" />
-                            <span className="text-white text-sm">{user.squad.name}</span>
-                            <span className="text-gray-500 text-xs">[{user.squad.tag}]</span>
+                            <Shield className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                            <span className="text-white text-sm truncate max-w-[100px]">{user.squad.name}</span>
                           </div>
                         ) : (
                           <span className="text-gray-500 text-sm">-</span>
                         )}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <div className="flex flex-wrap gap-1">
                           {user.roles?.map((role) => (
                             <span
                               key={role}
-                              className={`px-2 py-1 text-xs font-medium rounded bg-${getRoleColor(role)}-500/20 text-${getRoleColor(role)}-400`}
+                              className={`px-2 py-0.5 text-xs font-medium rounded bg-${getRoleColor(role)}-500/20 text-${getRoleColor(role)}-400`}
                             >
                               {role}
                             </span>
                           ))}
-            </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center gap-1 text-yellow-400">
                           <Coins className="w-4 h-4" />
                           <span className="font-medium">{user.goldCoins || 0}</span>
-          </div>
+                        </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         {user.isBanned ? (
                           <span className="px-2 py-1 text-xs font-medium rounded bg-red-500/20 text-red-400">
                             Banni
@@ -1458,43 +1512,15 @@ const AdminPanel = () => {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-gray-400 text-sm">
+                      <td className="px-4 lg:px-6 py-4 text-gray-400 text-sm hidden xl:table-cell">
                         {formatDate(user.createdAt)}
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-            <button
-                            onClick={() => openEditModal('user', user)}
-                            className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                            title="Modifier"
-                          >
-                            <Edit2 className="w-4 h-4" />
-            </button>
-            <button
-                            onClick={() => setResetStatsConfirm(user)}
-                            className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-                            title="Reset Stats & Historique"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-            </button>
-            <button
-                            onClick={() => openBanModal(user)}
-                            className={`p-2 rounded-lg transition-colors ${
-                              user.isBanned 
-                                ? 'text-green-400 hover:bg-green-500/20' 
-                                : 'text-orange-400 hover:bg-orange-500/20'
-                            }`}
-                            title={user.isBanned ? 'Débannir' : 'Bannir'}
-                          >
-                            <Ban className="w-4 h-4" />
-            </button>
-            <button
-                            onClick={() => setDeleteConfirm({ type: 'user', id: user._id })}
-                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                            title="Supprimer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-            </button>
+                      <td className="px-4 lg:px-6 py-4">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>
+                          <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>
+                          <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg transition-colors ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`} title={user.isBanned ? 'Débannir' : 'Bannir'}><Ban className="w-4 h-4" /></button>
+                          <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
@@ -1503,7 +1529,7 @@ const AdminPanel = () => {
               </tbody>
             </table>
           </div>
-          </div>
+        </div>
 
         {/* Pagination */}
         {totalPages > 1 && (
@@ -1755,16 +1781,19 @@ const AdminPanel = () => {
   };
 
   const renderSquads = () => {
-                  return (
+    return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">Gestion des Escouades</h2>
-              </div>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <h2 className="text-xl sm:text-2xl font-bold text-white">Gestion des Escouades</h2>
+          <div className="text-gray-400 text-xs sm:text-sm">
+            {squads.length} escouade(s) • Page {page}/{totalPages || 1}
+          </div>
+        </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 sm:w-5 h-4 sm:h-5 text-gray-500" />
           <input
             type="text"
             value={searchTerm}
@@ -1773,7 +1802,7 @@ const AdminPanel = () => {
               setPage(1);
             }}
             placeholder="Rechercher une escouade..."
-            className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+            className="w-full pl-9 sm:pl-10 pr-4 py-2.5 sm:py-3 bg-dark-800 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50"
           />
         </div>
 
@@ -1792,13 +1821,13 @@ const AdminPanel = () => {
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-12 h-12 rounded-lg flex items-center justify-center"
-                      style={{ backgroundColor: squad.color + '30' }}
+                      className="w-12 h-12 rounded-lg flex items-center justify-center border border-white/10"
+                      style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30' }}
                     >
                       {squad.logo ? (
                         <img src={squad.logo} alt="" className="w-8 h-8 object-contain" />
                       ) : (
-                        <Shield className="w-6 h-6" style={{ color: squad.color }} />
+                        <Shield className="w-6 h-6" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }} />
                       )}
                           </div>
                     <div>
@@ -5041,37 +5070,37 @@ const renderDisputes = () => {
     <div className="min-h-screen bg-dark-950">
       {/* Header */}
       <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-                    <button 
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+              <button 
                 onClick={() => navigate('/')}
-                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                    >
-                <ArrowLeft className="w-6 h-6 text-white" />
-                    </button>
-              <div>
-                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                  <Shield className="w-8 h-8 text-purple-400" />
-                  Panel Administrateur
+                className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0"
+              >
+                <ArrowLeft className="w-5 sm:w-6 h-5 sm:h-6 text-white" />
+              </button>
+              <div className="min-w-0">
+                <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                  <Shield className="w-5 sm:w-7 lg:w-8 h-5 sm:h-7 lg:h-8 text-purple-400 flex-shrink-0" />
+                  <span className="truncate">Panel Admin</span>
                 </h1>
-                <p className="text-gray-400 mt-1">Gérez toutes les données de la plateforme</p>
-                  </div>
-                  </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <p className="text-white font-medium">{user?.username}</p>
-                <p className="text-sm text-purple-400">Administrateur</p>
-                </div>
+                <p className="text-gray-400 mt-0.5 sm:mt-1 text-xs sm:text-sm hidden sm:block">Gérez toutes les données de la plateforme</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <div className="text-right hidden sm:block">
+                <p className="text-white font-medium text-sm sm:text-base">{user?.username}</p>
+                <p className="text-xs sm:text-sm text-purple-400">Administrateur</p>
+              </div>
               <img
                 src={getAvatarUrl(user?.avatarUrl || user?.avatar) || '/avatar.jpg'}
                 alt="Avatar"
-                className="w-12 h-12 rounded-full border-2 border-purple-500"
+                className="w-9 sm:w-12 h-9 sm:h-12 rounded-full"
               />
-                    </div>
-                    </div>
-                  </div>
-                </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Notifications */}
       {(success || error) && (
@@ -5097,8 +5126,8 @@ const renderDisputes = () => {
 
       {/* Navigation Tabs - Grouped Layout */}
       <div className="bg-dark-900/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-6 overflow-x-auto py-3 pb-4" style={{
+        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto py-2 sm:py-3 pb-3 sm:pb-4 scrollbar-hide" style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#6b21a8 #1f2937'
           }}>

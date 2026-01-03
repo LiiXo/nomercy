@@ -337,7 +337,7 @@ const Navbar = () => {
                   <img 
                     src={user.avatar || getDefaultAvatar(user.username)} 
                     alt=""
-                    className={`w-8 h-8 rounded-full border-2 ${isHardcore ? 'border-neon-red/50' : 'border-accent-500/50'}`}
+                    className="w-8 h-8 rounded-full"
                   />
                   <span className="text-sm font-medium text-white max-w-[100px] truncate">{user.username}</span>
                   <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
@@ -459,7 +459,7 @@ const Navbar = () => {
                 <img 
                   src={user.avatar || getDefaultAvatar(user.username)} 
                   alt=""
-                  className={`w-10 h-10 rounded-full border-2 ${isHardcore ? 'border-neon-red/50' : 'border-accent-500/50'}`}
+                  className="w-10 h-10 rounded-full"
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium truncate">{user.username}</p>
