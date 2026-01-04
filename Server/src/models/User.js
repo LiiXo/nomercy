@@ -90,6 +90,14 @@ const userSchema = new mongoose.Schema({
     default: null
   },
 
+  // Historique des matchs joués (pour tracking fiable)
+  matchHistory: [{
+    match: { type: mongoose.Schema.Types.ObjectId, ref: 'Match' },
+    squad: { type: mongoose.Schema.Types.ObjectId, ref: 'Squad' }, // L'escouade avec laquelle il a joué
+    result: { type: String, enum: ['win', 'loss'] },
+    playedAt: { type: Date, default: Date.now }
+  }],
+
   // Account status
   isBanned: {
     type: Boolean,

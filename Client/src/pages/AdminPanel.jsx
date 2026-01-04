@@ -2262,8 +2262,20 @@ const renderDisputes = () => {
                         {match.challenger?.name || match.challengerInfo?.name || 'Team 1'} [{match.challenger?.tag || match.challengerInfo?.tag || '???'}] vs {match.opponent?.name || match.opponentInfo?.name || 'Team 2'} [{match.opponent?.tag || match.opponentInfo?.tag || '???'}]
                       </h3>
                       <p className="text-gray-400 text-sm">
-                        Mode: {match.mode} • Ladder: {match.ladder} • {formatDate(match.createdAt)}
+                        Mode: {match.mode} • Ladder: {match.ladderId || match.ladder} • {formatDate(match.createdAt)}
                       </p>
+                      <div className="flex gap-4 mt-1 text-xs">
+                        {match.startedAt && (
+                          <span className="text-blue-400">
+                            🏁 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} à {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                        {match.result?.confirmedAt && (
+                          <span className="text-green-400">
+                            ✅ Validé: {new Date(match.result.confirmedAt).toLocaleDateString('fr-FR')} à {new Date(match.result.confirmedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <a
@@ -2329,8 +2341,20 @@ const renderDisputes = () => {
                         {match.gameMode} • {match.players?.length || 0} joueurs
                       </h3>
                       <p className="text-gray-400 text-sm">
-                        Map: {match.map || 'N/A'} • {formatDate(match.createdAt)}
+                        Map: {match.map?.name || match.map || 'N/A'} • {formatDate(match.createdAt)}
                       </p>
+                      <div className="flex gap-4 mt-1 text-xs">
+                        {match.startedAt && (
+                          <span className="text-blue-400">
+                            🏁 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} à {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                        {(match.result?.confirmedAt || match.completedAt) && (
+                          <span className="text-green-400">
+                            ✅ Fin: {new Date(match.result?.confirmedAt || match.completedAt).toLocaleDateString('fr-FR')} à {new Date(match.result?.confirmedAt || match.completedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <a
@@ -3932,10 +3956,24 @@ const renderDisputes = () => {
                     </button>
                   </div>
                 </div>
-                <div className="mt-2 text-gray-500 text-sm">
-                  Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} • 
-                  Ladder: {match.ladderId || 'N/A'} • 
-                  Format: {match.format || 'N/A'}
+                <div className="mt-2 text-gray-500 text-sm space-y-1">
+                  <div>
+                    Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
+                    Ladder: {match.ladderId || 'N/A'} • 
+                    Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                  </div>
+                  <div className="flex gap-4">
+                    {match.startedAt && (
+                      <span className="text-blue-400">
+                        🏁 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} à {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {match.result?.confirmedAt && (
+                      <span className="text-green-400">
+                        ✅ Validé: {new Date(match.result.confirmedAt).toLocaleDateString('fr-FR')} à {new Date(match.result.confirmedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

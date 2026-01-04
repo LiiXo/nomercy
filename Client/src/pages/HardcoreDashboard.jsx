@@ -123,6 +123,11 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Fermé • 00h00 - 20h00',
       matchesInProgress: 'match(s) en cours',
       inLadder: 'dans le classement',
+      waitingHelperConfirmation: 'En attente de confirmation de l\'aide...',
+      helperAccepted: 'L\'aide a accepté !',
+      helperDeclined: 'L\'aide a refusé de jouer.',
+      helperTimeout: 'L\'aide n\'a pas répondu à temps.',
+      secondsLeft: 's restantes',
     },
     en: {
       matchmaking: 'Matchmaking',
@@ -189,6 +194,11 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Closed • 00:00 - 20:00',
       matchesInProgress: 'match(es) in progress',
       inLadder: 'in the',
+      waitingHelperConfirmation: 'Waiting for helper confirmation...',
+      helperAccepted: 'Helper accepted!',
+      helperDeclined: 'Helper declined to play.',
+      helperTimeout: 'Helper did not respond in time.',
+      secondsLeft: 's left',
     },
     de: {
       matchmaking: 'Matchmaking',
@@ -255,6 +265,11 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Geschlossen • 00:00 - 20:00',
       matchesInProgress: 'Spiel(e) läuft',
       inLadder: 'in der Rangliste',
+      waitingHelperConfirmation: 'Warte auf Helferbestätigung...',
+      helperAccepted: 'Helfer hat akzeptiert!',
+      helperDeclined: 'Helfer hat abgelehnt.',
+      helperTimeout: 'Helfer hat nicht rechtzeitig geantwortet.',
+      secondsLeft: 's verbleibend',
     },
     it: {
       matchmaking: 'Matchmaking',
@@ -321,6 +336,11 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Chiuso • 00:00 - 20:00',
       matchesInProgress: 'partita(e) in corso',
       inLadder: 'nella classifica',
+      waitingHelperConfirmation: 'In attesa di conferma dell\'aiuto...',
+      helperAccepted: 'L\'aiuto ha accettato!',
+      helperDeclined: 'L\'aiuto ha rifiutato di giocare.',
+      helperTimeout: 'L\'aiuto non ha risposto in tempo.',
+      secondsLeft: 's rimanenti',
     },
   }[language] || {};
   
@@ -359,6 +379,11 @@ const HardcoreDashboard = () => {
   const [pendingMatchAction, setPendingMatchAction] = useState(null);
   const [rosterError, setRosterError] = useState('');
   const [checkingAnticheat, setCheckingAnticheat] = useState(false);
+  
+  // Helper confirmation states
+  const [waitingHelperConfirmation, setWaitingHelperConfirmation] = useState(false);
+  const [helperConfirmationId, setHelperConfirmationId] = useState(null);
+  const [helperConfirmationTimeLeft, setHelperConfirmationTimeLeft] = useState(30);
   
   const availableModes = ['hardcoreSND', 'hardcoreDom', 'hardcoreTDM'];
   
@@ -498,9 +523,16 @@ const HardcoreDashboard = () => {
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], withCredentials: true });
     socketRef.current = socket;
+    
+    // Get user ID (handle both 'id' and '_id' formats from API)
+    const currentUserId = user?.id || user?._id;
 
     socket.on('connect', () => {
       socket.emit('joinPage', { page: 'hardcore-dashboard' });
+      // Join user's personal room for helper confirmation responses
+      if (currentUserId) {
+        socket.emit('joinUserRoom', currentUserId);
+      }
     });
 
     socket.on('totalOnlineUsers', (count) => setTotalOnlineUsers(count));
@@ -550,9 +582,12 @@ const HardcoreDashboard = () => {
 
     return () => {
       socket.emit('leavePage', { page: 'hardcore-dashboard' });
+      if (currentUserId) {
+        socket.emit('leaveUserRoom', currentUserId);
+      }
       socket.disconnect();
     };
-  }, []);
+  }, [user?.id, user?._id]);
 
   // Match functions
   const handleOpenPostRoster = (e, ladderId, gameMode) => {
@@ -663,6 +698,84 @@ const HardcoreDashboard = () => {
     }
   };
 
+  // Request helper confirmation and wait for response
+  const requestHelperConfirmation = async (helperId, actionType, matchDetails) => {
+    return new Promise((resolve, reject) => {
+      setWaitingHelperConfirmation(true);
+      setHelperConfirmationTimeLeft(30);
+      
+      // Create timeout for 30 seconds
+      let timeoutId;
+      let countdownId;
+      
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (countdownId) clearInterval(countdownId);
+        setWaitingHelperConfirmation(false);
+        setHelperConfirmationId(null);
+        if (socketRef.current) {
+          socketRef.current.off('helperConfirmationResponse');
+        }
+      };
+      
+      // Start countdown
+      countdownId = setInterval(() => {
+        setHelperConfirmationTimeLeft(prev => {
+          if (prev <= 1) {
+            cleanup();
+            reject(new Error('timeout'));
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      // Set timeout for 30 seconds
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('timeout'));
+      }, 30000);
+      
+      // Listen for response
+      if (socketRef.current) {
+        socketRef.current.on('helperConfirmationResponse', (data) => {
+          console.log('[HELPER] Received confirmation response:', data);
+          cleanup();
+          if (data.status === 'accepted') {
+            resolve(true);
+          } else {
+            reject(new Error(data.status));
+          }
+        });
+      }
+      
+      // Send request to server
+      fetch(`${API_URL}/helper-confirmation/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          helperId,
+          actionType,
+          matchDetails
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) {
+            cleanup();
+            reject(new Error(data.message));
+          } else {
+            setHelperConfirmationId(data.confirmationId);
+          }
+        })
+        .catch(err => {
+          cleanup();
+          reject(err);
+        });
+    });
+  };
+
   const handleConfirmRoster = async () => {
     setRosterError('');
     setCheckingAnticheat(true);
@@ -688,6 +801,34 @@ const HardcoreDashboard = () => {
         if (disconnectedPlayers.length > 0) {
           setRosterError(`GGSecure non connecté : ${disconnectedPlayers.join(', ')}`);
           setCheckingAnticheat(false);
+          return;
+        }
+      }
+      
+      setCheckingAnticheat(false);
+      
+      // If there's a helper, request confirmation first
+      if (selectedHelper) {
+        const action = pendingMatchAction;
+        const matchDetails = {
+          ladderId: action?.ladderId,
+          gameMode: action?.gameMode || matchForm.gameMode,
+          teamSize: action?.teamSize || matchForm.teamSize,
+          matchId: action?.matchId || null
+        };
+        
+        try {
+          await requestHelperConfirmation(selectedHelper._id, action?.type || 'post', matchDetails);
+          // Helper accepted, proceed with the action
+        } catch (error) {
+          // Helper declined or timeout
+          if (error.message === 'timeout') {
+            setRosterError(txt.helperTimeout || 'L\'aide n\'a pas répondu à temps.');
+          } else if (error.message === 'declined') {
+            setRosterError(txt.helperDeclined || 'L\'aide a refusé de jouer.');
+          } else {
+            setRosterError(error.message || 'Erreur lors de la confirmation de l\'aide');
+          }
           return;
         }
       }
@@ -992,6 +1133,8 @@ const HardcoreDashboard = () => {
   const [topSquads, setTopSquads] = useState([]);
   const [loadingPlayers, setLoadingPlayers] = useState(true);
   const [loadingSquads, setLoadingSquads] = useState(true);
+  const [mySquadRank, setMySquadRank] = useState(null);
+  const [myPlayerRank, setMyPlayerRank] = useState(null);
 
   useEffect(() => {
     const fetchTopPlayers = async () => {
@@ -1000,7 +1143,7 @@ const HardcoreDashboard = () => {
         const response = await fetch(`${API_URL}/rankings/top-players/hardcore?limit=10`);
         const data = await response.json();
         if (data.success) {
-          setTopPlayers(data.rankings.map((r, idx) => {
+          const players = data.rankings.map((r, idx) => {
             const u = r.user;
             // Handle avatar with Discord fallback
             let avatarUrl = getAvatarUrl(u?.avatarUrl || u?.avatar);
@@ -1014,7 +1157,39 @@ const HardcoreDashboard = () => {
               avatar: avatarUrl,
               points: r.points
             };
-          }));
+          });
+          setTopPlayers(players);
+          
+          // Check if current user is in top 10
+          const currentUserId = user?.id || user?._id;
+          if (currentUserId) {
+            const isInTop10 = players.some(p => p.id === currentUserId);
+            if (!isInTop10) {
+              // Fetch user's rank
+              try {
+                const rankResponse = await fetch(`${API_URL}/rankings/player-rank/${currentUserId}?mode=hardcore`);
+                const rankData = await rankResponse.json();
+                if (rankData.success && rankData.rank) {
+                  // Get user avatar
+                  let userAvatar = getAvatarUrl(user?.avatarUrl || user?.avatar);
+                  if (!userAvatar && user?.discordId && user?.discordAvatar) {
+                    userAvatar = `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png`;
+                  }
+                  setMyPlayerRank({
+                    rank: rankData.rank,
+                    id: currentUserId,
+                    player: user?.username || user?.discordUsername || 'You',
+                    avatar: userAvatar,
+                    points: rankData.points || 0
+                  });
+                }
+              } catch (rankErr) {
+                console.error('Error fetching player rank:', rankErr);
+              }
+            } else {
+              setMyPlayerRank(null);
+            }
+          }
         }
       } catch (err) {
         console.error('Error fetching top players:', err);
@@ -1023,7 +1198,7 @@ const HardcoreDashboard = () => {
       }
     };
     fetchTopPlayers();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const fetchTopSquads = async () => {
@@ -1032,7 +1207,7 @@ const HardcoreDashboard = () => {
         const response = await fetch(`${API_URL}/squads/leaderboard/hardcore?limit=10`);
         const data = await response.json();
         if (data.success) {
-          setTopSquads(data.squads.map((s, idx) => ({
+          const squads = data.squads.map((s, idx) => ({
             rank: idx + 1,
             id: s._id,
             team: s.name,
@@ -1043,7 +1218,35 @@ const HardcoreDashboard = () => {
             totalMatches: s.totalMatches || (s.stats?.totalWins || 0) + (s.stats?.totalLosses || 0),
             totalWins: s.totalWins || s.stats?.totalWins || 0,
             totalLosses: s.totalLosses || s.stats?.totalLosses || 0
-          })));
+          }));
+          setTopSquads(squads);
+          
+          // Check if user's squad is in top 10
+          if (mySquad) {
+            const isInTop10 = squads.some(s => s.id === mySquad._id);
+            if (!isInTop10) {
+              // Fetch user's squad rank
+              try {
+                const rankResponse = await fetch(`${API_URL}/squads/${mySquad._id}/rank?mode=hardcore`);
+                const rankData = await rankResponse.json();
+                if (rankData.success && rankData.rank) {
+                  setMySquadRank({
+                    rank: rankData.rank,
+                    id: mySquad._id,
+                    team: mySquad.name,
+                    tag: mySquad.tag,
+                    color: mySquad.color,
+                    logo: mySquad.logo,
+                    points: rankData.points || mySquad.stats?.totalPoints || 0
+                  });
+                }
+              } catch (rankErr) {
+                console.error('Error fetching squad rank:', rankErr);
+              }
+            } else {
+              setMySquadRank(null);
+            }
+          }
         }
       } catch (err) {
         console.error('Error fetching top squads:', err);
@@ -1052,13 +1255,13 @@ const HardcoreDashboard = () => {
       }
     };
     fetchTopSquads();
-  }, []);
+  }, [mySquad]);
 
   const gameModes = [
-    { name: t('hardcoreDuel'), icon: '🗡️' },
-    { name: t('hardcoreSND'), icon: '💣' },
-    { name: t('hardcoreDom'), icon: '🏴' },
-    { name: t('hardcoreTDM'), icon: '⚔️' },
+    { name: t('hardcoreDuel'), icon: '🗡️', comingSoon: true },
+    { name: t('hardcoreSND'), icon: '💣', comingSoon: false },
+    { name: t('hardcoreDom'), icon: '🏴', comingSoon: true },
+    { name: t('hardcoreTDM'), icon: '⚔️', comingSoon: true },
   ];
 
   return (
@@ -1594,6 +1797,36 @@ const HardcoreDashboard = () => {
                           </div>
                         </div>
                       ))}
+                      
+                      {/* User's player position if not in top 10 */}
+                      {myPlayerRank && (
+                        <>
+                          <div className="px-6 py-2 flex items-center justify-center gap-2">
+                            <span className="text-gray-600 text-xs">• • •</span>
+                          </div>
+                          <div className="px-6 py-3 bg-gradient-to-r from-neon-red/20 to-neon-orange/10 border-t border-neon-red/30">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 w-14">
+                                  <span className="font-bold text-sm text-neon-red">#{myPlayerRank.rank}</span>
+                                </div>
+                                <img 
+                                  src={myPlayerRank.avatar || getDefaultAvatar(myPlayerRank.player)} 
+                                  alt="" 
+                                  className="w-8 h-8 rounded-full ring-2 ring-neon-red/50" 
+                                />
+                                <Link to={`/player/${myPlayerRank.id}`} className="font-semibold text-sm text-neon-red hover:text-neon-orange transition-colors">
+                                  {myPlayerRank.player}
+                                  <span className="ml-2 text-[10px] uppercase tracking-wider text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">
+                                    {language === 'fr' ? 'Toi' : 'You'}
+                                  </span>
+                                </Link>
+                              </div>
+                              <span className="text-neon-red font-bold text-sm">{myPlayerRank.points.toLocaleString()} XP</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1642,6 +1875,39 @@ const HardcoreDashboard = () => {
                           </div>
                         </div>
                       ))}
+                      
+                      {/* User's squad position if not in top 10 */}
+                      {mySquadRank && (
+                        <>
+                          <div className="px-6 py-2 flex items-center justify-center gap-2">
+                            <span className="text-gray-600 text-xs">• • •</span>
+                          </div>
+                          <div className="px-6 py-3 bg-gradient-to-r from-neon-red/20 to-neon-orange/10 border-t border-neon-red/30">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 w-14">
+                                  <span className="font-bold text-sm text-neon-red">#{mySquadRank.rank}</span>
+                                </div>
+                                {mySquadRank.logo ? (
+                                  <img src={mySquadRank.logo} alt="" className="w-8 h-8 rounded object-contain ring-2 ring-neon-red/50" />
+                                ) : (
+                                  <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold border-2 border-neon-red/50" style={{ backgroundColor: mySquadRank.color === 'transparent' ? 'transparent' : mySquadRank.color + '30', color: mySquadRank.color === 'transparent' ? '#9ca3af' : mySquadRank.color }}>
+                                    {mySquadRank.tag?.charAt(0) || 'S'}
+                                  </div>
+                                )}
+                                <Link to={`/squad/${mySquadRank.id}`} className="font-semibold text-sm text-neon-red hover:text-neon-orange transition-colors">
+                                  {mySquadRank.team}
+                                  {mySquadRank.tag && <span className="text-neon-red/60 ml-1 text-xs">[{mySquadRank.tag}]</span>}
+                                  <span className="ml-2 text-[10px] uppercase tracking-wider text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">
+                                    {language === 'fr' ? 'Ton équipe' : 'Your team'}
+                                  </span>
+                                </Link>
+                              </div>
+                              <span className="text-neon-red font-bold text-sm">{mySquadRank.points.toLocaleString()} PTS</span>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1660,7 +1926,12 @@ const HardcoreDashboard = () => {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {gameModes.map((mode, index) => (
-                <div key={index} className="glass-card rounded-2xl p-6 text-center card-hover cursor-pointer neon-border-red neon-border-red-hover">
+                <div key={index} className={`glass-card rounded-2xl p-6 text-center card-hover neon-border-red ${mode.comingSoon ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer neon-border-red-hover'} relative`}>
+                  {mode.comingSoon && (
+                    <div className="absolute top-2 right-2 px-2 py-1 bg-orange-500/80 rounded-lg text-xs font-bold text-white">
+                      {language === 'fr' ? 'À venir' : language === 'de' ? 'Demnächst' : language === 'it' ? 'Prossimamente' : 'Coming Soon'}
+                    </div>
+                  )}
                   <div className="text-5xl mb-4">{mode.icon}</div>
                   <h3 className="text-white font-semibold">{mode.name}</h3>
                 </div>
@@ -1788,6 +2059,41 @@ const HardcoreDashboard = () => {
               const requiredSize = showRosterDialog === 'accept' && pendingMatchAction?.teamSize ? pendingMatchAction.teamSize : matchForm.teamSize;
               const totalSelected = selectedRoster.length + (selectedHelper ? 1 : 0);
               const isValidRoster = totalSelected === requiredSize;
+              
+              // Show waiting state for helper confirmation
+              if (waitingHelperConfirmation) {
+                return (
+                  <div className="space-y-3">
+                    <div className="p-4 bg-yellow-500/20 border border-yellow-500/50 rounded-xl">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" />
+                        <span className="text-yellow-400 font-medium">{txt.waitingHelperConfirmation}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-yellow-400" />
+                        <span className="text-yellow-400 text-sm font-bold">{helperConfirmationTimeLeft}{txt.secondsLeft}</span>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="mt-3 h-2 bg-dark-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-yellow-500 to-orange-500 transition-all duration-1000 ease-linear"
+                          style={{ width: `${(helperConfirmationTimeLeft / 30) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setWaitingHelperConfirmation(false);
+                        setHelperConfirmationId(null);
+                      }}
+                      className="w-full py-3 glass border border-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
+                    >
+                      {txt.cancel}
+                    </button>
+                  </div>
+                );
+              }
+              
               return (
                 <button
                   onClick={handleConfirmRoster}

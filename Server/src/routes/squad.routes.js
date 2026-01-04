@@ -1216,6 +1216,57 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get squad rank for a specific mode
+router.get('/:squadId/rank', async (req, res) => {
+  try {
+    const { squadId } = req.params;
+    const { mode = 'hardcore' } = req.query;
+    
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'Invalid mode' });
+    }
+    
+    // Get the specific squad
+    const targetSquad = await Squad.findById(squadId);
+    if (!targetSquad) {
+      return res.status(404).json({ success: false, message: 'Squad not found' });
+    }
+    
+    // Get all squads sorted by points for this mode
+    const query = {
+      $or: [{ mode }, { mode: 'both' }],
+      isDeleted: false
+    };
+    
+    const allSquads = await Squad.find(query)
+      .populate({
+        path: 'leader',
+        select: 'isBanned isDeleted',
+        match: { isBanned: false, isDeleted: { $ne: true } }
+      })
+      .sort({ 'stats.totalPoints': -1 })
+      .select('stats');
+    
+    // Filter valid squads and find rank
+    const validSquads = allSquads.filter(s => s.leader !== null);
+    const rank = validSquads.findIndex(s => s._id.toString() === squadId) + 1;
+    
+    if (rank === 0) {
+      return res.json({ success: false, message: 'Squad not ranked' });
+    }
+    
+    res.json({
+      success: true,
+      rank,
+      points: targetSquad.stats?.totalPoints || 0,
+      totalSquads: validSquads.length
+    });
+  } catch (error) {
+    console.error('Get squad rank error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Get squads leaderboard for a specific mode
 router.get('/leaderboard/:mode', async (req, res) => {
   try {

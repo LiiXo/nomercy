@@ -34,6 +34,7 @@ const startServer = async () => {
   const { default: seasonRoutes } = await import('./routes/season.routes.js');
   const { default: appSettingsRoutes } = await import('./routes/appSettings.routes.js');
   const { default: systemRoutes } = await import('./routes/system.routes.js');
+  const { default: helperConfirmationRoutes } = await import('./routes/helperConfirmation.routes.js');
   await import('./config/passport.js');
   
   // Import Match model for cleanup job
@@ -72,6 +73,9 @@ const startServer = async () => {
     io.emit('totalOnlineUsers', totalOnline);
   };
 
+  // Track user socket connections for direct messaging
+  const userSockets = new Map(); // userId -> Set of socketIds
+
   // Socket.io event handlers
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -79,6 +83,38 @@ const startServer = async () => {
     
     // Emit total online users count to all clients
     broadcastTotalOnlineUsers();
+
+    // Join user's personal room for direct notifications (helper confirmations, etc.)
+    socket.on('joinUserRoom', (userId) => {
+      if (userId) {
+        socket.join(`user-${userId}`);
+        socket.userId = userId;
+        
+        // Track user's socket connections
+        if (!userSockets.has(userId)) {
+          userSockets.set(userId, new Set());
+        }
+        userSockets.get(userId).add(socket.id);
+        
+        console.log(`Socket ${socket.id} joined user room for user-${userId}`);
+      }
+    });
+
+    socket.on('leaveUserRoom', (userId) => {
+      if (userId) {
+        socket.leave(`user-${userId}`);
+        
+        // Remove from user sockets tracking
+        if (userSockets.has(userId)) {
+          userSockets.get(userId).delete(socket.id);
+          if (userSockets.get(userId).size === 0) {
+            userSockets.delete(userId);
+          }
+        }
+        
+        console.log(`Socket ${socket.id} left user room for user-${userId}`);
+      }
+    });
 
     socket.on('joinPage', ({ page }) => {
       socket.join(page);
@@ -126,6 +162,14 @@ const startServer = async () => {
           io.to(page).emit('viewerCount', count);
         });
         socketPages.delete(socket.id);
+      }
+      
+      // Clean up user socket tracking
+      if (socket.userId && userSockets.has(socket.userId)) {
+        userSockets.get(socket.userId).delete(socket.id);
+        if (userSockets.get(socket.userId).size === 0) {
+          userSockets.delete(socket.userId);
+        }
       }
       
       // Emit updated total online users count
@@ -180,6 +224,7 @@ const startServer = async () => {
   app.use('/api/seasons', seasonRoutes);
   app.use('/api/app-settings', appSettingsRoutes);
   app.use('/api/system', systemRoutes);
+  app.use('/api/helper-confirmation', helperConfirmationRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

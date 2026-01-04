@@ -215,6 +215,55 @@ router.get('/top-players/:mode', async (req, res) => {
   }
 });
 
+// Get a specific player's rank (by XP)
+router.get('/player-rank/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { mode = 'hardcore' } = req.query;
+
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'Invalid mode' });
+    }
+
+    // Get the user
+    const user = await User.findById(userId).select('username avatar avatarUrl discordAvatar discordId stats isBanned isDeleted');
+    
+    if (!user || user.isBanned || user.isDeleted) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const userXp = user.stats?.xp || 0;
+
+    // Count users with higher XP
+    const higherRankedCount = await User.countDocuments({
+      isBanned: { $ne: true },
+      isDeleted: { $ne: true },
+      username: { $ne: null, $exists: true },
+      'stats.xp': { $gt: userXp }
+    });
+
+    // User's rank is higherRankedCount + 1
+    const rank = higherRankedCount + 1;
+
+    res.json({
+      success: true,
+      rank,
+      points: userXp,
+      user: {
+        _id: user._id,
+        username: user.username,
+        avatar: user.avatar,
+        avatarUrl: user.avatarUrl,
+        discordAvatar: user.discordAvatar,
+        discordId: user.discordId
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching player rank:', error);
+    res.status(500).json({ success: false, message: 'Error fetching player rank' });
+  }
+});
+
 // Get user's ranking
 router.get('/user/:userId/:mode', async (req, res) => {
   try {

@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -348,21 +349,48 @@ router.get('/history/:squadId', async (req, res) => {
   }
 });
 
-// Historique des matchs d'un joueur (basé sur les rosters)
+// Historique des matchs d'un joueur (basé sur matchHistory, rosters ET appartenance à l'escouade)
 router.get('/player-history/:playerId', async (req, res) => {
   try {
     const { playerId } = req.params;
     const { page = 1, limit = 10 } = req.query;
 
+    // Convertir en ObjectId pour les recherches MongoDB
+    const playerObjectId = new mongoose.Types.ObjectId(playerId);
+
+    // Récupérer le joueur avec son historique de matchs et son escouade
+    const player = await User.findById(playerId)
+      .select('squad matchHistory')
+      .populate('matchHistory.match');
+    
+    const playerSquadId = player?.squad;
+    
+    // Récupérer les IDs des matchs depuis le matchHistory de l'utilisateur
+    const matchHistoryIds = player?.matchHistory?.map(mh => mh.match?._id || mh.match).filter(Boolean) || [];
+
+    // Construire la requête: chercher dans les rosters (y compris les helpers), matchHistory, OU escouade
+    const orConditions = [
+      { 'challengerRoster.user': playerObjectId },
+      { 'opponentRoster.user': playerObjectId }
+    ];
+
+    // Si le joueur a un matchHistory, inclure ces matchs
+    if (matchHistoryIds.length > 0) {
+      orConditions.push({ _id: { $in: matchHistoryIds } });
+    }
+
+    // Si le joueur a une escouade, chercher aussi les matchs de son escouade
+    if (playerSquadId) {
+      orConditions.push({ challenger: playerSquadId });
+      orConditions.push({ opponent: playerSquadId });
+    }
+
     const matches = await Match.find({
-      $or: [
-        { 'challengerRoster.user': playerId },
-        { 'opponentRoster.user': playerId }
-      ],
+      $or: orConditions,
       status: 'completed'
     })
-      .populate('challenger', 'name tag color logo')
-      .populate('opponent', 'name tag color logo')
+      .populate('challenger', 'name tag color logo members')
+      .populate('opponent', 'name tag color logo members')
       .populate('result.winner', 'name tag')
       .populate('challengerRoster.user', 'username avatar avatarUrl discordId discordAvatar')
       .populate('opponentRoster.user', 'username avatar avatarUrl discordId discordAvatar')
@@ -371,26 +399,68 @@ router.get('/player-history/:playerId', async (req, res) => {
       .limit(parseInt(limit));
 
     const total = await Match.countDocuments({
-      $or: [
-        { 'challengerRoster.user': playerId },
-        { 'opponentRoster.user': playerId }
-      ],
+      $or: orConditions,
       status: 'completed'
+    });
+
+    // Créer un map des résultats depuis matchHistory pour un accès rapide
+    const matchHistoryMap = new Map();
+    player?.matchHistory?.forEach(mh => {
+      const matchId = (mh.match?._id || mh.match)?.toString();
+      if (matchId) {
+        matchHistoryMap.set(matchId, {
+          result: mh.result,
+          squadId: mh.squad?.toString()
+        });
+      }
     });
 
     // Ajouter l'info si le joueur a gagné ou perdu pour chaque match
     const matchesWithResult = matches.map(match => {
       const matchObj = match.toObject();
-      const isInChallenger = match.challengerRoster?.some(r => 
-        (r.user?._id || r.user).toString() === playerId
+      const matchId = match._id.toString();
+      
+      // D'abord vérifier dans le matchHistory (source la plus fiable)
+      const historyEntry = matchHistoryMap.get(matchId);
+      if (historyEntry) {
+        const playerSquad = historyEntry.squadId === match.challenger?._id?.toString() 
+          ? match.challenger 
+          : match.opponent;
+        return {
+          ...matchObj,
+          playerResult: historyEntry.result,
+          playerSquad: playerSquad
+        };
+      }
+      
+      // Fallback: Vérifier dans les rosters et l'escouade
+      const isInChallengerRoster = match.challengerRoster?.some(r => 
+        (r.user?._id || r.user)?.toString() === playerId
       );
-      const playerSquadId = isInChallenger ? match.challenger?._id : match.opponent?._id;
-      const didWin = match.result?.winner?.toString() === playerSquadId?.toString();
+      
+      const isInOpponentRoster = match.opponentRoster?.some(r => 
+        (r.user?._id || r.user)?.toString() === playerId
+      );
+      
+      const isInChallengerSquad = match.challenger?.members?.some(m => 
+        (m.user?._id || m.user)?.toString() === playerId
+      );
+      
+      const isInOpponentSquad = match.opponent?.members?.some(m => 
+        (m.user?._id || m.user)?.toString() === playerId
+      );
+      
+      const challengerIdMatch = playerSquadId && match.challenger?._id?.toString() === playerSquadId.toString();
+      const opponentIdMatch = playerSquadId && match.opponent?._id?.toString() === playerSquadId.toString();
+      
+      const isInChallenger = isInChallengerRoster || isInChallengerSquad || challengerIdMatch;
+      const playerSquad = isInChallenger ? match.challenger : match.opponent;
+      const didWin = match.result?.winner?.toString() === playerSquad?._id?.toString();
       
       return {
         ...matchObj,
         playerResult: didWin ? 'win' : 'loss',
-        playerSquad: isInChallenger ? match.challenger : match.opponent
+        playerSquad: playerSquad
       };
     });
 
@@ -1286,6 +1356,14 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
               goldCoins: playerCoinsWin,
               'stats.xp': xpGained,
               'stats.wins': 1
+            },
+            $push: {
+              matchHistory: {
+                match: match._id,
+                squad: winnerId,
+                result: 'win',
+                playedAt: new Date()
+              }
             }
           }, { new: true });
           
@@ -1313,6 +1391,14 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
             $inc: { 
               goldCoins: playerCoinsLoss,
               'stats.losses': 1
+            },
+            $push: {
+              matchHistory: {
+                match: match._id,
+                squad: loserId,
+                result: 'loss',
+                playedAt: new Date()
+              }
             }
           }, { new: true });
           console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: +${playerCoinsLoss} coins consolation`);
@@ -2159,6 +2245,14 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
                 goldCoins: playerCoinsWin,
                 'stats.xp': xpGained,
                 'stats.wins': 1
+              },
+              $push: {
+                matchHistory: {
+                  match: match._id,
+                  squad: winnerId,
+                  result: 'win',
+                  playedAt: new Date()
+                }
               }
             });
           }
@@ -2175,6 +2269,14 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
               $inc: { 
                 goldCoins: playerCoinsLoss,
                 'stats.losses': 1
+              },
+              $push: {
+                matchHistory: {
+                  match: match._id,
+                  squad: loserId,
+                  result: 'loss',
+                  playedAt: new Date()
+                }
               }
             });
           }

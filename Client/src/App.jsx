@@ -9,6 +9,7 @@ import PageTransition from './components/PageTransition';
 import AnnouncementModal from './components/AnnouncementModal';
 import BanDialog from './components/BanDialog';
 import GlobalAlerts from './components/GlobalAlerts';
+import HelperConfirmationDialog from './components/HelperConfirmationDialog';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import LandingPage from './pages/LandingPage';
@@ -491,6 +492,9 @@ function AppContent() {
       
       {/* Global Alerts - Shows app-wide notifications and disabled features */}
       <GlobalAlerts />
+      
+      {/* Helper Confirmation Dialog - Shows when someone requests you as helper */}
+      <HelperConfirmationDialog />
     </div>
   );
 }

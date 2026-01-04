@@ -24,6 +24,7 @@ const Navbar = () => {
   const [squadRequestsCount, setSquadRequestsCount] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [disputesCount, setDisputesCount] = useState(0);
+  const [canSpin, setCanSpin] = useState(false);
 
   const languageRef = useRef(null);
   const userMenuRef = useRef(null);
@@ -176,6 +177,34 @@ const Navbar = () => {
     };
   }, [isAuthenticated]);
 
+  // Fetch spin status to show/hide yellow notification dot
+  useEffect(() => {
+    const fetchSpinStatus = async () => {
+      if (!isAuthenticated) {
+        setCanSpin(false);
+        return;
+      }
+      
+      try {
+        const response = await fetch('https://api-nomercy.ggsecure.io/api/spin/status', {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        if (data.success) {
+          setCanSpin(data.canSpin);
+        }
+      } catch (err) {
+        console.error('Error fetching spin status:', err);
+      }
+    };
+
+    fetchSpinStatus();
+    // Check every minute for spin availability
+    const interval = setInterval(fetchSpinStatus, 60000);
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
+
   const isActive = (path) => location.pathname === path;
 
   const handleChangeMode = () => {
@@ -255,7 +284,7 @@ const Navbar = () => {
               >
                 <Gift className="w-4 h-4" />
                 <span className="hidden lg:inline">{language === 'fr' ? 'Roue' : 'Wheel'}</span>
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
+                {canSpin && <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />}
               </button>
             )}
 
@@ -582,7 +611,14 @@ const Navbar = () => {
       )}
 
       {/* Spin Wheel Modal */}
-      <SpinWheel isOpen={showSpinWheel} onClose={() => setShowSpinWheel(false)} />
+      <SpinWheel isOpen={showSpinWheel} onClose={() => { 
+        setShowSpinWheel(false);
+        // Refetch spin status after closing the wheel
+        fetch('https://api-nomercy.ggsecure.io/api/spin/status', { credentials: 'include' })
+          .then(res => res.json())
+          .then(data => { if (data.success) setCanSpin(data.canSpin); })
+          .catch(() => {});
+      }} />
     </nav>
   );
 };
