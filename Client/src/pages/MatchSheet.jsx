@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { io } from 'socket.io-client';
+import { useSocket } from '../SocketContext';
 import { 
   ArrowLeft, Trophy, Users, Clock, Coins, Send, Loader2, 
   TrendingUp, TrendingDown, Minus, Shield, Swords, MessageCircle,
@@ -13,7 +13,6 @@ import {
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
-const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
 const MatchSheet = () => {
   const { matchId } = useParams();
@@ -52,7 +51,7 @@ const MatchSheet = () => {
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [evidenceDescription, setEvidenceDescription] = useState('');
   const evidenceInputRef = useRef(null);
-  const socketRef = useRef(null);
+  const { on, joinMatch, leaveMatch } = useSocket();
   const [rewardsConfig, setRewardsConfig] = useState(null);
   const [showCombatReport, setShowCombatReport] = useState(false);
   const [hasSeenCombatReport, setHasSeenCombatReport] = useState(false);
@@ -109,7 +108,7 @@ const MatchSheet = () => {
       selectWinner: 'Sélectionner le gagnant',
       weWon: 'Nous avons gagné',
       theyWon: 'Ils ont gagné',
-      onlyLeader: 'Seul le leader peut valider',
+      onlyLeader: 'Seul le leader ou un officier peut valider',
       matchEnded: 'Match terminé',
       winner: 'Gagnant',
       reportDispute: 'Signaler un litige',
@@ -216,7 +215,7 @@ const MatchSheet = () => {
       selectWinner: 'Select winner',
       weWon: 'We won',
       theyWon: 'They won',
-      onlyLeader: 'Only the leader can validate',
+      onlyLeader: 'Only the leader or an officer can validate',
       matchEnded: 'Match ended',
       winner: 'Winner',
       reportDispute: 'Report dispute',
@@ -323,7 +322,7 @@ const MatchSheet = () => {
       selectWinner: 'Gewinner wählen',
       weWon: 'Wir haben gewonnen',
       theyWon: 'Sie haben gewonnen',
-      onlyLeader: 'Nur der Leader kann bestätigen',
+      onlyLeader: 'Nur der Leader oder ein Offizier kann bestätigen',
       matchEnded: 'Spiel beendet',
       winner: 'Gewinner',
       reportDispute: 'Streitfall melden',
@@ -430,7 +429,7 @@ const MatchSheet = () => {
       selectWinner: 'Seleziona vincitore',
       weWon: 'Abbiamo vinto',
       theyWon: 'Hanno vinto',
-      onlyLeader: 'Solo il leader può confermare',
+      onlyLeader: 'Solo il leader o un ufficiale può confermare',
       matchEnded: 'Partita terminata',
       winner: 'Vincitore',
       reportDispute: 'Segnala controversia',
@@ -784,22 +783,15 @@ const MatchSheet = () => {
     };
   }, [match?.status, matchId]);
 
-  // Socket.io connection for real-time updates
+  // Socket.io events for real-time updates
   useEffect(() => {
     if (!matchId) return;
 
-    const socket = io(SOCKET_URL, { 
-      transports: ['websocket', 'polling'], 
-      withCredentials: true 
-    });
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      socket.emit('joinMatch', matchId);
-    });
+    // Join match room
+    joinMatch(matchId);
 
     // Real-time chat messages
-    socket.on('newChatMessage', (data) => {
+    const handleChatMessage = (data) => {
       if (data.matchId === matchId) {
         setMessages(prev => {
           // Avoid duplicates
@@ -811,10 +803,10 @@ const MatchSheet = () => {
         // Scroll to bottom after receiving new message
         setTimeout(scrollChatToBottom, 50);
       }
-    });
+    };
 
     // Match updates (cancel requests, status changes, etc.)
-    socket.on('matchUpdate', (data) => {
+    const handleMatchUpdate = (data) => {
       if (data.match?._id === matchId) {
         setMatch(data.match);
         
@@ -836,13 +828,18 @@ const MatchSheet = () => {
           navigate(redirectPath);
         }
       }
-    });
+    };
+
+    // Subscribe to events
+    const unsubChat = on('newChatMessage', handleChatMessage);
+    const unsubMatch = on('matchUpdate', handleMatchUpdate);
 
     return () => {
-      socket.emit('leaveMatch', matchId);
-      socket.disconnect();
+      leaveMatch(matchId);
+      unsubChat();
+      unsubMatch();
     };
-  }, [matchId, navigate]);
+  }, [matchId, navigate, on, joinMatch, leaveMatch]);
 
   // Chat container ref for scrolling
   const chatContainerRef = useRef(null);
@@ -892,18 +889,18 @@ const MatchSheet = () => {
     }
   };
 
-  // Check if user is leader of their squad
-  const isLeader = () => {
+  // Check if user is leader or officer of their squad
+  const isLeaderOrOfficer = () => {
     if (!mySquad || !user) return false;
     const member = mySquad.members?.find(m => 
       (m.user?._id || m.user) === user.id
     );
-    return member?.role === 'leader';
+    return member?.role === 'leader' || member?.role === 'officer';
   };
 
   // Submit match result
   const handleSubmitResult = async (winnerId) => {
-    if (!isLeader()) return;
+    if (!isLeaderOrOfficer()) return;
     
     setSubmittingResult(true);
     try {
@@ -1635,8 +1632,8 @@ const MatchSheet = () => {
               </div>
             )}
 
-            {/* Match Actions - Only for participants, leaders, and active matches */}
-            {isParticipant && match.opponent && (match.status === 'accepted' || match.status === 'in_progress') && isLeader() && (
+            {/* Match Actions - Only for participants, leaders/officers, and active matches */}
+            {isParticipant && match.opponent && (match.status === 'accepted' || match.status === 'in_progress') && isLeaderOrOfficer() && (
               <div className="space-y-2">
                 {/* Sélectionner le gagnant */}
                 <button

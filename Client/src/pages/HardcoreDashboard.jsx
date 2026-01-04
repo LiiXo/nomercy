@@ -2,12 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
+import { useSocket } from '../SocketContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
-import { io } from 'socket.io-client';
 import { Trophy, Users, Skull, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
-const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
 // Countdown component - defined outside to prevent re-creation
 const ReadyCountdown = ({ createdAt, onExpire }) => {
@@ -52,6 +51,7 @@ const ReadyCountdown = ({ createdAt, onExpire }) => {
 const HardcoreDashboard = () => {
   const { language, t } = useLanguage();
   const { isAuthenticated, user } = useAuth();
+  const { on, off, joinPage, leavePage, totalOnlineUsers } = useSocket();
   
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
@@ -350,8 +350,6 @@ const HardcoreDashboard = () => {
   const [squadTeamMatches, setSquadTeamMatches] = useState([]);
   const [duoTrioMatches, setDuoTrioMatches] = useState([]);
   const [loadingMatches, setLoadingMatches] = useState(true);
-  const socketRef = useRef(null);
-  const [totalOnlineUsers, setTotalOnlineUsers] = useState(0);
   const [showPostMatch, setShowPostMatch] = useState(null);
   const [postingMatch, setPostingMatch] = useState(false);
   const [acceptingMatch, setAcceptingMatch] = useState(null);
@@ -519,25 +517,13 @@ const HardcoreDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Socket.io connection
+  // Socket.io events for real-time match updates
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], withCredentials: true });
-    socketRef.current = socket;
-    
-    // Get user ID (handle both 'id' and '_id' formats from API)
-    const currentUserId = user?.id || user?._id;
+    // Join the page room
+    joinPage('hardcore-dashboard');
 
-    socket.on('connect', () => {
-      socket.emit('joinPage', { page: 'hardcore-dashboard' });
-      // Join user's personal room for helper confirmation responses
-      if (currentUserId) {
-        socket.emit('joinUserRoom', currentUserId);
-      }
-    });
-
-    socket.on('totalOnlineUsers', (count) => setTotalOnlineUsers(count));
-
-    socket.on('matchCreated', (data) => {
+    // Handle match created events
+    const handleMatchCreated = (data) => {
       if (data.mode === 'hardcore') {
         if (data.ladderId === 'squad-team') {
           setSquadTeamMatches(prev => [data.match, ...prev]);
@@ -545,9 +531,10 @@ const HardcoreDashboard = () => {
           setDuoTrioMatches(prev => [data.match, ...prev]);
         }
       }
-    });
+    };
 
-    socket.on('matchAccepted', (data) => {
+    // Handle match accepted events
+    const handleMatchAccepted = (data) => {
       if (data.mode === 'hardcore') {
         if (data.ladderId === 'squad-team') {
           setSquadTeamMatches(prev => prev.filter(m => m._id !== data.matchId));
@@ -559,7 +546,11 @@ const HardcoreDashboard = () => {
         
         const currentSquad = mySquadRef.current;
         if (data.match && currentSquad) {
-          const isMyMatch = data.match.challenger?._id === currentSquad._id || data.match.opponent?._id === currentSquad._id;
+          const currentSquadId = (currentSquad._id || currentSquad.id)?.toString();
+          const challengerId = data.match.challenger?._id?.toString() || data.match.challenger?.id?.toString();
+          const opponentId = data.match.opponent?._id?.toString() || data.match.opponent?.id?.toString();
+          
+          const isMyMatch = currentSquadId && (challengerId === currentSquadId || opponentId === currentSquadId);
           if (isMyMatch) {
             setMyActiveMatches(prev => {
               if (prev.some(m => m._id === data.match._id)) return prev;
@@ -567,10 +558,16 @@ const HardcoreDashboard = () => {
             });
           }
         }
+        
+        // Fallback: refresh active matches to ensure consistency
+        setTimeout(() => {
+          if (isAuthenticated) fetchMyActiveMatches();
+        }, 1000);
       }
-    });
+    };
 
-    socket.on('matchCancelled', (data) => {
+    // Handle match cancelled events
+    const handleMatchCancelled = (data) => {
       if (data.mode === 'hardcore') {
         if (data.ladderId === 'squad-team') {
           setSquadTeamMatches(prev => prev.filter(m => m._id !== data.matchId));
@@ -578,16 +575,20 @@ const HardcoreDashboard = () => {
           setDuoTrioMatches(prev => prev.filter(m => m._id !== data.matchId));
         }
       }
-    });
+    };
+
+    // Subscribe to events
+    const unsubCreated = on('matchCreated', handleMatchCreated);
+    const unsubAccepted = on('matchAccepted', handleMatchAccepted);
+    const unsubCancelled = on('matchCancelled', handleMatchCancelled);
 
     return () => {
-      socket.emit('leavePage', { page: 'hardcore-dashboard' });
-      if (currentUserId) {
-        socket.emit('leaveUserRoom', currentUserId);
-      }
-      socket.disconnect();
+      leavePage('hardcore-dashboard');
+      unsubCreated();
+      unsubAccepted();
+      unsubCancelled();
     };
-  }, [user?.id, user?._id]);
+  }, [on, joinPage, leavePage, isAuthenticated]);
 
   // Match functions
   const handleOpenPostRoster = (e, ladderId, gameMode) => {
@@ -628,6 +629,7 @@ const HardcoreDashboard = () => {
           if (ladderId === 'squad-team') setSquadTeamMatches(resData.matches);
           else if (ladderId === 'duo-trio') setDuoTrioMatches(resData.matches);
         }
+        setTimeout(async () => { await fetchMyActiveMatches(); }, 500);
         setTimeout(() => setMatchMessage({ type: '', text: '' }), 3000);
         return true;
       } else {
@@ -707,15 +709,14 @@ const HardcoreDashboard = () => {
       // Create timeout for 30 seconds
       let timeoutId;
       let countdownId;
+      let unsubscribe;
       
       const cleanup = () => {
         if (timeoutId) clearTimeout(timeoutId);
         if (countdownId) clearInterval(countdownId);
         setWaitingHelperConfirmation(false);
         setHelperConfirmationId(null);
-        if (socketRef.current) {
-          socketRef.current.off('helperConfirmationResponse');
-        }
+        if (unsubscribe) unsubscribe();
       };
       
       // Start countdown
@@ -736,18 +737,16 @@ const HardcoreDashboard = () => {
         reject(new Error('timeout'));
       }, 30000);
       
-      // Listen for response
-      if (socketRef.current) {
-        socketRef.current.on('helperConfirmationResponse', (data) => {
-          console.log('[HELPER] Received confirmation response:', data);
-          cleanup();
-          if (data.status === 'accepted') {
-            resolve(true);
-          } else {
-            reject(new Error(data.status));
-          }
-        });
-      }
+      // Listen for response using socket context
+      unsubscribe = on('helperConfirmationResponse', (data) => {
+        console.log('[HELPER] Received confirmation response:', data);
+        cleanup();
+        if (data.status === 'accepted') {
+          resolve(true);
+        } else {
+          reject(new Error(data.status));
+        }
+      });
       
       // Send request to server
       fetch(`${API_URL}/helper-confirmation/request`, {

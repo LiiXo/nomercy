@@ -1,21 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
-import { io } from 'socket.io-client';
+import { useSocket } from '../SocketContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { Users, Clock, Check, X, Loader2, Swords, Shield } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
-const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
 const HelperConfirmationDialog = () => {
   const { user, isAuthenticated } = useAuth();
   const { language } = useLanguage();
-  const socketRef = useRef(null);
+  const { on } = useSocket();
   const [pendingRequest, setPendingRequest] = useState(null);
   const [responding, setResponding] = useState(false);
   const [timeLeft, setTimeLeft] = useState(30);
-  const hasJoinedRoom = useRef(false);
 
   const texts = {
     fr: {
@@ -121,53 +119,14 @@ const HelperConfirmationDialog = () => {
     return () => clearInterval(interval);
   }, [isAuthenticated, userId]);
 
-  // Connect to socket and listen for helper confirmation requests
+  // Listen for helper confirmation requests using shared socket
   useEffect(() => {
     if (!isAuthenticated || !userId) return;
 
-    console.log('[HELPER] Initializing socket connection for user:', userId);
+    console.log('[HELPER] Setting up listener for user:', userId);
     
-    const socket = io(SOCKET_URL, {
-      transports: ['websocket', 'polling'],
-      withCredentials: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000
-    });
-    socketRef.current = socket;
-
-    // Function to join user room
-    const joinUserRoom = () => {
-      if (hasJoinedRoom.current) return;
-      console.log('[HELPER] Joining user room for user:', userId);
-      socket.emit('joinUserRoom', userId);
-      hasJoinedRoom.current = true;
-    };
-
-    socket.on('connect', () => {
-      console.log('[HELPER] Socket connected, id:', socket.id);
-      hasJoinedRoom.current = false; // Reset on new connection
-      joinUserRoom();
-    });
-
-    socket.on('reconnect', () => {
-      console.log('[HELPER] Socket reconnected');
-      hasJoinedRoom.current = false;
-      joinUserRoom();
-    });
-
-    socket.on('disconnect', (reason) => {
-      console.log('[HELPER] Socket disconnected:', reason);
-      hasJoinedRoom.current = false;
-    });
-
-    // If socket is already connected, join room immediately
-    if (socket.connected) {
-      joinUserRoom();
-    }
-
-    // Listen for helper confirmation requests
-    socket.on('helperConfirmationRequest', (data) => {
+    // Listen for helper confirmation requests via shared socket
+    const unsubscribe = on('helperConfirmationRequest', (data) => {
       console.log('[HELPER] Received confirmation request via socket:', data);
       setPendingRequest(data);
       
@@ -179,14 +138,10 @@ const HelperConfirmationDialog = () => {
     });
 
     return () => {
-      if (socket) {
-        console.log('[HELPER] Cleaning up socket connection');
-        socket.emit('leaveUserRoom', userId);
-        socket.disconnect();
-        hasJoinedRoom.current = false;
-      }
+      console.log('[HELPER] Cleaning up listener');
+      unsubscribe();
     };
-  }, [isAuthenticated, userId]);
+  }, [isAuthenticated, userId, on]);
 
   // Countdown timer
   useEffect(() => {

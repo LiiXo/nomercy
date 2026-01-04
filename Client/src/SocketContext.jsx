@@ -1,0 +1,264 @@
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { io } from 'socket.io-client';
+import { useAuth } from './AuthContext';
+
+// Determine socket URL based on environment
+// In development, connect to localhost. In production, use production URL.
+const getSocketUrl = () => {
+  // If VITE_API_URL is explicitly set, use it (removing /api if present)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace('/api', '');
+  }
+  // In development (when running locally), use localhost
+  if (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:5000';
+  }
+  // Otherwise use production URL
+  return 'https://api-nomercy.ggsecure.io';
+};
+
+const SOCKET_URL = getSocketUrl();
+
+const SocketContext = createContext(null);
+
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  if (!context) {
+    throw new Error('useSocket must be used within a SocketProvider');
+  }
+  return context;
+};
+
+export const SocketProvider = ({ children }) => {
+  const { isAuthenticated, user } = useAuth();
+  const socketRef = useRef(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [totalOnlineUsers, setTotalOnlineUsers] = useState(0);
+  const joinedRoomsRef = useRef(new Set());
+  const eventListenersRef = useRef(new Map());
+
+  // Get user ID (handle both 'id' and '_id' formats from API)
+  const userId = user?.id || user?._id;
+
+  // Initialize socket connection once
+  useEffect(() => {
+    console.log('[Socket] Connecting to:', SOCKET_URL);
+    // Create socket connection
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
+
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('[Socket] Connected:', socket.id);
+      setIsConnected(true);
+      
+      // Re-join all rooms after reconnection
+      joinedRoomsRef.current.forEach(room => {
+        if (room.startsWith('user-')) {
+          socket.emit('joinUserRoom', room.replace('user-', ''));
+        } else if (room.startsWith('page-')) {
+          socket.emit('joinPage', { page: room.replace('page-', '') });
+        } else if (room.startsWith('match-')) {
+          socket.emit('joinMatch', room.replace('match-', ''));
+        } else if (room.startsWith('ranked-match-')) {
+          socket.emit('joinRankedMatch', room.replace('ranked-match-', ''));
+        }
+      });
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket] Disconnected:', reason);
+      setIsConnected(false);
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('[Socket] Reconnected after', attemptNumber, 'attempts');
+    });
+
+    socket.on('totalOnlineUsers', (count) => {
+      setTotalOnlineUsers(count);
+    });
+
+    return () => {
+      console.log('[Socket] Cleaning up connection');
+      socket.disconnect();
+      socketRef.current = null;
+      joinedRoomsRef.current.clear();
+      eventListenersRef.current.clear();
+    };
+  }, []); // Only run once on mount
+
+  // Join user's personal room when authenticated
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected || !userId) return;
+
+    const userRoom = `user-${userId}`;
+    if (!joinedRoomsRef.current.has(userRoom)) {
+      console.log('[Socket] Joining user room:', userId);
+      socket.emit('joinUserRoom', userId);
+      joinedRoomsRef.current.add(userRoom);
+    }
+
+    return () => {
+      if (socket && joinedRoomsRef.current.has(userRoom)) {
+        console.log('[Socket] Leaving user room:', userId);
+        socket.emit('leaveUserRoom', userId);
+        joinedRoomsRef.current.delete(userRoom);
+      }
+    };
+  }, [isConnected, userId]);
+
+  // Join a page room
+  const joinPage = useCallback((page) => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) return;
+
+    const pageRoom = `page-${page}`;
+    if (!joinedRoomsRef.current.has(pageRoom)) {
+      console.log('[Socket] Joining page:', page);
+      socket.emit('joinPage', { page });
+      joinedRoomsRef.current.add(pageRoom);
+    }
+  }, [isConnected]);
+
+  // Leave a page room
+  const leavePage = useCallback((page) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const pageRoom = `page-${page}`;
+    if (joinedRoomsRef.current.has(pageRoom)) {
+      console.log('[Socket] Leaving page:', page);
+      socket.emit('leavePage', { page });
+      joinedRoomsRef.current.delete(pageRoom);
+    }
+  }, []);
+
+  // Join a match room
+  const joinMatch = useCallback((matchId) => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) return;
+
+    const matchRoom = `match-${matchId}`;
+    if (!joinedRoomsRef.current.has(matchRoom)) {
+      console.log('[Socket] Joining match:', matchId);
+      socket.emit('joinMatch', matchId);
+      joinedRoomsRef.current.add(matchRoom);
+    }
+  }, [isConnected]);
+
+  // Leave a match room
+  const leaveMatch = useCallback((matchId) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const matchRoom = `match-${matchId}`;
+    if (joinedRoomsRef.current.has(matchRoom)) {
+      console.log('[Socket] Leaving match:', matchId);
+      socket.emit('leaveMatch', matchId);
+      joinedRoomsRef.current.delete(matchRoom);
+    }
+  }, []);
+
+  // Join a ranked match room
+  const joinRankedMatch = useCallback((matchId) => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) return;
+
+    const matchRoom = `ranked-match-${matchId}`;
+    if (!joinedRoomsRef.current.has(matchRoom)) {
+      console.log('[Socket] Joining ranked match:', matchId);
+      socket.emit('joinRankedMatch', matchId);
+      joinedRoomsRef.current.add(matchRoom);
+    }
+  }, [isConnected]);
+
+  // Leave a ranked match room
+  const leaveRankedMatch = useCallback((matchId) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const matchRoom = `ranked-match-${matchId}`;
+    if (joinedRoomsRef.current.has(matchRoom)) {
+      console.log('[Socket] Leaving ranked match:', matchId);
+      socket.emit('leaveRankedMatch', matchId);
+      joinedRoomsRef.current.delete(matchRoom);
+    }
+  }, []);
+
+  // Subscribe to an event (with automatic cleanup tracking)
+  const on = useCallback((event, callback) => {
+    const socket = socketRef.current;
+    if (!socket) return () => {};
+
+    socket.on(event, callback);
+    
+    // Track listener for potential cleanup
+    if (!eventListenersRef.current.has(event)) {
+      eventListenersRef.current.set(event, new Set());
+    }
+    eventListenersRef.current.get(event).add(callback);
+
+    // Return unsubscribe function
+    return () => {
+      socket.off(event, callback);
+      eventListenersRef.current.get(event)?.delete(callback);
+    };
+  }, []);
+
+  // Unsubscribe from an event
+  const off = useCallback((event, callback) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    if (callback) {
+      socket.off(event, callback);
+      eventListenersRef.current.get(event)?.delete(callback);
+    } else {
+      socket.off(event);
+      eventListenersRef.current.delete(event);
+    }
+  }, []);
+
+  // Emit an event
+  const emit = useCallback((event, data) => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) {
+      console.warn('[Socket] Cannot emit, socket not connected');
+      return;
+    }
+    socket.emit(event, data);
+  }, [isConnected]);
+
+  const value = {
+    socket: socketRef.current,
+    isConnected,
+    totalOnlineUsers,
+    joinPage,
+    leavePage,
+    joinMatch,
+    leaveMatch,
+    joinRankedMatch,
+    leaveRankedMatch,
+    on,
+    off,
+    emit,
+  };
+
+  return (
+    <SocketContext.Provider value={value}>
+      {children}
+    </SocketContext.Provider>
+  );
+};
+
+export default SocketContext;
+

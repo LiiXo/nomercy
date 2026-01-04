@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { io } from 'socket.io-client';
+import { useSocket } from '../SocketContext';
 import { 
   Trophy, Swords, Target, Flag, Skull, Users, Loader2, 
   X, Play, Clock, Zap, Shield, Crown, Medal, Star,
@@ -14,14 +14,13 @@ import {
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
-const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
 const RankedMode = () => {
   const { language } = useLanguage();
   const { selectedMode } = useMode();
   const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const socketRef = useRef(null);
+  const { on, emit, isConnected } = useSocket();
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
@@ -439,21 +438,12 @@ const RankedMode = () => {
     fetchAppSettings();
   }, []);
 
-  // Socket connection
+  // Socket events for matchmaking
   useEffect(() => {
     if (!isAuthenticated || !user) return;
 
-    socketRef.current = io(SOCKET_URL, {
-      withCredentials: true,
-      transports: ['websocket', 'polling']
-    });
-
-    socketRef.current.on('connect', () => {
-      console.log('Socket connected');
-      socketRef.current.emit('joinUserRoom', user._id || user.id);
-    });
-
-    socketRef.current.on('rankedMatchFound', (data) => {
+    // Handle ranked match found
+    const handleMatchFound = (data) => {
       console.log('Match found:', data);
       setMatchFound(data);
       setIsSearching(false);
@@ -462,21 +452,22 @@ const RankedMode = () => {
         setShowMatchmakingDialog(false);
         navigate(`/ranked-match/${data.matchId}`);
       }, 2000);
-    });
+    };
 
-    socketRef.current.on('queueUpdate', (data) => {
+    // Handle queue updates
+    const handleQueueUpdate = (data) => {
       setQueueStatus(data);
-    });
+    };
+
+    // Subscribe to events
+    const unsubMatchFound = on('rankedMatchFound', handleMatchFound);
+    const unsubQueueUpdate = on('queueUpdate', handleQueueUpdate);
 
     return () => {
-      if (socketRef.current) {
-        if (user) {
-          socketRef.current.emit('leaveUserRoom', user._id || user.id);
-        }
-        socketRef.current.disconnect();
-      }
+      unsubMatchFound();
+      unsubQueueUpdate();
     };
-  }, [isAuthenticated, user, navigate]);
+  }, [isAuthenticated, user, navigate, on]);
 
   // Search timer
   useEffect(() => {

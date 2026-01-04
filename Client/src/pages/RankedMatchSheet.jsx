@@ -3,8 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
+import { useSocket } from '../SocketContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
-import { io } from 'socket.io-client';
 import { 
   ArrowLeft, Trophy, Users, Clock, Coins, Send, Loader2, 
   TrendingUp, TrendingDown, Minus, Shield, Swords, MessageCircle,
@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
-const SOCKET_URL = 'https://api-nomercy.ggsecure.io';
 
 const RankedMatchSheet = () => {
   const { matchId } = useParams();
@@ -21,8 +20,8 @@ const RankedMatchSheet = () => {
   const { language } = useLanguage();
   const { selectedMode } = useMode();
   const { user, isAuthenticated } = useAuth();
+  const { on, joinRankedMatch, leaveRankedMatch } = useSocket();
   const chatRef = useRef(null);
-  const socketRef = useRef(null);
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
@@ -308,36 +307,40 @@ const RankedMatchSheet = () => {
   }, [matchId, isAuthenticated]);
 
   // Socket connection
+  // Socket events for real-time ranked match updates
   useEffect(() => {
     if (!matchId || !isAuthenticated) return;
 
-    socketRef.current = io(SOCKET_URL, {
-      withCredentials: true
-    });
+    // Join ranked match room
+    joinRankedMatch(matchId);
 
-    socketRef.current.on('connect', () => {
-      socketRef.current.emit('joinRankedMatch', matchId);
-    });
-
-    socketRef.current.on('newRankedMessage', (message) => {
+    // Handle new messages
+    const handleNewMessage = (message) => {
       setMessages(prev => [...prev, message]);
-    });
+    };
 
-    socketRef.current.on('rankedMatchUpdate', (updatedMatch) => {
+    // Handle match updates
+    const handleMatchUpdate = (updatedMatch) => {
       setMatch(updatedMatch);
-    });
+    };
 
-    socketRef.current.on('rankedBattleReport', (report) => {
+    // Handle battle report
+    const handleBattleReport = (report) => {
       setBattleReport(report);
-    });
+    };
+
+    // Subscribe to events
+    const unsubMessage = on('newRankedMessage', handleNewMessage);
+    const unsubMatch = on('rankedMatchUpdate', handleMatchUpdate);
+    const unsubReport = on('rankedBattleReport', handleBattleReport);
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.emit('leaveRankedMatch', matchId);
-        socketRef.current.disconnect();
-      }
+      leaveRankedMatch(matchId);
+      unsubMessage();
+      unsubMatch();
+      unsubReport();
     };
-  }, [matchId, isAuthenticated]);
+  }, [matchId, isAuthenticated, on, joinRankedMatch, leaveRankedMatch]);
 
   // Auto-scroll chat
   useEffect(() => {

@@ -3936,6 +3936,15 @@ const renderDisputes = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <a
+                      href={`/match/${match._id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      Voir le match
+                    </a>
                     <select
                       value={match.status}
                       onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}

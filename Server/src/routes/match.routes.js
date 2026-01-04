@@ -53,6 +53,56 @@ const isAdminOrStaff = (user) => {
   return user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 };
 
+/**
+ * Met à jour l'historique de matchs pour tous les joueurs d'un roster
+ * @param {Array} roster - Le roster des joueurs (challengerRoster ou opponentRoster)
+ * @param {String} matchId - L'ID du match
+ * @param {String} squadId - L'ID de l'escouade avec laquelle ils ont joué
+ * @param {String} result - 'win' ou 'loss'
+ * @returns {Promise<void>}
+ */
+const updatePlayersMatchHistory = async (roster, matchId, squadId, result) => {
+  if (!roster || roster.length === 0) {
+    console.log(`[UPDATE MATCH HISTORY] ⚠️ Roster vide pour le match ${matchId}`);
+    return;
+  }
+
+  console.log(`[UPDATE MATCH HISTORY] Mise à jour de ${roster.length} joueurs pour ${result} (match: ${matchId}, squad: ${squadId})`);
+
+  for (const rosterEntry of roster) {
+    const playerId = rosterEntry.user?._id || rosterEntry.user;
+    if (playerId) {
+      try {
+        // Vérifier si ce match est déjà dans l'historique du joueur
+        const player = await User.findById(playerId).select('matchHistory username');
+        const alreadyExists = player?.matchHistory?.some(mh => 
+          (mh.match?._id || mh.match)?.toString() === matchId.toString()
+        );
+
+        if (alreadyExists) {
+          console.log(`[UPDATE MATCH HISTORY] Match déjà dans l'historique de ${player.username}, ignoré`);
+          continue;
+        }
+
+        // Ajouter le match dans l'historique
+        await User.findByIdAndUpdate(playerId, {
+          $push: {
+            matchHistory: {
+              match: matchId,
+              squad: squadId,
+              result: result,
+              playedAt: new Date()
+            }
+          }
+        });
+        console.log(`[UPDATE MATCH HISTORY] ✅ Historique mis à jour pour ${player?.username || playerId} (${result})`);
+      } catch (error) {
+        console.error(`[UPDATE MATCH HISTORY] ❌ Erreur pour le joueur ${playerId}:`, error);
+      }
+    }
+  }
+};
+
 // Obtenir la configuration publique des récompenses (pour RankingsInfo)
 router.get('/public-config', async (req, res) => {
   try {
@@ -773,6 +823,13 @@ router.post('/', verifyToken, async (req, res) => {
     
     const match = new Match({
       challenger: squad._id,
+      // Sauvegarder les infos de l'escouade pour l'historique (même si l'escouade est supprimée plus tard)
+      challengerInfo: {
+        name: squad.name,
+        tag: squad.tag,
+        color: squad.color,
+        logo: squad.logo
+      },
       ladderId,
       mode,
       gameMode,
@@ -919,6 +976,13 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     }
 
     match.opponent = squad._id;
+    // Sauvegarder les infos de l'escouade adversaire pour l'historique (même si l'escouade est supprimée plus tard)
+    match.opponentInfo = {
+      name: squad.name,
+      tag: squad.tag,
+      color: squad.color,
+      logo: squad.logo
+    };
     match.acceptedAt = new Date();
     match.acceptedBy = user._id;
     
@@ -1131,15 +1195,15 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
 
     const squad = await Squad.findById(user.squad._id);
     
-    // Vérifier que l'utilisateur est leader de son escouade
+    // Vérifier que l'utilisateur est leader ou officier de son escouade
     const member = squad.members.find(m => 
       m.user.toString() === user._id.toString()
     );
     
-    if (!member || member.role !== 'leader') {
+    if (!member || (member.role !== 'leader' && member.role !== 'officer')) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Seul le leader peut valider le résultat du match' 
+        message: 'Seuls les leaders et officiers peuvent valider le résultat du match' 
       });
     }
 
@@ -1356,14 +1420,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
               goldCoins: playerCoinsWin,
               'stats.xp': xpGained,
               'stats.wins': 1
-            },
-            $push: {
-              matchHistory: {
-                match: match._id,
-                squad: winnerId,
-                result: 'win',
-                playedAt: new Date()
-              }
             }
           }, { new: true });
           
@@ -1391,14 +1447,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
             $inc: { 
               goldCoins: playerCoinsLoss,
               'stats.losses': 1
-            },
-            $push: {
-              matchHistory: {
-                match: match._id,
-                squad: loserId,
-                result: 'loss',
-                playedAt: new Date()
-              }
             }
           }, { new: true });
           console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: +${playerCoinsLoss} coins consolation`);
@@ -1407,6 +1455,12 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     } else {
       console.log(`[MATCH RESULT] WARNING: Loser roster is empty or not found!`);
     }
+
+    // ✅ MISE À JOUR DE L'HISTORIQUE DES JOUEURS (uniquement ceux du roster)
+    console.log(`[MATCH RESULT] 🔄 Mise à jour de l'historique des matchs pour les joueurs...`);
+    await updatePlayersMatchHistory(winnerRoster, match._id, winnerId, 'win');
+    await updatePlayersMatchHistory(loserRoster, match._id, loserId, 'loss');
+    console.log(`[MATCH RESULT] ✅ Historique des joueurs mis à jour`);
 
     // Sauvegarder les récompenses dans le match pour le rapport de combat
     match.result.rewardsGiven = rewardsGiven;
@@ -2245,14 +2299,6 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
                 goldCoins: playerCoinsWin,
                 'stats.xp': xpGained,
                 'stats.wins': 1
-              },
-              $push: {
-                matchHistory: {
-                  match: match._id,
-                  squad: winnerId,
-                  result: 'win',
-                  playedAt: new Date()
-                }
               }
             });
           }
@@ -2269,19 +2315,17 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
               $inc: { 
                 goldCoins: playerCoinsLoss,
                 'stats.losses': 1
-              },
-              $push: {
-                matchHistory: {
-                  match: match._id,
-                  squad: loserId,
-                  result: 'loss',
-                  playedAt: new Date()
-                }
               }
             });
           }
         }
       }
+
+      // ✅ MISE À JOUR DE L'HISTORIQUE DES JOUEURS (uniquement ceux du roster)
+      console.log(`[RESOLVE MATCH] 🔄 Mise à jour de l'historique des matchs pour les joueurs...`);
+      await updatePlayersMatchHistory(winnerRoster, match._id, winnerId, 'win');
+      await updatePlayersMatchHistory(loserRoster, match._id, loserId, 'loss');
+      console.log(`[RESOLVE MATCH] ✅ Historique des joueurs mis à jour`);
 
       match.result = {
         winner: winnerId,

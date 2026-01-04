@@ -772,8 +772,10 @@ const MySquad = () => {
   }
 
   // Squad view
-  const winRate = squad.wins + squad.losses > 0 
-    ? Math.round((squad.wins / (squad.wins + squad.losses)) * 100) 
+  const totalWins = squad.stats?.totalWins || 0;
+  const totalLosses = squad.stats?.totalLosses || 0;
+  const winRate = totalWins + totalLosses > 0 
+    ? Math.round((totalWins / (totalWins + totalLosses)) * 100) 
     : 0;
 
   const pendingRequests = squad.joinRequests?.length || 0;
@@ -937,7 +939,7 @@ const MySquad = () => {
                   <Trophy className="w-5 h-5 text-green-400" />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-black text-white">{squad.wins || 0}</p>
+              <p className="text-2xl sm:text-3xl font-black text-white">{totalWins}</p>
               <p className="text-xs text-gray-500 uppercase tracking-wider">{t.wins}</p>
             </div>
             <div className={`bg-dark-900/80 backdrop-blur-sm rounded-xl border ${borderColor} p-4 sm:p-5`}>
@@ -946,7 +948,7 @@ const MySquad = () => {
                   <Swords className="w-5 h-5 text-red-400" />
                 </div>
               </div>
-              <p className="text-2xl sm:text-3xl font-black text-white">{squad.losses || 0}</p>
+              <p className="text-2xl sm:text-3xl font-black text-white">{totalLosses}</p>
               <p className="text-xs text-gray-500 uppercase tracking-wider">{t.losses}</p>
             </div>
             <div className={`bg-dark-900/80 backdrop-blur-sm rounded-xl border ${borderColor} p-4 sm:p-5`}>

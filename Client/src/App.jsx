@@ -4,6 +4,7 @@ import { LanguageProvider } from './LanguageContext';
 import { ModeProvider, useMode } from './ModeContext';
 import { AuthProvider, useAuth } from './AuthContext';
 import { AudioProvider } from './AudioProvider';
+import { SocketProvider } from './SocketContext';
 import ScrollToTop from './components/ScrollToTop';
 import PageTransition from './components/PageTransition';
 import AnnouncementModal from './components/AnnouncementModal';
@@ -503,13 +504,15 @@ function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <ModeProvider>
-          <Router>
-            <AudioProvider>
-              <AppContent />
-            </AudioProvider>
-          </Router>
-        </ModeProvider>
+        <SocketProvider>
+          <ModeProvider>
+            <Router>
+              <AudioProvider>
+                <AppContent />
+              </AudioProvider>
+            </Router>
+          </ModeProvider>
+        </SocketProvider>
       </AuthProvider>
     </LanguageProvider>
   );
