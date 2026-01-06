@@ -109,7 +109,8 @@ router.get('/public-config', async (req, res) => {
     const config = await getRewardsConfig();
     res.json({
       success: true,
-      squadMatchRewards: config.squadMatchRewards,
+      squadMatchRewardsChill: config.squadMatchRewardsChill,
+      squadMatchRewardsCompetitive: config.squadMatchRewardsCompetitive,
       rankedMatchRewards: config.rankedMatchRewards
     });
   } catch (error) {
@@ -722,16 +723,16 @@ router.post('/', verifyToken, async (req, res) => {
     }
 
     // Vérifier que la taille de l'équipe est valide pour le ladder
-    if (ladderId === 'duo-trio' && ![2, 3].includes(teamSize)) {
+    if (ladderId === 'duo-trio' && ![2, 3, 4].includes(teamSize)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Format invalide pour Duo/Trio (2v2 ou 3v3 uniquement)' 
+        message: 'Format invalide pour Chill (2v2, 3v3 ou 4v4 uniquement)' 
       });
     }
     if (ladderId === 'squad-team' && ![4, 5].includes(teamSize)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Format invalide pour Squad/Team (4v4 ou 5v5 uniquement)' 
+        message: 'Format invalide pour Compétitif (4v4 ou 5v5 uniquement)' 
       });
     }
 
@@ -1273,10 +1274,10 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       ? match.opponent._id.toString() 
       : match.challenger._id.toString();
 
-    // Récupérer les valeurs configurées dans l'admin panel
-    const rewardsConfig = await getSquadMatchRewards();
+    // Récupérer les valeurs configurées dans l'admin panel selon le type de ladder
+    const rewardsConfig = await getSquadMatchRewards(match.ladderId);
     
-    console.log(`[MATCH RESULT] Full rewardsConfig:`, JSON.stringify(rewardsConfig, null, 2));
+    console.log(`[MATCH RESULT] Full rewardsConfig for ${match.ladderId}:`, JSON.stringify(rewardsConfig, null, 2));
     
     // Points à attribuer (depuis la config) - avec valeurs par défaut
     const pointsWin = rewardsConfig.ladderPointsWin ?? 20;
@@ -1284,7 +1285,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     const generalPointsWin = rewardsConfig.generalSquadPointsWin ?? 15;
     const generalPointsLoss = rewardsConfig.generalSquadPointsLoss ?? 7;
 
-    console.log(`[MATCH RESULT] Match ${matchId} - Winner: ${winnerId}, Loser: ${loserId}`);
+    console.log(`[MATCH RESULT] Match ${matchId} (${match.ladderId}) - Winner: ${winnerId}, Loser: ${loserId}`);
     console.log(`[MATCH RESULT] Config - Ladder Points Win: ${pointsWin}, Loss: ${pointsLoss}, General Win: ${generalPointsWin}, Loss: ${generalPointsLoss}`);
 
     // 1. Mettre à jour le classement (ladder) du gagnant
@@ -1640,8 +1641,8 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
       ? match.opponent._id.toString() 
       : match.challenger._id.toString();
 
-    // Récupérer les valeurs configurées dans l'admin panel
-    const rewardsConfigConfirm = await getSquadMatchRewards();
+    // Récupérer les valeurs configurées dans l'admin panel selon le type de ladder
+    const rewardsConfigConfirm = await getSquadMatchRewards(match.ladderId);
     
     // Points à attribuer (depuis la config)
     const pointsWin = rewardsConfigConfirm.ladderPointsWin;
@@ -2191,8 +2192,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
         ? match.opponent._id.toString() 
         : match.challenger._id.toString();
 
-      // Récupérer les valeurs configurées dans l'admin panel
-      const rewardsConfigResolve = await getSquadMatchRewards();
+      // Récupérer les valeurs configurées dans l'admin panel selon le type de ladder
+      const rewardsConfigResolve = await getSquadMatchRewards(match.ladderId);
       
       // Points à attribuer (depuis la config) - avec valeurs par défaut
       const pointsWin = rewardsConfigResolve.ladderPointsWin ?? 20;

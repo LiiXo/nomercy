@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import User from '../models/User.js';
 import Squad from '../models/Squad.js';
 import Match from '../models/Match.js';
+import RankedMatch from '../models/RankedMatch.js';
 import ShopItem from '../models/ShopItem.js';
 import Trophy from '../models/Trophy.js';
 import Announcement from '../models/Announcement.js';
@@ -1015,7 +1016,25 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalSquads = await Squad.countDocuments();
-    const totalMatches = await Match.countDocuments();
+    
+    // Compter uniquement les matchs "completed" par ladder
+    const completedMatchesDuoTrio = await Match.countDocuments({ 
+      status: 'completed', 
+      ladderId: 'duo-trio' 
+    });
+    const completedMatchesSquadTeam = await Match.countDocuments({ 
+      status: 'completed', 
+      ladderId: 'squad-team' 
+    });
+    
+    // Compter les matchs classés "completed"
+    const completedRankedMatches = await RankedMatch.countDocuments({ 
+      status: 'completed' 
+    });
+    
+    // Total des matchs completed
+    const totalMatches = completedMatchesDuoTrio + completedMatchesSquadTeam + completedRankedMatches;
+    
     const totalShopItems = await ShopItem.countDocuments();
     const totalTrophies = await Trophy.countDocuments();
     const activeAnnouncements = await Announcement.countDocuments({ isActive: true });
@@ -1051,6 +1070,11 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
         totalUsers,
         totalSquads,
         totalMatches,
+        matchesByLadder: {
+          duoTrio: completedMatchesDuoTrio,
+          squadTeam: completedMatchesSquadTeam,
+          ranked: completedRankedMatches
+        },
         totalShopItems,
         totalTrophies,
         activeAnnouncements,

@@ -68,10 +68,10 @@ const RankingsInfo = () => {
       howItWorksDesc: 'Le système de classement NoMercy permet aux escouades de s\'affronter dans différents formats compétitifs et de grimper dans le classement pour prouver leur valeur.',
       
       ladderTypes: 'Types de Classements',
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Format compétitif en 2v2 ou 3v3',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Format compétitif en 2v2, 3v3 ou 4v4',
       duoTrioTime: 'Ouvert de 00h00 à 20h00 (heure française)',
-      squadTeam: 'Squad / Team',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Format compétitif en 5v5',
       squadTeamTime: 'Disponible 24h/24, 7j/7',
       
@@ -126,7 +126,7 @@ const RankingsInfo = () => {
       faqQuestion2: 'Que se passe-t-il si je quitte mon escouade ?',
       faqAnswer2: 'Si vous quittez votre escouade, vous perdez votre accès aux classements jusqu\'à ce que vous rejoigniez une nouvelle escouade.',
       faqQuestion3: 'Puis-je m\'inscrire aux deux classements ?',
-      faqAnswer3: 'Oui, votre escouade peut s\'inscrire simultanément au Duo/Trio et au Squad/Team.',
+      faqAnswer3: 'Oui, votre escouade peut s\'inscrire simultanément au Chill et au Compétitif.',
       faqQuestion4: 'Comment sont résolus les litiges ?',
       faqAnswer4: 'Les litiges sont examinés par le staff qui analysera les preuves fournies par les deux équipes.',
       
@@ -141,10 +141,10 @@ const RankingsInfo = () => {
       howItWorksDesc: 'The NoMercy ranking system allows squads to compete in different competitive formats and climb the rankings to prove their worth.',
       
       ladderTypes: 'Ranking Types',
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Competitive format in 2v2 or 3v3',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Competitive format in 2v2, 3v3 or 4v4',
       duoTrioTime: 'Open from 00:00 to 20:00 (French time)',
-      squadTeam: 'Squad / Team',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Competitive format in 5v5',
       squadTeamTime: 'Available 24/7',
       
@@ -199,7 +199,7 @@ const RankingsInfo = () => {
       faqQuestion2: 'What happens if I leave my squad?',
       faqAnswer2: 'If you leave your squad, you lose access to rankings until you join a new squad.',
       faqQuestion3: 'Can I register for both rankings?',
-      faqAnswer3: 'Yes, your squad can register for both Duo/Trio and Squad/Team simultaneously.',
+      faqAnswer3: 'Yes, your squad can register for both Chill and Compétitif simultaneously.',
       faqQuestion4: 'How are disputes resolved?',
       faqAnswer4: 'Disputes are reviewed by staff who will analyze evidence provided by both teams.',
       
@@ -214,10 +214,10 @@ const RankingsInfo = () => {
       howItWorksDesc: 'Das NoMercy-Ranglistensystem ermöglicht es Squads, in verschiedenen Wettkampfformaten zu konkurrieren und in den Ranglisten aufzusteigen.',
       
       ladderTypes: 'Ranglisten-Typen',
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Wettkampfformat 2v2 oder 3v3',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Wettkampfformat 2v2, 3v3 oder 4v4',
       duoTrioTime: 'Geöffnet von 00:00 bis 20:00 Uhr (französische Zeit)',
-      squadTeam: 'Squad / Team',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Wettkampfformat 5v5',
       squadTeamTime: 'Verfügbar 24/7',
       
@@ -272,7 +272,7 @@ const RankingsInfo = () => {
       faqQuestion2: 'Was passiert, wenn ich mein Squad verlasse?',
       faqAnswer2: 'Wenn Sie Ihr Squad verlassen, verlieren Sie den Zugang zu Ranglisten, bis Sie einem neuen Squad beitreten.',
       faqQuestion3: 'Kann ich mich für beide Ranglisten registrieren?',
-      faqAnswer3: 'Ja, Ihr Squad kann sich gleichzeitig für Duo/Trio und Squad/Team registrieren.',
+      faqAnswer3: 'Ja, Ihr Squad kann sich gleichzeitig für Chill und Compétitif registrieren.',
       faqQuestion4: 'Wie werden Streitigkeiten gelöst?',
       faqAnswer4: 'Streitigkeiten werden vom Personal überprüft, das die von beiden Teams bereitgestellten Beweise analysiert.',
       
@@ -287,10 +287,10 @@ const RankingsInfo = () => {
       howItWorksDesc: 'Il sistema di classificazione NoMercy permette alle squadre di competere in diversi formati competitivi e salire nelle classifiche per dimostrare il loro valore.',
       
       ladderTypes: 'Tipi di Classifiche',
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Formato competitivo in 2v2 o 3v3',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Formato competitivo in 2v2, 3v3 o 4v4',
       duoTrioTime: 'Aperto dalle 00:00 alle 20:00 (ora francese)',
-      squadTeam: 'Squad / Team',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Formato competitivo in 5v5',
       squadTeamTime: 'Disponibile 24/7',
       
@@ -345,7 +345,7 @@ const RankingsInfo = () => {
       faqQuestion2: 'Cosa succede se lascio la mia squadra?',
       faqAnswer2: 'Se lasci la tua squadra, perdi l\'accesso alle classifiche fino a quando non ti unisci a una nuova squadra.',
       faqQuestion3: 'Posso iscrivermi a entrambe le classifiche?',
-      faqAnswer3: 'Sì, la tua squadra può iscriversi sia a Duo/Trio che a Squad/Team contemporaneamente.',
+      faqAnswer3: 'Sì, la tua squadra può iscriversi sia a Chill che a Compétitif contemporaneamente.',
       faqQuestion4: 'Come vengono risolte le controversie?',
       faqAnswer4: 'Le controversie sono esaminate dallo staff che analizzerà le prove fornite da entrambe le squadre.',
       
@@ -421,7 +421,7 @@ const RankingsInfo = () => {
               </div>
               
               <div className="grid md:grid-cols-2 gap-4">
-                {/* Duo/Trio Card */}
+                {/* Chill Card */}
                 <div className="bg-dark-800/50 rounded-xl p-5 border border-white/10">
                   <div className="flex items-center gap-2 mb-3">
                     <Users className="w-5 h-5 text-purple-400" />
@@ -443,7 +443,7 @@ const RankingsInfo = () => {
                   </div>
                 </div>
 
-                {/* Squad/Team Card */}
+                {/* Compétitif Card */}
                 <div className="bg-dark-800/50 rounded-xl p-5 border border-white/10">
                   <div className="flex items-center gap-2 mb-3">
                     <Shield className="w-5 h-5 text-blue-400" />
@@ -470,34 +470,90 @@ const RankingsInfo = () => {
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className={`w-8 h-8 animate-spin ${colors.text}`} />
                 </div>
-              ) : config?.squadMatchRewards ? (
+              ) : (config?.squadMatchRewardsChill || config?.squadMatchRewardsCompetitive) ? (
                 <div className="space-y-6">
-                  {/* Squad Match Rewards */}
-                  <div>
+                  {/* Ladder Chill Rewards */}
+                  <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5">
                     <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-purple-400" />
-                      {language === 'fr' ? 'Matchs Squad (Ladder)' : 'Squad Matches (Ladder)'}
+                      <Users className="w-5 h-5 text-blue-400" />
+                      🎮 {language === 'fr' ? 'Ladder Chill' : 'Chill Ladder'}
                     </h3>
-                    <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
-                        <Trophy className="w-6 h-6 text-green-400 mx-auto mb-2" />
-                        <p className="text-green-400 font-bold text-xl">+{config.squadMatchRewards.ladderPointsWin || 20}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-center">
+                        <Trophy className="w-5 h-5 text-green-400 mx-auto mb-1" />
+                        <p className="text-green-400 font-bold text-lg">+{config.squadMatchRewardsChill?.ladderPointsWin || 15}</p>
                         <p className="text-gray-400 text-xs">{language === 'fr' ? 'Points Victoire' : 'Win Points'}</p>
                       </div>
-                      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-                        <Target className="w-6 h-6 text-red-400 mx-auto mb-2" />
-                        <p className="text-red-400 font-bold text-xl">-{config.squadMatchRewards.ladderPointsLoss || 10}</p>
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-center">
+                        <Target className="w-5 h-5 text-red-400 mx-auto mb-1" />
+                        <p className="text-red-400 font-bold text-lg">-{config.squadMatchRewardsChill?.ladderPointsLoss || 8}</p>
                         <p className="text-gray-400 text-xs">{language === 'fr' ? 'Points Défaite' : 'Loss Points'}</p>
                       </div>
-                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
-                        <Coins className="w-6 h-6 text-yellow-400 mx-auto mb-2" />
-                        <p className="text-yellow-400 font-bold text-xl">+{config.squadMatchRewards.playerCoinsWin || 50}</p>
-                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Pièces Victoire' : 'Win Coins'}</p>
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
+                        <Coins className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
+                        <p className="text-yellow-400 font-bold text-lg">+{config.squadMatchRewardsChill?.playerCoinsWin || 40}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Gold Victoire' : 'Win Gold'}</p>
                       </div>
-                      <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 text-center">
-                        <Zap className="w-6 h-6 text-cyan-400 mx-auto mb-2" />
-                        <p className="text-cyan-400 font-bold text-xl">{config.squadMatchRewards.playerXPWinMin || 450}-{config.squadMatchRewards.playerXPWinMax || 550}</p>
+                      <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 text-center">
+                        <Zap className="w-5 h-5 text-cyan-400 mx-auto mb-1" />
+                        <p className="text-cyan-400 font-bold text-lg">{config.squadMatchRewardsChill?.playerXPWinMin || 350}-{config.squadMatchRewardsChill?.playerXPWinMax || 450}</p>
                         <p className="text-gray-400 text-xs">XP {language === 'fr' ? 'Victoire' : 'Win'}</p>
+                      </div>
+                    </div>
+                    {/* Additional info for Chill */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-dark-800/50 rounded-lg p-2 text-center">
+                        <span className="text-gray-500">{language === 'fr' ? 'Points Général' : 'General Points'}: </span>
+                        <span className="text-green-400">+{config.squadMatchRewardsChill?.generalSquadPointsWin || 10}</span>
+                        <span className="text-gray-600 mx-1">/</span>
+                        <span className="text-red-400">-{config.squadMatchRewardsChill?.generalSquadPointsLoss || 5}</span>
+                      </div>
+                      <div className="bg-dark-800/50 rounded-lg p-2 text-center">
+                        <span className="text-gray-500">{language === 'fr' ? 'Gold Défaite' : 'Loss Gold'}: </span>
+                        <span className="text-orange-400">+{config.squadMatchRewardsChill?.playerCoinsLoss || 20}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Ladder Compétitif Rewards */}
+                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-5">
+                    <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-orange-400" />
+                      🔥 {language === 'fr' ? 'Ladder Compétitif' : 'Competitive Ladder'}
+                    </h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-center">
+                        <Trophy className="w-5 h-5 text-green-400 mx-auto mb-1" />
+                        <p className="text-green-400 font-bold text-lg">+{config.squadMatchRewardsCompetitive?.ladderPointsWin || 25}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Points Victoire' : 'Win Points'}</p>
+                      </div>
+                      <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-center">
+                        <Target className="w-5 h-5 text-red-400 mx-auto mb-1" />
+                        <p className="text-red-400 font-bold text-lg">-{config.squadMatchRewardsCompetitive?.ladderPointsLoss || 12}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Points Défaite' : 'Loss Points'}</p>
+                      </div>
+                      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 text-center">
+                        <Coins className="w-5 h-5 text-yellow-400 mx-auto mb-1" />
+                        <p className="text-yellow-400 font-bold text-lg">+{config.squadMatchRewardsCompetitive?.playerCoinsWin || 60}</p>
+                        <p className="text-gray-400 text-xs">{language === 'fr' ? 'Gold Victoire' : 'Win Gold'}</p>
+                      </div>
+                      <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 text-center">
+                        <Zap className="w-5 h-5 text-cyan-400 mx-auto mb-1" />
+                        <p className="text-cyan-400 font-bold text-lg">{config.squadMatchRewardsCompetitive?.playerXPWinMin || 550}-{config.squadMatchRewardsCompetitive?.playerXPWinMax || 650}</p>
+                        <p className="text-gray-400 text-xs">XP {language === 'fr' ? 'Victoire' : 'Win'}</p>
+                      </div>
+                    </div>
+                    {/* Additional info for Competitive */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-dark-800/50 rounded-lg p-2 text-center">
+                        <span className="text-gray-500">{language === 'fr' ? 'Points Général' : 'General Points'}: </span>
+                        <span className="text-green-400">+{config.squadMatchRewardsCompetitive?.generalSquadPointsWin || 20}</span>
+                        <span className="text-gray-600 mx-1">/</span>
+                        <span className="text-red-400">-{config.squadMatchRewardsCompetitive?.generalSquadPointsLoss || 10}</span>
+                      </div>
+                      <div className="bg-dark-800/50 rounded-lg p-2 text-center">
+                        <span className="text-gray-500">{language === 'fr' ? 'Gold Défaite' : 'Loss Gold'}: </span>
+                        <span className="text-orange-400">+{config.squadMatchRewardsCompetitive?.playerCoinsLoss || 30}</span>
                       </div>
                     </div>
                   </div>
@@ -522,7 +578,7 @@ const RankingsInfo = () => {
 
                   <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <XCircle className="w-5 h-5 text-red-400" />
+                      <AlertTriangle className="w-5 h-5 text-red-400" />
                       <h3 className="font-bold text-white">{t.defeatPoints}</h3>
                     </div>
                     <p className="text-red-400 text-sm">{t.defeatPointsDesc}</p>

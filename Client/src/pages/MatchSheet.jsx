@@ -96,8 +96,8 @@ const MatchSheet = () => {
       inProgress: 'En cours',
       completed: 'Terminé',
       cancelled: 'Annulé',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       notFound: 'Match non trouvé',
       loadingError: 'Erreur de chargement',
       yourTeam: 'Votre équipe',
@@ -203,8 +203,8 @@ const MatchSheet = () => {
       inProgress: 'In Progress',
       completed: 'Completed',
       cancelled: 'Cancelled',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       notFound: 'Match not found',
       loadingError: 'Loading error',
       yourTeam: 'Your team',
@@ -310,8 +310,8 @@ const MatchSheet = () => {
       inProgress: 'Im Gange',
       completed: 'Abgeschlossen',
       cancelled: 'Abgebrochen',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       notFound: 'Match nicht gefunden',
       loadingError: 'Ladefehler',
       yourTeam: 'Dein Team',
@@ -417,8 +417,8 @@ const MatchSheet = () => {
       inProgress: 'In corso',
       completed: 'Completato',
       cancelled: 'Annullato',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       notFound: 'Partita non trovata',
       loadingError: 'Errore di caricamento',
       yourTeam: 'La tua squadra',
@@ -578,11 +578,13 @@ const MatchSheet = () => {
     }
   };
 
-  // Fetch rewards configuration
+  // Fetch rewards configuration based on match ladder type
   useEffect(() => {
     const fetchRewardsConfig = async () => {
       try {
-        const response = await fetch(`${API_URL}/config/rewards/squad`);
+        // Pass ladderId to get correct rewards (chill vs competitive)
+        const ladderId = match?.ladderId || 'duo-trio';
+        const response = await fetch(`${API_URL}/config/rewards/squad?ladderId=${ladderId}`);
         const data = await response.json();
         if (data.success) {
           setRewardsConfig(data.rewards);
@@ -591,8 +593,11 @@ const MatchSheet = () => {
         console.error('Error fetching rewards config:', err);
       }
     };
-    fetchRewardsConfig();
-  }, []);
+    // Only fetch when we have match data
+    if (match?.ladderId) {
+      fetchRewardsConfig();
+    }
+  }, [match?.ladderId]);
 
   useEffect(() => {
     fetchMatchData(true);
@@ -1505,7 +1510,7 @@ const MatchSheet = () => {
                   <Trophy className={`w-4 h-4 text-${accentColor}-400`} />
                   {language === 'fr' ? 'Enjeux du match' : 'Match Stakes'}
                   <span className={`ml-auto text-xs px-2 py-0.5 rounded bg-${accentColor}-500/20 text-${accentColor}-400`}>
-                    {match.ladderId === 'duo-trio' ? 'Duo/Trio' : 'Squad/Team'}
+                    {match.ladderId === 'duo-trio' ? 'Chill' : 'Compétitif'}
                   </span>
                 </h3>
                 
@@ -1520,7 +1525,7 @@ const MatchSheet = () => {
                       <div className="pb-2 border-b border-white/5">
                         <p className="text-gray-500 text-[10px] uppercase mb-1">{language === 'fr' ? 'Escouade' : 'Squad'}</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">Ladder {match.ladderId === 'duo-trio' ? 'D/T' : 'S/T'}</span>
+                          <span className="text-gray-400 text-xs">Ladder {match.ladderId === 'duo-trio' ? 'Chill' : 'Comp'}</span>
                           <span className="text-green-400 text-sm font-bold">+{rewardsConfig.ladderPointsWin} pts</span>
                         </div>
                         <div className="flex items-center justify-between mt-1">
@@ -1557,7 +1562,7 @@ const MatchSheet = () => {
                       <div className="pb-2 border-b border-white/5">
                         <p className="text-gray-500 text-[10px] uppercase mb-1">{language === 'fr' ? 'Escouade' : 'Squad'}</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">Ladder {match.ladderId === 'duo-trio' ? 'D/T' : 'S/T'}</span>
+                          <span className="text-gray-400 text-xs">Ladder {match.ladderId === 'duo-trio' ? 'Chill' : 'Comp'}</span>
                           <span className="text-red-400 text-sm font-bold">-{rewardsConfig.ladderPointsLoss} pts</span>
                         </div>
                         <div className="flex items-center justify-between mt-1">

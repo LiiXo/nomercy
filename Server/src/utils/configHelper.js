@@ -43,21 +43,45 @@ export const clearConfigCache = () => {
   cacheTimestamp = null;
 };
 
-// Get squad match rewards
-export const getSquadMatchRewards = async () => {
+// Get squad match rewards based on ladder type
+export const getSquadMatchRewards = async (ladderId = 'duo-trio') => {
   const config = await getRewardsConfig();
-  return config.squadMatchRewards || {
-    ladderPointsWin: 20,
-    ladderPointsLoss: 10,
-    generalSquadPointsWin: 15,
-    generalSquadPointsLoss: 7,
-    playerPointsWin: 20,
-    playerPointsLoss: 10,
-    playerCoinsWin: 50,
-    playerCoinsLoss: 25,
-    playerXPWinMin: 450,
-    playerXPWinMax: 550
+  
+  // Default values for chill (duo-trio)
+  const defaultChill = {
+    ladderPointsWin: 15,
+    ladderPointsLoss: 8,
+    generalSquadPointsWin: 10,
+    generalSquadPointsLoss: 5,
+    playerPointsWin: 15,
+    playerPointsLoss: 8,
+    playerCoinsWin: 40,
+    playerCoinsLoss: 20,
+    playerXPWinMin: 350,
+    playerXPWinMax: 450
   };
+  
+  // Default values for competitive (squad-team)
+  const defaultCompetitive = {
+    ladderPointsWin: 25,
+    ladderPointsLoss: 12,
+    generalSquadPointsWin: 20,
+    generalSquadPointsLoss: 10,
+    playerPointsWin: 25,
+    playerPointsLoss: 12,
+    playerCoinsWin: 60,
+    playerCoinsLoss: 30,
+    playerXPWinMin: 550,
+    playerXPWinMax: 650
+  };
+  
+  // Determine which rewards to use based on ladderId
+  if (ladderId === 'squad-team') {
+    return config.squadMatchRewardsCompetitive || defaultCompetitive;
+  } else {
+    // Default to chill for duo-trio or any other value
+    return config.squadMatchRewardsChill || defaultChill;
+  }
 };
 
 // Get ranked match rewards

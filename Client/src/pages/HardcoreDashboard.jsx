@@ -75,8 +75,8 @@ const HardcoreDashboard = () => {
       instantMatch: 'Match instantané',
       findOpponent: 'Chercher un adversaire',
       scheduleMatch: 'Planifier le match',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       yourMatch: 'Votre match',
       cancel: 'Annuler',
       notRegistered: 'Non inscrit',
@@ -146,8 +146,8 @@ const HardcoreDashboard = () => {
       instantMatch: 'Instant match',
       findOpponent: 'Find opponent',
       scheduleMatch: 'Schedule match',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       yourMatch: 'Your match',
       cancel: 'Cancel',
       notRegistered: 'Not registered',
@@ -217,8 +217,8 @@ const HardcoreDashboard = () => {
       instantMatch: 'Sofortiges Spiel',
       findOpponent: 'Gegner finden',
       scheduleMatch: 'Spiel planen',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       yourMatch: 'Dein Spiel',
       cancel: 'Abbrechen',
       notRegistered: 'Nicht registriert',
@@ -288,8 +288,8 @@ const HardcoreDashboard = () => {
       instantMatch: 'Partita istantanea',
       findOpponent: 'Trova avversario',
       scheduleMatch: 'Programma partita',
-      duoTrio: 'Duo / Trio',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      squadTeam: 'Compétitif',
       yourMatch: 'La tua partita',
       cancel: 'Annulla',
       notRegistered: 'Non registrato',
@@ -363,6 +363,12 @@ const HardcoreDashboard = () => {
   const [appSettings, setAppSettings] = useState(null);
   const [inProgressCounts, setInProgressCounts] = useState({ 'squad-team': 0, 'duo-trio': 0, total: 0 });
   
+  // Ladder rewards config
+  const [ladderRewards, setLadderRewards] = useState({
+    chill: { playerCoinsWin: 40 },
+    competitive: { playerCoinsWin: 60 }
+  });
+  
   // Top player and squad
   const [topPlayer, setTopPlayer] = useState(null);
   const [topSquad, setTopSquad] = useState(null);
@@ -425,6 +431,29 @@ const HardcoreDashboard = () => {
       }
     };
     fetchAppSettings();
+  }, []);
+
+  // Fetch ladder rewards config
+  useEffect(() => {
+    const fetchLadderRewards = async () => {
+      try {
+        const [chillRes, compRes] = await Promise.all([
+          fetch(`${API_URL}/config/rewards/squad?ladderId=duo-trio`),
+          fetch(`${API_URL}/config/rewards/squad?ladderId=squad-team`)
+        ]);
+        const chillData = await chillRes.json();
+        const compData = await compRes.json();
+        if (chillData.success && compData.success) {
+          setLadderRewards({
+            chill: chillData.rewards,
+            competitive: compData.rewards
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching ladder rewards:', err);
+      }
+    };
+    fetchLadderRewards();
   }, []);
 
   // Fetch top player and top squad for hardcore mode
@@ -969,9 +998,18 @@ const HardcoreDashboard = () => {
   // Callback for when countdown expires
   const handleCountdownExpire = () => fetchMatches(false);
 
+  // Get gold coins for a ladder type
+  const getGoldCoinsForLadder = (ladderId) => {
+    if (ladderId === 'squad-team') {
+      return ladderRewards.competitive?.playerCoinsWin || 60;
+    }
+    return ladderRewards.chill?.playerCoinsWin || 40;
+  };
+
   // Match card component
   const renderMatchCard = (match, ladder, isMyMatch, isActiveMatch = false) => {
     const canCancel = match.isReady || !match.scheduledAt || (new Date(match.scheduledAt) - new Date()) > 5 * 60 * 1000;
+    const goldCoins = getGoldCoinsForLadder(ladder);
     
     return (
       <div key={match._id} className={`match-card p-4 sm:p-5 ${
@@ -1010,7 +1048,7 @@ const HardcoreDashboard = () => {
             )}
             <div className="flex items-center gap-1">
               <Coins className="w-3 h-3 text-yellow-400" />
-              <span className="text-yellow-400 text-xs font-semibold">+50</span>
+              <span className="text-yellow-400 text-xs font-semibold">+{goldCoins}</span>
             </div>
           </div>
           
@@ -1077,7 +1115,7 @@ const HardcoreDashboard = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <Coins className="w-4 h-4 text-yellow-400" />
-              <span className="text-yellow-400 text-sm font-semibold">+50</span>
+              <span className="text-yellow-400 text-sm font-semibold">+{goldCoins}</span>
             </div>
             {isMyMatch && !isActiveMatch && !match.opponent && (
               <span className="px-3 py-1 bg-neon-red/20 rounded-lg text-neon-red text-xs font-bold">{txt.yourMatch}</span>
@@ -1449,7 +1487,7 @@ const HardcoreDashboard = () => {
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neon-green/10 border border-neon-green/30 animate-pulse">
                           <div className="w-2 h-2 bg-neon-green rounded-full animate-ping" />
                           <span className="text-neon-green text-xs font-semibold">
-                            {inProgressCounts['squad-team']} {txt.matchesInProgress} {txt.inLadder} Squad/Team
+                            {inProgressCounts['squad-team']} {txt.matchesInProgress} {txt.inLadder} Compétitif
                           </span>
                         </div>
                       )}
@@ -1457,7 +1495,7 @@ const HardcoreDashboard = () => {
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-500/10 border border-accent-500/30 animate-pulse">
                           <div className="w-2 h-2 bg-accent-400 rounded-full animate-ping" />
                           <span className="text-accent-400 text-xs font-semibold">
-                            {inProgressCounts['duo-trio']} {txt.matchesInProgress} {txt.inLadder} Duo/Trio
+                            {inProgressCounts['duo-trio']} {txt.matchesInProgress} {txt.inLadder} Chill
                           </span>
                         </div>
                       )}
@@ -1489,7 +1527,7 @@ const HardcoreDashboard = () => {
                         }`}
                       >
                         {showPostMatch === 'duo-trio' ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                        <span className="hidden sm:inline">Duo/Trio</span>
+                        <span className="hidden sm:inline">Chill</span>
                       </button>
                     )}
 
@@ -1507,7 +1545,7 @@ const HardcoreDashboard = () => {
                         }`}
                       >
                         {showPostMatch === 'squad-team' ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                        <span className="hidden sm:inline">Squad/Team</span>
+                        <span className="hidden sm:inline">Compétitif</span>
                       </button>
                     )}
                   </>
@@ -1537,7 +1575,7 @@ const HardcoreDashboard = () => {
                     <div className="space-y-2">
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">{txt.ladder}</label>
                       <div className={`w-full px-4 py-3 glass rounded-xl text-sm font-medium ${showPostMatch === 'duo-trio' ? 'text-accent-400' : 'text-white'}`}>
-                        {showPostMatch === 'duo-trio' ? 'Duo / Trio' : 'Squad / Team'}
+                        {showPostMatch === 'duo-trio' ? 'Chill' : 'Compétitif'}
                       </div>
                     </div>
 
@@ -1545,7 +1583,7 @@ const HardcoreDashboard = () => {
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">Format</label>
                       {showPostMatch === 'duo-trio' ? (
                         <div className="flex gap-2">
-                          {[2, 3].map(size => (
+                          {[2, 3, 4].map(size => (
                             <button
                               key={size}
                               type="button"
@@ -1687,12 +1725,12 @@ const HardcoreDashboard = () => {
                   </div>
                 )}
 
-                {/* Duo/Trio */}
+                {/* Chill */}
                 {duoTrioMatches.length > 0 && (
                   <div>
                     <div className="flex items-center gap-4 mb-4">
                       <div className="h-px flex-1 bg-gradient-to-r from-accent-500/50 to-transparent" />
-                      <span className="text-accent-400 font-semibold text-sm uppercase tracking-wider">Duo / Trio</span>
+                      <span className="text-accent-400 font-semibold text-sm uppercase tracking-wider">Chill</span>
                       <span className="text-accent-400/50 text-xs">({duoTrioMatches.length})</span>
                       <div className="h-px flex-1 bg-gradient-to-l from-accent-500/50 to-transparent" />
                     </div>
@@ -1702,12 +1740,12 @@ const HardcoreDashboard = () => {
                   </div>
                 )}
 
-                {/* Squad/Team */}
+                {/* Compétitif */}
                 {squadTeamMatches.length > 0 && (
                   <div>
                     <div className="flex items-center gap-4 mb-4">
                       <div className="h-px flex-1 bg-gradient-to-r from-purple-500/50 to-transparent" />
-                      <span className="text-purple-400 font-semibold text-sm uppercase tracking-wider">Squad / Team</span>
+                      <span className="text-purple-400 font-semibold text-sm uppercase tracking-wider">Compétitif</span>
                       <span className="text-purple-400/50 text-xs">({squadTeamMatches.length})</span>
                       <div className="h-px flex-1 bg-gradient-to-l from-purple-500/50 to-transparent" />
                     </div>

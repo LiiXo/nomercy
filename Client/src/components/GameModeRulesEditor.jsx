@@ -42,8 +42,8 @@ const getSubTypeLabels = (lang) => {
   const translations = {
     fr: {
       rankings: [
-        { value: 'duo-trio', label: '👥 Duo/Trio', sublabel: 'Ladder Duo et Trio' },
-        { value: 'squad-team', label: '👥👥 Squad/Team', sublabel: 'Ladder Squad et Team' }
+        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Ladder Chill' },
+        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Ladder Compétitif' }
       ],
       ranked: [
         { value: 'duel', label: '⚔️ Duel 1v1', sublabel: 'Mode Duel' },
@@ -54,8 +54,8 @@ const getSubTypeLabels = (lang) => {
     },
     en: {
       rankings: [
-        { value: 'duo-trio', label: '👥 Duo/Trio', sublabel: 'Duo and Trio Ladder' },
-        { value: 'squad-team', label: '👥👥 Squad/Team', sublabel: 'Squad and Team Ladder' }
+        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Chill Ladder' },
+        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Compétitif Ladder' }
       ],
       ranked: [
         { value: 'duel', label: '⚔️ Duel 1v1', sublabel: 'Duel Mode' },
@@ -66,8 +66,8 @@ const getSubTypeLabels = (lang) => {
     },
     it: {
       rankings: [
-        { value: 'duo-trio', label: '👥 Duo/Trio', sublabel: 'Classifica Duo e Trio' },
-        { value: 'squad-team', label: '👥👥 Squad/Team', sublabel: 'Classifica Squad e Team' }
+        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Classifica Chill' },
+        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Classifica Compétitif' }
       ],
       ranked: [
         { value: 'duel', label: '⚔️ Duello 1v1', sublabel: 'Modalità Duello' },
@@ -78,8 +78,8 @@ const getSubTypeLabels = (lang) => {
     },
     de: {
       rankings: [
-        { value: 'duo-trio', label: '👥 Duo/Trio', sublabel: 'Duo- und Trio-Rangliste' },
-        { value: 'squad-team', label: '👥👥 Squad/Team', sublabel: 'Squad- und Team-Rangliste' }
+        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Chill-Rangliste' },
+        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Compétitif-Rangliste' }
       ],
       ranked: [
         { value: 'duel', label: '⚔️ Duell 1v1', sublabel: 'Duell-Modus' },

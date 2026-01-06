@@ -62,22 +62,50 @@ router.get('/', async (req, res) => {
 });
 
 // Get squad match rewards (public - for match sheet display)
+// Accept ladderId query param to return correct rewards (duo-trio = chill, squad-team = competitive)
 router.get('/rewards/squad', async (req, res) => {
   try {
     const config = await Config.getOrCreate();
-    const rewards = config.squadMatchRewards || {
-      ladderPointsWin: 20,
-      ladderPointsLoss: 10,
-      generalSquadPointsWin: 15,
-      generalSquadPointsLoss: 7,
-      playerPointsWin: 20,
-      playerPointsLoss: 10,
-      playerCoinsWin: 50,
-      playerCoinsLoss: 25,
-      playerXPWinMin: 450,
-      playerXPWinMax: 550
+    const { ladderId } = req.query;
+    
+    // Default values for chill (duo-trio)
+    const defaultChill = {
+      ladderPointsWin: 15,
+      ladderPointsLoss: 8,
+      generalSquadPointsWin: 10,
+      generalSquadPointsLoss: 5,
+      playerPointsWin: 15,
+      playerPointsLoss: 8,
+      playerCoinsWin: 40,
+      playerCoinsLoss: 20,
+      playerXPWinMin: 350,
+      playerXPWinMax: 450
     };
-    res.json({ success: true, rewards });
+    
+    // Default values for competitive (squad-team)
+    const defaultCompetitive = {
+      ladderPointsWin: 25,
+      ladderPointsLoss: 12,
+      generalSquadPointsWin: 20,
+      generalSquadPointsLoss: 10,
+      playerPointsWin: 25,
+      playerPointsLoss: 12,
+      playerCoinsWin: 60,
+      playerCoinsLoss: 30,
+      playerXPWinMin: 550,
+      playerXPWinMax: 650
+    };
+    
+    // Determine which rewards to return based on ladderId
+    let rewards;
+    if (ladderId === 'squad-team') {
+      rewards = config.squadMatchRewardsCompetitive || defaultCompetitive;
+    } else {
+      // Default to chill for duo-trio or when no ladderId provided
+      rewards = config.squadMatchRewardsChill || defaultChill;
+    }
+    
+    res.json({ success: true, rewards, ladderId: ladderId || 'duo-trio' });
   } catch (error) {
     console.error('Get squad rewards config error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });

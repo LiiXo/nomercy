@@ -13,16 +13,16 @@ export const REWARD_POINTS = {
 const generateSeasonTrophyData = (seasonNumber, ladderId, rank, month, year) => {
   const ladderNames = {
     'duo-trio': {
-      fr: 'Duo/Trio',
-      en: 'Duo/Trio',
-      de: 'Duo/Trio',
-      it: 'Duo/Trio'
+      fr: 'Chill',
+      en: 'Chill',
+      de: 'Chill',
+      it: 'Chill'
     },
     'squad-team': {
-      fr: 'Squad/Team',
-      en: 'Squad/Team',
-      de: 'Squad/Team',
-      it: 'Squad/Team'
+      fr: 'Compétitif',
+      en: 'Competitive',
+      de: 'Kompetitiv',
+      it: 'Competitivo'
     }
   };
 
@@ -108,8 +108,8 @@ const generateSeasonTrophyData = (seasonNumber, ladderId, rank, month, year) => 
  */
 export const resetLadderSeason = async (ladderId, adminId = null) => {
   const ladderNames = {
-    'duo-trio': 'Duo / Trio',
-    'squad-team': 'Squad / Team'
+    'duo-trio': 'Chill',
+    'squad-team': 'Compétitif'
   };
 
   if (!ladderNames[ladderId]) {

@@ -119,9 +119,9 @@ const Rankings = () => {
   // Textes traduits
   const txt = {
     fr: {
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Affrontez d\'autres équipes en 2v2 ou 3v3. Ouvert de 00h00 à 20h00 (heure française).',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Affrontez d\'autres équipes en 2v2, 3v3 ou 4v4. Ouvert de 00h00 à 20h00 (heure française).',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Le format compétitif en 5v5. Disponible 24h/24.',
       gameMode: 'Recherche et Destruction',
       join: 'S\'inscrire au classement',
@@ -157,9 +157,9 @@ const Rankings = () => {
       rewardPoints: 'pts attribués',
     },
     en: {
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Face other teams in 2v2 or 3v3. Open from 00:00 to 20:00 (French time).',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Face other teams in 2v2, 3v3 or 4v4. Open from 00:00 to 20:00 (French time).',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Competitive format in 5v5. Available 24/7.',
       gameMode: 'Search & Destroy',
       join: 'Join ranking',
@@ -195,9 +195,9 @@ const Rankings = () => {
       rewardPoints: 'pts awarded',
     },
     de: {
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Tretet gegen andere Teams im 2v2 oder 3v3 an. Geöffnet von 00:00 bis 20:00 (französische Zeit).',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Tretet gegen andere Teams im 2v2, 3v3 oder 4v4 an. Geöffnet von 00:00 bis 20:00 (französische Zeit).',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Wettkampfformat im 5v5. 24/7 verfügbar.',
       gameMode: 'Suchen & Zerstören',
       join: 'Rangliste beitreten',
@@ -233,9 +233,9 @@ const Rankings = () => {
       rewardPoints: 'Pkt verliehen',
     },
     it: {
-      duoTrio: 'Duo / Trio',
-      duoTrioDesc: 'Affronta altre squadre in 2v2 o 3v3. Aperto dalle 00:00 alle 20:00 (ora francese).',
-      squadTeam: 'Squad / Team',
+      duoTrio: 'Chill',
+      duoTrioDesc: 'Affronta altre squadre in 2v2, 3v3 o 4v4. Aperto dalle 00:00 alle 20:00 (ora francese).',
+      squadTeam: 'Compétitif',
       squadTeamDesc: 'Formato competitivo in 5v5. Disponibile 24/7.',
       gameMode: 'Cerca e Distruggi',
       join: 'Iscriviti alla classifica',
@@ -271,9 +271,9 @@ const Rankings = () => {
       rewardPoints: 'pti assegnati',
     },
   }[language] || {
-    duoTrio: 'Duo / Trio',
-    duoTrioDesc: 'Face other teams in 2v2 or 3v3. Open from 00:00 to 20:00 (French time).',
-    squadTeam: 'Squad / Team',
+    duoTrio: 'Chill',
+    duoTrioDesc: 'Face other teams in 2v2, 3v3 or 4v4. Open from 00:00 to 20:00 (French time).',
+    squadTeam: 'Compétitif',
     squadTeamDesc: 'Competitive format in 5v5. Available 24/7.',
     gameMode: 'Search & Destroy',
     join: 'Join ranking',
@@ -417,7 +417,7 @@ const Rankings = () => {
   useEffect(() => {
     if (!mySquad) return;
 
-    // Check Duo/Trio rank
+    // Check Chill rank
     const duoTrioIndex = duoTrioLeaderboard.findIndex(s => s._id === mySquad._id);
     if (duoTrioIndex !== -1) {
       setMyDuoTrioRank(duoTrioLeaderboard[duoTrioIndex]);
@@ -426,7 +426,7 @@ const Rankings = () => {
       fetchMyRank('duo-trio');
     }
 
-    // Check Squad/Team rank
+    // Check Compétitif rank
     const squadTeamIndex = squadTeamLeaderboard.findIndex(s => s._id === mySquad._id);
     if (squadTeamIndex !== -1) {
       setMySquadTeamRank(squadTeamLeaderboard[squadTeamIndex]);
@@ -879,7 +879,7 @@ const Rankings = () => {
                 {txt.seasonChampions}
               </h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Duo/Trio Previous Season */}
+                {/* Chill Previous Season */}
                 {previousSeasonWinners.duoTrio && (
                   <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${colors.border} overflow-hidden`}>
                     <div className={`p-4 border-b border-white/10 bg-gradient-to-r ${colors.gradient}`}>
@@ -948,7 +948,7 @@ const Rankings = () => {
                   </div>
                 )}
 
-                {/* Squad/Team Previous Season */}
+                {/* Compétitif Previous Season */}
                 {previousSeasonWinners.squadTeam && (
                   <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${colors.border} overflow-hidden`}>
                     <div className={`p-4 border-b border-white/10 bg-gradient-to-r ${colors.gradient}`}>
@@ -1022,15 +1022,15 @@ const Rankings = () => {
 
           {/* Leaderboards Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Duo/Trio */}
+            {/* Chill */}
             {renderLeaderboard(
-              { id: 'duo-trio', name: txt.duoTrio, teamSizes: ['2v2', '3v3'] },
+              { id: 'duo-trio', name: txt.duoTrio, teamSizes: ['2V2', '3V3', '4V4'] },
               duoTrioLeaderboard,
               loadingDuoTrio,
               myDuoTrioRank
             )}
 
-            {/* Squad/Team */}
+            {/* Compétitif */}
             {renderLeaderboard(
               { id: 'squad-team', name: txt.squadTeam, teamSizes: ['5v5'] },
               squadTeamLeaderboard,

@@ -16,27 +16,50 @@ const configSchema = new mongoose.Schema({
     enum: ['rewards']
   },
   
-  // Récompenses pour les matchs squad (ladder)
-  squadMatchRewards: {
+  // Récompenses pour les matchs squad (ladder) - Ladder Chill (duo-trio)
+  squadMatchRewardsChill: {
     // Points ladder escouade (dans le classement du ladder spécifique)
-    ladderPointsWin: { type: Number, default: 20 },
-    ladderPointsLoss: { type: Number, default: 10 },
+    ladderPointsWin: { type: Number, default: 15 },
+    ladderPointsLoss: { type: Number, default: 8 },
     
     // Points classement général escouade (top escouades toutes confondues)
-    generalSquadPointsWin: { type: Number, default: 15 },
-    generalSquadPointsLoss: { type: Number, default: 7 },
+    generalSquadPointsWin: { type: Number, default: 10 },
+    generalSquadPointsLoss: { type: Number, default: 5 },
     
     // Points joueur individuel (classement joueurs)
-    playerPointsWin: { type: Number, default: 20 },
-    playerPointsLoss: { type: Number, default: 10 },
+    playerPointsWin: { type: Number, default: 15 },
+    playerPointsLoss: { type: Number, default: 8 },
     
     // Coins joueur
-    playerCoinsWin: { type: Number, default: 50 },
-    playerCoinsLoss: { type: Number, default: 25 },
+    playerCoinsWin: { type: Number, default: 40 },
+    playerCoinsLoss: { type: Number, default: 20 },
     
     // XP joueur (gain aléatoire entre min et max pour les gagnants, 0 pour les perdants)
-    playerXPWinMin: { type: Number, default: 450 },
-    playerXPWinMax: { type: Number, default: 550 }
+    playerXPWinMin: { type: Number, default: 350 },
+    playerXPWinMax: { type: Number, default: 450 }
+  },
+
+  // Récompenses pour les matchs squad (ladder) - Ladder Compétitif (squad-team)
+  squadMatchRewardsCompetitive: {
+    // Points ladder escouade (dans le classement du ladder spécifique)
+    ladderPointsWin: { type: Number, default: 25 },
+    ladderPointsLoss: { type: Number, default: 12 },
+    
+    // Points classement général escouade (top escouades toutes confondues)
+    generalSquadPointsWin: { type: Number, default: 20 },
+    generalSquadPointsLoss: { type: Number, default: 10 },
+    
+    // Points joueur individuel (classement joueurs)
+    playerPointsWin: { type: Number, default: 25 },
+    playerPointsLoss: { type: Number, default: 12 },
+    
+    // Coins joueur
+    playerCoinsWin: { type: Number, default: 60 },
+    playerCoinsLoss: { type: Number, default: 30 },
+    
+    // XP joueur (gain aléatoire entre min et max pour les gagnants, 0 pour les perdants)
+    playerXPWinMin: { type: Number, default: 550 },
+    playerXPWinMax: { type: Number, default: 650 }
   },
   
   // Récompenses pour le mode classé - utilise Mixed pour les clés dynamiques avec espaces

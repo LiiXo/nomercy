@@ -1227,7 +1227,7 @@ const AdminPanel = () => {
     const statCards = [
       { label: 'Utilisateurs', value: stats.totalUsers || 0, icon: Users, color: 'blue' },
       { label: 'Escouades', value: stats.totalSquads || 0, icon: Shield, color: 'purple' },
-      { label: 'Matchs Totaux', value: stats.totalMatches || 0, icon: Swords, color: 'green' },
+      { label: 'Matchs Totaux (Completed)', value: stats.totalMatches || 0, icon: Swords, color: 'green' },
     ];
 
     // Use real registration data from API or empty array
@@ -1263,6 +1263,30 @@ const AdminPanel = () => {
             );
           })}
         </div>
+
+        {/* Matchs par Ladder */}
+        {stats.matchesByLadder && (
+          <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <Swords className="w-5 h-5 text-green-400" />
+              Matchs Completed par Ladder
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-dark-900/50 rounded-lg p-4 border border-white/5">
+                <p className="text-gray-400 text-sm mb-1">Chill</p>
+                <p className="text-2xl font-bold text-green-400">{stats.matchesByLadder.duoTrio || 0}</p>
+              </div>
+              <div className="bg-dark-900/50 rounded-lg p-4 border border-white/5">
+                <p className="text-gray-400 text-sm mb-1">Compétitif</p>
+                <p className="text-2xl font-bold text-purple-400">{stats.matchesByLadder.squadTeam || 0}</p>
+              </div>
+              <div className="bg-dark-900/50 rounded-lg p-4 border border-white/5">
+                <p className="text-gray-400 text-sm mb-1">Ranked</p>
+                <p className="text-2xl font-bold text-yellow-400">{stats.matchesByLadder.ranked || 0}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Visitors Chart - Last 30 Days */}
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
@@ -2536,15 +2560,15 @@ const renderDisputes = () => {
             Paramètres Ladder
           </h3>
           
-          {/* Duo/Trio Time Restriction */}
+          {/* Chill Time Restriction */}
           <div className="bg-dark-900/50 rounded-lg p-4">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h4 className="text-white font-medium">Restriction horaire Duo/Trio</h4>
+                <h4 className="text-white font-medium">Restriction horaire Chill</h4>
                 <p className="text-gray-500 text-xs">
                   {appSettings.ladderSettings?.duoTrioTimeRestriction?.enabled 
                     ? `Ouvert de ${appSettings.ladderSettings?.duoTrioTimeRestriction?.startHour || 0}h à ${appSettings.ladderSettings?.duoTrioTimeRestriction?.endHour || 20}h (heure française)`
-                    : 'Le ladder Duo/Trio est toujours ouvert'}
+                    : 'Le ladder Chill est toujours ouvert'}
                 </p>
               </div>
               <button
@@ -2561,7 +2585,7 @@ const renderDisputes = () => {
                     });
                     const data = await response.json();
                     if (data.success) {
-                      setSuccess(newEnabled ? 'Restriction horaire activée' : 'Ladder Duo/Trio toujours ouvert');
+                      setSuccess(newEnabled ? 'Restriction horaire activée' : 'Ladder Chill toujours ouvert');
                       fetchAppSettings();
                     } else {
                       setError(data.message || 'Erreur');
@@ -3296,7 +3320,7 @@ const renderDisputes = () => {
     };
 
     const handleLadderSeasonReset = async () => {
-      if (!window.confirm(`Voulez-vous vraiment réinitialiser les saisons de TOUS les ladders (Duo/Trio et Squad/Team) ?\n\n- Les 3 premières équipes recevront des points (150, 100, 75) dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ladder seront remis à zéro\n\nCette action est irréversible!`)) {
+      if (!window.confirm(`Voulez-vous vraiment réinitialiser les saisons de TOUS les ladders (Chill et Compétitif) ?\n\n- Les 3 premières équipes recevront des points (150, 100, 75) dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ladder seront remis à zéro\n\nCette action est irréversible!`)) {
         return;
       }
 
@@ -3314,14 +3338,14 @@ const renderDisputes = () => {
           let message = `Saisons de ladder réinitialisées avec succès!\n\n`;
           
           if (data.duoTrio?.winners?.length > 0) {
-            message += `Duo/Trio - ${data.duoTrio.seasonName}:\n`;
+            message += `Chill - ${data.duoTrio.seasonName}:\n`;
             data.duoTrio.winners.forEach(w => {
               message += `  ${w.rank}. ${w.squadName} (+${w.points} pts, ${w.trophy})\n`;
             });
           }
           
           if (data.squadTeam?.winners?.length > 0) {
-            message += `\nSquad/Team - ${data.squadTeam.seasonName}:\n`;
+            message += `\nCompétitif - ${data.squadTeam.seasonName}:\n`;
             data.squadTeam.winners.forEach(w => {
               message += `  ${w.rank}. ${w.squadName} (+${w.points} pts, ${w.trophy})\n`;
             });
@@ -3340,7 +3364,7 @@ const renderDisputes = () => {
     };
 
     const handleSingleLadderSeasonReset = async (ladderId) => {
-      const ladderName = ladderId === 'duo-trio' ? 'Duo/Trio' : 'Squad/Team';
+      const ladderName = ladderId === 'duo-trio' ? 'Chill' : 'Compétitif';
       
       if (!window.confirm(`Voulez-vous vraiment réinitialiser la saison du ladder ${ladderName} ?\n\n- Les 3 premières équipes recevront des points dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ce ladder seront remis à zéro\n\nCette action est irréversible!`)) {
         return;
@@ -3421,7 +3445,7 @@ const renderDisputes = () => {
             Reset Saison Ladder
           </h3>
           <p className="text-gray-400 text-sm mb-4">
-            Réinitialise les deux ladders (Duo/Trio et Squad/Team). Cette action:
+            Réinitialise les deux ladders (Chill et Compétitif). Cette action:
           </p>
           <ul className="text-gray-400 text-sm mb-4 list-disc list-inside space-y-1">
             <li>Attribue les points aux 3 premières équipes (150, 100, 75 pts dans le Top 10 Escouade)</li>
@@ -3452,7 +3476,7 @@ const renderDisputes = () => {
               ) : (
                 <Users className="w-5 h-5" />
               )}
-              Reset Duo/Trio
+              Reset Chill
             </button>
             <button
               onClick={() => handleSingleLadderSeasonReset('squad-team')}
@@ -3464,16 +3488,16 @@ const renderDisputes = () => {
               ) : (
                 <Shield className="w-5 h-5" />
               )}
-              Reset Squad/Team
+              Reset Compétitif
             </button>
           </div>
         </div>
 
-        {/* Squad Match Rewards */}
-        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+        {/* Squad Match Rewards - Chill */}
+        <div className="bg-dark-800/50 border border-blue-500/20 rounded-xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <Settings className="w-5 h-5" />
-            Récompenses Matchs Squad (Ladder)
+            <Settings className="w-5 h-5 text-blue-400" />
+            🎮 Récompenses Ladder Chill
           </h3>
           
           {/* Section: Points Escouade dans le Ladder */}
@@ -3484,11 +3508,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-green-400 mb-2">Points Ladder (Victoire)</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.ladderPointsWin || 0}
+                  value={editedConfig.squadMatchRewardsChill?.ladderPointsWin || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       ladderPointsWin: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3499,11 +3523,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-red-400 mb-2">Points Ladder (Défaite)</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.ladderPointsLoss || 0}
+                  value={editedConfig.squadMatchRewardsChill?.ladderPointsLoss || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       ladderPointsLoss: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3521,11 +3545,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-green-400 mb-2">Points Général (Victoire)</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.generalSquadPointsWin || 0}
+                  value={editedConfig.squadMatchRewardsChill?.generalSquadPointsWin || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       generalSquadPointsWin: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3536,11 +3560,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-red-400 mb-2">Points Général (Défaite)</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.generalSquadPointsLoss || 0}
+                  value={editedConfig.squadMatchRewardsChill?.generalSquadPointsLoss || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       generalSquadPointsLoss: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3558,11 +3582,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-green-400 mb-2">Gold (Victoire)</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.playerCoinsWin || 0}
+                  value={editedConfig.squadMatchRewardsChill?.playerCoinsWin || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       playerCoinsWin: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3573,11 +3597,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-orange-400 mb-2">Gold Consolation (Défaite)</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.playerCoinsLoss || 0}
+                  value={editedConfig.squadMatchRewardsChill?.playerCoinsLoss || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       playerCoinsLoss: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3596,11 +3620,11 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-cyan-400 mb-2">XP Minimum</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.playerXPWinMin || 0}
+                  value={editedConfig.squadMatchRewardsChill?.playerXPWinMin || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
                       playerXPWinMin: parseInt(e.target.value) || 0
                     }
                   })}
@@ -3611,11 +3635,169 @@ const renderDisputes = () => {
                 <label className="block text-sm font-medium text-cyan-400 mb-2">XP Maximum</label>
                 <input
                   type="number"
-                  value={editedConfig.squadMatchRewards?.playerXPWinMax || 0}
+                  value={editedConfig.squadMatchRewardsChill?.playerXPWinMax || 0}
                   onChange={(e) => setEditedConfig({
                     ...editedConfig,
-                    squadMatchRewards: {
-                      ...editedConfig.squadMatchRewards,
+                    squadMatchRewardsChill: {
+                      ...editedConfig.squadMatchRewardsChill,
+                      playerXPWinMax: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-cyan-500/30 rounded-lg text-cyan-400 focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+            </div>
+            <p className="text-gray-500 text-xs mt-2">L'XP est attribuée aléatoirement entre le min et max lors d'une victoire. Aucune XP en cas de défaite.</p>
+          </div>
+        </div>
+
+        {/* Squad Match Rewards - Competitive */}
+        <div className="bg-dark-800/50 border border-orange-500/20 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-orange-400" />
+            🔥 Récompenses Ladder Compétitif
+          </h3>
+          
+          {/* Section: Points Escouade dans le Ladder */}
+          <div className="mb-6">
+            <h4 className="text-md font-semibold text-purple-400 mb-3 border-b border-purple-500/30 pb-2">📊 Points Escouade (Ladder Spécifique)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-green-400 mb-2">Points Ladder (Victoire)</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.ladderPointsWin || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      ladderPointsWin: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-green-500/30 rounded-lg text-green-400 focus:border-green-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-red-400 mb-2">Points Ladder (Défaite)</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.ladderPointsLoss || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      ladderPointsLoss: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-red-500/30 rounded-lg text-red-400 focus:border-red-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Top Escouade Général */}
+          <div className="mb-6">
+            <h4 className="text-md font-semibold text-cyan-400 mb-3 border-b border-cyan-500/30 pb-2">🏆 Points Top Escouade Général</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-green-400 mb-2">Points Général (Victoire)</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.generalSquadPointsWin || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      generalSquadPointsWin: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-green-500/30 rounded-lg text-green-400 focus:border-green-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-red-400 mb-2">Points Général (Défaite)</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.generalSquadPointsLoss || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      generalSquadPointsLoss: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-red-500/30 rounded-lg text-red-400 focus:border-red-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Gold */}
+          <div className="mb-6">
+            <h4 className="text-md font-semibold text-yellow-400 mb-3 border-b border-yellow-500/30 pb-2">💰 Gold (Coins)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-green-400 mb-2">Gold (Victoire)</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.playerCoinsWin || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      playerCoinsWin: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-yellow-500/30 rounded-lg text-yellow-400 focus:border-yellow-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-orange-400 mb-2">Gold Consolation (Défaite)</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.playerCoinsLoss || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      playerCoinsLoss: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-orange-500/30 rounded-lg text-orange-400 focus:border-orange-500 focus:outline-none"
+                />
+                <p className="text-gray-500 text-xs mt-1">Gold donné même en cas de défaite</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: XP Joueur */}
+          <div>
+            <h4 className="text-md font-semibold text-cyan-400 mb-3 border-b border-cyan-500/30 pb-2">⚡ XP Joueur (Victoire uniquement)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-cyan-400 mb-2">XP Minimum</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.playerXPWinMin || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
+                      playerXPWinMin: parseInt(e.target.value) || 0
+                    }
+                  })}
+                  className="w-full px-4 py-2 bg-dark-900 border border-cyan-500/30 rounded-lg text-cyan-400 focus:border-cyan-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-cyan-400 mb-2">XP Maximum</label>
+                <input
+                  type="number"
+                  value={editedConfig.squadMatchRewardsCompetitive?.playerXPWinMax || 0}
+                  onChange={(e) => setEditedConfig({
+                    ...editedConfig,
+                    squadMatchRewardsCompetitive: {
+                      ...editedConfig.squadMatchRewardsCompetitive,
                       playerXPWinMax: parseInt(e.target.value) || 0
                     }
                   })}
@@ -4100,12 +4282,12 @@ const renderDisputes = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Duo/Trio History */}
+            {/* Chill History */}
             <div className="bg-dark-800/50 border border-amber-500/30 rounded-xl overflow-hidden">
               <div className="p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-b border-white/10">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Users className="w-5 h-5 text-amber-400" />
-                  Duo/Trio - Historique
+                  Chill - Historique
                 </h3>
               </div>
               <div className="p-4 max-h-[500px] overflow-y-auto">
@@ -4158,12 +4340,12 @@ const renderDisputes = () => {
               </div>
             </div>
 
-            {/* Squad/Team History */}
+            {/* Compétitif History */}
             <div className="bg-dark-800/50 border border-emerald-500/30 rounded-xl overflow-hidden">
               <div className="p-4 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-b border-white/10">
                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                   <Shield className="w-5 h-5 text-emerald-400" />
-                  Squad/Team - Historique
+                  Compétitif - Historique
                 </h3>
               </div>
               <div className="p-4 max-h-[500px] overflow-y-auto">
