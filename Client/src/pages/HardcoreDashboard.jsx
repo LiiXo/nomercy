@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
+import { useData } from '../DataContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
-import { Trophy, Users, Skull, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap } from 'lucide-react';
+import { Trophy, Users, Skull, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
@@ -52,12 +53,20 @@ const HardcoreDashboard = () => {
   const { language, t } = useLanguage();
   const { isAuthenticated, user } = useAuth();
   const { on, off, joinPage, leavePage, totalOnlineUsers } = useSocket();
+  const { 
+    appSettings, 
+    ladderRewards, 
+    topPlayer, 
+    topSquad, 
+    getGoldCoinsForLadder,
+    isDuoTrioOpen: duoTrioOpenFromContext 
+  } = useData();
   
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
-  // Local translations
-  const txt = {
+  // Memoized translations to prevent recreation on every render
+  const txt = useMemo(() => ({
     fr: {
       matchmaking: 'Matchmaking',
       matches: 'matchs',
@@ -128,6 +137,17 @@ const HardcoreDashboard = () => {
       helperDeclined: 'L\'aide a refusé de jouer.',
       helperTimeout: 'L\'aide n\'a pas répondu à temps.',
       secondsLeft: 's restantes',
+      newSquad: 'Nouvelle équipe',
+      newSquadWarning: '⚠️ Équipe récente',
+      viewRoster: 'Voir le roster',
+      newSquadApprovalTitle: 'Demande de match - Nouvelle équipe',
+      newSquadApprovalDesc: 'Une nouvelle équipe souhaite accepter votre match. Cette équipe a moins de 3 jours et moins de 3 matchs joués.',
+      acceptMatch: 'Accepter le match',
+      rejectMatch: 'Refuser',
+      waitingApproval: 'En attente d\'approbation...',
+      approvalTimeout: 'L\'équipe adverse n\'a pas répondu à temps',
+      approvalRejected: 'L\'équipe adverse a refusé le match',
+      teamCreatedOn: 'Équipe créée le',
     },
     en: {
       matchmaking: 'Matchmaking',
@@ -199,6 +219,17 @@ const HardcoreDashboard = () => {
       helperDeclined: 'Helper declined to play.',
       helperTimeout: 'Helper did not respond in time.',
       secondsLeft: 's left',
+      newSquad: 'New team',
+      newSquadWarning: '⚠️ Recent team',
+      viewRoster: 'View roster',
+      newSquadApprovalTitle: 'Match request - New team',
+      newSquadApprovalDesc: 'A new team wants to accept your match. This team is less than 3 days old and has less than 3 matches played.',
+      acceptMatch: 'Accept match',
+      rejectMatch: 'Reject',
+      waitingApproval: 'Waiting for approval...',
+      approvalTimeout: 'The other team did not respond in time',
+      approvalRejected: 'The other team rejected the match',
+      teamCreatedOn: 'Team created on',
     },
     de: {
       matchmaking: 'Matchmaking',
@@ -270,6 +301,17 @@ const HardcoreDashboard = () => {
       helperDeclined: 'Helfer hat abgelehnt.',
       helperTimeout: 'Helfer hat nicht rechtzeitig geantwortet.',
       secondsLeft: 's verbleibend',
+      newSquad: 'Neues Team',
+      newSquadWarning: '⚠️ Neues Team',
+      viewRoster: 'Roster ansehen',
+      newSquadApprovalTitle: 'Spielanfrage - Neues Team',
+      newSquadApprovalDesc: 'Ein neues Team möchte Ihr Spiel annehmen. Dieses Team ist weniger als 3 Tage alt und hat weniger als 3 Spiele gespielt.',
+      acceptMatch: 'Spiel akzeptieren',
+      rejectMatch: 'Ablehnen',
+      waitingApproval: 'Warte auf Genehmigung...',
+      approvalTimeout: 'Das andere Team hat nicht rechtzeitig geantwortet',
+      approvalRejected: 'Das andere Team hat das Spiel abgelehnt',
+      teamCreatedOn: 'Team erstellt am',
     },
     it: {
       matchmaking: 'Matchmaking',
@@ -341,8 +383,19 @@ const HardcoreDashboard = () => {
       helperDeclined: 'L\'aiuto ha rifiutato di giocare.',
       helperTimeout: 'L\'aiuto non ha risposto in tempo.',
       secondsLeft: 's rimanenti',
+      newSquad: 'Nuova squadra',
+      newSquadWarning: '⚠️ Squadra recente',
+      viewRoster: 'Vedi roster',
+      newSquadApprovalTitle: 'Richiesta partita - Nuova squadra',
+      newSquadApprovalDesc: 'Una nuova squadra vuole accettare la tua partita. Questa squadra ha meno di 3 giorni e meno di 3 partite giocate.',
+      acceptMatch: 'Accetta partita',
+      rejectMatch: 'Rifiuta',
+      waitingApproval: 'In attesa di approvazione...',
+      approvalTimeout: 'L\'altra squadra non ha risposto in tempo',
+      approvalRejected: 'L\'altra squadra ha rifiutato la partita',
+      teamCreatedOn: 'Squadra creata il',
     },
-  }[language] || {};
+  })[language] || {}, [language]);
   
   // Matchmaking states
   const [mySquad, setMySquad] = useState(null);
@@ -360,18 +413,7 @@ const HardcoreDashboard = () => {
     teamSize: 5,
     mapType: 'free'
   });
-  const [appSettings, setAppSettings] = useState(null);
   const [inProgressCounts, setInProgressCounts] = useState({ 'squad-team': 0, 'duo-trio': 0, total: 0 });
-  
-  // Ladder rewards config
-  const [ladderRewards, setLadderRewards] = useState({
-    chill: { playerCoinsWin: 40 },
-    competitive: { playerCoinsWin: 60 }
-  });
-  
-  // Top player and squad
-  const [topPlayer, setTopPlayer] = useState(null);
-  const [topSquad, setTopSquad] = useState(null);
   
   // Roster selection states
   const [showRosterDialog, setShowRosterDialog] = useState(null);
@@ -388,6 +430,16 @@ const HardcoreDashboard = () => {
   const [waitingHelperConfirmation, setWaitingHelperConfirmation] = useState(false);
   const [helperConfirmationId, setHelperConfirmationId] = useState(null);
   const [helperConfirmationTimeLeft, setHelperConfirmationTimeLeft] = useState(30);
+  
+  // New squad approval states (for match poster receiving request)
+  const [newSquadApprovalRequest, setNewSquadApprovalRequest] = useState(null);
+  const [newSquadApprovalTimeLeft, setNewSquadApprovalTimeLeft] = useState(30);
+  const [respondingToApproval, setRespondingToApproval] = useState(false);
+  
+  // State for viewing a match's roster (for new squads)
+  const [viewingRoster, setViewingRoster] = useState(null);
+  
+  // Note: L'approbation est gérée par l'API avec polling côté serveur
   
   const availableModes = ['hardcoreSND', 'hardcoreDom', 'hardcoreTDM'];
   
@@ -417,68 +469,7 @@ const HardcoreDashboard = () => {
     localStorage.setItem('hardcoreMatchFilters', JSON.stringify(activeModes));
   }, [activeModes]);
 
-  // Fetch app settings to check feature flags
-  useEffect(() => {
-    const fetchAppSettings = async () => {
-      try {
-        const response = await fetch(`${API_URL}/app-settings/public`);
-        const data = await response.json();
-        if (data.success) {
-          setAppSettings(data);
-        }
-      } catch (err) {
-        console.error('Error fetching app settings:', err);
-      }
-    };
-    fetchAppSettings();
-  }, []);
-
-  // Fetch ladder rewards config
-  useEffect(() => {
-    const fetchLadderRewards = async () => {
-      try {
-        const [chillRes, compRes] = await Promise.all([
-          fetch(`${API_URL}/config/rewards/squad?ladderId=duo-trio`),
-          fetch(`${API_URL}/config/rewards/squad?ladderId=squad-team`)
-        ]);
-        const chillData = await chillRes.json();
-        const compData = await compRes.json();
-        if (chillData.success && compData.success) {
-          setLadderRewards({
-            chill: chillData.rewards,
-            competitive: compData.rewards
-          });
-        }
-      } catch (err) {
-        console.error('Error fetching ladder rewards:', err);
-      }
-    };
-    fetchLadderRewards();
-  }, []);
-
-  // Fetch top player and top squad for hardcore mode
-  useEffect(() => {
-    const fetchTopStats = async () => {
-      try {
-        // Fetch top player (by wins in hardcore mode)
-        const playerRes = await fetch(`${API_URL}/rankings/top-player?mode=hardcore`);
-        const playerData = await playerRes.json();
-        if (playerData.success && playerData.player) {
-          setTopPlayer(playerData.player);
-        }
-        
-        // Fetch top squad (by ladder points in hardcore)
-        const squadRes = await fetch(`${API_URL}/rankings/top-squad?mode=hardcore`);
-        const squadData = await squadRes.json();
-        if (squadData.success && squadData.squad) {
-          setTopSquad(squadData.squad);
-        }
-      } catch (err) {
-        console.error('Error fetching top stats:', err);
-      }
-    };
-    fetchTopStats();
-  }, []);
+  // App settings, ladder rewards, and top stats are now provided by DataContext
 
   const gameModeApiNames = {
     fr: { 'Search & Destroy': 'Recherche & Destruction', 'Domination': 'Domination', 'Team Deathmatch': 'Mêlée générale' },
@@ -536,15 +527,21 @@ const HardcoreDashboard = () => {
     }
   };
 
+  // Initial fetch and unified refresh interval
   useEffect(() => {
     fetchMatches(true);
     fetchInProgressCounts();
-    const interval = setInterval(() => {
+    if (isAuthenticated) fetchMyActiveMatches();
+    
+    // Single unified interval for all periodic refreshes
+    const refreshInterval = setInterval(() => {
       fetchMatches(false);
       fetchInProgressCounts();
+      if (isAuthenticated) fetchMyActiveMatches();
     }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    return () => clearInterval(refreshInterval);
+  }, [isAuthenticated]);
 
   // Socket.io events for real-time match updates
   useEffect(() => {
@@ -606,18 +603,41 @@ const HardcoreDashboard = () => {
       }
     };
 
+    // Handle new squad approval request (for match poster)
+    const handleNewSquadApprovalRequest = (data) => {
+      console.log('[NEW SQUAD] Received approval request:', data);
+      setNewSquadApprovalRequest(data);
+      setNewSquadApprovalTimeLeft(30);
+    };
+
+    // Handle new squad approval response (for the new squad waiting for approval)
+    // Note: Principalement informatif car l'API gère tout avec polling
+    const handleNewSquadApprovalResponse = (data) => {
+      console.log('[NEW SQUAD] Received approval response via socket:', data);
+      
+      if (!data.approved) {
+        // Notification anticipée que le match a été refusé
+        setMatchMessage({ type: 'error', text: txt.approvalRejected || 'Match refusé' });
+        setTimeout(() => setMatchMessage({ type: '', text: '' }), 4000);
+      }
+    };
+
     // Subscribe to events
     const unsubCreated = on('matchCreated', handleMatchCreated);
     const unsubAccepted = on('matchAccepted', handleMatchAccepted);
     const unsubCancelled = on('matchCancelled', handleMatchCancelled);
+    const unsubNewSquadApproval = on('newSquadApprovalRequest', handleNewSquadApprovalRequest);
+    const unsubNewSquadResponse = on('newSquadApprovalResponse', handleNewSquadApprovalResponse);
 
     return () => {
       leavePage('hardcore-dashboard');
       unsubCreated();
       unsubAccepted();
       unsubCancelled();
+      unsubNewSquadApproval();
+      unsubNewSquadResponse();
     };
-  }, [on, joinPage, leavePage, isAuthenticated]);
+  }, [on, joinPage, leavePage, isAuthenticated, language]);
 
   // Match functions
   const handleOpenPostRoster = (e, ladderId, gameMode) => {
@@ -705,6 +725,10 @@ const HardcoreDashboard = () => {
           const { hours, minutes } = data.cooldownData;
           let timeString = hours > 0 && minutes > 0 ? `${hours}${txt.hourUnit} ${minutes}${txt.minuteUnit}` : hours > 0 ? `${hours}${txt.hourUnit}` : `${minutes}${txt.minuteUnit}`;
           setRosterError(`${txt.rematchCooldown} ${timeString}.`);
+        } else if (data.errorCode === 'NEW_SQUAD_TIMEOUT') {
+          setRosterError(txt.approvalTimeout || 'L\'équipe adverse n\'a pas répondu à temps');
+        } else if (data.errorCode === 'NEW_SQUAD_REJECTED') {
+          setRosterError(txt.approvalRejected || 'L\'équipe adverse a refusé le match');
         } else {
           setRosterError(data.message);
         }
@@ -949,28 +973,20 @@ const HardcoreDashboard = () => {
   const getGameModesForLadder = (ladderId) => ['Search & Destroy'];
   const isRegisteredToLadder = (ladderId) => mySquad?.registeredLadders?.some(l => l.ladderId === ladderId);
 
-  const isDuoTrioOpen = () => {
-    // If time restriction is disabled in admin settings, always open
-    if (appSettings?.ladderSettings?.duoTrioTimeRestriction?.enabled === false) {
-      return true;
-    }
-    const parisHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris', hour: 'numeric', hour12: false }));
-    const startHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.startHour ?? 0;
-    const endHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.endHour ?? 20;
-    return parisHour >= startHour && parisHour < endHour;
-  };
+  // Use isDuoTrioOpen from DataContext
+  const isDuoTrioOpen = useCallback(() => duoTrioOpenFromContext, [duoTrioOpenFromContext]);
   
-  // Get formatted time slot text
-  const getDuoTrioTimeText = () => {
+  // Get formatted time slot text - memoized
+  const getDuoTrioTimeText = useMemo(() => {
     if (appSettings?.ladderSettings?.duoTrioTimeRestriction?.enabled === false) {
       return language === 'fr' ? '✓ Disponible 24h/24' : '✓ Available 24/7';
     }
     const startHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.startHour ?? 0;
     const endHour = appSettings?.ladderSettings?.duoTrioTimeRestriction?.endHour ?? 20;
-    const isOpen = isDuoTrioOpen();
+    const isOpen = duoTrioOpenFromContext;
     const timeStr = `${startHour.toString().padStart(2, '0')}h00 - ${endHour.toString().padStart(2, '0')}h00`;
     return isOpen ? `✓ ${language === 'fr' ? 'Ouvert' : 'Open'} • ${timeStr}` : `✗ ${language === 'fr' ? 'Fermé' : 'Closed'} • ${timeStr}`;
-  };
+  }, [appSettings, duoTrioOpenFromContext, language]);
 
   const [myActiveMatches, setMyActiveMatches] = useState([]);
 
@@ -985,36 +1001,114 @@ const HardcoreDashboard = () => {
     }
   };
 
-  useEffect(() => {
-    const refreshInterval = setInterval(() => {
-      fetchMatches();
-      if (isAuthenticated) fetchMyActiveMatches();
-    }, 30000);
-    return () => clearInterval(refreshInterval);
-  }, [isAuthenticated]);
-
-  useEffect(() => { if (isAuthenticated) fetchMyActiveMatches(); }, [isAuthenticated]);
+  // Note: Interval already handled in unified refresh above
 
   // Callback for when countdown expires
   const handleCountdownExpire = () => fetchMatches(false);
 
-  // Get gold coins for a ladder type
-  const getGoldCoinsForLadder = (ladderId) => {
-    if (ladderId === 'squad-team') {
-      return ladderRewards.competitive?.playerCoinsWin || 60;
+  // New squad approval countdown effect
+  useEffect(() => {
+    if (!newSquadApprovalRequest) return;
+    
+    let isActive = true;
+    
+    const interval = setInterval(() => {
+      if (!isActive) return;
+      
+      setNewSquadApprovalTimeLeft(prev => {
+        if (prev <= 1) {
+          // Auto-reject when time expires - only once
+          if (isActive) {
+            isActive = false;
+            clearInterval(interval);
+            handleRespondToNewSquadApproval(false);
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
+  }, [newSquadApprovalRequest]);
+
+  // Handle responding to new squad approval request
+  const handleRespondToNewSquadApproval = useCallback(async (approved) => {
+    if (!newSquadApprovalRequest || respondingToApproval) return;
+    
+    const currentApprovalId = newSquadApprovalRequest.approvalId;
+    const requestingUserId = newSquadApprovalRequest.requestingUserId;
+    setRespondingToApproval(true);
+    
+    try {
+      const response = await fetch(`${API_URL}/matches/new-squad-approval/${currentApprovalId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ approved })
+      });
+      
+      const data = await response.json();
+      
+      // Fermer le dialog dans tous les cas (succès ou erreur)
+      setNewSquadApprovalRequest(null);
+      
+      if (data.success) {
+        if (approved) {
+          setMatchMessage({ type: 'success', text: language === 'fr' ? 'Match accepté !' : 'Match accepted!' });
+        } else {
+          setMatchMessage({ type: 'info', text: language === 'fr' ? 'Match refusé' : 'Match rejected' });
+        }
+        setTimeout(() => setMatchMessage({ type: '', text: '' }), 3000);
+      } else {
+        console.error('Error responding to approval:', data.message);
+      }
+    } catch (error) {
+      console.error('Error responding to new squad approval:', error);
+      // Fermer le dialog en cas d'erreur réseau aussi
+      setNewSquadApprovalRequest(null);
+    } finally {
+      setRespondingToApproval(false);
     }
-    return ladderRewards.chill?.playerCoinsWin || 40;
-  };
+  }, [newSquadApprovalRequest, respondingToApproval, language]);
+
+  // getGoldCoinsForLadder is now provided by DataContext
 
   // Match card component
   const renderMatchCard = (match, ladder, isMyMatch, isActiveMatch = false) => {
     const canCancel = match.isReady || !match.scheduledAt || (new Date(match.scheduledAt) - new Date()) > 5 * 60 * 1000;
     const goldCoins = getGoldCoinsForLadder(ladder);
+    const isNewSquadMatch = match.challengerIsNewSquad && !isMyMatch && !isActiveMatch;
     
     return (
       <div key={match._id} className={`match-card p-4 sm:p-5 ${
-        isActiveMatch ? 'border-2 border-neon-green/50' : isMyMatch ? 'border-2 border-neon-red/40' : ''
+        isActiveMatch ? 'border-2 border-neon-green/50' : isMyMatch ? 'border-2 border-neon-red/40' : isNewSquadMatch ? 'border-2 border-yellow-500/40' : ''
       }`}>
+        {/* New Squad Warning Badge */}
+        {isNewSquadMatch && (
+          <div className="mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-yellow-400 text-xs font-semibold">{txt.newSquadWarning}</span>
+              <span className="text-white text-xs ml-2 font-bold">{match.challenger?.name}</span>
+              {match.challenger?.tag && <span className="text-gray-400 text-xs ml-1">[{match.challenger.tag}]</span>}
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewingRoster({ match, roster: match.challengerRoster || [] });
+              }}
+              className="px-2 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-lg text-yellow-400 text-xs font-medium flex items-center gap-1 transition-colors"
+            >
+              <Eye className="w-3 h-3" />
+              {txt.viewRoster}
+            </button>
+          </div>
+        )}
+        
         {/* Mobile Layout */}
         <div className="flex flex-col sm:hidden gap-3">
           <div className="flex items-center justify-between gap-2">
@@ -1560,7 +1654,7 @@ const HardcoreDashboard = () => {
                   <div className={`mb-4 px-4 py-2.5 rounded-xl flex items-center gap-2 ${isDuoTrioOpen() ? 'bg-neon-green/10 border border-neon-green/30' : 'bg-neon-red/10 border border-neon-red/30'}`}>
                     <Clock className={`w-4 h-4 ${isDuoTrioOpen() ? 'text-neon-green' : 'text-neon-red'}`} />
                     <span className={`text-sm font-medium ${isDuoTrioOpen() ? 'text-neon-green' : 'text-neon-red'}`}>
-                      {getDuoTrioTimeText()}
+                      {getDuoTrioTimeText}
                     </span>
                   </div>
                 )}
@@ -2147,6 +2241,212 @@ const HardcoreDashboard = () => {
                 </button>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* View Roster Dialog (for new squads) */}
+      {viewingRoster && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="glass-card rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto border border-yellow-500/30">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-yellow-500/20">
+                  <Users className="w-5 h-5 text-yellow-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-display text-white">{viewingRoster.match?.challenger?.name}</h3>
+                  <p className="text-yellow-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {txt.newSquad}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingRoster(null)}
+                className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Squad info */}
+            {viewingRoster.match?.challenger?.createdAt && (
+              <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl">
+                <p className="text-gray-400 text-xs">
+                  {txt.teamCreatedOn}: <span className="text-white font-medium">
+                    {new Date(viewingRoster.match.challenger.createdAt).toLocaleDateString(language, { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {/* Roster */}
+            <div className="mb-4">
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">{txt.rosterPlayers} ({viewingRoster.roster?.length || 0})</p>
+              <div className="space-y-2">
+                {viewingRoster.roster && viewingRoster.roster.length > 0 ? (
+                  viewingRoster.roster.map((player, idx) => {
+                    const playerUser = player.user || player;
+                    const avatar = getAvatarUrl(playerUser.avatarUrl || playerUser.avatar) || getDefaultAvatar(playerUser.username);
+                    return (
+                      <div key={playerUser._id || idx} className="p-3 glass rounded-xl flex items-center gap-3">
+                        <img src={avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-medium text-sm truncate">{playerUser.username}</p>
+                          {playerUser.activisionId && <p className="text-gray-500 text-xs truncate">{playerUser.activisionId}</p>}
+                        </div>
+                        {playerUser.platform && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded ${playerUser.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                            {playerUser.platform}
+                          </span>
+                        )}
+                        {player.isHelper && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                            {txt.helper}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-4">{language === 'fr' ? 'Roster non disponible' : 'Roster not available'}</p>
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={() => setViewingRoster(null)}
+              className="w-full py-3 glass border border-white/10 rounded-xl text-white font-medium hover:bg-white/5 transition-colors"
+            >
+              {txt.close}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* New Squad Approval Dialog (for match poster) */}
+      {newSquadApprovalRequest && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+          <div className="glass-card rounded-3xl p-6 max-w-lg w-full shadow-2xl max-h-[90vh] overflow-y-auto border-2 border-yellow-500/50 animate-pulse-slow">
+            {/* Header with warning */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className="relative">
+                <div className="absolute inset-0 bg-yellow-500 blur-xl opacity-40 animate-pulse" />
+                <div className="relative w-14 h-14 bg-gradient-to-br from-yellow-500 to-orange-500 rounded-2xl flex items-center justify-center">
+                  <AlertTriangle className="w-7 h-7 text-white" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xl font-display text-white">{txt.newSquadApprovalTitle}</h3>
+                <p className="text-yellow-400 text-sm">{txt.newSquadApprovalDesc}</p>
+              </div>
+            </div>
+
+            {/* Countdown timer */}
+            <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-yellow-400 text-sm font-medium">{language === 'fr' ? 'Temps restant' : 'Time remaining'}</span>
+                <span className={`text-lg font-bold ${newSquadApprovalTimeLeft <= 10 ? 'text-neon-red animate-pulse' : 'text-yellow-400'}`}>
+                  {newSquadApprovalTimeLeft}s
+                </span>
+              </div>
+              <div className="h-2 bg-dark-800 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-1000 ease-linear ${newSquadApprovalTimeLeft <= 10 ? 'bg-neon-red' : 'bg-gradient-to-r from-yellow-500 to-orange-500'}`}
+                  style={{ width: `${(newSquadApprovalTimeLeft / 30) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Requesting squad info */}
+            <div className="mb-6 p-4 glass rounded-xl">
+              <div className="flex items-center gap-4 mb-4">
+                {newSquadApprovalRequest.requestingSquad?.logo ? (
+                  <img src={newSquadApprovalRequest.requestingSquad.logo} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                ) : (
+                  <div 
+                    className="w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold"
+                    style={{ backgroundColor: (newSquadApprovalRequest.requestingSquad?.color || '#ef4444') + '30', color: newSquadApprovalRequest.requestingSquad?.color || '#ef4444' }}
+                  >
+                    {newSquadApprovalRequest.requestingSquad?.tag?.charAt(0) || 'S'}
+                  </div>
+                )}
+                <div className="flex-1">
+                  <p className="text-white font-bold text-lg">{newSquadApprovalRequest.requestingSquad?.name}</p>
+                  {newSquadApprovalRequest.requestingSquad?.tag && (
+                    <p className="text-gray-400 text-sm">[{newSquadApprovalRequest.requestingSquad.tag}]</p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <p className="text-yellow-400 text-xs font-semibold">{txt.newSquad}</p>
+                  <p className="text-gray-500 text-xs">
+                    {newSquadApprovalRequest.requestingSquad?.createdAt && 
+                      new Date(newSquadApprovalRequest.requestingSquad.createdAt).toLocaleDateString(language, { day: 'numeric', month: 'short' })
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Match info */}
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <span className="px-2 py-1 bg-neon-red/20 rounded text-neon-red text-xs">{newSquadApprovalRequest.gameMode}</span>
+                <span className="px-2 py-1 bg-white/10 rounded text-white text-xs">{newSquadApprovalRequest.teamSize}v{newSquadApprovalRequest.teamSize}</span>
+              </div>
+            </div>
+
+            {/* Roster preview */}
+            <div className="mb-6">
+              <p className="text-gray-400 text-xs uppercase tracking-wider mb-3">{txt.rosterPlayers} ({newSquadApprovalRequest.roster?.length || 0})</p>
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {newSquadApprovalRequest.roster && newSquadApprovalRequest.roster.length > 0 ? (
+                  newSquadApprovalRequest.roster.map((player, idx) => {
+                    const avatar = getAvatarUrl(player.avatarUrl || player.avatar) || getDefaultAvatar(player.username);
+                    return (
+                      <div key={player._id || idx} className="p-3 glass rounded-xl flex items-center gap-3">
+                        <img src={avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-medium text-sm truncate">{player.username}</p>
+                          {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                        </div>
+                        {player.platform && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                            {player.platform}
+                          </span>
+                        )}
+                        {player.isHelper && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                            {txt.helper}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-4">{language === 'fr' ? 'Roster non disponible' : 'Roster not available'}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleRespondToNewSquadApproval(false)}
+                disabled={respondingToApproval}
+                className="flex-1 py-4 glass border border-red-500/30 rounded-xl text-red-400 font-bold hover:bg-red-500/10 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {respondingToApproval ? <Loader2 className="w-5 h-5 animate-spin" /> : <Ban className="w-5 h-5" />}
+                {txt.rejectMatch}
+              </button>
+              <button
+                onClick={() => handleRespondToNewSquadApproval(true)}
+                disabled={respondingToApproval}
+                className="flex-1 py-4 bg-gradient-to-r from-neon-green to-emerald-600 rounded-xl text-white font-bold hover:scale-105 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {respondingToApproval ? <Loader2 className="w-5 h-5 animate-spin" /> : <UserCheck className="w-5 h-5" />}
+                {txt.acceptMatch}
+              </button>
+            </div>
           </div>
         </div>
       )}

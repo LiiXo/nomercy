@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
+import { useData } from '../DataContext';
 import { 
   Trophy, Users, Skull, Check, Eye, 
   Loader2, AlertCircle, CheckCircle, X, Crown, Medal, ChevronRight, AlertTriangle, FileText, Clock, ScrollText, UserPlus, UserMinus, Info
@@ -14,6 +15,7 @@ const Rankings = () => {
   const { t, language } = useLanguage();
   const { selectedMode } = useMode();
   const { user, isAuthenticated } = useAuth();
+  const { appSettings, isDuoTrioOpen: duoTrioOpenFromContext } = useData();
 
   const isHardcore = selectedMode === 'hardcore';
   
@@ -33,7 +35,9 @@ const Rankings = () => {
   const [ladderRules, setLadderRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
   const [previousSeasonWinners, setPreviousSeasonWinners] = useState(null);
-  const [ladderSettings, setLadderSettings] = useState(null);
+  
+  // Use ladderSettings from DataContext
+  const ladderSettings = appSettings?.ladderSettings || null;
   
   const colors = {
     primary: isHardcore ? 'red' : 'cyan',
@@ -45,51 +49,8 @@ const Rankings = () => {
     bg: isHardcore ? 'bg-red-500/10' : 'bg-cyan-500/10',
   };
 
-  // Check if duo-trio is currently open based on settings
-  const isDuoTrioOpen = (settings) => {
-    // If time restriction is disabled, always open
-    if (settings && !settings.duoTrioTimeRestriction?.enabled) {
-      return true;
-    }
-    
-    const startHour = settings?.duoTrioTimeRestriction?.startHour ?? 0;
-    const endHour = settings?.duoTrioTimeRestriction?.endHour ?? 20;
-    
-    const parisHour = parseInt(new Date().toLocaleString('en-US', { 
-      timeZone: 'Europe/Paris', 
-      hour: 'numeric', 
-      hour12: false 
-    }));
-    
-    return parisHour >= startHour && parisHour < endHour;
-  };
-
-  const [duoTrioOpen, setDuoTrioOpen] = useState(true);
-
-  // Fetch ladder settings on mount
-  useEffect(() => {
-    const fetchLadderSettings = async () => {
-      try {
-        const response = await fetch(`${API_URL}/app-settings/public`);
-        const data = await response.json();
-        if (data.success && data.ladderSettings) {
-          setLadderSettings(data.ladderSettings);
-          setDuoTrioOpen(isDuoTrioOpen(data.ladderSettings));
-        }
-      } catch (err) {
-        console.error('Error fetching ladder settings:', err);
-      }
-    };
-    fetchLadderSettings();
-  }, []);
-
-  // Update duo-trio status every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDuoTrioOpen(isDuoTrioOpen(ladderSettings));
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [ladderSettings]);
+  // Use isDuoTrioOpen from DataContext (already updates based on time)
+  const duoTrioOpen = duoTrioOpenFromContext;
 
   // Fetch ladder rules from API when modal opens
   useEffect(() => {

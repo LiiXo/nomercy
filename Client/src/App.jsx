@@ -5,6 +5,7 @@ import { ModeProvider, useMode } from './ModeContext';
 import { AuthProvider, useAuth } from './AuthContext';
 import { AudioProvider } from './AudioProvider';
 import { SocketProvider } from './SocketContext';
+import { DataProvider } from './DataContext';
 import ScrollToTop from './components/ScrollToTop';
 import PageTransition from './components/PageTransition';
 import AnnouncementModal from './components/AnnouncementModal';
@@ -505,13 +506,15 @@ function App() {
     <LanguageProvider>
       <AuthProvider>
         <SocketProvider>
-          <ModeProvider>
-            <Router>
-              <AudioProvider>
-                <AppContent />
-              </AudioProvider>
-            </Router>
-          </ModeProvider>
+          <DataProvider>
+            <ModeProvider>
+              <Router>
+                <AudioProvider>
+                  <AppContent />
+                </AudioProvider>
+              </Router>
+            </ModeProvider>
+          </DataProvider>
         </SocketProvider>
       </AuthProvider>
     </LanguageProvider>

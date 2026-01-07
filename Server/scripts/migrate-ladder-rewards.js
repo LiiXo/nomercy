@@ -81,3 +81,4 @@ async function migrateLadderRewards() {
 // Run migration
 migrateLadderRewards();
 
+

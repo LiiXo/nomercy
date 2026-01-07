@@ -10,6 +10,7 @@ import Squad from '../models/Squad.js';
 import User from '../models/User.js';
 import AppSettings from '../models/AppSettings.js';
 import Map from '../models/Map.js';
+import NewSquadApproval from '../models/NewSquadApproval.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
 import { getSquadMatchRewards, getRewardsConfig } from '../utils/configHelper.js';
 
@@ -52,6 +53,32 @@ const disputeEvidenceUpload = multer({
 const isAdminOrStaff = (user) => {
   return user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 };
+
+// Helper function to check if a squad is "new" (< 3 days old AND < 3 completed matches)
+const isNewSquad = async (squadId) => {
+  const squad = await Squad.findById(squadId);
+  if (!squad) return false;
+  
+  // Check if squad is less than 3 days old
+  const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const isRecent = squad.createdAt > threeDaysAgo;
+  
+  if (!isRecent) return false;
+  
+  // Count completed matches for this squad
+  const completedMatches = await Match.countDocuments({
+    $or: [
+      { challenger: squadId },
+      { opponent: squadId }
+    ],
+    status: 'completed'
+  });
+  
+  return completedMatches < 3;
+};
+
+// Note: Les demandes d'approbation de nouvelles escouades sont maintenant stockées en base de données
+// Voir le modèle NewSquadApproval.js
 
 /**
  * Met à jour l'historique de matchs pour tous les joueurs d'un roster
@@ -102,6 +129,64 @@ const updatePlayersMatchHistory = async (roster, matchId, squadId, result) => {
     }
   }
 };
+
+// Répondre à une demande d'approbation de nouvelle escouade
+router.post('/new-squad-approval/:approvalId/respond', verifyToken, async (req, res) => {
+  try {
+    const { approvalId } = req.params;
+    const { approved } = req.body;
+    
+    console.log(`[NEW SQUAD] Received response for ${approvalId}: approved=${approved}`);
+    
+    // Chercher dans la base de données
+    const pendingApproval = await NewSquadApproval.findOne({ 
+      approvalId, 
+      status: 'pending' 
+    });
+    
+    if (!pendingApproval) {
+      console.log(`[NEW SQUAD] ❌ Approval ${approvalId} NOT FOUND in database!`);
+      
+      // Même si l'approbation n'existe plus, on renvoie un succès au posteur
+      return res.json({
+        success: true,
+        message: 'Réponse enregistrée (la demande avait peut-être déjà expiré)'
+      });
+    }
+    
+    // Vérifier que c'est bien le créateur du match qui répond
+    if (pendingApproval.matchPosterId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Vous n\'êtes pas autorisé à répondre à cette demande'
+      });
+    }
+    
+    // Mettre à jour le statut dans la base de données
+    pendingApproval.status = approved ? 'approved' : 'rejected';
+    await pendingApproval.save();
+    
+    // Notifier l'escouade qui demande via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`user-${pendingApproval.requestingUserId}`).emit('newSquadApprovalResponse', {
+        approvalId,
+        approved,
+        matchId: pendingApproval.matchId
+      });
+    }
+    
+    console.log(`[NEW SQUAD] Approval ${approvalId} responded: ${approved ? 'APPROVED' : 'REJECTED'}`);
+    
+    res.json({
+      success: true,
+      message: approved ? 'Match accepté' : 'Match refusé'
+    });
+  } catch (error) {
+    console.error('New squad approval response error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 // Obtenir la configuration publique des récompenses (pour RankingsInfo)
 router.get('/public-config', async (req, res) => {
@@ -158,11 +243,19 @@ router.get('/available/:ladderId', async (req, res) => {
         { isReady: false, scheduledAt: { $gt: now } } // Matchs planifiés futurs
       ]
     })
-      .populate('challenger', 'name tag color logo members')
-      .populate('createdBy', 'username')
+      .populate('challenger', 'name tag color logo members createdAt')
+      .populate('createdBy', 'username _id')
+      .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .sort({ isReady: -1, scheduledAt: 1 }) // "Ready" en premier, puis par date
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit));
+
+    // Enrichir les matchs avec l'info isNewSquad pour le challenger
+    const enrichedMatches = await Promise.all(matches.map(async (match) => {
+      const matchObj = match.toObject();
+      matchObj.challengerIsNewSquad = await isNewSquad(match.challenger._id);
+      return matchObj;
+    }));
 
     const total = await Match.countDocuments({
       ladderId,
@@ -176,7 +269,7 @@ router.get('/available/:ladderId', async (req, res) => {
 
     res.json({
       success: true,
-      matches,
+      matches: enrichedMatches,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -847,20 +940,32 @@ router.post('/', verifyToken, async (req, res) => {
     console.log('[CREATE MATCH] Saved match with challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
 
     const populatedMatch = await Match.findById(match._id)
-      .populate('challenger', 'name tag color logo members')
-      .populate('createdBy', 'username');
+      .populate('challenger', 'name tag color logo members createdAt')
+      .populate('createdBy', 'username _id')
+      .populate('challengerRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform');
+
+    // Vérifier si l'escouade qui poste est nouvelle
+    const challengerIsNewSquad = await isNewSquad(squad._id);
 
     // Émettre via Socket.io pour mise à jour temps réel sur le dashboard
     const io = req.app.get('io');
     if (io) {
+      // Convertir en objet et ajouter l'info nouvelle escouade
+      const matchForSocket = populatedMatch.toObject();
+      matchForSocket.challengerIsNewSquad = challengerIsNewSquad;
+      
       io.to('hardcore-dashboard').emit('matchCreated', {
-        match: populatedMatch,
+        match: matchForSocket,
         ladderId,
         mode
       });
     }
 
-    res.status(201).json({ success: true, match: populatedMatch });
+    // Réponse API avec l'info nouvelle escouade aussi
+    const matchResponse = populatedMatch.toObject();
+    matchResponse.challengerIsNewSquad = challengerIsNewSquad;
+    
+    res.status(201).json({ success: true, match: matchResponse });
   } catch (error) {
     console.error('Create match error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -889,7 +994,8 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Vous devez avoir une escouade' });
     }
 
-    const match = await Match.findById(matchId);
+    const match = await Match.findById(matchId)
+      .populate('createdBy', '_id username');
     
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
@@ -915,7 +1021,8 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     }
 
     // Vérifier que l'escouade est inscrite au ladder
-    const squad = await Squad.findById(user.squad._id);
+    const squad = await Squad.findById(user.squad._id)
+      .populate('members.user', 'username avatarUrl discordAvatar discordId activisionId platform');
     const isRegistered = squad.registeredLadders?.some(l => l.ladderId === match.ladderId);
     
     if (!isRegistered) {
@@ -927,7 +1034,7 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
 
     // Vérifier que l'utilisateur est leader ou officier
     const member = squad.members.find(m => 
-      m.user.toString() === user._id.toString()
+      (m.user._id || m.user).toString() === user._id.toString()
     );
     
     if (!member || (member.role !== 'leader' && member.role !== 'officer')) {
@@ -975,6 +1082,131 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
         }
       });
     }
+
+    // ========== VÉRIFICATION NOUVELLE ESCOUADE ==========
+    // Si l'escouade qui accepte est "nouvelle" (< 3 jours ET < 3 matchs), demander approbation
+    const acceptingSquadIsNew = await isNewSquad(squad._id);
+    
+    if (acceptingSquadIsNew) {
+      console.log(`[NEW SQUAD] Squad ${squad.name} is new, requesting approval from match poster`);
+      
+      const io = req.app.get('io');
+      const matchPosterId = match.createdBy._id.toString();
+      
+      // Préparer les données du roster pour l'approbation (joueurs sélectionnés pour ce match)
+      let rosterForApproval = [];
+      if (req.body.roster && req.body.roster.length > 0) {
+        const userIds = req.body.roster.map(r => r.user);
+        const rosterUsers = await User.find({ _id: { $in: userIds } })
+          .select('_id username avatarUrl discordAvatar discordId activisionId platform');
+        rosterForApproval = rosterUsers.map(u => ({
+          _id: u._id,
+          username: u.username,
+          avatarUrl: u.avatarUrl,
+          discordAvatar: u.discordAvatar,
+          discordId: u.discordId,
+          activisionId: u.activisionId,
+          platform: u.platform,
+          isHelper: req.body.roster.find(r => r.user === u._id.toString())?.isHelper || false
+        }));
+      }
+      
+      // Créer une demande d'approbation dans la base de données
+      const approvalId = `${matchId}-${Date.now()}`;
+      const expiresAt = new Date(Date.now() + 30000); // 30 secondes
+      
+      const approvalDoc = await NewSquadApproval.create({
+        approvalId,
+        matchId,
+        requestingSquadId: squad._id,
+        requestingUserId: user._id,
+        matchPosterId: match.createdBy._id,
+        roster: rosterForApproval,
+        status: 'pending',
+        expiresAt
+      });
+      
+      console.log(`[NEW SQUAD] Approval document created in DB: ${approvalId}`);
+      
+      // Envoyer la demande d'approbation au posteur du match via Socket.io
+      io.to(`user-${matchPosterId}`).emit('newSquadApprovalRequest', {
+        approvalId,
+        matchId,
+        requestingSquad: {
+          _id: squad._id,
+          name: squad.name,
+          tag: squad.tag,
+          color: squad.color,
+          logo: squad.logo,
+          createdAt: squad.createdAt
+        },
+        roster: rosterForApproval,
+        gameMode: match.gameMode,
+        teamSize: match.teamSize,
+        ladderId: match.ladderId
+      });
+      
+      console.log(`[NEW SQUAD] Approval request ${approvalId} sent to user-${matchPosterId}`);
+      
+      // Attendre la réponse en polluant la base de données (max 30 secondes)
+      const startTime = Date.now();
+      const timeoutMs = 30000;
+      const pollInterval = 500; // Vérifier toutes les 500ms
+      
+      let approvalResult = null;
+      while (Date.now() - startTime < timeoutMs) {
+        const currentApproval = await NewSquadApproval.findOne({ approvalId });
+        
+        if (!currentApproval) {
+          // Document supprimé - traiter comme expiré
+          break;
+        }
+        
+        if (currentApproval.status === 'approved') {
+          approvalResult = { approved: true };
+          break;
+        } else if (currentApproval.status === 'rejected') {
+          approvalResult = { approved: false };
+          break;
+        }
+        
+        // Attendre avant la prochaine vérification
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+      
+      // Mettre à jour le statut si expiré
+      if (!approvalResult) {
+        await NewSquadApproval.findOneAndUpdate(
+          { approvalId, status: 'pending' },
+          { status: 'expired' }
+        );
+        
+        // Notifier l'équipe qui a demandé que c'est expiré
+        io.to(`user-${user._id}`).emit('newSquadApprovalResponse', {
+          approvalId,
+          approved: false,
+          matchId,
+          reason: 'expired'
+        });
+        
+        return res.status(408).json({
+          success: false,
+          message: 'Le temps d\'approbation a expiré. L\'équipe adverse n\'a pas répondu.',
+          errorCode: 'NEW_SQUAD_TIMEOUT'
+        });
+      }
+      
+      if (!approvalResult.approved) {
+        return res.status(403).json({
+          success: false,
+          message: 'L\'équipe adverse a refusé le match',
+          errorCode: 'NEW_SQUAD_REJECTED'
+        });
+      }
+      
+      console.log(`[NEW SQUAD] Approval granted for squad ${squad.name}`);
+    }
+    // ========== FIN VÉRIFICATION NOUVELLE ESCOUADE ==========
 
     match.opponent = squad._id;
     // Sauvegarder les infos de l'escouade adversaire pour l'historique (même si l'escouade est supprimée plus tard)
