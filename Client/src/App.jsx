@@ -389,6 +389,16 @@ function AppContent() {
               </AuthenticatedRoute>
             } 
           />
+          <Route 
+            path="/ranked/match/:matchId" 
+            element={
+              <AuthenticatedRoute>
+                <PageTransition>
+                  <MatchSheet />
+                </PageTransition>
+              </AuthenticatedRoute>
+            } 
+          />
 
           {/* Rules */}
           <Route 

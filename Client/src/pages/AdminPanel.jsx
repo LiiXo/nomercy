@@ -2382,7 +2382,7 @@ const renderDisputes = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <a
-                        href={`/ranked-match/${match._id}`}
+                        href={`/ranked/match/${match._id}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
@@ -2667,6 +2667,176 @@ const renderDisputes = () => {
                 <span className="text-gray-500 text-sm">(heure française)</span>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Ranked Settings */}
+        <div className="bg-dark-800/50 border border-cyan-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
+            <Trophy className="w-5 h-5 text-cyan-400" />
+            Paramètres Mode Classé
+          </h3>
+          
+          {/* Search & Destroy */}
+          <div className="bg-dark-900/50 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <Skull className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h4 className="text-white font-medium">Search & Destroy</h4>
+                  <p className="text-gray-500 text-xs">Mode solo classé - 3v3, 4v4 ou 5v5</p>
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  const newEnabled = !appSettings?.rankedSettings?.searchAndDestroy?.enabled;
+                  try {
+                    const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ 
+                        searchAndDestroy: { enabled: newEnabled }
+                      })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                      setSuccess(newEnabled ? 'Mode activé' : 'Mode désactivé');
+                      fetchAppSettings();
+                    } else {
+                      setError(data.message || 'Erreur');
+                    }
+                  } catch (err) {
+                    setError('Erreur lors de la modification');
+                  }
+                }}
+                className={`relative w-12 h-6 rounded-full transition-colors ${
+                  appSettings?.rankedSettings?.searchAndDestroy?.enabled !== false ? 'bg-cyan-500' : 'bg-dark-700'
+                }`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                  appSettings?.rankedSettings?.searchAndDestroy?.enabled !== false ? 'translate-x-6' : ''
+                }`} />
+              </button>
+            </div>
+            
+            {/* Rewards Configuration */}
+            <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10">
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Points victoire</label>
+                <input
+                  type="number"
+                  value={appSettings?.rankedSettings?.searchAndDestroy?.rewards?.pointsWin || 25}
+                  onChange={async (e) => {
+                    try {
+                      const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ 
+                          searchAndDestroy: { rewards: { pointsWin: parseInt(e.target.value) || 25 } }
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.success) fetchAppSettings();
+                    } catch (err) {
+                      setError('Erreur');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Points défaite</label>
+                <input
+                  type="number"
+                  value={appSettings?.rankedSettings?.searchAndDestroy?.rewards?.pointsLose || -15}
+                  onChange={async (e) => {
+                    try {
+                      const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ 
+                          searchAndDestroy: { rewards: { pointsLose: parseInt(e.target.value) || -15 } }
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.success) fetchAppSettings();
+                    } catch (err) {
+                      setError('Erreur');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+              <div>
+                <label className="text-gray-400 text-sm block mb-2">Gold victoire</label>
+                <input
+                  type="number"
+                  value={appSettings?.rankedSettings?.searchAndDestroy?.rewards?.goldWin || 50}
+                  onChange={async (e) => {
+                    try {
+                      const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ 
+                          searchAndDestroy: { rewards: { goldWin: parseInt(e.target.value) || 50 } }
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.success) fetchAppSettings();
+                    } catch (err) {
+                      setError('Erreur');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+            </div>
+            
+            {/* Matchmaking Timer */}
+            <div className="mt-4 pt-4 border-t border-white/10">
+              <label className="text-gray-400 text-sm block mb-2">Timer d'attente (secondes)</label>
+              <input
+                type="number"
+                min="30"
+                max="300"
+                value={appSettings?.rankedSettings?.searchAndDestroy?.matchmaking?.waitTimer || 120}
+                onChange={async (e) => {
+                  try {
+                    const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      credentials: 'include',
+                      body: JSON.stringify({ 
+                        searchAndDestroy: { matchmaking: { waitTimer: parseInt(e.target.value) || 120 } }
+                      })
+                    });
+                    const data = await response.json();
+                    if (data.success) fetchAppSettings();
+                  } catch (err) {
+                    setError('Erreur');
+                  }
+                }}
+                className="w-32 px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
+              />
+              <p className="text-gray-500 text-xs mt-1">Temps d'attente pour plus de joueurs quand 6 sont en file</p>
+            </div>
+          </div>
+          
+          {/* Other modes - Coming Soon */}
+          <div className="grid grid-cols-2 gap-4">
+            {['Mêlée générale', 'Duel'].map((mode) => (
+              <div key={mode} className="bg-dark-900/50 rounded-lg p-4 opacity-50">
+                <div className="flex items-center gap-3">
+                  <Lock className="w-4 h-4 text-gray-500" />
+                  <span className="text-gray-400">{mode}</span>
+                  <span className="px-2 py-0.5 text-xs bg-gray-700/50 rounded text-gray-500">À venir</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -3987,10 +4157,13 @@ const renderDisputes = () => {
 
   // ==================== MATCHES TAB ====================
   const [ladderMatches, setLadderMatches] = useState([]);
+  const [adminRankedMatches, setAdminRankedMatches] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
+  const [matchesSubTab, setMatchesSubTab] = useState('ladder'); // 'ladder' or 'ranked'
   const [matchToEdit, setMatchToEdit] = useState(null);
   const [matchToDelete, setMatchToDelete] = useState(null);
+  const [rankedMatchToDelete, setRankedMatchToDelete] = useState(null);
 
   const fetchLadderMatches = async () => {
     setMatchesLoading(true);
@@ -4048,19 +4221,85 @@ const renderDisputes = () => {
     }
   };
 
+  // Ranked matches admin functions
+  const fetchAdminRankedMatches = async () => {
+    setMatchesLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/admin/all?status=${matchesFilter}&limit=50`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAdminRankedMatches(data.matches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching ranked matches:', err);
+    } finally {
+      setMatchesLoading(false);
+    }
+  };
+
+  const handleDeleteRankedMatch = async (matchId) => {
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/admin/${matchId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Match classé supprimé avec succès');
+        setRankedMatchToDelete(null);
+        fetchAdminRankedMatches();
+      } else {
+        setError(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      setError('Erreur lors de la suppression');
+    }
+  };
+
+  const handleUpdateRankedMatchStatus = async (matchId, status) => {
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/admin/${matchId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Statut du match classé mis à jour');
+        fetchAdminRankedMatches();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour');
+    }
+  };
+
   const renderMatches = () => {
+    // Helper to get player names for ranked matches
+    const getRankedMatchTeamNames = (match) => {
+      const team1Players = match.players?.filter(p => p.team === 1) || [];
+      const team2Players = match.players?.filter(p => p.team === 2) || [];
+      const team1Name = team1Players.map(p => p.user?.username || p.username || '?').join(', ') || 'Équipe 1';
+      const team2Name = team2Players.map(p => p.user?.username || p.username || '?').join(', ') || 'Équipe 2';
+      return { team1Name, team2Name };
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Swords className="w-7 h-7 text-purple-400" />
-              Gestion des Matchs Ladder
+              Gestion des Matchs
             </h2>
-            <p className="text-gray-400 mt-1">Modifier et supprimer les matchs ladder</p>
+            <p className="text-gray-400 mt-1">Gérer les matchs ladder et classés</p>
           </div>
           <button
-            onClick={fetchLadderMatches}
+            onClick={matchesSubTab === 'ladder' ? fetchLadderMatches : fetchAdminRankedMatches}
             className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -4068,125 +4307,252 @@ const renderDisputes = () => {
           </button>
         </div>
 
+        {/* Sub Tabs - Ladder vs Ranked */}
+        <div className="flex gap-2 p-1 bg-dark-800/50 rounded-lg w-fit">
+          <button
+            onClick={() => {
+              setMatchesSubTab('ladder');
+              setMatchesFilter('all');
+              setTimeout(fetchLadderMatches, 100);
+            }}
+            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+              matchesSubTab === 'ladder' 
+                ? 'bg-purple-500 text-white' 
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+            Matchs Ladder
+          </button>
+          <button
+            onClick={() => {
+              setMatchesSubTab('ranked');
+              setMatchesFilter('all');
+              setTimeout(fetchAdminRankedMatches, 100);
+            }}
+            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+              matchesSubTab === 'ranked' 
+                ? 'bg-cyan-500 text-white' 
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            Matchs Classés
+          </button>
+        </div>
+
         {/* Filters */}
-        <div className="flex gap-2">
-          {['all', 'pending', 'completed', 'disputed', 'cancelled'].map((filter) => (
+        <div className="flex gap-2 flex-wrap">
+          {['all', 'pending', 'in_progress', 'completed', 'disputed', 'cancelled'].map((filter) => (
             <button
               key={filter}
               onClick={() => {
                 setMatchesFilter(filter);
-                setTimeout(fetchLadderMatches, 100);
+                setTimeout(matchesSubTab === 'ladder' ? fetchLadderMatches : fetchAdminRankedMatches, 100);
               }}
               className={`px-4 py-2 rounded-lg transition-colors ${
                 matchesFilter === filter 
-                  ? 'bg-purple-500 text-white' 
+                  ? matchesSubTab === 'ladder' ? 'bg-purple-500 text-white' : 'bg-cyan-500 text-white'
                   : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
               }`}
             >
               {filter === 'all' ? 'Tous' : 
                filter === 'pending' ? 'En attente' : 
+               filter === 'in_progress' ? 'En cours' : 
                filter === 'completed' ? 'Terminés' : 
                filter === 'disputed' ? 'Litiges' : 'Annulés'}
             </button>
           ))}
         </div>
 
-        {/* Matches List */}
-        {matchesLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
-          </div>
-        ) : ladderMatches.length > 0 ? (
-          <div className="space-y-3">
-            {ladderMatches.map((match) => (
-              <div key={match._id} className="bg-dark-800/50 border border-white/10 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <div className="text-white font-medium">{match.challenger?.name || 'Équipe inconnue'}</div>
-                      <span className="text-gray-500">vs</span>
-                      <div className="text-white font-medium">{match.opponent?.name || 'En attente'}</div>
-                    </div>
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                      match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                      match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
-                      match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
-                      'bg-blue-500/20 text-blue-400'
-                    }`}>
-                      {match.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/match/${match._id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Voir le match
-                    </a>
-                    <select
-                      value={match.status}
-                      onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
-                      className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
-                    >
-                      <option value="pending">En attente</option>
-                      <option value="accepted">Accepté</option>
-                      <option value="in_progress">En cours</option>
-                      <option value="completed">Terminé</option>
-                      <option value="disputed">Litige</option>
-                      <option value="cancelled">Annulé</option>
-                    </select>
-                    <button
-                      onClick={() => setMatchToDelete(match)}
-                      className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-2 text-gray-500 text-sm space-y-1">
-                  <div>
-                    Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
-                    Ladder: {match.ladderId || 'N/A'} • 
-                    Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
-                  </div>
-                  <div className="flex gap-4">
-                    {match.startedAt && (
-                      <span className="text-blue-400">
-                        🏁 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} à {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                    {match.result?.confirmedAt && (
-                      <span className="text-green-400">
-                        ✅ Validé: {new Date(match.result.confirmedAt).toLocaleDateString('fr-FR')} à {new Date(match.result.confirmedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    )}
-                  </div>
-                </div>
+        {/* Ladder Matches List */}
+        {matchesSubTab === 'ladder' && (
+          <>
+            {matchesLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-20">
-            <Swords className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400">Aucun match trouvé</p>
-            <button
-              onClick={fetchLadderMatches}
-              className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
-            >
-              Charger les matchs
-            </button>
-          </div>
+            ) : ladderMatches.length > 0 ? (
+              <div className="space-y-3">
+                {ladderMatches.map((match) => (
+                  <div key={match._id} className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
+                          LADDER
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="text-white font-medium">{match.challenger?.name || 'Équipe inconnue'}</div>
+                          <span className="text-gray-500">vs</span>
+                          <div className="text-white font-medium">{match.opponent?.name || 'En attente'}</div>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                          match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                          match.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                          match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
+                          match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                          'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          {match.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/match/${match._id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Voir
+                        </a>
+                        <select
+                          value={match.status}
+                          onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
+                          className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
+                        >
+                          <option value="pending">En attente</option>
+                          <option value="accepted">Accepté</option>
+                          <option value="in_progress">En cours</option>
+                          <option value="completed">Terminé</option>
+                          <option value="disputed">Litige</option>
+                          <option value="cancelled">Annulé</option>
+                        </select>
+                        <button
+                          onClick={() => setMatchToDelete(match)}
+                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-gray-500 text-sm space-y-1">
+                      <div>
+                        Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
+                        Ladder: {match.ladderId || 'N/A'} • 
+                        Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-20">
+                <Swords className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">Aucun match ladder trouvé</p>
+                <button
+                  onClick={fetchLadderMatches}
+                  className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                >
+                  Charger les matchs
+                </button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Delete Match Modal */}
+        {/* Ranked Matches List */}
+        {matchesSubTab === 'ranked' && (
+          <>
+            {matchesLoading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+              </div>
+            ) : adminRankedMatches.length > 0 ? (
+              <div className="space-y-3">
+                {adminRankedMatches.map((match) => {
+                  const { team1Name, team2Name } = getRankedMatchTeamNames(match);
+                  return (
+                    <div key={match._id} className="bg-dark-800/50 border border-cyan-500/20 rounded-xl p-4">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/20 text-cyan-400">
+                            CLASSÉ
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <div className="text-white font-medium text-sm">{team1Name}</div>
+                            <span className="text-gray-500">vs</span>
+                            <div className="text-white font-medium text-sm">{team2Name}</div>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                            match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                            match.status === 'ready' ? 'bg-blue-500/20 text-blue-400' :
+                            match.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                            match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
+                            match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {match.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/ranked/${match._id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors text-sm"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            Voir
+                          </a>
+                          <select
+                            value={match.status}
+                            onChange={(e) => handleUpdateRankedMatchStatus(match._id, e.target.value)}
+                            className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
+                          >
+                            <option value="pending">En attente</option>
+                            <option value="ready">Prêt</option>
+                            <option value="in_progress">En cours</option>
+                            <option value="completed">Terminé</option>
+                            <option value="disputed">Litige</option>
+                            <option value="cancelled">Annulé</option>
+                          </select>
+                          <button
+                            onClick={() => setRankedMatchToDelete(match)}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-gray-500 text-sm space-y-1">
+                        <div>
+                          Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
+                          Mode: {match.gameMode || 'N/A'} • 
+                          Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                        </div>
+                        {match.team1Referent && (
+                          <div className="text-cyan-400">
+                            👑 Référents: {match.team1Referent?.username || '?'} (Éq.1) - {match.team2Referent?.username || '?'} (Éq.2)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-20">
+                <Target className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">Aucun match classé trouvé</p>
+                <button
+                  onClick={fetchAdminRankedMatches}
+                  className="mt-4 px-4 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors"
+                >
+                  Charger les matchs
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Delete Ladder Match Modal */}
         {matchToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
             <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
-              <h3 className="text-lg font-bold text-white mb-4">Supprimer le match ?</h3>
+              <h3 className="text-lg font-bold text-white mb-4">Supprimer le match ladder ?</h3>
               <p className="text-gray-400 mb-6">
                 Cette action est irréversible. Le match entre {matchToDelete.challenger?.name} et {matchToDelete.opponent?.name || 'N/A'} sera définitivement supprimé.
               </p>
@@ -4199,6 +4565,32 @@ const renderDisputes = () => {
                 </button>
                 <button
                   onClick={() => handleDeleteMatch(matchToDelete._id)}
+                  className="flex-1 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Supprimer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Ranked Match Modal */}
+        {rankedMatchToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
+              <h3 className="text-lg font-bold text-white mb-4">Supprimer le match classé ?</h3>
+              <p className="text-gray-400 mb-6">
+                Cette action est irréversible. Le match sera définitivement supprimé.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setRankedMatchToDelete(null)}
+                  className="flex-1 py-3 bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={() => handleDeleteRankedMatch(rankedMatchToDelete._id)}
                   className="flex-1 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors"
                 >
                   Supprimer

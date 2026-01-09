@@ -42,6 +42,9 @@ const startServer = async () => {
   
   // Import monthly reset service for ladder season reset
   const { scheduleMonthlyLadderReset } = await import('./services/monthlyReset.service.js');
+  
+  // Import ranked matchmaking service
+  const { initMatchmaking } = await import('./services/rankedMatchmaking.service.js');
 
   const app = express();
   const httpServer = createServer(app);
@@ -179,6 +182,9 @@ const startServer = async () => {
 
   // Make io accessible to routes
   app.set('io', io);
+  
+  // Initialize ranked matchmaking service with Socket.io
+  initMatchmaking(io);
 
   // Log config for debugging
   console.log('=== Server Configuration ===');

@@ -82,3 +82,4 @@ async function migrateLadderRewards() {
 migrateLadderRewards();
 
 
+

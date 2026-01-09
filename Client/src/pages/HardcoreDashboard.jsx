@@ -441,7 +441,7 @@ const HardcoreDashboard = () => {
   
   // Note: L'approbation est gérée par l'API avec polling côté serveur
   
-  const availableModes = ['hardcoreSND', 'hardcoreDom', 'hardcoreTDM'];
+  const availableModes = ['hardcoreSND', 'hardcoreTDM', 'hardcoreDuel'];
   
   const [activeModes, setActiveModes] = useState(() => {
     const saved = localStorage.getItem('hardcoreMatchFilters');
@@ -472,8 +472,8 @@ const HardcoreDashboard = () => {
   // App settings, ladder rewards, and top stats are now provided by DataContext
 
   const gameModeApiNames = {
-    fr: { 'Search & Destroy': 'Recherche & Destruction', 'Domination': 'Domination', 'Team Deathmatch': 'Mêlée générale' },
-    en: { 'Search & Destroy': 'Search & Destroy', 'Domination': 'Domination', 'Team Deathmatch': 'Team Deathmatch' },
+    fr: { 'Search & Destroy': 'Recherche & Destruction', 'Team Deathmatch': 'Mêlée générale', 'Duel': 'Duel' },
+    en: { 'Search & Destroy': 'Search & Destroy', 'Team Deathmatch': 'Team Deathmatch', 'Duel': 'Duel' },
   };
 
   const getGameModeName = (mode) => gameModeApiNames[language]?.[mode] || gameModeApiNames['en'][mode] || mode;
@@ -1389,10 +1389,9 @@ const HardcoreDashboard = () => {
   }, [mySquad]);
 
   const gameModes = [
-    { name: t('hardcoreDuel'), icon: '🗡️', comingSoon: true },
     { name: t('hardcoreSND'), icon: '💣', comingSoon: false },
-    { name: t('hardcoreDom'), icon: '🏴', comingSoon: true },
     { name: t('hardcoreTDM'), icon: '⚔️', comingSoon: true },
+    { name: t('hardcoreDuel'), icon: '🗡️', comingSoon: true },
   ];
 
   return (

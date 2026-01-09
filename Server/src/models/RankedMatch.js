@@ -5,17 +5,37 @@ const rankedPlayerSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
-  },
-  rank: String, // Bronze, Silver, Gold, etc.
-  points: Number,
-  team: {
-    type: Number, // 1 ou 2 (null pour mêlée générale)
+    required: false, // Not required for fake/test players
     default: null
+  },
+  username: String, // Sauvegardé pour l'historique
+  rank: String, // Bronze, Silver, Gold, etc.
+  points: Number, // Points au moment du match
+  team: {
+    type: Number, // 1 ou 2
+    default: null
+  },
+  isReferent: { // Référent de l'équipe (peut déclarer litige et résultat)
+    type: Boolean,
+    default: false
+  },
+  isFake: { // Pour identifier les joueurs de test
+    type: Boolean,
+    default: false
   },
   kills: { type: Number, default: 0 },
   deaths: { type: Number, default: 0 },
-  score: { type: Number, default: 0 }
+  score: { type: Number, default: 0 },
+  // Récompenses attribuées à ce joueur
+  rewards: {
+    pointsChange: { type: Number, default: 0 },
+    goldEarned: { type: Number, default: 0 }
+  },
+  // Date d'entrée dans la file d'attente (pour savoir qui éjecter)
+  queueJoinedAt: {
+    type: Date,
+    default: null
+  }
 }, { _id: false });
 
 const rankedMatchSchema = new mongoose.Schema({
@@ -23,7 +43,7 @@ const rankedMatchSchema = new mongoose.Schema({
   gameMode: {
     type: String,
     required: true,
-    enum: ['Duel', 'Team Deathmatch', 'Domination', 'Search & Destroy']
+    enum: ['Search & Destroy', 'Team Deathmatch', 'Duel']
   },
   // Mode hardcore ou cdl
   mode: {
@@ -31,49 +51,27 @@ const rankedMatchSchema = new mongoose.Schema({
     required: true,
     enum: ['hardcore', 'cdl']
   },
+  // Taille des équipes (3v3, 4v4, 5v5)
+  teamSize: {
+    type: Number,
+    enum: [3, 4, 5],
+    required: true
+  },
   // Liste des joueurs
   players: [rankedPlayerSchema],
-  // Faux joueurs pour mode dev (bots)
-  fakePlayers: [{
-    odId: String,
-    username: String,
-    rank: String,
-    points: Number,
-    team: Number
-  }],
-  // Équipe 1 (pour Domination et S&D)
-  team1: {
-    players: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }],
-    score: { type: Number, default: 0 }
-  },
-  // Équipe 2 (pour Domination et S&D)
-  team2: {
-    players: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    }],
-    score: { type: Number, default: 0 }
-  },
-  // Capitaine équipe 1 (hôte)
-  team1Captain: {
+  
+  // Référent équipe 1 (tiré au sort, peut déclarer résultat/litige)
+  team1Referent: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  // Capitaine équipe 2
-  team2Captain: {
+  // Référent équipe 2
+  team2Referent: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  // Hôte de la partie (pour mode Duel et Team Deathmatch)
-  host: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    default: null
-  },
-  // Équipe hôte (pour Domination et S&D - 1 ou 2)
+  
+  // Équipe hôte (1 ou 2 - tirée au sort)
   hostTeam: {
     type: Number,
     enum: [1, 2],
@@ -82,7 +80,7 @@ const rankedMatchSchema = new mongoose.Schema({
   // Statut du match
   status: {
     type: String,
-    enum: ['pending', 'in_progress', 'completed', 'cancelled', 'disputed'],
+    enum: ['pending', 'ready', 'in_progress', 'completed', 'cancelled', 'disputed'],
     default: 'pending'
   },
   // Code de partie pour rejoindre
@@ -90,64 +88,73 @@ const rankedMatchSchema = new mongoose.Schema({
     type: String,
     default: null
   },
-  // Map choisie
-  map: {
+  // Maps générées aléatoirement (3 maps pour BO3)
+  maps: [{
     name: String,
-    image: String
-  },
-  // Bracket de rang pour le matchmaking
+    image: String,
+    order: Number, // 1, 2, 3
+    winner: { type: Number, enum: [1, 2], default: null } // Équipe gagnante de cette map
+  }],
+  // Bracket de rang pour le matchmaking (optionnel, peut être mixte)
   rankBracket: {
-    type: String, // bronze, silver, gold, platinum, diamond, master, grandmaster, champion
-    required: true
+    type: String,
+    default: 'mixed'
   },
   // Résultat du match
   result: {
     winner: {
-      type: String, // 'team1', 'team2', ou null pour mêlée générale
+      type: Number, // 1 ou 2 (équipe gagnante)
       default: null
     },
-    winnerUser: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null // Pour mêlée générale uniquement
-    },
-    fakeWinner: {
-      odId: String,
-      username: String
-    },
-    team1Score: { type: Number, default: 0 },
+    team1Score: { type: Number, default: 0 }, // Nombre de maps gagnées
     team2Score: { type: Number, default: 0 },
     isForfeit: { type: Boolean, default: false },
     forfeitReason: String,
-    reportedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+    forfeitTeam: { type: Number, enum: [1, 2], default: null },
+    // Déclaration du résultat par les référents
+    team1Report: {
+      winner: { type: Number, enum: [1, 2], default: null },
+      reportedAt: Date
     },
-    reportedAt: Date,
+    team2Report: {
+      winner: { type: Number, enum: [1, 2], default: null },
+      reportedAt: Date
+    },
+    // Résultat confirmé (quand les 2 référents sont d'accord)
     confirmed: { type: Boolean, default: false },
-    confirmedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
     confirmedAt: Date
   },
-  // Litige
+  // Litige (si les référents ne sont pas d'accord)
   dispute: {
+    isActive: { type: Boolean, default: false },
     reportedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
+    reportedByTeam: { type: Number, enum: [1, 2], default: null },
     reportedAt: Date,
     reason: {
       type: String,
       maxlength: 500
     },
+    // Preuves uploadées
+    evidence: [{
+      uploadedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      team: Number,
+      imageUrl: String,
+      description: { type: String, maxlength: 200 },
+      uploadedAt: { type: Date, default: Date.now }
+    }],
     resolvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
     resolvedAt: Date,
-    resolution: String
+    resolution: String,
+    resolvedWinner: { type: Number, enum: [1, 2], default: null }
   },
   // Chat du match
   chat: [{
@@ -160,18 +167,21 @@ const rankedMatchSchema = new mongoose.Schema({
       required: true,
       maxlength: 500
     },
-    team: Number, // 1 ou 2
+    team: Number, // 1 ou 2 (null = visible par tous)
     isSystem: {
       type: Boolean,
       default: false
     },
+    messageType: { type: String, default: null }, // Pour les messages système traduits
+    messageParams: { type: mongoose.Schema.Types.Mixed, default: null },
     createdAt: {
       type: Date,
       default: Date.now
     }
   }],
   // Timestamps
-  startedAt: Date,
+  matchmakingStartedAt: Date, // Quand le timer de 2 min a commencé
+  startedAt: Date, // Quand le match a réellement commencé
   completedAt: Date
 }, { 
   timestamps: true 
@@ -182,6 +192,29 @@ rankedMatchSchema.index({ status: 1, gameMode: 1, mode: 1 });
 rankedMatchSchema.index({ 'players.user': 1, status: 1 });
 rankedMatchSchema.index({ rankBracket: 1, status: 1 });
 rankedMatchSchema.index({ createdAt: -1 });
+rankedMatchSchema.index({ team1Referent: 1 });
+rankedMatchSchema.index({ team2Referent: 1 });
+
+// Méthode pour vérifier si un joueur est référent
+rankedMatchSchema.methods.isPlayerReferent = function(userId) {
+  const userIdStr = userId.toString();
+  return this.team1Referent?.toString() === userIdStr || 
+         this.team2Referent?.toString() === userIdStr;
+};
+
+// Méthode pour obtenir l'équipe d'un joueur
+rankedMatchSchema.methods.getPlayerTeam = function(userId) {
+  const player = this.players.find(p => p.user.toString() === userId.toString());
+  return player?.team || null;
+};
+
+// Méthode pour obtenir le référent de l'équipe adverse
+rankedMatchSchema.methods.getOpponentReferent = function(userId) {
+  const playerTeam = this.getPlayerTeam(userId);
+  if (playerTeam === 1) return this.team2Referent;
+  if (playerTeam === 2) return this.team1Referent;
+  return null;
+};
 
 export default mongoose.model('RankedMatch', rankedMatchSchema);
 

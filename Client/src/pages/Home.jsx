@@ -199,7 +199,7 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-4xl mx-auto">
             {features.map((feature, index) => {
               const Icon = feature.icon;
               const isTournaments = feature.title === t('tournaments');

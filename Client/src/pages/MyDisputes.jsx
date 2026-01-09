@@ -192,7 +192,7 @@ const MyDisputes = () => {
           <div className="space-y-4">
             {disputes.map((match) => {
               const isLadder = match.disputeType === 'ladder';
-              const matchUrl = isLadder ? `/match/${match._id}` : `/ranked-match/${match._id}`;
+              const matchUrl = isLadder ? `/match/${match._id}` : `/ranked/match/${match._id}`;
               
               return (
                 <div 
@@ -322,6 +322,7 @@ const MyDisputes = () => {
 };
 
 export default MyDisputes;
+
 
 
 

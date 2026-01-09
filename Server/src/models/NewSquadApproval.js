@@ -49,3 +49,4 @@ newSquadApprovalSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 60 });
 
 export default mongoose.model('NewSquadApproval', newSquadApprovalSchema);
 
+

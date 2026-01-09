@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
@@ -17,9 +17,14 @@ const API_URL = 'https://api-nomercy.ggsecure.io/api';
 const MatchSheet = () => {
   const { matchId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { language } = useLanguage();
   const { selectedMode } = useMode();
   const { user, isAuthenticated, refreshUser } = useAuth();
+  
+  // Detect if this is a ranked match based on URL
+  const isRankedMatch = location.pathname.includes('/ranked/match/');
+  const apiEndpoint = isRankedMatch ? 'ranked-matches' : 'matches';
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
@@ -64,6 +69,51 @@ const MatchSheet = () => {
   // Team form (last 5 matches)
   const [challengerForm, setChallengerForm] = useState([]);
   const [opponentForm, setOpponentForm] = useState([]);
+
+  // Generate team names for ranked matches
+  const generateTeamName = (seed) => {
+    const adjectives = ['Shadow', 'Thunder', 'Crimson', 'Iron', 'Ghost', 'Vanguard', 'Phoenix', 'Storm', 'Blaze', 'Titan'];
+    const nouns = ['Wolves', 'Dragons', 'Knights', 'Spartans', 'Reapers', 'Sentinels', 'Rangers', 'Hawks', 'Vipers', 'Legion'];
+    const getPseudoRandomIndex = (s, arrayLength) => {
+      let x = (s * 9301 + 49297) % 233280;
+      return Math.floor((x / 233280) * arrayLength);
+    };
+    return `${adjectives[getPseudoRandomIndex(seed, adjectives.length)]} ${nouns[getPseudoRandomIndex(seed + 1, nouns.length)]}`;
+  };
+
+  const rankedTeamNames = useMemo(() => {
+    if (!isRankedMatch || !matchId) return { team1: 'Team 1', team2: 'Team 2' };
+    const seed = matchId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return {
+      team1: generateTeamName(seed),
+      team2: generateTeamName(seed + 12345)
+    };
+  }, [isRankedMatch, matchId]);
+
+  // Get referent name for ranked matches
+  const getReferentName = (teamNum) => {
+    if (!match || !isRankedMatch) return '';
+    const referent = teamNum === 1 ? match.team1Referent : match.team2Referent;
+    if (typeof referent === 'object') return referent?.username || referent?.discordUsername || '?';
+    const player = match.players?.find(p => p.user?._id === referent || p.user === referent);
+    return player?.user?.username || player?.username || '?';
+  };
+
+  // Check if current user is referent (for ranked matches)
+  const isReferent = useMemo(() => {
+    if (!isRankedMatch || !match || !user) return false;
+    const team1RefId = match.team1Referent?._id || match.team1Referent;
+    const team2RefId = match.team2Referent?._id || match.team2Referent;
+    return user._id === team1RefId || user._id === team2RefId || user.id === team1RefId || user.id === team2RefId;
+  }, [isRankedMatch, match, user]);
+
+  // Get user's team for ranked matches
+  const getUserTeam = () => {
+    if (!isRankedMatch || !match || !user) return null;
+    const userId = user._id || user.id;
+    const player = match.players?.find(p => p.user?._id === userId || p.user === userId);
+    return player?.team || null;
+  };
 
   // Translations
   const t = {
@@ -508,7 +558,7 @@ const MatchSheet = () => {
   const fetchMatchData = async (isInitial = false) => {
     if (isInitial) setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -683,7 +733,7 @@ const MatchSheet = () => {
     }
     
     try {
-      await fetch(`${API_URL}/matches/${matchId}/chat`, {
+      await fetch(`${API_URL}/${apiEndpoint}/${matchId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -875,7 +925,7 @@ const MatchSheet = () => {
 
     setSendingMessage(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/chat`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -909,7 +959,7 @@ const MatchSheet = () => {
     
     setSubmittingResult(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/result`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/result`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -936,7 +986,7 @@ const MatchSheet = () => {
     
     setSubmittingCode(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/code`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/${isRankedMatch ? 'game-code' : 'code'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -977,7 +1027,7 @@ const MatchSheet = () => {
     
     setSubmittingDispute(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/dispute`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/dispute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1005,7 +1055,7 @@ const MatchSheet = () => {
   const handleRequestCancel = async () => {
     setRequestingCancel(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/cancel-request`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/cancel-request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
@@ -1053,7 +1103,7 @@ const MatchSheet = () => {
   const handleStaffResolveVictory = async (winnerId) => {
     setStaffActionLoading(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/resolve`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1080,7 +1130,7 @@ const MatchSheet = () => {
     
     setStaffActionLoading(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/resolve`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -1124,7 +1174,7 @@ const MatchSheet = () => {
       formData.append('evidence', file);
       formData.append('description', evidenceDescription);
       
-      const response = await fetch(`${API_URL}/matches/${matchId}/dispute-evidence`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/dispute-evidence`, {
         method: 'POST',
         credentials: 'include',
         body: formData
@@ -1191,7 +1241,7 @@ const MatchSheet = () => {
     
     setStaffActionLoading(true);
     try {
-      const response = await fetch(`${API_URL}/matches/${matchId}/cancel-dispute`, {
+      const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/cancel-dispute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
@@ -1329,74 +1379,79 @@ const MatchSheet = () => {
         {/* Teams Header */}
         <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
           <div className="flex items-center justify-center gap-3 sm:gap-8">
-            {/* Challenger */}
-            <div className={`flex-1 text-center ${isMyTeamChallenger ? 'relative' : ''}`}>
-              {isMyTeamChallenger && (
-                <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
-                  {t.yourTeam}
-                </span>
-              )}
-              <Link to={`/squad/${match.challenger?._id}`} className="group">
-                {match.challenger?.logo ? (
-                  <img 
-                    src={match.challenger.logo} 
-                    alt={match.challenger.name}
-                    className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
-                  />
-                ) : (
-                  <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
-                    <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+            {isRankedMatch ? (
+              <>
+                {/* Team 1 - Ranked */}
+                <div className={`flex-1 text-center ${getUserTeam() === 1 ? 'relative' : ''}`}>
+                  {getUserTeam() === 1 && (
+                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                      {t.yourTeam}
+                    </span>
+                  )}
+                  <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-blue-500/30 to-blue-600/20 flex items-center justify-center border-2 border-blue-500/30">
+                    <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-blue-400" />
                   </div>
-                )}
-                <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamChallenger ? 'text-yellow-400' : 'text-white'}`}>
-                  {match.challenger?.name}
-                </h3>
-                {match.challenger?.tag && (
-                  <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.challenger.tag}]</span>
-                )}
-              </Link>
-              {/* Team Form - Last 5 matches */}
-              {challengerForm.length > 0 && (
-                <div className="flex items-center justify-center gap-1 mt-2">
-                  <span className="text-gray-500 text-[10px] mr-1">{language === 'fr' ? 'Forme:' : 'Form:'}</span>
-                  {challengerForm.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className={`w-4 h-4 sm:w-5 sm:h-5 rounded text-[10px] sm:text-xs font-bold flex items-center justify-center ${
-                        m.isWin 
-                          ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                          : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                      }`}
-                      title={m.opponentName}
-                    >
-                      {m.isWin ? 'V' : 'D'}
-                    </div>
-                  ))}
+                  <h3 className={`text-sm sm:text-xl font-bold truncate ${getUserTeam() === 1 ? 'text-yellow-400' : 'text-white'}`}>
+                    {rankedTeamNames.team1}
+                  </h3>
+                  <div className="flex items-center justify-center gap-1 mt-2">
+                    <Crown className="w-3 h-3 text-yellow-500" />
+                    <span className="text-gray-400 text-xs">{getReferentName(1)}</span>
+                  </div>
+                  {match.hostTeam === 1 && (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-400 rounded-full border border-yellow-500/30">
+                      <Home className="w-3 h-3" />
+                      {language === 'fr' ? 'Hôte' : 'Host'}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* VS */}
-            <div className="flex flex-col items-center flex-shrink-0">
-              <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
-                <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
-              </div>
-            </div>
+                {/* VS */}
+                <div className="flex flex-col items-center flex-shrink-0">
+                  <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
+                    <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
+                  </div>
+                </div>
 
-            {/* Opponent */}
-            <div className={`flex-1 text-center ${isMyTeamOpponent ? 'relative' : ''}`}>
-              {isMyTeamOpponent && (
-                <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
-                  {t.yourTeam}
-                </span>
-              )}
-              {match.opponent ? (
-                <>
-                  <Link to={`/squad/${match.opponent?._id}`} className="group">
-                    {match.opponent?.logo ? (
+                {/* Team 2 - Ranked */}
+                <div className={`flex-1 text-center ${getUserTeam() === 2 ? 'relative' : ''}`}>
+                  {getUserTeam() === 2 && (
+                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                      {t.yourTeam}
+                    </span>
+                  )}
+                  <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-red-500/30 to-red-600/20 flex items-center justify-center border-2 border-red-500/30">
+                    <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-red-400" />
+                  </div>
+                  <h3 className={`text-sm sm:text-xl font-bold truncate ${getUserTeam() === 2 ? 'text-yellow-400' : 'text-white'}`}>
+                    {rankedTeamNames.team2}
+                  </h3>
+                  <div className="flex items-center justify-center gap-1 mt-2">
+                    <Crown className="w-3 h-3 text-yellow-500" />
+                    <span className="text-gray-400 text-xs">{getReferentName(2)}</span>
+                  </div>
+                  {match.hostTeam === 2 && (
+                    <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-400 rounded-full border border-yellow-500/30">
+                      <Home className="w-3 h-3" />
+                      {language === 'fr' ? 'Hôte' : 'Host'}
+                    </span>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Challenger - Ladder */}
+                <div className={`flex-1 text-center ${isMyTeamChallenger ? 'relative' : ''}`}>
+                  {isMyTeamChallenger && (
+                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                      {t.yourTeam}
+                    </span>
+                  )}
+                  <Link to={`/squad/${match.challenger?._id}`} className="group">
+                    {match.challenger?.logo ? (
                       <img 
-                        src={match.opponent.logo} 
-                        alt={match.opponent.name}
+                        src={match.challenger.logo} 
+                        alt={match.challenger.name}
                         className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
                       />
                     ) : (
@@ -1404,18 +1459,18 @@ const MatchSheet = () => {
                         <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
                       </div>
                     )}
-                    <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamOpponent ? 'text-yellow-400' : 'text-white'}`}>
-                      {match.opponent?.name}
+                    <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamChallenger ? 'text-yellow-400' : 'text-white'}`}>
+                      {match.challenger?.name}
                     </h3>
-                    {match.opponent?.tag && (
-                      <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.opponent.tag}]</span>
+                    {match.challenger?.tag && (
+                      <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.challenger.tag}]</span>
                     )}
                   </Link>
                   {/* Team Form - Last 5 matches */}
-                  {opponentForm.length > 0 && (
+                  {challengerForm.length > 0 && (
                     <div className="flex items-center justify-center gap-1 mt-2">
                       <span className="text-gray-500 text-[10px] mr-1">{language === 'fr' ? 'Forme:' : 'Form:'}</span>
-                      {opponentForm.map((m, idx) => (
+                      {challengerForm.map((m, idx) => (
                         <div
                           key={idx}
                           className={`w-4 h-4 sm:w-5 sm:h-5 rounded text-[10px] sm:text-xs font-bold flex items-center justify-center ${
@@ -1430,16 +1485,74 @@ const MatchSheet = () => {
                       ))}
                     </div>
                   )}
-                </>
-              ) : (
-                <div className="opacity-50">
-                  <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-dark-800 flex items-center justify-center border-2 border-dashed border-white/20">
-                    <span className="text-xl sm:text-3xl">?</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-500">{t.waitingOpponent}</h3>
                 </div>
-              )}
-            </div>
+
+                {/* VS */}
+                <div className="flex flex-col items-center flex-shrink-0">
+                  <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
+                    <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
+                  </div>
+                </div>
+
+                {/* Opponent - Ladder */}
+                <div className={`flex-1 text-center ${isMyTeamOpponent ? 'relative' : ''}`}>
+                  {isMyTeamOpponent && (
+                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                      {t.yourTeam}
+                    </span>
+                  )}
+                  {match.opponent ? (
+                    <>
+                      <Link to={`/squad/${match.opponent?._id}`} className="group">
+                        {match.opponent?.logo ? (
+                          <img 
+                            src={match.opponent.logo} 
+                            alt={match.opponent.name}
+                            className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
+                            <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+                          </div>
+                        )}
+                        <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamOpponent ? 'text-yellow-400' : 'text-white'}`}>
+                          {match.opponent?.name}
+                        </h3>
+                        {match.opponent?.tag && (
+                          <span className="text-gray-500 text-xs sm:text-sm hidden sm:inline">[{match.opponent.tag}]</span>
+                        )}
+                      </Link>
+                      {/* Team Form - Last 5 matches */}
+                      {opponentForm.length > 0 && (
+                        <div className="flex items-center justify-center gap-1 mt-2">
+                          <span className="text-gray-500 text-[10px] mr-1">{language === 'fr' ? 'Forme:' : 'Form:'}</span>
+                          {opponentForm.map((m, idx) => (
+                            <div
+                              key={idx}
+                              className={`w-4 h-4 sm:w-5 sm:h-5 rounded text-[10px] sm:text-xs font-bold flex items-center justify-center ${
+                                m.isWin 
+                                  ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                                  : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                              }`}
+                              title={m.opponentName}
+                            >
+                              {m.isWin ? 'V' : 'D'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="opacity-50">
+                      <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-dark-800 flex items-center justify-center border-2 border-dashed border-white/20">
+                        <span className="text-xl sm:text-3xl">?</span>
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-500">{t.waitingOpponent}</h3>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -1924,138 +2037,174 @@ const MatchSheet = () => {
 
             {/* Rosters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Challenger Roster */}
-              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-4`}>
-                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                  <Users className={`w-4 h-4 text-${accentColor}-400`} />
-                  {match.challenger?.name}
-                </h3>
-                {match.challengerRoster?.length > 0 ? (
-                  <div className="space-y-2">
-                    {match.challengerRoster.map((p, idx) => {
-                      const player = p.user;
-                      // Utiliser le username sauvegardé si le compte est supprimé
-                      const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur supprimé' : 'Deleted player');
-                      const isDeleted = !player;
-                      const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username))) : getDefaultAvatar(displayName);
-                      return (
-                        <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
-                          <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                          <div className="flex-1 min-w-0">
-                            {isDeleted ? (
-                              <span className="text-gray-400 text-sm font-medium truncate block italic">
-                                {displayName}
-                              </span>
-                            ) : (
-                              <Link 
-                                to={`/player/${player._id}`} 
-                                className="text-white text-sm font-medium truncate hover:text-cyan-400 transition-colors cursor-pointer block"
-                              >
-                                {displayName}
-                              </Link>
-                            )}
-                            {player?.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {player?.platform === 'PC' && (
-                              <span 
-                                className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                                  ggsecureStatuses[player._id] === true 
-                                    ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                                    : ggsecureStatuses[player._id] === false
-                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                    : 'bg-blue-500/20 text-blue-400'
-                                }`}
-                                title={ggsecureStatuses[player._id] === true ? 'GGSecure Online' : ggsecureStatuses[player._id] === false ? 'GGSecure Offline' : 'PC Player'}
-                              >
-                                {ggsecureStatuses[player._id] !== undefined && (
-                                  <span className={`w-1.5 h-1.5 rounded-full ${ggsecureStatuses[player._id] ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+              {isRankedMatch ? (
+                <>
+                  {/* Team 1 Roster - Ranked */}
+                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-4`}>
+                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                      <Users className={`w-4 h-4 text-${accentColor}-400`} />
+                      {rankedTeamNames.team1}
+                    </h3>
+                    {match.players?.filter(p => p.team === 1).length > 0 ? (
+                      <div className="space-y-2">
+                        {match.players.filter(p => p.team === 1).map((p, idx) => {
+                          const player = p.user;
+                          const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur' : 'Player');
+                          const isPlayerReferent = p.isReferent || match.team1Referent?._id === player?._id || match.team1Referent === player?._id;
+                          const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || getDefaultAvatar(player.username)) : getDefaultAvatar(displayName);
+                          return (
+                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isPlayerReferent ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                              <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              <div className="flex-1 min-w-0">
+                                {player ? (
+                                  <Link to={`/player/${player._id}`} className="text-white text-sm font-medium truncate hover:text-cyan-400 transition-colors cursor-pointer block">
+                                    {displayName}
+                                  </Link>
+                                ) : (
+                                  <span className="text-gray-400 text-sm font-medium truncate block italic">{displayName}</span>
                                 )}
-                                PC
-                              </span>
-                            )}
-                            {player?.platform && player.platform !== 'PC' && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
-                                {player.platform}
-                              </span>
-                            )}
-                            {p.isHelper && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{t.helper}</span>}
-                          </div>
-                        </div>
-                      );
-                    })}
+                                <p className="text-gray-500 text-xs truncate">{p.rank} • {p.points} pts</p>
+                              </div>
+                              {isPlayerReferent && <Crown className="w-4 h-4 text-yellow-500" />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
-                )}
-              </div>
 
-              {/* Opponent Roster */}
-              {match.opponent && (
-                <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-3 sm:p-4`}>
-                  <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                    <Users className="w-4 h-4 text-purple-400" />
-                    {match.opponent?.name}
-                  </h3>
-                  {match.opponentRoster?.length > 0 ? (
-                    <div className="space-y-2">
-                      {match.opponentRoster.map((p, idx) => {
-                        const player = p.user;
-                        // Utiliser le username sauvegardé si le compte est supprimé
-                        const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur supprimé' : 'Deleted player');
-                        const isDeleted = !player;
-                        const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username))) : getDefaultAvatar(displayName);
-                        return (
-                          <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
-                            <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                            <div className="flex-1 min-w-0">
-                              {isDeleted ? (
-                                <span className="text-gray-400 text-sm font-medium truncate block italic">
-                                  {displayName}
-                                </span>
-                              ) : (
-                                <Link 
-                                  to={`/player/${player._id}`} 
-                                  className="text-white text-sm font-medium truncate hover:text-purple-400 transition-colors cursor-pointer block"
-                                >
-                                  {displayName}
-                                </Link>
-                              )}
-                              {player?.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                  {/* Team 2 Roster - Ranked */}
+                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-3 sm:p-4`}>
+                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                      <Users className="w-4 h-4 text-purple-400" />
+                      {rankedTeamNames.team2}
+                    </h3>
+                    {match.players?.filter(p => p.team === 2).length > 0 ? (
+                      <div className="space-y-2">
+                        {match.players.filter(p => p.team === 2).map((p, idx) => {
+                          const player = p.user;
+                          const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur' : 'Player');
+                          const isPlayerReferent = p.isReferent || match.team2Referent?._id === player?._id || match.team2Referent === player?._id;
+                          const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || getDefaultAvatar(player.username)) : getDefaultAvatar(displayName);
+                          return (
+                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isPlayerReferent ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                              <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              <div className="flex-1 min-w-0">
+                                {player ? (
+                                  <Link to={`/player/${player._id}`} className="text-white text-sm font-medium truncate hover:text-purple-400 transition-colors cursor-pointer block">
+                                    {displayName}
+                                  </Link>
+                                ) : (
+                                  <span className="text-gray-400 text-sm font-medium truncate block italic">{displayName}</span>
+                                )}
+                                <p className="text-gray-500 text-xs truncate">{p.rank} • {p.points} pts</p>
+                              </div>
+                              {isPlayerReferent && <Crown className="w-4 h-4 text-yellow-500" />}
                             </div>
-                            <div className="flex items-center gap-1">
-                              {player?.platform === 'PC' && (
-                                <span 
-                                  className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${
-                                    ggsecureStatuses[player._id] === true 
-                                      ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                                      : ggsecureStatuses[player._id] === false
-                                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                                      : 'bg-blue-500/20 text-blue-400'
-                                  }`}
-                                  title={ggsecureStatuses[player._id] === true ? 'GGSecure Online' : ggsecureStatuses[player._id] === false ? 'GGSecure Offline' : 'PC Player'}
-                                >
-                                  {ggsecureStatuses[player._id] !== undefined && (
-                                    <span className={`w-1.5 h-1.5 rounded-full ${ggsecureStatuses[player._id] ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Challenger Roster - Ladder */}
+                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-3 sm:p-4`}>
+                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                      <Users className={`w-4 h-4 text-${accentColor}-400`} />
+                      {match.challenger?.name}
+                    </h3>
+                    {match.challengerRoster?.length > 0 ? (
+                      <div className="space-y-2">
+                        {match.challengerRoster.map((p, idx) => {
+                          const player = p.user;
+                          const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur supprimé' : 'Deleted player');
+                          const isDeleted = !player;
+                          const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username))) : getDefaultAvatar(displayName);
+                          return (
+                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                              <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              <div className="flex-1 min-w-0">
+                                {isDeleted ? (
+                                  <span className="text-gray-400 text-sm font-medium truncate block italic">{displayName}</span>
+                                ) : (
+                                  <Link to={`/player/${player._id}`} className="text-white text-sm font-medium truncate hover:text-cyan-400 transition-colors cursor-pointer block">
+                                    {displayName}
+                                  </Link>
+                                )}
+                                {player?.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {player?.platform === 'PC' && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${ggsecureStatuses[player._id] === true ? 'bg-green-500/20 text-green-400 border border-green-500/30' : ggsecureStatuses[player._id] === false ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-blue-500/20 text-blue-400'}`} title={ggsecureStatuses[player._id] === true ? 'GGSecure Online' : ggsecureStatuses[player._id] === false ? 'GGSecure Offline' : 'PC Player'}>
+                                    {ggsecureStatuses[player._id] !== undefined && <span className={`w-1.5 h-1.5 rounded-full ${ggsecureStatuses[player._id] ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>}
+                                    PC
+                                  </span>
+                                )}
+                                {player?.platform && player.platform !== 'PC' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{player.platform}</span>}
+                                {p.isHelper && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{t.helper}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
+                    )}
+                  </div>
+
+                  {/* Opponent Roster - Ladder */}
+                  {match.opponent && (
+                    <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-3 sm:p-4`}>
+                      <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-purple-400" />
+                        {match.opponent?.name}
+                      </h3>
+                      {match.opponentRoster?.length > 0 ? (
+                        <div className="space-y-2">
+                          {match.opponentRoster.map((p, idx) => {
+                            const player = p.user;
+                            const displayName = player?.username || p.username || (language === 'fr' ? 'Joueur supprimé' : 'Deleted player');
+                            const isDeleted = !player;
+                            const avatar = player ? (getAvatarUrl(player.avatarUrl || player.avatar) || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : getDefaultAvatar(player.username))) : getDefaultAvatar(displayName);
+                            return (
+                              <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${p.isHelper ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                                <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                <div className="flex-1 min-w-0">
+                                  {isDeleted ? (
+                                    <span className="text-gray-400 text-sm font-medium truncate block italic">{displayName}</span>
+                                  ) : (
+                                    <Link to={`/player/${player._id}`} className="text-white text-sm font-medium truncate hover:text-purple-400 transition-colors cursor-pointer block">
+                                      {displayName}
+                                    </Link>
                                   )}
-                                  PC
-                                </span>
-                              )}
-                              {player?.platform && player.platform !== 'PC' && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
-                                  {player.platform}
-                                </span>
-                              )}
-                              {p.isHelper && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{t.helper}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
+                                  {player?.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {player?.platform === 'PC' && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1 ${ggsecureStatuses[player._id] === true ? 'bg-green-500/20 text-green-400 border border-green-500/30' : ggsecureStatuses[player._id] === false ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-blue-500/20 text-blue-400'}`} title={ggsecureStatuses[player._id] === true ? 'GGSecure Online' : ggsecureStatuses[player._id] === false ? 'GGSecure Offline' : 'PC Player'}>
+                                      {ggsecureStatuses[player._id] !== undefined && <span className={`w-1.5 h-1.5 rounded-full ${ggsecureStatuses[player._id] ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`}></span>}
+                                      PC
+                                    </span>
+                                  )}
+                                  {player?.platform && player.platform !== 'PC' && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">{player.platform}</span>}
+                                  {p.isHelper && <span className="text-[10px] px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">{t.helper}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
                   )}
-                </div>
+                </>
               )}
             </div>
           </div>

@@ -125,6 +125,58 @@ const appSettingsSchema = new mongoose.Schema({
       startHour: { type: Number, default: 0 },   // Start hour (0-23)
       endHour: { type: Number, default: 20 }     // End hour (0-23)
     }
+  },
+  
+  // Ranked mode settings
+  rankedSettings: {
+    // Configuration par mode de jeu
+    searchAndDestroy: {
+      enabled: { type: Boolean, default: true },
+      // Récompenses en victoire
+      rewards: {
+        pointsWin: { type: Number, default: 25 },    // Points gagnés en victoire
+        pointsLose: { type: Number, default: -15 },  // Points perdus en défaite
+        goldWin: { type: Number, default: 50 }       // Gold gagné en victoire
+      },
+      // Configuration du matchmaking
+      matchmaking: {
+        minPlayers: { type: Number, default: 6 },    // Minimum pour 3v3
+        maxPlayers: { type: Number, default: 10 },   // Maximum pour 5v5
+        waitTimer: { type: Number, default: 120 }    // Timer d'attente en secondes (2 min)
+      }
+    },
+    teamDeathmatch: {
+      enabled: { type: Boolean, default: false },
+      rewards: {
+        pointsWin: { type: Number, default: 25 },
+        pointsLose: { type: Number, default: -15 },
+        goldWin: { type: Number, default: 50 }
+      }
+    },
+    domination: {
+      enabled: { type: Boolean, default: false },
+      rewards: {
+        pointsWin: { type: Number, default: 25 },
+        pointsLose: { type: Number, default: -15 },
+        goldWin: { type: Number, default: 50 }
+      }
+    },
+    captureTheFlag: {
+      enabled: { type: Boolean, default: false },
+      rewards: {
+        pointsWin: { type: Number, default: 25 },
+        pointsLose: { type: Number, default: -15 },
+        goldWin: { type: Number, default: 50 }
+      }
+    },
+    killConfirmed: {
+      enabled: { type: Boolean, default: false },
+      rewards: {
+        pointsWin: { type: Number, default: 25 },
+        pointsLose: { type: Number, default: -15 },
+        goldWin: { type: Number, default: 50 }
+      }
+    }
   }
 }, {
   timestamps: true

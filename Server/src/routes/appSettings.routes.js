@@ -21,6 +21,13 @@ router.get('/public', async (req, res) => {
       staffAdminAccess: settings.staffAdminAccess,
       ladderSettings: settings.ladderSettings || {
         duoTrioTimeRestriction: { enabled: true, startHour: 0, endHour: 20 }
+      },
+      rankedSettings: settings.rankedSettings || {
+        searchAndDestroy: {
+          enabled: true,
+          rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
+          matchmaking: { minPlayers: 6, maxPlayers: 10, waitTimer: 120 }
+        }
       }
     });
   } catch (error) {
@@ -246,6 +253,108 @@ router.patch('/admin/ladder-settings', verifyToken, requireAdmin, async (req, re
     });
   } catch (error) {
     console.error('Error updating ladder settings:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update ranked settings (admin only)
+router.patch('/admin/ranked-settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { searchAndDestroy, teamDeathmatch, domination, captureTheFlag, killConfirmed } = req.body;
+    
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    
+    // Initialize rankedSettings if not exists
+    if (!settings.rankedSettings) {
+      settings.rankedSettings = {
+        searchAndDestroy: {
+          enabled: true,
+          rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
+          matchmaking: { minPlayers: 6, maxPlayers: 10, waitTimer: 120 }
+        }
+      };
+    }
+    
+    // Update Search & Destroy settings
+    if (searchAndDestroy) {
+      if (!settings.rankedSettings.searchAndDestroy) {
+        settings.rankedSettings.searchAndDestroy = {
+          enabled: true,
+          rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
+          matchmaking: { minPlayers: 6, maxPlayers: 10, waitTimer: 120 }
+        };
+      }
+      
+      if (typeof searchAndDestroy.enabled === 'boolean') {
+        settings.rankedSettings.searchAndDestroy.enabled = searchAndDestroy.enabled;
+      }
+      
+      if (searchAndDestroy.rewards) {
+        if (!settings.rankedSettings.searchAndDestroy.rewards) {
+          settings.rankedSettings.searchAndDestroy.rewards = { pointsWin: 25, pointsLose: -15, goldWin: 50 };
+        }
+        if (typeof searchAndDestroy.rewards.pointsWin === 'number') {
+          settings.rankedSettings.searchAndDestroy.rewards.pointsWin = searchAndDestroy.rewards.pointsWin;
+        }
+        if (typeof searchAndDestroy.rewards.pointsLose === 'number') {
+          settings.rankedSettings.searchAndDestroy.rewards.pointsLose = searchAndDestroy.rewards.pointsLose;
+        }
+        if (typeof searchAndDestroy.rewards.goldWin === 'number') {
+          settings.rankedSettings.searchAndDestroy.rewards.goldWin = searchAndDestroy.rewards.goldWin;
+        }
+      }
+      
+      if (searchAndDestroy.matchmaking) {
+        if (!settings.rankedSettings.searchAndDestroy.matchmaking) {
+          settings.rankedSettings.searchAndDestroy.matchmaking = { minPlayers: 6, maxPlayers: 10, waitTimer: 120 };
+        }
+        if (typeof searchAndDestroy.matchmaking.waitTimer === 'number') {
+          settings.rankedSettings.searchAndDestroy.matchmaking.waitTimer = searchAndDestroy.matchmaking.waitTimer;
+        }
+      }
+    }
+    
+    // Update other modes (future)
+    const modes = [
+      { key: 'teamDeathmatch', data: teamDeathmatch },
+      { key: 'domination', data: domination },
+      { key: 'captureTheFlag', data: captureTheFlag },
+      { key: 'killConfirmed', data: killConfirmed }
+    ];
+    
+    for (const mode of modes) {
+      if (mode.data) {
+        if (!settings.rankedSettings[mode.key]) {
+          settings.rankedSettings[mode.key] = {
+            enabled: false,
+            rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 }
+          };
+        }
+        if (typeof mode.data.enabled === 'boolean') {
+          settings.rankedSettings[mode.key].enabled = mode.data.enabled;
+        }
+        if (mode.data.rewards) {
+          settings.rankedSettings[mode.key].rewards = {
+            ...settings.rankedSettings[mode.key].rewards,
+            ...mode.data.rewards
+          };
+        }
+      }
+    }
+    
+    settings.markModified('rankedSettings');
+    await settings.save();
+    
+    res.json({ 
+      success: true, 
+      rankedSettings: settings.rankedSettings,
+      message: 'Paramètres classé mis à jour'
+    });
+  } catch (error) {
+    console.error('Error updating ranked settings:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
