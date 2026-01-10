@@ -1044,11 +1044,11 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
       });
     }
 
-    // Vérifier le cooldown de 3h avant de pouvoir rejouer contre la même équipe
+    // Vérifier le cooldown de 3h avant de pouvoir rejouer contre la même équipe dans le même format
     const REMATCH_COOLDOWN_HOURS = 3;
     const cooldownThreshold = new Date(Date.now() - REMATCH_COOLDOWN_HOURS * 60 * 60 * 1000);
     
-    // Chercher un match récent entre ces deux équipes (dans les deux sens)
+    // Chercher un match récent entre ces deux équipes (dans les deux sens) avec le même format
     const recentMatch = await Match.findOne({
       $or: [
         // Notre équipe était challenger, l'adversaire était opponent
@@ -1056,6 +1056,8 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
         // Notre équipe était opponent, l'adversaire était challenger
         { challenger: match.challenger, opponent: squad._id }
       ],
+      // Même format de match (4v4 ou 5v5) - permet de jouer différents formats contre la même équipe
+      teamSize: match.teamSize,
       // Match terminé, en cours, ou en litige (pas pending/cancelled/expired)
       status: { $in: ['in_progress', 'completed', 'disputed', 'accepted'] },
       // Le match a été accepté dans les 3 dernières heures

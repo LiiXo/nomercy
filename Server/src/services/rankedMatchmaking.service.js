@@ -401,9 +401,18 @@ const createMatchFromQueue = async (gameMode, mode) => {
     // Tirer au sort l'équipe hôte
     const hostTeam = Math.random() < 0.5 ? 1 : 2;
     
-    // Sélectionner 3 maps aléatoires pour le BO3
-    const maps = await GameMap.find({ isActive: true });
-    const selectedMaps = maps.sort(() => Math.random() - 0.5).slice(0, 3).map((map, index) => ({
+    // Sélectionner 3 maps aléatoires pour le BO3 selon le nombre de joueurs
+    // 3v3 et 4v4 → ladder duo-trio
+    // 5v5 → ladder squad-team
+    const ladderType = teamSize === 5 ? 'squad-team' : 'duo-trio';
+    const maps = await GameMap.find({ 
+      isActive: true,
+      ladders: ladderType
+    });
+    
+    // Si pas assez de maps dans ce ladder, prendre toutes les maps actives
+    const availableMaps = maps.length >= 3 ? maps : await GameMap.find({ isActive: true });
+    const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, 3).map((map, index) => ({
       name: map.name,
       image: map.imageUrl || map.image,
       order: index + 1,

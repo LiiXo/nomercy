@@ -222,6 +222,116 @@ router.post('/matchmaking/check-ggsecure', verifyToken, async (req, res) => {
   }
 });
 
+// ==================== ADMIN ROUTES ====================
+// NOTE: Admin routes MUST be defined BEFORE /:matchId to avoid being captured by the param
+
+// Get all ranked matches (admin/staff)
+router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status = '' } = req.query;
+    
+    const query = {};
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    
+    const matches = await RankedMatch.find(query)
+      .populate('players.user', 'username')
+      .populate('team1Referent', 'username')
+      .populate('team2Referent', 'username')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await RankedMatch.countDocuments(query);
+    
+    res.json({
+      success: true,
+      matches,
+      total,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get all ranked matches error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update ranked match status (admin/staff)
+router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'ready', 'in_progress', 'completed', 'cancelled', 'disputed'];
+    
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Statut invalide'
+      });
+    }
+
+    const match = await RankedMatch.findById(req.params.matchId);
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'Match classé non trouvé'
+      });
+    }
+
+    match.status = status;
+    
+    // If completing or cancelling, remove from dispute if needed
+    if (status === 'completed' || status === 'cancelled') {
+      match.dispute = null;
+    }
+    
+    await match.save();
+
+    res.json({
+      success: true,
+      message: 'Statut du match mis à jour',
+      match
+    });
+  } catch (error) {
+    console.error('Update ranked match status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Delete ranked match (admin/staff)
+router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const match = await RankedMatch.findById(req.params.matchId);
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'Match classé non trouvé'
+      });
+    }
+
+    await RankedMatch.findByIdAndDelete(req.params.matchId);
+
+    res.json({
+      success: true,
+      message: 'Match classé supprimé'
+    });
+  } catch (error) {
+    console.error('Delete ranked match error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
 // ==================== MATCH ROUTES ====================
 
 // Get match by ID
@@ -480,7 +590,7 @@ router.post('/:matchId/evidence', verifyToken, async (req, res) => {
     }
     
     // Vérifier que le joueur est dans le match
-    const player = match.players.find(p => p.user.toString() === req.user.id);
+    const player = match.players.find(p => p.user && p.user.toString() === req.user.id);
     if (!player) {
       return res.status(403).json({ success: false, message: 'Vous n\'êtes pas dans ce match' });
     }
@@ -517,7 +627,7 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     }
     
     // Vérifier que le joueur est dans le match
-    const player = match.players.find(p => p.user.toString() === req.user.id);
+    const player = match.players.find(p => p.user && p.user.toString() === req.user.id);
     if (!player) {
       return res.status(403).json({ success: false, message: 'Vous n\'êtes pas dans ce match' });
     }
@@ -615,114 +725,5 @@ async function distributeRewards(match) {
     console.error('[Ranked] Error distributing rewards:', error);
   }
 }
-
-// ==================== ADMIN ROUTES ====================
-
-// Get all ranked matches (admin)
-// Get all ranked matches (admin/staff)
-router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
-  try {
-    const { page = 1, limit = 20, status = '' } = req.query;
-    
-    const query = {};
-    if (status && status !== 'all') {
-      query.status = status;
-    }
-    
-    const matches = await RankedMatch.find(query)
-      .populate('players.user', 'username')
-      .populate('host', 'username')
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
-    
-    const total = await RankedMatch.countDocuments(query);
-    
-    res.json({
-      success: true,
-      matches,
-      total,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit))
-      }
-    });
-  } catch (error) {
-    console.error('Get all ranked matches error:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-});
-
-// Update ranked match status (admin/staff)
-router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, res) => {
-  try {
-    const { status } = req.body;
-    const validStatuses = ['pending', 'ready', 'in_progress', 'completed', 'cancelled', 'disputed'];
-    
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Statut invalide'
-      });
-    }
-
-    const match = await RankedMatch.findById(req.params.matchId);
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'Match classé non trouvé'
-      });
-    }
-
-    match.status = status;
-    
-    // If completing or cancelling, remove from dispute if needed
-    if (status === 'completed' || status === 'cancelled') {
-      match.dispute = null;
-    }
-    
-    await match.save();
-
-    res.json({
-      success: true,
-      message: 'Statut du match mis à jour',
-      match
-    });
-  } catch (error) {
-    console.error('Update ranked match status error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur'
-    });
-  }
-});
-
-// Delete ranked match (admin/staff)
-router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
-  try {
-    const match = await RankedMatch.findById(req.params.matchId);
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'Match classé non trouvé'
-      });
-    }
-
-    await RankedMatch.findByIdAndDelete(req.params.matchId);
-
-    res.json({
-      success: true,
-      message: 'Match classé supprimé'
-    });
-  } catch (error) {
-    console.error('Delete ranked match error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur'
-    });
-  }
-});
 
 export default router;

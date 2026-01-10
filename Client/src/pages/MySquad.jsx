@@ -83,7 +83,6 @@ const MySquad = () => {
       noLadders: 'Aucune ladder inscrite',
       joinedAt: 'Membre depuis',
       createdAt: 'Créée le',
-      squadHub: 'Squad Hub',
       createTitle: 'Créer une nouvelle escouade',
       squadNameLabel: 'Nom de l\'escouade',
       squadNamePlaceholder: 'Ex: Les Invincibles',
@@ -146,7 +145,6 @@ const MySquad = () => {
       noLadders: 'No ladder registered',
       joinedAt: 'Member since',
       createdAt: 'Created',
-      squadHub: 'Squad Hub',
       createTitle: 'Create a new squad',
       squadNameLabel: 'Squad name',
       squadNamePlaceholder: 'Ex: The Invincibles',
@@ -209,7 +207,6 @@ const MySquad = () => {
       noLadders: 'Keine Ladder registriert',
       joinedAt: 'Mitglied seit',
       createdAt: 'Erstellt am',
-      squadHub: 'Squad Hub',
       createTitle: 'Neues Squad erstellen',
       squadNameLabel: 'Squad-Name',
       squadNamePlaceholder: 'Z.B.: Die Unbesiegbaren',
@@ -272,7 +269,6 @@ const MySquad = () => {
       noLadders: 'Nessuna ladder registrata',
       joinedAt: 'Membro dal',
       createdAt: 'Creata il',
-      squadHub: 'Squad Hub',
       createTitle: 'Crea una nuova squad',
       squadNameLabel: 'Nome squad',
       squadNamePlaceholder: 'Es: Gli Invincibili',
@@ -753,7 +749,7 @@ const MySquad = () => {
                         <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                       </button>
                       <Link
-                        to="/squad-hub"
+                        to="/squads"
                         className={`inline-flex items-center justify-center gap-3 px-8 py-4 bg-dark-800/80 border ${borderColor} rounded-xl text-white font-semibold hover:bg-dark-700/80 transition-all group`}
                       >
                         <Search className="w-5 h-5" />
@@ -842,13 +838,6 @@ const MySquad = () => {
               
               {/* Quick Actions */}
               <div className="absolute top-4 right-4 flex gap-2">
-                <Link
-                  to="/squad-hub"
-                  className="p-2.5 bg-dark-800/80 hover:bg-dark-700/80 rounded-lg text-gray-400 hover:text-white transition-colors backdrop-blur-sm border border-white/10"
-                  title={t.squadHub}
-                >
-                  <Globe className="w-4 h-4" />
-                </Link>
                 {isLeaderOrOfficer && (
                   <Link
                     to="/squad-management"

@@ -220,7 +220,6 @@ const Navbar = () => {
     { path: `/${selectedMode}/rankings`, label: t('rankings'), icon: Trophy },
     // Only show ranked mode to admin/staff users
     ...(isStaff() ? [{ path: `/${selectedMode}/ranked`, label: t('rankedMode'), icon: Medal }] : []),
-    { path: '/squad-hub', label: 'Squad Hub', icon: Users },
   ];
 
   const isHardcore = selectedMode === 'hardcore';

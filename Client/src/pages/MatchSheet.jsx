@@ -56,7 +56,7 @@ const MatchSheet = () => {
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [evidenceDescription, setEvidenceDescription] = useState('');
   const evidenceInputRef = useRef(null);
-  const { on, joinMatch, leaveMatch } = useSocket();
+  const { on, joinMatch, leaveMatch, joinRankedMatch, leaveRankedMatch } = useSocket();
   const [rewardsConfig, setRewardsConfig] = useState(null);
   const [showCombatReport, setShowCombatReport] = useState(false);
   const [hasSeenCombatReport, setHasSeenCombatReport] = useState(false);
@@ -94,17 +94,52 @@ const MatchSheet = () => {
   const getReferentName = (teamNum) => {
     if (!match || !isRankedMatch) return '';
     const referent = teamNum === 1 ? match.team1Referent : match.team2Referent;
-    if (typeof referent === 'object') return referent?.username || referent?.discordUsername || '?';
-    const player = match.players?.find(p => p.user?._id === referent || p.user === referent);
-    return player?.user?.username || player?.username || '?';
+    
+    // If referent is a populated object with username
+    if (typeof referent === 'object' && referent !== null) {
+      return referent?.username || referent?.discordUsername || '?';
+    }
+    
+    // If referent is just an ID, find the player in the match
+    if (referent) {
+      const player = match.players?.find(p => {
+        const playerId = p.user?._id || p.user;
+        return playerId === referent || playerId?.toString() === referent?.toString();
+      });
+      if (player?.user?.username) return player.user.username;
+      if (player?.username) return player.username;
+    }
+    
+    // Fallback: find the referent from team players
+    const teamPlayers = match.players?.filter(p => p.team === teamNum && p.isReferent);
+    if (teamPlayers?.length > 0) {
+      const refPlayer = teamPlayers[0];
+      return refPlayer?.user?.username || refPlayer?.username || '?';
+    }
+    
+    return '?';
   };
 
   // Check if current user is referent (for ranked matches)
   const isReferent = useMemo(() => {
     if (!isRankedMatch || !match || !user) return false;
+    const userId = user._id || user.id;
+    
+    // Check via team1Referent / team2Referent fields
     const team1RefId = match.team1Referent?._id || match.team1Referent;
     const team2RefId = match.team2Referent?._id || match.team2Referent;
-    return user._id === team1RefId || user._id === team2RefId || user.id === team1RefId || user.id === team2RefId;
+    
+    if (userId === team1RefId || userId === team2RefId) return true;
+    if (team1RefId?.toString() === userId?.toString()) return true;
+    if (team2RefId?.toString() === userId?.toString()) return true;
+    
+    // Also check via isReferent flag in players array
+    const myPlayer = match.players?.find(p => {
+      const playerId = p.user?._id || p.user;
+      return playerId === userId || playerId?.toString() === userId?.toString();
+    });
+    
+    return myPlayer?.isReferent === true;
   }, [isRankedMatch, match, user]);
 
   // Get user's team for ranked matches
@@ -159,6 +194,8 @@ const MatchSheet = () => {
       weWon: 'Nous avons gagné',
       theyWon: 'Ils ont gagné',
       onlyLeader: 'Seul le leader ou un officier peut valider',
+      onlyReferent: 'Seul le référent de l\'équipe peut valider le score et signaler un litige',
+      referent: 'Référent',
       matchEnded: 'Match terminé',
       winner: 'Gagnant',
       reportDispute: 'Signaler un litige',
@@ -266,6 +303,8 @@ const MatchSheet = () => {
       weWon: 'We won',
       theyWon: 'They won',
       onlyLeader: 'Only the leader or an officer can validate',
+      onlyReferent: 'Only the team referent can validate score and report disputes',
+      referent: 'Referent',
       matchEnded: 'Match ended',
       winner: 'Winner',
       reportDispute: 'Report dispute',
@@ -373,6 +412,8 @@ const MatchSheet = () => {
       weWon: 'Wir haben gewonnen',
       theyWon: 'Sie haben gewonnen',
       onlyLeader: 'Nur der Leader oder ein Offizier kann bestätigen',
+      onlyReferent: 'Nur der Team-Referent kann das Ergebnis validieren und Streit melden',
+      referent: 'Referent',
       matchEnded: 'Spiel beendet',
       winner: 'Gewinner',
       reportDispute: 'Streitfall melden',
@@ -480,6 +521,8 @@ const MatchSheet = () => {
       weWon: 'Abbiamo vinto',
       theyWon: 'Hanno vinto',
       onlyLeader: 'Solo il leader o un ufficiale può confermare',
+      onlyReferent: 'Solo il referente della squadra può convalidare il punteggio e segnalare controversie',
+      referent: 'Referente',
       matchEnded: 'Partita terminata',
       winner: 'Vincitore',
       reportDispute: 'Segnala controversia',
@@ -842,18 +885,27 @@ const MatchSheet = () => {
   useEffect(() => {
     if (!matchId) return;
 
-    // Join match room
-    joinMatch(matchId);
+    // Join the correct room based on match type
+    if (isRankedMatch) {
+      joinRankedMatch(matchId);
+    } else {
+      joinMatch(matchId);
+    }
 
-    // Real-time chat messages
+    // Real-time chat messages handler
     const handleChatMessage = (data) => {
-      if (data.matchId === matchId) {
+      // Pour les matchs classés, data est directement le message
+      // Pour les matchs normaux, data contient matchId et message
+      const messageData = isRankedMatch ? data : data.message;
+      const msgMatchId = isRankedMatch ? matchId : data.matchId;
+      
+      if (msgMatchId === matchId && messageData) {
         setMessages(prev => {
           // Avoid duplicates
-          if (prev.some(m => m.createdAt === data.message.createdAt && m.user?._id === data.message.user?._id)) {
+          if (prev.some(m => m.createdAt === messageData.createdAt && m.user?._id === messageData.user?._id)) {
             return prev;
           }
-          return [...prev, data.message];
+          return [...prev, messageData];
         });
         // Scroll to bottom after receiving new message
         setTimeout(scrollChatToBottom, 50);
@@ -885,16 +937,21 @@ const MatchSheet = () => {
       }
     };
 
-    // Subscribe to events
-    const unsubChat = on('newChatMessage', handleChatMessage);
+    // Subscribe to the correct events based on match type
+    const chatEvent = isRankedMatch ? 'newRankedMessage' : 'newChatMessage';
+    const unsubChat = on(chatEvent, handleChatMessage);
     const unsubMatch = on('matchUpdate', handleMatchUpdate);
 
     return () => {
-      leaveMatch(matchId);
+      if (isRankedMatch) {
+        leaveRankedMatch(matchId);
+      } else {
+        leaveMatch(matchId);
+      }
       unsubChat();
       unsubMatch();
     };
-  }, [matchId, navigate, on, joinMatch, leaveMatch]);
+  }, [matchId, navigate, on, joinMatch, leaveMatch, joinRankedMatch, leaveRankedMatch, isRankedMatch]);
 
   // Chat container ref for scrolling
   const chatContainerRef = useRef(null);
@@ -954,16 +1011,27 @@ const MatchSheet = () => {
   };
 
   // Submit match result
-  const handleSubmitResult = async (winnerId) => {
-    if (!isLeaderOrOfficer()) return;
+  const handleSubmitResult = async (winnerValue) => {
+    // For ranked matches, only referent can submit. For ladder, leader/officer.
+    if (isRankedMatch) {
+      if (!isReferent) return;
+    } else {
+      if (!isLeaderOrOfficer()) return;
+    }
     
     setSubmittingResult(true);
     try {
+      // For ranked matches, send winner as team number (1 or 2)
+      // For ladder matches, send winnerId as squad ID
+      const payload = isRankedMatch 
+        ? { winner: winnerValue } 
+        : { winnerId: winnerValue };
+      
       const response = await fetch(`${API_URL}/${apiEndpoint}/${matchId}/result`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ winnerId })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -1265,6 +1333,7 @@ const MatchSheet = () => {
     const statusMap = {
       pending: { color: 'yellow', text: t.pending },
       accepted: { color: 'blue', text: t.accepted },
+      ready: { color: 'green', text: t.inProgress },
       in_progress: { color: 'green', text: t.inProgress },
       completed: { color: 'gray', text: t.completed },
       cancelled: { color: 'red', text: t.cancelled },
@@ -1342,7 +1411,13 @@ const MatchSheet = () => {
 
   const isMyTeamChallenger = mySquad?._id === match.challenger?._id;
   const isMyTeamOpponent = mySquad?._id === match.opponent?._id;
-  const isParticipant = isMyTeamChallenger || isMyTeamOpponent;
+  // Pour les matchs classés, vérifier si le joueur est dans match.players
+  const isRankedPlayer = isRankedMatch && match.players?.some(p => {
+    const playerId = p.user?._id || p.user;
+    const currentUserId = user?._id || user?.id;
+    return playerId === currentUserId;
+  });
+  const isParticipant = isMyTeamChallenger || isMyTeamOpponent || isRankedPlayer;
   const statusBadge = getStatusBadge(match.status);
   const currentRank = getCurrentRank();
   const potentialWinRank = getPotentialRank(true);
@@ -1723,7 +1798,7 @@ const MatchSheet = () => {
               </div>
             )}
 
-            {/* Random Maps Display */}
+            {/* Random Maps Display - Ladder */}
             {match.mapType === 'random' && match.randomMaps?.length > 0 && (
               <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-4 mb-4`}>
                 <h3 className="text-sm font-semibold text-purple-400 mb-3 flex items-center gap-2">
@@ -1750,8 +1825,68 @@ const MatchSheet = () => {
               </div>
             )}
 
-            {/* Match Actions - Only for participants, leaders/officers, and active matches */}
-            {isParticipant && match.opponent && (match.status === 'accepted' || match.status === 'in_progress') && isLeaderOrOfficer() && (
+            {/* Ranked Maps Display - BO3 */}
+            {isRankedMatch && match.maps?.length > 0 && (
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 mb-4`}>
+                <h3 className={`text-sm font-semibold text-${accentColor}-400 mb-3 flex items-center gap-2`}>
+                  <Map className="w-4 h-4" />
+                  {t.randomMaps} ({match.teamSize}v{match.teamSize})
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {match.maps.map((map, idx) => (
+                    <div 
+                      key={idx} 
+                      className={`relative flex flex-col items-center p-3 bg-dark-800/50 rounded-lg border ${
+                        map.winner === 1 
+                          ? 'border-blue-500/50 bg-blue-500/10' 
+                          : map.winner === 2 
+                            ? 'border-red-500/50 bg-red-500/10' 
+                            : 'border-white/5'
+                      }`}
+                    >
+                      {/* Map Order Badge */}
+                      <span className={`absolute -top-2 -left-2 w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                        isHardcore 
+                          ? 'bg-red-500/30 text-red-300 border border-red-500/50' 
+                          : 'bg-cyan-500/30 text-cyan-300 border border-cyan-500/50'
+                      }`}>
+                        {map.order}
+                      </span>
+                      
+                      {/* Map Image */}
+                      {map.image ? (
+                        <img 
+                          src={map.image} 
+                          alt={map.name} 
+                          className="w-full h-16 sm:h-20 rounded-lg object-cover mb-2"
+                        />
+                      ) : (
+                        <div className={`w-full h-16 sm:h-20 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center mb-2`}>
+                          <Map className={`w-6 h-6 text-${accentColor}-400`} />
+                        </div>
+                      )}
+                      
+                      {/* Map Name */}
+                      <p className="text-white text-sm font-medium text-center truncate w-full">{map.name}</p>
+                      
+                      {/* Winner Badge */}
+                      {map.winner && (
+                        <div className={`mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          map.winner === 1 
+                            ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                            : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                        }`}>
+                          {map.winner === 1 ? rankedTeamNames.team1 : rankedTeamNames.team2}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Match Actions - Ladder matches: Only for participants, leaders/officers, and active matches */}
+            {!isRankedMatch && isParticipant && match.opponent && (match.status === 'accepted' || match.status === 'in_progress') && isLeaderOrOfficer() && (
               <div className="space-y-2">
                 {/* Sélectionner le gagnant */}
                 <button
@@ -1799,6 +1934,58 @@ const MatchSheet = () => {
                     <Ban className="w-4 h-4" />
                     {t.requestCancel}
                   </button>
+                )}
+              </div>
+            )}
+
+            {/* Match Actions - Ranked matches: Only referent can validate/dispute */}
+            {isRankedMatch && (match.status === 'ready' || match.status === 'in_progress') && (
+              <div className="space-y-2">
+                {/* Info box showing referent role */}
+                <div className={`p-3 rounded-xl border ${isReferent ? 'bg-yellow-500/10 border-yellow-500/30' : 'bg-dark-800/50 border-white/10'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Crown className={`w-4 h-4 ${isReferent ? 'text-yellow-400' : 'text-gray-400'}`} />
+                    <span className={`text-sm font-medium ${isReferent ? 'text-yellow-400' : 'text-gray-400'}`}>
+                      {isReferent 
+                        ? (language === 'fr' ? 'Vous êtes le référent de votre équipe' : 'You are your team\'s referent')
+                        : t.onlyReferent
+                      }
+                    </span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2 text-xs text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-blue-400" />
+                      {t.referent} Team 1: <span className="text-blue-300 ml-1">{getReferentName(1)}</span>
+                    </span>
+                    <span className="hidden sm:inline text-gray-600">•</span>
+                    <span className="flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-red-400" />
+                      {t.referent} Team 2: <span className="text-red-300 ml-1">{getReferentName(2)}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions only for referent */}
+                {isReferent && (
+                  <>
+                    {/* Sélectionner le gagnant */}
+                    <button
+                      onClick={() => setShowResultModal(true)}
+                      className={`w-full py-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2`}
+                    >
+                      <Trophy className="w-4 h-4" />
+                      {t.selectWinner}
+                    </button>
+
+                    {/* Signaler un litige */}
+                    <button
+                      onClick={() => setShowDisputeModal(true)}
+                      className="w-full py-2.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400 text-sm font-medium hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      {t.reportDispute}
+                    </button>
+                  </>
                 )}
               </div>
             )}
@@ -2222,59 +2409,109 @@ const MatchSheet = () => {
             </h3>
             
             <div className="space-y-3">
-              {/* Our team won */}
-              <button
-                onClick={() => handleSubmitResult(mySquad._id)}
-                disabled={submittingResult}
-                className="w-full p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {mySquad?.logo ? (
-                      <img src={mySquad.logo} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-green-400" />
+              {isRankedMatch ? (
+                <>
+                  {/* Ranked: My team won */}
+                  <button
+                    onClick={() => handleSubmitResult(getUserTeam())}
+                    disabled={submittingResult}
+                    className="w-full p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getUserTeam() === 1 ? 'bg-blue-500/20' : 'bg-red-500/20'}`}>
+                          <Shield className={`w-5 h-5 ${getUserTeam() === 1 ? 'text-blue-400' : 'text-red-400'}`} />
+                        </div>
+                        <div>
+                          <p className="text-white font-semibold">
+                            {getUserTeam() === 1 ? rankedTeamNames.team1 : rankedTeamNames.team2}
+                          </p>
+                          <p className="text-green-400 text-sm">{t.weWon}</p>
+                        </div>
                       </div>
-                    )}
-                    <div>
-                      <p className="text-white font-semibold">{mySquad?.name}</p>
-                      <p className="text-green-400 text-sm">{t.weWon}</p>
+                      <CheckCircle className="w-6 h-6 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                  </div>
-                  <CheckCircle className="w-6 h-6 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </button>
+                  </button>
 
-              {/* Other team won */}
-              <button
-                onClick={() => handleSubmitResult(isMyTeamChallenger ? match.opponent._id : match.challenger._id)}
-                disabled={submittingResult}
-                className="w-full p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {(isMyTeamChallenger ? match.opponent?.logo : match.challenger?.logo) ? (
-                      <img 
-                        src={isMyTeamChallenger ? match.opponent?.logo : match.challenger?.logo} 
-                        alt="" 
-                        className="w-10 h-10 rounded-lg object-cover" 
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                        <Shield className="w-5 h-5 text-red-400" />
+                  {/* Ranked: Other team won */}
+                  <button
+                    onClick={() => handleSubmitResult(getUserTeam() === 1 ? 2 : 1)}
+                    disabled={submittingResult}
+                    className="w-full p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getUserTeam() === 1 ? 'bg-red-500/20' : 'bg-blue-500/20'}`}>
+                          <Shield className={`w-5 h-5 ${getUserTeam() === 1 ? 'text-red-400' : 'text-blue-400'}`} />
+                        </div>
+                        <div>
+                          <p className="text-white font-semibold">
+                            {getUserTeam() === 1 ? rankedTeamNames.team2 : rankedTeamNames.team1}
+                          </p>
+                          <p className="text-red-400 text-sm">{t.theyWon}</p>
+                        </div>
                       </div>
-                    )}
-                    <div>
-                      <p className="text-white font-semibold">
-                        {isMyTeamChallenger ? match.opponent?.name : match.challenger?.name}
-                      </p>
-                      <p className="text-red-400 text-sm">{t.theyWon}</p>
+                      <XCircle className="w-6 h-6 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
-                  </div>
-                  <XCircle className="w-6 h-6 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </button>
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Ladder: Our team won */}
+                  <button
+                    onClick={() => handleSubmitResult(mySquad._id)}
+                    disabled={submittingResult}
+                    className="w-full p-4 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {mySquad?.logo ? (
+                          <img src={mySquad.logo} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                            <Shield className="w-5 h-5 text-green-400" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-white font-semibold">{mySquad?.name}</p>
+                          <p className="text-green-400 text-sm">{t.weWon}</p>
+                        </div>
+                      </div>
+                      <CheckCircle className="w-6 h-6 text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
+
+                  {/* Ladder: Other team won */}
+                  <button
+                    onClick={() => handleSubmitResult(isMyTeamChallenger ? match.opponent._id : match.challenger._id)}
+                    disabled={submittingResult}
+                    className="w-full p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-left transition-all group disabled:opacity-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {(isMyTeamChallenger ? match.opponent?.logo : match.challenger?.logo) ? (
+                          <img 
+                            src={isMyTeamChallenger ? match.opponent?.logo : match.challenger?.logo} 
+                            alt="" 
+                            className="w-10 h-10 rounded-lg object-cover" 
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                            <Shield className="w-5 h-5 text-red-400" />
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-white font-semibold">
+                            {isMyTeamChallenger ? match.opponent?.name : match.challenger?.name}
+                          </p>
+                          <p className="text-red-400 text-sm">{t.theyWon}</p>
+                        </div>
+                      </div>
+                      <XCircle className="w-6 h-6 text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Cancel button */}
@@ -2549,17 +2786,19 @@ const MatchSheet = () => {
               </div>
             </div>
 
-            {/* Dispute button */}
-            <button
-              onClick={() => {
-                setShowCombatReport(false);
-                setShowDisputeModal(true);
-              }}
-              className="w-full py-2.5 mb-3 rounded-xl font-medium text-orange-400 bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              {language === 'fr' ? 'Signaler un litige' : 'Report a dispute'}
-            </button>
+            {/* Dispute button - For ladder: leader/officer, For ranked: referent only */}
+            {((!isRankedMatch && isLeaderOrOfficer()) || (isRankedMatch && isReferent)) && (
+              <button
+                onClick={() => {
+                  setShowCombatReport(false);
+                  setShowDisputeModal(true);
+                }}
+                className="w-full py-2.5 mb-3 rounded-xl font-medium text-orange-400 bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                <AlertTriangle className="w-4 h-4" />
+                {language === 'fr' ? 'Signaler un litige' : 'Report a dispute'}
+              </button>
+            )}
 
             {/* Close button */}
             <button
