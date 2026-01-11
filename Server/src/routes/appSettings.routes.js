@@ -294,7 +294,7 @@ router.patch('/admin/ranked-settings', verifyToken, requireAdmin, async (req, re
       
       if (searchAndDestroy.rewards) {
         if (!settings.rankedSettings.searchAndDestroy.rewards) {
-          settings.rankedSettings.searchAndDestroy.rewards = { pointsWin: 25, pointsLose: -15, goldWin: 50 };
+          settings.rankedSettings.searchAndDestroy.rewards = { pointsWin: 25, pointsLose: -15, goldWin: 50, goldLoss: 10 };
         }
         if (typeof searchAndDestroy.rewards.pointsWin === 'number') {
           settings.rankedSettings.searchAndDestroy.rewards.pointsWin = searchAndDestroy.rewards.pointsWin;
@@ -304,6 +304,9 @@ router.patch('/admin/ranked-settings', verifyToken, requireAdmin, async (req, re
         }
         if (typeof searchAndDestroy.rewards.goldWin === 'number') {
           settings.rankedSettings.searchAndDestroy.rewards.goldWin = searchAndDestroy.rewards.goldWin;
+        }
+        if (typeof searchAndDestroy.rewards.goldLoss === 'number') {
+          settings.rankedSettings.searchAndDestroy.rewards.goldLoss = searchAndDestroy.rewards.goldLoss;
         }
       }
       

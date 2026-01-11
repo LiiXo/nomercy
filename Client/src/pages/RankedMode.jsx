@@ -7,7 +7,7 @@ import { useSocket } from '../SocketContext';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -60,9 +60,41 @@ const RankedMode = () => {
   
   // Adding fake players (staff/admin)
   const [addingFakePlayers, setAddingFakePlayers] = useState(false);
+  
+  // Rules modal
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [rules, setRules] = useState(null);
+  const [loadingRules, setLoadingRules] = useState(false);
+  
+  // Rank animation state
+  const [rankAnimationPhase, setRankAnimationPhase] = useState(0);
 
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
+  
+  // Rank animation effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRankAnimationPhase(prev => (prev + 1) % 360);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Fetch rules for Search & Destroy
+  const fetchRules = async () => {
+    setLoadingRules(true);
+    try {
+      const response = await fetch(`${API_URL}/game-mode-rules/${selectedMode}/ranked/snd`);
+      const data = await response.json();
+      if (data.success && data.rules) {
+        setRules(data.rules);
+      }
+    } catch (err) {
+      console.error('Error fetching rules:', err);
+    } finally {
+      setLoadingRules(false);
+    }
+  };
 
   // Get rank from points
   const getRankFromPoints = (points) => {
@@ -101,13 +133,19 @@ const RankedMode = () => {
     }
   };
 
-  // Check active match
+  // Check active match and redirect if found
   const checkActiveMatch = async () => {
     if (!isAuthenticated) return;
     try {
       const response = await fetch(`${API_URL}/ranked-matches/active/me`, { credentials: 'include' });
       const data = await response.json();
-      setActiveMatch(data.success && data.match ? data.match : null);
+      if (data.success && data.match) {
+        setActiveMatch(data.match);
+        // Redirection automatique vers le match en cours
+        navigate(`/ranked/match/${data.match._id}`);
+      } else {
+        setActiveMatch(null);
+      }
     } catch (err) {
       console.error('Error checking active match:', err);
     }
@@ -132,7 +170,7 @@ const RankedMode = () => {
   };
 
   // Fetch queue status
-  const fetchQueueStatus = async () => {
+  const fetchQueueStatus = async (autoRedirect = false) => {
     if (!isAuthenticated) return;
     try {
       const response = await fetch(
@@ -146,6 +184,17 @@ const RankedMode = () => {
         setQueuePosition(data.position);
         setTimerActive(data.timerActive);
         setTimerEndTime(data.timerEndTime);
+        
+        // Si le joueur a un match en cours
+        if (data.inMatch && data.match) {
+          setActiveMatch(data.match);
+          // Redirection automatique vers le match au chargement initial
+          if (autoRedirect) {
+            navigate(`/ranked/match/${data.match._id}`);
+          }
+        } else {
+          setActiveMatch(null);
+        }
       }
     } catch (err) {
       console.error('Error fetching queue status:', err);
@@ -547,15 +596,43 @@ const RankedMode = () => {
                     </div>
                   ) : myRanking ? (
                     <div className="flex flex-col md:flex-row items-center gap-6">
-                      {/* Rank Badge */}
-                      <div className="relative">
-                        <div className={`w-28 h-28 rounded-2xl bg-gradient-to-br ${playerRank.gradient} p-1 shadow-2xl`}>
-                          <div className="w-full h-full rounded-xl bg-dark-900/50 flex items-center justify-center">
-                            <PlayerRankIcon className="w-12 h-12 text-white" />
+                      {/* Rank Badge - Animated */}
+                      <div className="relative group">
+                        {/* Glow effect animé */}
+                        <div 
+                          className="absolute -inset-2 rounded-3xl opacity-60 blur-xl transition-all group-hover:opacity-80"
+                          style={{
+                            background: `conic-gradient(from ${rankAnimationPhase}deg, ${playerRank.color}40, transparent, ${playerRank.color}60, transparent, ${playerRank.color}40)`
+                          }}
+                        ></div>
+                        {/* Outer ring animé */}
+                        <div 
+                          className="absolute -inset-1 rounded-2xl opacity-70"
+                          style={{
+                            background: `linear-gradient(${rankAnimationPhase}deg, ${playerRank.color}, transparent, ${playerRank.color})`,
+                            animation: 'spin 4s linear infinite'
+                          }}
+                        ></div>
+                        <div className={`relative w-28 h-28 rounded-2xl bg-gradient-to-br ${playerRank.gradient} p-1 shadow-2xl transform transition-transform group-hover:scale-105`}>
+                          <div className="w-full h-full rounded-xl bg-dark-900/50 flex items-center justify-center backdrop-blur-sm">
+                            <PlayerRankIcon 
+                              className="w-12 h-12 text-white drop-shadow-lg" 
+                              style={{ 
+                                filter: `drop-shadow(0 0 8px ${playerRank.color}80)`,
+                                animation: 'pulse 2s ease-in-out infinite'
+                              }}
+                            />
                           </div>
                         </div>
-                        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-dark-900 border border-white/20">
-                          <span className="text-xs font-bold text-white">{playerRank.tier}</span>
+                        <div 
+                          className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-dark-900 border-2 shadow-lg"
+                          style={{ borderColor: `${playerRank.color}50` }}
+                        >
+                          <span className="text-xs font-bold" style={{ color: playerRank.color }}>{playerRank.tier}</span>
+                        </div>
+                        {/* Sparkles effect */}
+                        <div className="absolute -top-1 -right-1 animate-ping">
+                          <Sparkles className="w-4 h-4" style={{ color: playerRank.color }} />
                         </div>
                       </div>
 
@@ -662,6 +739,22 @@ const RankedMode = () => {
                     </span>
                   </div>
                 </div>
+                
+                {/* Bouton Règles du mode */}
+                {selectedGameMode === 'Search & Destroy' && (
+                  <button
+                    onClick={() => {
+                      fetchRules();
+                      setShowRulesModal(true);
+                    }}
+                    className={`mt-4 w-full py-3 rounded-xl border border-${accent}-500/30 bg-${accent}-500/10 hover:bg-${accent}-500/20 transition-all flex items-center justify-center gap-2`}
+                  >
+                    <BookOpen className={`w-5 h-5 text-${accent}-400`} />
+                    <span className={`text-${accent}-400 font-semibold`}>
+                      {language === 'fr' ? 'Voir les règles du mode' : 'View game mode rules'}
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Matchmaking Section */}
@@ -887,35 +980,122 @@ const RankedMode = () => {
 
             {/* Right Column - Ranks & Leaderboard */}
             <div className="space-y-6">
-              {/* Ranks Overview */}
-              <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Sparkles className={`w-5 h-5 text-${accent}-500`} />
+              {/* Ranks Overview - Animated Ladder */}
+              <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6 relative overflow-hidden">
+                {/* Background glow effect */}
+                <div 
+                  className="absolute inset-0 opacity-30 pointer-events-none"
+                  style={{
+                    background: `linear-gradient(180deg, 
+                      rgba(241, 196, 15, 0.1) 0%, 
+                      rgba(231, 76, 60, 0.1) 15%, 
+                      rgba(155, 89, 182, 0.1) 30%, 
+                      rgba(185, 242, 255, 0.1) 45%, 
+                      rgba(0, 206, 209, 0.1) 60%, 
+                      rgba(255, 215, 0, 0.1) 75%, 
+                      rgba(192, 192, 192, 0.1) 90%, 
+                      rgba(205, 127, 50, 0.1) 100%)`
+                  }}
+                />
+                
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2 relative z-10">
+                  <Sparkles className={`w-5 h-5 text-${accent}-500 animate-pulse`} />
                   {t.ranks}
                 </h3>
-                <div className="space-y-2">
-                  {RANKS.map((rank) => {
+                
+                {/* Animated connection line */}
+                <div className="absolute left-10 top-16 bottom-6 w-0.5 bg-gradient-to-b from-yellow-400 via-purple-500 to-amber-700 opacity-30" />
+                
+                <div className="space-y-2 relative z-10">
+                  {/* Reverse RANKS to show Champion at top, Bronze at bottom */}
+                  {[...RANKS].reverse().map((rank, index) => {
                     const Icon = rank.icon;
                     const isCurrentRank = myRanking && myRanking.points >= rank.min && myRanking.points <= rank.max;
+                    const animationDelay = index * 0.1;
+                    const isTopRank = index < 2; // Champion & Grandmaster
+                    
                     return (
                       <div 
                         key={rank.name}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        className={`group relative flex items-center gap-3 p-3 rounded-xl transition-all duration-300 hover:scale-[1.02] cursor-default ${
                           isCurrentRank 
-                            ? `bg-gradient-to-r ${rank.gradient} bg-opacity-20 border border-white/20` 
-                            : 'bg-dark-800/30 hover:bg-dark-800/50'
+                            ? `bg-gradient-to-r ${rank.gradient} bg-opacity-30 border-2 shadow-lg` 
+                            : 'bg-dark-800/30 hover:bg-dark-800/60 border border-transparent hover:border-white/10'
                         }`}
+                        style={{
+                          borderColor: isCurrentRank ? `${rank.color}50` : undefined,
+                          boxShadow: isCurrentRank ? `0 0 20px ${rank.color}30` : undefined,
+                          animation: `slideInRight 0.5s ease-out ${animationDelay}s both`
+                        }}
                       >
-                        <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${rank.gradient} flex items-center justify-center shadow-lg`}>
-                          <Icon className="w-5 h-5 text-white" />
+                        {/* Animated glow for current rank */}
+                        {isCurrentRank && (
+                          <div 
+                            className="absolute -inset-0.5 rounded-xl opacity-50 blur-sm -z-10"
+                            style={{
+                              background: `linear-gradient(${rankAnimationPhase}deg, ${rank.color}, transparent, ${rank.color})`,
+                            }}
+                          />
+                        )}
+                        
+                        {/* Rank icon with animation */}
+                        <div 
+                          className={`relative w-10 h-10 rounded-lg bg-gradient-to-br ${rank.gradient} flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${isTopRank ? 'ring-2 ring-white/20' : ''}`}
+                          style={{
+                            boxShadow: `0 4px 15px ${rank.color}40`
+                          }}
+                        >
+                          <Icon 
+                            className={`w-5 h-5 text-white ${isCurrentRank ? 'animate-pulse' : ''}`}
+                            style={{ 
+                              filter: isTopRank ? `drop-shadow(0 0 6px ${rank.color})` : undefined
+                            }}
+                          />
+                          {/* Sparkle effect for top ranks */}
+                          {isTopRank && (
+                            <div className="absolute -top-1 -right-1">
+                              <Sparkles 
+                                className="w-3 h-3 animate-ping" 
+                                style={{ color: rank.color, animationDuration: '2s' }}
+                              />
+                            </div>
+                          )}
                         </div>
+                        
                         <div className="flex-1">
-                          <p className="font-semibold text-white text-sm">{rank.name}</p>
+                          <p 
+                            className={`font-bold text-sm transition-colors ${isCurrentRank ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}
+                            style={{ 
+                              color: isCurrentRank ? rank.color : undefined,
+                              textShadow: isCurrentRank ? `0 0 10px ${rank.color}60` : undefined
+                            }}
+                          >
+                            {rank.name}
+                          </p>
                           <p className="text-xs text-gray-500">{rank.min} - {rank.max === 99999 ? '∞' : rank.max} pts</p>
                         </div>
+                        
+                        {/* Current rank indicator */}
                         {isCurrentRank && (
-                          <span className="px-2 py-1 rounded-full bg-white/20 text-white text-xs font-bold">
-                            {t.you}
+                          <div className="flex items-center gap-2">
+                            <span 
+                              className="px-2.5 py-1 rounded-full text-xs font-bold animate-pulse"
+                              style={{ 
+                                backgroundColor: `${rank.color}30`,
+                                color: rank.color,
+                                boxShadow: `0 0 10px ${rank.color}40`
+                              }}
+                            >
+                              {t.you}
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-white animate-bounce" style={{ animationDuration: '1.5s' }} />
+                          </div>
+                        )}
+                        
+                        {/* Tier badge for top ranks */}
+                        {isTopRank && !isCurrentRank && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-gray-400">
+                            {rank.tier}
                           </span>
                         )}
                       </div>
@@ -1015,6 +1195,73 @@ const RankedMode = () => {
           </div>
         </div>
       </div>
+      
+      {/* Rules Modal */}
+      {showRulesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className={`bg-dark-900 rounded-2xl border border-${accent}-500/30 p-6 md:p-8 max-w-5xl w-full max-h-[85vh] overflow-y-auto shadow-2xl`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
+                  <BookOpen className="w-5 h-5 text-white" />
+                </div>
+                {language === 'fr' ? 'Règles - Search & Destroy' : 'Rules - Search & Destroy'}
+              </h3>
+              <button
+                onClick={() => setShowRulesModal(false)}
+                className="p-2 rounded-lg bg-dark-800 hover:bg-dark-700 transition-colors"
+              >
+                <span className="text-gray-400 text-xl">×</span>
+              </button>
+            </div>
+            
+            {loadingRules ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className={`w-8 h-8 text-${accent}-500 animate-spin`} />
+              </div>
+            ) : rules && rules.sections?.length > 0 ? (
+              <div className="space-y-6">
+                {rules.sections.sort((a, b) => a.order - b.order).map((section, idx) => (
+                  <div key={idx} className="bg-dark-800/50 rounded-xl p-4 border border-white/5">
+                    <h4 className={`text-lg font-bold text-${accent}-400 mb-3 flex items-center gap-2`}>
+                      {section.icon === 'shield' && <Shield className="w-5 h-5" />}
+                      {section.icon === 'target' && <Target className="w-5 h-5" />}
+                      {section.icon === 'crosshair' && <Crosshair className="w-5 h-5" />}
+                      {section.icon === 'users' && <Users className="w-5 h-5" />}
+                      {section.icon === 'trophy' && <Trophy className="w-5 h-5" />}
+                      {section.icon === 'swords' && <Swords className="w-5 h-5" />}
+                      {(!section.icon || section.icon === 'fileText') && <BookOpen className="w-5 h-5" />}
+                      {section.title?.[language] || section.title?.fr || section.title?.en}
+                    </h4>
+                    <div 
+                      className="text-gray-300 text-sm prose prose-invert prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ 
+                        __html: section.content?.[language] || section.content?.fr || section.content?.en 
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <BookOpen className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-500">
+                  {language === 'fr' 
+                    ? 'Aucune règle configurée pour ce mode.' 
+                    : 'No rules configured for this mode.'}
+                </p>
+              </div>
+            )}
+            
+            <button
+              onClick={() => setShowRulesModal(false)}
+              className={`mt-6 w-full py-3 rounded-xl bg-gradient-to-r ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'} text-white font-semibold hover:opacity-90 transition-all`}
+            >
+              {language === 'fr' ? 'Fermer' : 'Close'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

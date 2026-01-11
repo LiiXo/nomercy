@@ -164,7 +164,7 @@ const rankedMatchSchema = new mongoose.Schema({
     },
     message: {
       type: String,
-      required: true,
+      required: false,
       maxlength: 500
     },
     team: Number, // 1 ou 2 (null = visible par tous)
@@ -174,6 +174,7 @@ const rankedMatchSchema = new mongoose.Schema({
     },
     messageType: { type: String, default: null }, // Pour les messages système traduits
     messageParams: { type: mongoose.Schema.Types.Mixed, default: null },
+    username: { type: String, default: null }, // Pour les messages GGSecure
     createdAt: {
       type: Date,
       default: Date.now

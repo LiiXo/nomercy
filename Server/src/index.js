@@ -45,6 +45,9 @@ const startServer = async () => {
   
   // Import ranked matchmaking service
   const { initMatchmaking } = await import('./services/rankedMatchmaking.service.js');
+  
+  // Import GGSecure monitoring service
+  const { initGGSecureMonitoring, startGGSecureMonitoring } = await import('./services/ggsecureMonitoring.service.js');
 
   const app = express();
   const httpServer = createServer(app);
@@ -185,6 +188,9 @@ const startServer = async () => {
   
   // Initialize ranked matchmaking service with Socket.io
   initMatchmaking(io);
+  
+  // Initialize GGSecure monitoring service with Socket.io
+  initGGSecureMonitoring(io);
 
   // Log config for debugging
   console.log('=== Server Configuration ===');
@@ -280,6 +286,9 @@ const startServer = async () => {
       
       // Schedule monthly ladder season reset (runs at 00:05 on the 1st of each month)
       scheduleMonthlyLadderReset();
+      
+      // Start GGSecure monitoring for active matches
+      startGGSecureMonitoring();
     });
   } catch (err) {
     console.error('MongoDB connection error:', err);

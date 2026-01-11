@@ -414,10 +414,12 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const availableMaps = maps.length >= 3 ? maps : await GameMap.find({ isActive: true });
     const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, 3).map((map, index) => ({
       name: map.name,
-      image: map.imageUrl || map.image,
+      image: map.image || null,
       order: index + 1,
       winner: null
     }));
+    
+    console.log(`[Ranked Matchmaking] Selected maps for match:`, selectedMaps);
     
     // Créer les données des joueurs pour le match
     const matchPlayers = [

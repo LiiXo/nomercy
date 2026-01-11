@@ -1350,6 +1350,285 @@ router.post('/:matchId/code', verifyToken, async (req, res) => {
   }
 });
 
+// Demander l'annulation d'un match (nécessite approbation de l'adversaire)
+router.post('/:matchId/request-cancellation', verifyToken, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { reason } = req.body;
+    
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Raison requise' });
+    }
+    
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    if (!user.squad) {
+      return res.status(400).json({ success: false, message: 'Vous devez avoir une escouade' });
+    }
+
+    const match = await Match.findById(matchId)
+      .populate('challenger', 'name tag members')
+      .populate('opponent', 'name tag members')
+      .populate('createdBy', '_id')
+      .populate('acceptedBy', '_id');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Vérifier que le match est en cours ou accepté
+    if (!['accepted', 'in_progress'].includes(match.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Ce match ne peut pas être annulé dans son état actuel' 
+      });
+    }
+
+    // Vérifier que l'utilisateur est leader de son escouade
+    const squad = await Squad.findById(user.squad._id);
+    const member = squad.members.find(m => 
+      m.user.toString() === user._id.toString()
+    );
+    
+    if (!member || member.role !== 'leader') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Seul le leader peut demander l\'annulation' 
+      });
+    }
+
+    // Vérifier que l'utilisateur est participant au match
+    const isChallenger = match.challenger._id.toString() === user.squad._id.toString();
+    const isOpponent = match.opponent && match.opponent._id.toString() === user.squad._id.toString();
+    
+    if (!isChallenger && !isOpponent) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Vous ne participez pas à ce match' 
+      });
+    }
+
+    // Créer la demande d'annulation
+    match.cancellationRequest = {
+      requestedBy: user.squad._id,
+      requestedBySquadName: squad.name,
+      requestedAt: new Date(),
+      reason: reason.trim(),
+      status: 'pending'
+    };
+    
+    // Ajouter un message système dans le chat
+    const now = new Date();
+    match.chat.push({
+      isSystem: true,
+      messageType: 'cancellation_request',
+      username: squad.name,
+      message: reason.trim(),
+      createdAt: now
+    });
+    
+    await match.save();
+
+    // Notifier via Socket.io
+    const io = req.app.get('io');
+    if (io) {
+      // Envoyer le message de demande d'annulation dans le chat
+      io.to(`match-${matchId}`).emit('newChatMessage', {
+        matchId,
+        message: {
+          _id: `cancellation-${Date.now()}`,
+          isSystem: true,
+          messageType: 'cancellation_request',
+          username: squad.name,
+          message: reason.trim(),
+          createdAt: now
+        }
+      });
+      
+      // Signaler une mise à jour du match (le frontend fera un fetch pour récupérer les données complètes)
+      io.to(`match-${matchId}`).emit('matchUpdate', {
+        matchId: match._id
+      });
+      
+      // Notifier les leaders de l'autre équipe
+      const otherSquad = isChallenger ? match.opponent : match.challenger;
+      
+      if (otherSquad && otherSquad.members && Array.isArray(otherSquad.members)) {
+        const otherSquadLeaders = otherSquad.members.filter(m => m.role === 'leader');
+        
+        for (const leader of otherSquadLeaders) {
+          const leaderId = leader.user?._id || leader.user;
+          if (leaderId) {
+            io.to(`user-${leaderId}`).emit('matchCancellationRequest', {
+              matchId: match._id,
+              requestedBy: squad.name,
+              reason: reason.trim(),
+              gameMode: match.gameMode,
+              teamSize: match.teamSize
+            });
+          }
+        }
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Demande d\'annulation envoyée. En attente de l\'approbation de l\'adversaire.',
+      match 
+    });
+  } catch (error) {
+    console.error('Request cancellation error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Répondre à une demande d'annulation
+router.post('/:matchId/respond-cancellation', verifyToken, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { approved } = req.body;
+    
+    const user = await User.findById(req.user._id).populate('squad');
+    
+    if (!user.squad) {
+      return res.status(400).json({ success: false, message: 'Vous devez avoir une escouade' });
+    }
+
+    const match = await Match.findById(matchId)
+      .populate('challenger', 'name tag')
+      .populate('opponent', 'name tag');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    if (!match.cancellationRequest || match.cancellationRequest.status !== 'pending') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Aucune demande d\'annulation en attente' 
+      });
+    }
+
+    // Vérifier que l'utilisateur est leader de l'équipe qui doit répondre
+    const squad = await Squad.findById(user.squad._id);
+    const member = squad.members.find(m => 
+      m.user.toString() === user._id.toString()
+    );
+    
+    if (!member || member.role !== 'leader') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Seul le leader peut répondre' 
+      });
+    }
+
+    // Vérifier que c'est l'autre équipe qui répond (pas celle qui a demandé)
+    const isRequestingTeam = match.cancellationRequest.requestedBy.toString() === user.squad._id.toString();
+    
+    if (isRequestingTeam) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous ne pouvez pas répondre à votre propre demande' 
+      });
+    }
+
+    const now = new Date();
+    const io = req.app.get('io');
+
+    if (approved) {
+      // Annuler le match
+      match.status = 'cancelled';
+      match.cancellationRequest.status = 'approved';
+      match.cancellationRequest.respondedAt = now;
+      
+      // Ajouter un message système dans le chat
+      match.chat.push({
+        isSystem: true,
+        messageType: 'cancellation_accepted',
+        username: squad.name,
+        createdAt: now
+      });
+      
+      await match.save();
+
+      // Notifier via Socket.io
+      if (io) {
+        // Message dans le chat
+        io.to(`match-${matchId}`).emit('newChatMessage', {
+          matchId,
+          message: {
+            _id: `cancellation-accepted-${Date.now()}`,
+            isSystem: true,
+            messageType: 'cancellation_accepted',
+            username: squad.name,
+            createdAt: now
+          }
+        });
+        
+        // Signaler une mise à jour du match
+        io.to(`match-${matchId}`).emit('matchUpdate', {
+          matchId: match._id
+        });
+        
+        io.to('hardcore-dashboard').emit('matchCancelled', {
+          matchId: match._id,
+          ladderId: match.ladderId,
+          mode: match.mode
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        message: 'Match annulé',
+        match 
+      });
+    } else {
+      // Refuser l'annulation
+      match.cancellationRequest.status = 'rejected';
+      match.cancellationRequest.respondedAt = now;
+      
+      // Ajouter un message système dans le chat
+      match.chat.push({
+        isSystem: true,
+        messageType: 'cancellation_rejected',
+        username: squad.name,
+        createdAt: now
+      });
+      
+      await match.save();
+
+      // Notifier via Socket.io
+      if (io) {
+        // Message dans le chat
+        io.to(`match-${matchId}`).emit('newChatMessage', {
+          matchId,
+          message: {
+            _id: `cancellation-rejected-${Date.now()}`,
+            isSystem: true,
+            messageType: 'cancellation_rejected',
+            username: squad.name,
+            createdAt: now
+          }
+        });
+        
+        // Signaler une mise à jour du match
+        io.to(`match-${matchId}`).emit('matchUpdate', {
+          matchId: match._id
+        });
+      }
+
+      res.json({ 
+        success: true, 
+        message: 'Demande d\'annulation refusée',
+        match 
+      });
+    }
+  } catch (error) {
+    console.error('Respond to cancellation error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Annuler un match (par le créateur)
 router.delete('/:matchId', verifyToken, async (req, res) => {
   try {

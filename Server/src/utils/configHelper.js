@@ -7,16 +7,16 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 // Default values for ranked match rewards
 const DEFAULT_RANKED_REWARDS = {
   hardcore: {
-    'Duel': { pointsWin: 20, pointsLoss: -10, coinsWin: 50, xpWinMin: 700, xpWinMax: 800 },
-    'Team Deathmatch': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, xpWinMin: 700, xpWinMax: 800 },
-    'Domination': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, xpWinMin: 700, xpWinMax: 800 },
-    'Search & Destroy': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, xpWinMin: 700, xpWinMax: 800 }
+    'Duel': { pointsWin: 20, pointsLoss: -10, coinsWin: 50, coinsLoss: 10, xpWinMin: 700, xpWinMax: 800 },
+    'Team Deathmatch': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, coinsLoss: 12, xpWinMin: 700, xpWinMax: 800 },
+    'Domination': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 16, xpWinMin: 700, xpWinMax: 800 },
+    'Search & Destroy': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 16, xpWinMin: 700, xpWinMax: 800 }
   },
   cdl: {
-    'Duel': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, xpWinMin: 700, xpWinMax: 800 },
-    'Team Deathmatch': { pointsWin: 30, pointsLoss: -15, coinsWin: 75, xpWinMin: 700, xpWinMax: 800 },
-    'Domination': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, xpWinMin: 700, xpWinMax: 800 },
-    'Search & Destroy': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, xpWinMin: 700, xpWinMax: 800 }
+    'Duel': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, coinsLoss: 12, xpWinMin: 700, xpWinMax: 800 },
+    'Team Deathmatch': { pointsWin: 30, pointsLoss: -15, coinsWin: 75, coinsLoss: 15, xpWinMin: 700, xpWinMax: 800 },
+    'Domination': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, coinsLoss: 18, xpWinMin: 700, xpWinMax: 800 },
+    'Search & Destroy': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, coinsLoss: 18, xpWinMin: 700, xpWinMax: 800 }
   }
 };
 
@@ -105,6 +105,7 @@ export const getRankedMatchRewards = async (gameMode, mode = 'hardcore') => {
       pointsWin: typeof rewards.pointsWin === 'number' ? rewards.pointsWin : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.pointsWin ?? 20),
       pointsLoss: typeof rewards.pointsLoss === 'number' ? rewards.pointsLoss : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.pointsLoss ?? -10),
       coinsWin: typeof rewards.coinsWin === 'number' ? rewards.coinsWin : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.coinsWin ?? 50),
+      coinsLoss: typeof rewards.coinsLoss === 'number' ? rewards.coinsLoss : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.coinsLoss ?? 10),
       xpWinMin: typeof rewards.xpWinMin === 'number' ? rewards.xpWinMin : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.xpWinMin ?? 700),
       xpWinMax: typeof rewards.xpWinMax === 'number' ? rewards.xpWinMax : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.xpWinMax ?? 800)
     };

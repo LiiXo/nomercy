@@ -132,11 +132,12 @@ const appSettingsSchema = new mongoose.Schema({
     // Configuration par mode de jeu
     searchAndDestroy: {
       enabled: { type: Boolean, default: true },
-      // Récompenses en victoire
+      // Récompenses en victoire/défaite
       rewards: {
         pointsWin: { type: Number, default: 25 },    // Points gagnés en victoire
         pointsLose: { type: Number, default: -15 },  // Points perdus en défaite
-        goldWin: { type: Number, default: 50 }       // Gold gagné en victoire
+        goldWin: { type: Number, default: 50 },      // Gold gagné en victoire
+        goldLoss: { type: Number, default: 10 }      // Gold de consolation en défaite
       },
       // Configuration du matchmaking
       matchmaking: {
@@ -150,7 +151,8 @@ const appSettingsSchema = new mongoose.Schema({
       rewards: {
         pointsWin: { type: Number, default: 25 },
         pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 }
+        goldWin: { type: Number, default: 50 },
+        goldLoss: { type: Number, default: 10 }
       }
     },
     domination: {
@@ -158,7 +160,8 @@ const appSettingsSchema = new mongoose.Schema({
       rewards: {
         pointsWin: { type: Number, default: 25 },
         pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 }
+        goldWin: { type: Number, default: 50 },
+        goldLoss: { type: Number, default: 10 }
       }
     },
     captureTheFlag: {
@@ -166,7 +169,8 @@ const appSettingsSchema = new mongoose.Schema({
       rewards: {
         pointsWin: { type: Number, default: 25 },
         pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 }
+        goldWin: { type: Number, default: 50 },
+        goldLoss: { type: Number, default: 10 }
       }
     },
     killConfirmed: {
@@ -174,7 +178,8 @@ const appSettingsSchema = new mongoose.Schema({
       rewards: {
         pointsWin: { type: Number, default: 25 },
         pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 }
+        goldWin: { type: Number, default: 50 },
+        goldLoss: { type: Number, default: 10 }
       }
     }
   }

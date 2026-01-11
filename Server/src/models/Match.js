@@ -61,7 +61,12 @@ const matchSchema = new mongoose.Schema({
   randomMaps: [{
     name: String,
     image: String,
-    order: Number // 1, 2, 3
+    order: Number, // 1, 2, 3
+    winner: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Squad',
+      default: null 
+    } // ID de l'escouade gagnante de cette map
   }],
   // Match instantané (prêt maintenant) ou planifié
   isReady: {
@@ -148,6 +153,24 @@ const matchSchema = new mongoose.Schema({
         default: Date.now
       }
     }]
+  },
+  // Demande d'annulation (pour les matchs en cours)
+  cancellationRequest: {
+    requestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Squad'
+    },
+    requestedBySquadName: String,
+    requestedAt: Date,
+    reason: {
+      type: String,
+      maxlength: 500
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected']
+    },
+    respondedAt: Date
   },
   // Description/message optionnel
   description: {
@@ -245,6 +268,10 @@ const matchSchema = new mongoose.Schema({
     },
     messageParams: {
       type: mongoose.Schema.Types.Mixed,
+      default: null
+    },
+    username: {
+      type: String,
       default: null
     },
     createdAt: {

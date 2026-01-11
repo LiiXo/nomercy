@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
 
@@ -30,6 +30,17 @@ const PlayerProfile = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [showMatchDetails, setShowMatchDetails] = useState(false);
+  
+  // Rank animation state
+  const [rankAnimationPhase, setRankAnimationPhase] = useState(0);
+  
+  // Rank animation effect
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRankAnimationPhase(prev => (prev + 1) % 360);
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
 
   // Traductions
   const texts = {
@@ -322,16 +333,16 @@ const PlayerProfile = () => {
   // Get rank for ornament (use ranking.rank from DB)
   const playerRank = playerStats?.rank || 999;
 
-  // Get division based on points
+  // Get division based on points with enhanced styling
   const getDivision = (points) => {
-    if (points >= 3500) return { name: 'Champion', color: 'from-yellow-400 to-amber-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '👑' };
-    if (points >= 3000) return { name: 'Grandmaster', color: 'from-red-500 to-rose-600', textColor: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: '🔥' };
-    if (points >= 2500) return { name: 'Master', color: 'from-purple-500 to-violet-600', textColor: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50', icon: '💎' };
-    if (points >= 2000) return { name: 'Diamond', color: 'from-cyan-400 to-blue-500', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', icon: '💠' };
-    if (points >= 1500) return { name: 'Platinum', color: 'from-teal-400 to-emerald-500', textColor: 'text-teal-400', bgColor: 'bg-teal-500/20', borderColor: 'border-teal-500/50', icon: '🏅' };
-    if (points >= 1000) return { name: 'Gold', color: 'from-yellow-500 to-amber-600', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '🥇' };
-    if (points >= 500) return { name: 'Silver', color: 'from-gray-300 to-gray-400', textColor: 'text-gray-300', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50', icon: '🥈' };
-    return { name: 'Bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉' };
+    if (points >= 3500) return { name: 'Champion', color: 'from-yellow-400 to-amber-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '👑', hexColor: '#F1C40F', Icon: Crown, isTop: true };
+    if (points >= 3000) return { name: 'Grandmaster', color: 'from-red-500 to-rose-600', textColor: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: '🔥', hexColor: '#E74C3C', Icon: Flame, isTop: true };
+    if (points >= 2500) return { name: 'Master', color: 'from-purple-500 to-violet-600', textColor: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50', icon: '💎', hexColor: '#9B59B6', Icon: Crown, isTop: false };
+    if (points >= 2000) return { name: 'Diamond', color: 'from-cyan-400 to-blue-500', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', icon: '💠', hexColor: '#B9F2FF', Icon: Star, isTop: false };
+    if (points >= 1500) return { name: 'Platinum', color: 'from-teal-400 to-emerald-500', textColor: 'text-teal-400', bgColor: 'bg-teal-500/20', borderColor: 'border-teal-500/50', icon: '🏅', hexColor: '#00CED1', Icon: Medal, isTop: false };
+    if (points >= 1000) return { name: 'Gold', color: 'from-yellow-500 to-amber-600', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '🥇', hexColor: '#FFD700', Icon: Medal, isTop: false };
+    if (points >= 500) return { name: 'Silver', color: 'from-gray-300 to-gray-400', textColor: 'text-gray-300', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50', icon: '🥈', hexColor: '#C0C0C0', Icon: Shield, isTop: false };
+    return { name: 'Bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉', hexColor: '#CD7F32', Icon: Shield, isTop: false };
   };
 
   const division = playerStats ? getDivision(playerStats.points) : null;
@@ -440,10 +451,58 @@ const PlayerProfile = () => {
                   </span>
                 )}
                 {division && (
-                  <span className={`flex items-center space-x-1.5 px-3 py-1.5 ${division.bgColor} border ${division.borderColor} rounded-lg`}>
-                    <span className="text-base">{division.icon}</span>
-                    <span className={`${division.textColor} font-bold`}>{division.name}</span>
-                </span>
+                  <div className="relative group">
+                    {/* Animated glow effect */}
+                    <div 
+                      className="absolute -inset-1 rounded-xl opacity-60 blur-md transition-opacity group-hover:opacity-80"
+                      style={{
+                        background: `conic-gradient(from ${rankAnimationPhase}deg, ${division.hexColor}40, transparent, ${division.hexColor}60, transparent, ${division.hexColor}40)`
+                      }}
+                    />
+                    {/* Outer rotating border for top ranks */}
+                    {division.isTop && (
+                      <div 
+                        className="absolute -inset-0.5 rounded-xl opacity-70"
+                        style={{
+                          background: `linear-gradient(${rankAnimationPhase}deg, ${division.hexColor}, transparent, ${division.hexColor})`,
+                        }}
+                      />
+                    )}
+                    <span 
+                      className={`relative flex items-center gap-2 px-4 py-2 ${division.bgColor} border-2 rounded-xl transition-all group-hover:scale-105`}
+                      style={{ 
+                        borderColor: `${division.hexColor}50`,
+                        boxShadow: `0 0 20px ${division.hexColor}30`
+                      }}
+                    >
+                      {/* Animated icon */}
+                      <div 
+                        className={`w-7 h-7 rounded-lg bg-gradient-to-br ${division.color} flex items-center justify-center shadow-lg`}
+                        style={{ boxShadow: `0 0 12px ${division.hexColor}50` }}
+                      >
+                        <division.Icon 
+                          className="w-4 h-4 text-white" 
+                          style={{ 
+                            filter: `drop-shadow(0 0 4px ${division.hexColor})`,
+                            animation: division.isTop ? 'pulse 2s ease-in-out infinite' : undefined
+                          }}
+                        />
+                      </div>
+                      <span 
+                        className={`${division.textColor} font-bold`}
+                        style={{ textShadow: `0 0 10px ${division.hexColor}60` }}
+                      >
+                        {division.name}
+                      </span>
+                      {/* Sparkle for top ranks */}
+                      {division.isTop && (
+                        <Sparkles 
+                          className="w-4 h-4 animate-pulse" 
+                          style={{ color: division.hexColor }}
+                        />
+                      )}
+                    </span>
+                  </div>
                 )}
               </div>
               
