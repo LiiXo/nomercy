@@ -103,7 +103,7 @@ const MatchSheet = () => {
       referents: 'Référents',
       team: 'Équipe',
       noRoster: 'Aucun roster défini',
-      onlyLeaderCanValidate: 'Seul le leader peut valider',
+      onlyLeaderCanValidate: 'Seul le leader ou un officier peut valider',
       onlyReferentCanValidate: 'Seul le référent peut valider',
       warningMessage: '⚠️ Rappel : Tout débordement ou comportement inacceptable peuvent entraîner des sanctions sévères.',
       playerDisconnected: 's\'est déconnecté de l\'anti-cheat (GGSecure)',
@@ -173,7 +173,7 @@ const MatchSheet = () => {
       referents: 'Referents',
       team: 'Team',
       noRoster: 'No roster defined',
-      onlyLeaderCanValidate: 'Only the leader can validate',
+      onlyLeaderCanValidate: 'Only the leader or an officer can validate',
       onlyReferentCanValidate: 'Only the referent can validate',
       warningMessage: '⚠️ Warning: Any misconduct or unacceptable behavior may result in severe penalties.',
       playerDisconnected: 'disconnected from anti-cheat (GGSecure)',
@@ -243,7 +243,7 @@ const MatchSheet = () => {
       referents: 'Referenten',
       team: 'Team',
       noRoster: 'Kein Roster definiert',
-      onlyLeaderCanValidate: 'Nur der Leader kann bestätigen',
+      onlyLeaderCanValidate: 'Nur der Leader oder ein Offizier kann bestätigen',
       onlyReferentCanValidate: 'Nur der Referent kann bestätigen',
       warningMessage: '⚠️ Warnung: Jedes Fehlverhalten oder inakzeptables Verhalten kann zu schweren Strafen führen.',
       playerDisconnected: 'hat sich vom Anti-Cheat (GGSecure) getrennt',
@@ -313,7 +313,7 @@ const MatchSheet = () => {
       referents: 'Referenti',
       team: 'Squadra',
       noRoster: 'Nessun roster definito',
-      onlyLeaderCanValidate: 'Solo il leader può confermare',
+      onlyLeaderCanValidate: 'Solo il leader o un ufficiale può confermare',
       onlyReferentCanValidate: 'Solo il referente può confermare',
       warningMessage: '⚠️ Avviso: Qualsiasi comportamento scorretto o inaccettabile può comportare sanzioni severe.',
       playerDisconnected: 'si è disconnesso dall\'anti-cheat (GGSecure)',
@@ -340,6 +340,7 @@ const MatchSheet = () => {
 
   // Fetch match data
   const fetchMatchData = async (isInitial = false) => {
+    console.log('[MatchSheet] fetchMatchData called, isInitial:', isInitial);
     if (isInitial) setLoading(true);
     try {
       const apiUrl = isRankedMatch 
@@ -350,6 +351,7 @@ const MatchSheet = () => {
         credentials: 'include'
       });
       const data = await response.json();
+      console.log('[MatchSheet] Match data fetched:', data.success ? 'success' : 'failed');
       
       if (data.success) {
         if (data.isStaff !== undefined) {
@@ -447,7 +449,9 @@ const MatchSheet = () => {
     };
 
     const handleMatchUpdate = (data) => {
+      console.log('[MatchSheet] matchUpdate received:', data);
       if (data.matchId === matchId || data.matchId?.toString() === matchId) {
+        console.log('[MatchSheet] Match ID matches, updating...');
         if (data.match) {
           // Si le match est annulé, rediriger vers la liste des matchs
           if (data.match.status === 'cancelled') {
@@ -456,6 +460,7 @@ const MatchSheet = () => {
           }
           setMatch(data.match);
         } else {
+          console.log('[MatchSheet] No match data, fetching...');
           fetchMatchData(false);
         }
       }
@@ -471,6 +476,7 @@ const MatchSheet = () => {
     socket.on('matchCancellationApproved', handleMatchCancelled);
 
     // Rejoindre la room du match
+    console.log('[MatchSheet] Joining match room:', matchId, 'isRanked:', isRankedMatch);
     if (isRankedMatch) {
       socket.emit('joinRankedMatch', matchId);
     } else {
@@ -480,6 +486,8 @@ const MatchSheet = () => {
     socket.on('newChatMessage', handleNewChatMessage);
     socket.on('matchUpdate', handleMatchUpdate);
     socket.on('matchCancellationApproved', handleMatchCancelled);
+    
+    console.log('[MatchSheet] Socket listeners attached');
 
     return () => {
       socket.off('newChatMessage', handleNewChatMessage);
@@ -593,10 +601,24 @@ const MatchSheet = () => {
   // Check if user is leader
   const isLeader = () => {
     if (!mySquad || !user) return false;
+    // Le leader est stocké dans mySquad.leader, pas dans members[].role
+    const leaderId = mySquad.leader?._id || mySquad.leader;
+    return leaderId?.toString() === user.id?.toString();
+  };
+
+  // Check if user is leader or officer (can manage matches)
+  const canManageMatch = () => {
+    if (!mySquad || !user) return false;
+    
+    // Vérifier si c'est le leader
+    const leaderId = mySquad.leader?._id || mySquad.leader;
+    if (leaderId?.toString() === user.id?.toString()) return true;
+    
+    // Vérifier si c'est un officier
     const member = mySquad.members?.find(m => 
-      (m.user?._id || m.user) === user.id
+      (m.user?._id || m.user)?.toString() === user.id?.toString()
     );
-    return member?.role === 'leader';
+    return member?.role === 'officer';
   };
 
   // Submit match result
@@ -604,7 +626,7 @@ const MatchSheet = () => {
     if (isRankedMatch) {
       if (!isReferent) return;
     } else {
-      if (!isLeader()) return;
+      if (!canManageMatch()) return;
     }
     
     setSubmittingResult(true);
@@ -693,10 +715,12 @@ const MatchSheet = () => {
       });
 
       const data = await response.json();
+      console.log('[MatchSheet] Cancellation request response:', data);
       if (data.success) {
         setMatch(data.match);
         setShowCancellationModal(false);
         setCancellationReason('');
+        console.log('[MatchSheet] Cancellation request sent successfully, match updated');
         // Le message sera affiché dans le chat via Socket.io
       } else {
         // Afficher l'erreur dans le chat comme message système
@@ -774,7 +798,7 @@ const MatchSheet = () => {
   const canRespondToCancellation = () => {
     if (!match?.cancellationRequest || match.cancellationRequest.status !== 'pending') return false;
     if (!mySquad) return false;
-    if (!isLeader()) return false;
+    if (!canManageMatch()) return false;
     
     // L'équipe qui a demandé ne peut pas répondre
     const requestedBySquadId = match.cancellationRequest.requestedBy?.toString() || match.cancellationRequest.requestedBy;
@@ -797,12 +821,12 @@ const MatchSheet = () => {
     return statusMap[status] || statusMap.pending;
   };
 
-  // Check who can validate (leader for ladder, referent for ranked)
+  // Check who can validate (leader/officer for ladder, referent for ranked)
   const canValidateResult = () => {
     if (isRankedMatch) {
       return isReferent;
     }
-    return isLeader();
+    return canManageMatch();
   };
 
   // Check who can report dispute
@@ -810,7 +834,7 @@ const MatchSheet = () => {
     if (isRankedMatch) {
       return isReferent;
     }
-    return isLeader();
+    return canManageMatch();
   };
 
   if (loading) {
@@ -838,11 +862,11 @@ const MatchSheet = () => {
     );
   }
 
-  const isMyTeamChallenger = mySquad?._id === match.challenger?._id;
-  const isMyTeamOpponent = mySquad?._id === match.opponent?._id;
+  const isMyTeamChallenger = mySquad?._id?.toString() === match.challenger?._id?.toString();
+  const isMyTeamOpponent = mySquad?._id?.toString() === match.opponent?._id?.toString();
   
   const isRankedParticipant = isRankedMatch && match.players?.some(p => 
-    p.user?._id === user?.id || p.user === user?.id
+    (p.user?._id || p.user)?.toString() === user?.id?.toString()
   );
   const isParticipant = isRankedMatch ? isRankedParticipant : (isMyTeamChallenger || isMyTeamOpponent);
   
@@ -1209,8 +1233,8 @@ const MatchSheet = () => {
             )}
 
             {/* Bouton demande d'annulation - Uniquement pour les matchs ladder */}
-            {/* Afficher si pas de demande en cours OU si la dernière demande a été refusée */}
-            {!isRankedMatch && isParticipant && isLeader() && ['accepted', 'in_progress'].includes(match.status) && (!match.cancellationRequest?.status || match.cancellationRequest?.status === 'rejected') && (
+            {/* Afficher si pas de demande en cours OU si la dernière demande a été refusée OU si pending sans requestedBy (données corrompues) */}
+            {!isRankedMatch && isParticipant && canManageMatch() && ['accepted', 'in_progress', 'ready'].includes(match.status) && (!match.cancellationRequest?.status || match.cancellationRequest?.status === 'rejected' || (match.cancellationRequest?.status === 'pending' && !match.cancellationRequest?.requestedBy)) && (
               <button
                 onClick={() => setShowCancellationModal(true)}
                 className="w-full py-2.5 bg-orange-500/10 border border-orange-500/30 rounded-lg text-orange-400 text-sm font-medium hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2"

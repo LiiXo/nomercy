@@ -1384,16 +1384,19 @@ router.post('/:matchId/request-cancellation', verifyToken, async (req, res) => {
       });
     }
 
-    // Vérifier que l'utilisateur est leader de son escouade
+    // Vérifier que l'utilisateur est leader ou officier de son escouade
     const squad = await Squad.findById(user.squad._id);
     const member = squad.members.find(m => 
       m.user.toString() === user._id.toString()
     );
     
-    if (!member || member.role !== 'leader') {
+    const isLeader = squad.leader.toString() === user._id.toString();
+    const isOfficer = member && member.role === 'officer';
+    
+    if (!isLeader && !isOfficer) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Seul le leader peut demander l\'annulation' 
+        message: 'Seul le leader ou un officier peut demander l\'annulation' 
       });
     }
 
@@ -1509,16 +1512,19 @@ router.post('/:matchId/respond-cancellation', verifyToken, async (req, res) => {
       });
     }
 
-    // Vérifier que l'utilisateur est leader de l'équipe qui doit répondre
+    // Vérifier que l'utilisateur est leader ou officier de l'équipe qui doit répondre
     const squad = await Squad.findById(user.squad._id);
     const member = squad.members.find(m => 
       m.user.toString() === user._id.toString()
     );
     
-    if (!member || member.role !== 'leader') {
+    const isLeader = squad.leader.toString() === user._id.toString();
+    const isOfficer = member && member.role === 'officer';
+    
+    if (!isLeader && !isOfficer) {
       return res.status(403).json({ 
         success: false, 
-        message: 'Seul le leader peut répondre' 
+        message: 'Seul le leader ou un officier peut répondre' 
       });
     }
 
