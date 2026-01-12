@@ -3980,71 +3980,161 @@ const renderDisputes = () => {
         </div>
 
         {/* Ranked Match Rewards */}
-        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
+        <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <Trophy className="w-5 h-5" />
-            Récompenses Matchs Classés (Ranked)
+            <Trophy className="w-5 h-5 text-purple-400" />
+            ⚔️ Récompenses Mode Classé (Ranked)
           </h3>
-          <p className="text-gray-400 text-sm mb-4">Configuration des points et coins par mode et type de jeu</p>
+          <p className="text-gray-400 text-sm mb-6">
+            Configuration complète des récompenses pour le mode classé. Les joueurs gagnants reçoivent des points, gold et XP. 
+            Les perdants perdent des points mais reçoivent du gold de consolation.
+          </p>
+          
           <div className="space-y-6">
             {editedConfig.rankedMatchRewards && Object.keys(editedConfig.rankedMatchRewards).map((mode) => (
-              <div key={mode} className="bg-dark-900/50 rounded-lg p-4">
-                <h4 className="text-white font-medium mb-4 capitalize flex items-center gap-2">
-                  {mode === 'hardcore' ? '🔥' : '🎯'} {mode}
+              <div key={mode} className={`rounded-xl p-5 ${mode === 'hardcore' ? 'bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/30' : 'bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/30'}`}>
+                <h4 className="text-white font-bold mb-5 text-lg capitalize flex items-center gap-2">
+                  {mode === 'hardcore' ? '🔥 Hardcore' : '🎯 CDL'}
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {Object.keys(editedConfig.rankedMatchRewards[mode]).map((gameMode) => (
-                    <div key={gameMode} className="bg-dark-800 rounded-lg p-4 space-y-3">
-                      <p className="text-white font-medium mb-2 text-sm border-b border-white/10 pb-2">{gameMode}</p>
+                    <div key={gameMode} className="bg-dark-800/80 backdrop-blur-sm rounded-xl p-5 border border-white/10 hover:border-white/20 transition-all">
+                      <p className="text-white font-semibold mb-4 text-base border-b border-white/20 pb-3 flex items-center gap-2">
+                        <span className="text-lg">🎮</span>
+                        {gameMode}
+                      </p>
                       
-                      <div>
-                        <label className="text-gray-400 text-xs block mb-1">Points Victoire</label>
-                        <input
-                          type="number"
-                          value={editedConfig.rankedMatchRewards[mode][gameMode].pointsWin || 0}
-                          onChange={(e) => {
-                            const newConfig = { ...editedConfig };
-                            newConfig.rankedMatchRewards[mode][gameMode].pointsWin = parseInt(e.target.value) || 0;
-                            setEditedConfig(newConfig);
-                          }}
-                          className="w-full px-2 py-1 bg-dark-900 border border-green-500/30 rounded text-green-400 text-sm focus:border-green-500 focus:outline-none"
-                        />
+                      {/* Points Ladder Classé */}
+                      <div className="mb-4 pb-4 border-b border-white/10">
+                        <p className="text-purple-400 text-xs font-semibold mb-3 uppercase tracking-wider">📊 Points Ladder Classé</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-green-400 text-xs block mb-1.5 font-medium">✅ Victoire</label>
+                            <input
+                              type="number"
+                              value={editedConfig.rankedMatchRewards[mode][gameMode].pointsWin || 0}
+                              onChange={(e) => {
+                                const newConfig = { ...editedConfig };
+                                newConfig.rankedMatchRewards[mode][gameMode].pointsWin = parseInt(e.target.value) || 0;
+                                setEditedConfig(newConfig);
+                              }}
+                              className="w-full px-3 py-2 bg-dark-900 border border-green-500/40 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="text-red-400 text-xs block mb-1.5 font-medium">❌ Défaite</label>
+                            <input
+                              type="number"
+                              value={editedConfig.rankedMatchRewards[mode][gameMode].pointsLoss || 0}
+                              onChange={(e) => {
+                                const newConfig = { ...editedConfig };
+                                newConfig.rankedMatchRewards[mode][gameMode].pointsLoss = parseInt(e.target.value) || 0;
+                                setEditedConfig(newConfig);
+                              }}
+                              className="w-full px-3 py-2 bg-dark-900 border border-red-500/40 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-gray-500 text-xs mt-2 italic">Points pour le classement du mode classé (rangs Bronze, Silver, Gold...)</p>
                       </div>
                       
-                      <div>
-                        <label className="text-gray-400 text-xs block mb-1">Points Défaite</label>
-                        <input
-                          type="number"
-                          value={editedConfig.rankedMatchRewards[mode][gameMode].pointsLoss || 0}
-                          onChange={(e) => {
-                            const newConfig = { ...editedConfig };
-                            newConfig.rankedMatchRewards[mode][gameMode].pointsLoss = parseInt(e.target.value) || 0;
-                            setEditedConfig(newConfig);
-                          }}
-                          className="w-full px-2 py-1 bg-dark-900 border border-red-500/30 rounded text-red-400 text-sm focus:border-red-500 focus:outline-none"
-                        />
+                      {/* Gold */}
+                      <div className="mb-4 pb-4 border-b border-white/10">
+                        <p className="text-yellow-400 text-xs font-semibold mb-3 uppercase tracking-wider">💰 Gold (Coins)</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-green-400 text-xs block mb-1.5 font-medium">✅ Victoire</label>
+                            <input
+                              type="number"
+                              value={editedConfig.rankedMatchRewards[mode][gameMode].coinsWin || 0}
+                              onChange={(e) => {
+                                const newConfig = { ...editedConfig };
+                                newConfig.rankedMatchRewards[mode][gameMode].coinsWin = parseInt(e.target.value) || 0;
+                                setEditedConfig(newConfig);
+                              }}
+                              className="w-full px-3 py-2 bg-dark-900 border border-yellow-500/40 rounded-lg text-yellow-400 text-sm font-semibold focus:border-yellow-500 focus:outline-none"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="text-orange-400 text-xs block mb-1.5 font-medium">🎁 Consolation</label>
+                            <input
+                              type="number"
+                              value={editedConfig.rankedMatchRewards[mode][gameMode].coinsLoss || 0}
+                              onChange={(e) => {
+                                const newConfig = { ...editedConfig };
+                                if (!editedConfig.rankedMatchRewards[mode][gameMode].coinsLoss && editedConfig.rankedMatchRewards[mode][gameMode].coinsLoss !== 0) {
+                                  newConfig.rankedMatchRewards[mode][gameMode].coinsLoss = 0;
+                                }
+                                newConfig.rankedMatchRewards[mode][gameMode].coinsLoss = parseInt(e.target.value) || 0;
+                                setEditedConfig(newConfig);
+                              }}
+                              className="w-full px-3 py-2 bg-dark-900 border border-orange-500/40 rounded-lg text-orange-400 text-sm font-semibold focus:border-orange-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-gray-500 text-xs mt-2 italic">Gold gagné par les vainqueurs et consolation pour les perdants</p>
                       </div>
                       
+                      {/* XP Top Player */}
                       <div>
-                        <label className="text-gray-400 text-xs block mb-1">Coins Victoire</label>
-                        <input
-                          type="number"
-                          value={editedConfig.rankedMatchRewards[mode][gameMode].coinsWin || 0}
-                          onChange={(e) => {
-                            const newConfig = { ...editedConfig };
-                            newConfig.rankedMatchRewards[mode][gameMode].coinsWin = parseInt(e.target.value) || 0;
-                            setEditedConfig(newConfig);
-                          }}
-                          className="w-full px-2 py-1 bg-dark-900 border border-yellow-500/30 rounded text-yellow-400 text-sm focus:border-yellow-500 focus:outline-none"
-                        />
+                        <p className="text-cyan-400 text-xs font-semibold mb-3 uppercase tracking-wider">⚡ XP Top Player (Victoire uniquement)</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-cyan-400 text-xs block mb-1.5 font-medium">Min</label>
+                            <input
+                              type="number"
+                              value={editedConfig.rankedMatchRewards[mode][gameMode].xpWinMin || 0}
+                              onChange={(e) => {
+                                const newConfig = { ...editedConfig };
+                                if (!editedConfig.rankedMatchRewards[mode][gameMode].xpWinMin && editedConfig.rankedMatchRewards[mode][gameMode].xpWinMin !== 0) {
+                                  newConfig.rankedMatchRewards[mode][gameMode].xpWinMin = 0;
+                                }
+                                newConfig.rankedMatchRewards[mode][gameMode].xpWinMin = parseInt(e.target.value) || 0;
+                                setEditedConfig(newConfig);
+                              }}
+                              className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/40 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="text-cyan-400 text-xs block mb-1.5 font-medium">Max</label>
+                            <input
+                              type="number"
+                              value={editedConfig.rankedMatchRewards[mode][gameMode].xpWinMax || 0}
+                              onChange={(e) => {
+                                const newConfig = { ...editedConfig };
+                                if (!editedConfig.rankedMatchRewards[mode][gameMode].xpWinMax && editedConfig.rankedMatchRewards[mode][gameMode].xpWinMax !== 0) {
+                                  newConfig.rankedMatchRewards[mode][gameMode].xpWinMax = 0;
+                                }
+                                newConfig.rankedMatchRewards[mode][gameMode].xpWinMax = parseInt(e.target.value) || 0;
+                                setEditedConfig(newConfig);
+                              }}
+                              className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/40 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-gray-500 text-xs mt-2 italic">XP aléatoire entre min et max pour le classement Top Player (affiché sur l'accueil)</p>
                       </div>
-                </div>
-                  ))}
-                  </div>
-                </div>
-            ))}
                     </div>
-                  </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-6 bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+            <p className="text-purple-400 font-medium text-sm mb-2">💡 Information</p>
+            <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside">
+              <li><strong className="text-white">Points Ladder Classé</strong> : Utilisés pour le classement avec rangs (Bronze, Silver, Gold, etc.)</li>
+              <li><strong className="text-white">XP Top Player</strong> : Utilisés pour le classement général des joueurs affiché sur la page d'accueil</li>
+              <li><strong className="text-white">Gold</strong> : Monnaie du jeu donnée aux gagnants et perdants (consolation)</li>
+              <li><strong className="text-white">Perdants</strong> : Reçoivent uniquement le gold de consolation (pas d'XP)</li>
+            </ul>
+          </div>
+        </div>
 
         {/* Staff Admin Access Control */}
         <div className="bg-dark-800/50 border border-purple-500/30 rounded-xl p-6">

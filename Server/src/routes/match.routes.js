@@ -1931,7 +1931,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         if (playerId) {
           // XP aléatoire entre min et max
           const xpGained = Math.floor(Math.random() * (playerXPWinMax - playerXPWinMin + 1)) + playerXPWinMin;
-          rewardsGiven.winners.xpGained.push({ oderId: playerId.toString(), xp: xpGained });
+          rewardsGiven.winners.xpGained.push({ playerId: playerId.toString(), xp: xpGained });
           
           console.log(`[MATCH RESULT] Updating player ${playerId} with: goldCoins +${playerCoinsWin}, xp +${xpGained}, wins +1`);
           
@@ -1986,6 +1986,9 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     match.result.rewardsGiven = rewardsGiven;
     await match.save();
 
+    console.log('[MATCH RESULT] 💾 Rewards saved in match.result.rewardsGiven');
+    console.log('[MATCH RESULT] rewardsGiven:', JSON.stringify(rewardsGiven, null, 2));
+
     const populatedMatch = await Match.findById(matchId)
       .populate('challenger', 'name tag color logo members registeredLadders')
       .populate('opponent', 'name tag color logo members registeredLadders')
@@ -1996,6 +1999,13 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles');
 
+    console.log('[MATCH RESULT] 🚀 Emitting matchUpdate with type: completed');
+    console.log('[MATCH RESULT] Match status:', populatedMatch.status);
+    console.log('[MATCH RESULT] Winner:', populatedMatch.result.winner);
+    console.log('[MATCH RESULT] RewardsGiven present:', !!populatedMatch.result.rewardsGiven);
+    console.log('[MATCH RESULT] RewardsGiven XP array:', populatedMatch.result.rewardsGiven?.winners?.xpGained);
+    console.log('[MATCH RESULT] RewardsGiven full:', JSON.stringify(populatedMatch.result.rewardsGiven, null, 2));
+
     // Émettre via Socket.io pour mise à jour en temps réel
     const io = req.app.get('io');
     if (io) {
@@ -2003,6 +2013,8 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         type: 'completed',
         match: populatedMatch
       });
+      console.log('[MATCH RESULT] ✅ Event emitted to room: match-' + matchId);
+      
       // Envoyer aussi le message système dans le chat
       const systemMessage = populatedMatch.chat[populatedMatch.chat.length - 1];
       io.to(`match-${matchId}`).emit('newChatMessage', {
@@ -2812,7 +2824,7 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
           const playerId = rosterEntry.user?._id || rosterEntry.user;
           if (playerId) {
             const xpGained = Math.floor(Math.random() * (playerXPWinMax - playerXPWinMin + 1)) + playerXPWinMin;
-            rewardsGiven.winners.xpGained.push({ oderId: playerId.toString(), xp: xpGained });
+            rewardsGiven.winners.xpGained.push({ playerId: playerId.toString(), xp: xpGained });
             
             await User.findByIdAndUpdate(playerId, {
               $inc: { 

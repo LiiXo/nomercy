@@ -8,6 +8,8 @@ import {
   ArrowLeft, Trophy, Users, Clock, Send, Loader2, Shield, 
   Swords, MessageCircle, AlertTriangle, Crown, Shuffle, Map
 } from 'lucide-react';
+import RankedMatchReport from '../components/RankedMatchReport';
+import LadderMatchReport from '../components/LadderMatchReport';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
@@ -50,6 +52,17 @@ const MatchSheet = () => {
   // Pour les matchs classés
   const [myTeam, setMyTeam] = useState(null);
   const [isReferent, setIsReferent] = useState(false);
+  
+  // Rapport de combat (mode classé)
+  const [showMatchReport, setShowMatchReport] = useState(false);
+  const [matchReportData, setMatchReportData] = useState(null);
+  
+  // Rapport de combat (match ladder)
+  const [showLadderReport, setShowLadderReport] = useState(false);
+  const [ladderReportData, setLadderReportData] = useState(null);
+  
+  // Flag pour éviter d'afficher le rapport plusieurs fois
+  const [reportShownForMatch, setReportShownForMatch] = useState(null);
 
   // Translations
   const t = {
@@ -425,6 +438,198 @@ const MatchSheet = () => {
     fetchMySquad();
   }, [matchId, isAuthenticated]);
 
+  // 🎯 Effet pour détecter quand le match devient complété et afficher le rapport
+  useEffect(() => {
+    console.log('[MatchSheet] 🔍 Checking for match completion...');
+    console.log('[MatchSheet] match:', match?.status);
+    console.log('[MatchSheet] reportShownForMatch:', reportShownForMatch);
+    console.log('[MatchSheet] matchId:', matchId);
+    
+    // Éviter d'afficher le rapport plusieurs fois pour le même match
+    if (!match || match.status !== 'completed' || reportShownForMatch === matchId) {
+      return;
+    }
+    
+    console.log('[MatchSheet] ✅ Match is completed! Preparing report...');
+    setReportShownForMatch(matchId);
+    
+    if (isRankedMatch) {
+      // ========== RAPPORT MODE CLASSÉ ==========
+      console.log('[MatchSheet] 📊 Preparing RANKED match report');
+      console.log('[MatchSheet] Players:', match.players);
+      console.log('[MatchSheet] User ID:', user?._id);
+      
+      // Trouver le joueur actuel
+      const currentPlayer = match.players?.find(p => {
+        const pUserId = p.user?._id?.toString() || p.user?.toString();
+        const currentUserId = user?._id?.toString();
+        return pUserId === currentUserId;
+      });
+      
+      console.log('[MatchSheet] Current player:', currentPlayer);
+      
+      if (currentPlayer && currentPlayer.rewards) {
+        const isWinner = currentPlayer.team === match.result?.winner;
+        const pointsChange = currentPlayer.rewards.pointsChange || 0;
+        const goldEarned = currentPlayer.rewards.goldEarned || 0;
+        const xpEarned = currentPlayer.rewards.xpEarned || 0;
+        
+        // Utiliser les points explicites si disponibles, sinon calculer
+        const newPoints = currentPlayer.rewards.newPoints ?? currentPlayer.points ?? 0;
+        const oldPoints = currentPlayer.rewards.oldPoints ?? Math.max(0, newPoints - pointsChange);
+        
+        console.log('[MatchSheet] 🎉 RANKED Report data:', {
+          isWinner,
+          pointsChange,
+          goldEarned,
+          xpEarned,
+          oldPoints,
+          newPoints,
+          rewards: currentPlayer.rewards
+        });
+        
+        setMatchReportData({
+          isWinner,
+          rewards: {
+            pointsChange: pointsChange,
+            goldEarned: goldEarned,
+            xpEarned: xpEarned
+          },
+          oldRank: { points: oldPoints },
+          newRank: { points: newPoints },
+          mode: match.mode || selectedMode
+        });
+        
+        setTimeout(() => setShowMatchReport(true), 500);
+      } else {
+        console.warn('[MatchSheet] ⚠️ No rewards found for ranked player');
+      }
+    } else {
+      // ========== RAPPORT MATCH LADDER ==========
+      console.log('[MatchSheet] 📊 Preparing LADDER match report');
+      console.log('[MatchSheet] Result:', match.result);
+      console.log('[MatchSheet] RewardsGiven:', match.result?.rewardsGiven);
+      console.log('[MatchSheet] RewardsGiven winners:', match.result?.rewardsGiven?.winners);
+      console.log('[MatchSheet] RewardsGiven xpGained:', match.result?.rewardsGiven?.winners?.xpGained);
+      console.log('[MatchSheet] MySquad:', mySquad);
+      console.log('[MatchSheet] Challenger:', match.challenger);
+      console.log('[MatchSheet] Opponent:', match.opponent);
+      console.log('[MatchSheet] Current user ID:', user?._id);
+      
+      if (match.result) {
+        const winnerId = match.result.winner?._id?.toString() || match.result.winner?.toString();
+        
+        // Déterminer mon escouade : soit depuis mySquad, soit en cherchant dans challenger/opponent
+        let mySquadId = mySquad?._id?.toString();
+        let mySquadData = mySquad;
+        
+        // Si mySquad n'est pas chargé, essayer de le déterminer depuis le roster du match
+        if (!mySquadId && user?._id) {
+          const userIdStr = user._id.toString();
+          
+          // Chercher dans le roster du challenger
+          const isInChallenger = match.challengerRoster?.some(r => 
+            (r.user?._id?.toString() || r.user?.toString()) === userIdStr
+          );
+          
+          // Chercher dans le roster de l'opponent
+          const isInOpponent = match.opponentRoster?.some(r => 
+            (r.user?._id?.toString() || r.user?.toString()) === userIdStr
+          );
+          
+          if (isInChallenger) {
+            mySquadId = match.challenger?._id?.toString();
+            mySquadData = match.challenger;
+            console.log('[MatchSheet] Found user in challenger roster');
+          } else if (isInOpponent) {
+            mySquadId = match.opponent?._id?.toString();
+            mySquadData = match.opponent;
+            console.log('[MatchSheet] Found user in opponent roster');
+          }
+        }
+        
+        if (mySquadId) {
+          const isWinner = winnerId === mySquadId;
+          
+          console.log('[MatchSheet] Winner ID:', winnerId);
+          console.log('[MatchSheet] My Squad ID:', mySquadId);
+          console.log('[MatchSheet] Is winner:', isWinner);
+          
+          const rewardsGiven = match.result.rewardsGiven;
+          
+        if (rewardsGiven) {
+          let playerXP = 0;
+          if (isWinner && rewardsGiven.winners?.xpGained) {
+            const userIdStr = user?._id?.toString();
+            console.log('[MatchSheet] Looking for XP with userId:', userIdStr);
+            console.log('[MatchSheet] xpGained array:', rewardsGiven.winners.xpGained);
+            
+            // Chercher l'XP du joueur dans le tableau
+            const xpEntry = rewardsGiven.winners.xpGained.find(entry => {
+              const entryPlayerId = entry.playerId?.toString() || entry.userId?.toString();
+              console.log('[MatchSheet] Comparing:', entryPlayerId, '===', userIdStr);
+              return entryPlayerId === userIdStr;
+            });
+            
+            if (xpEntry) {
+              playerXP = xpEntry.xp || 0;
+              console.log('[MatchSheet] Found xpEntry:', xpEntry);
+            } else if (rewardsGiven.winners.xpGained.length > 0) {
+              // Si on ne trouve pas le joueur mais qu'il y a des XP, prendre la moyenne
+              const totalXP = rewardsGiven.winners.xpGained.reduce((sum, e) => sum + (e.xp || 0), 0);
+              playerXP = Math.floor(totalXP / rewardsGiven.winners.xpGained.length);
+              console.log('[MatchSheet] Player not found in xpGained, using average XP:', playerXP);
+            }
+          } else if (isWinner && rewardsGiven.winners?.xp) {
+            // Fallback: si xp est directement sur winners (ancien format)
+            playerXP = rewardsGiven.winners.xp;
+            console.log('[MatchSheet] Using direct winners.xp:', playerXP);
+          }
+            
+            // Utiliser mySquadData ou retrouver depuis challenger/opponent
+            if (!mySquadData) {
+              mySquadData = match.challenger?._id?.toString() === mySquadId 
+                ? match.challenger 
+                : match.opponent;
+            }
+            
+            console.log('[MatchSheet] 🎉 LADDER Report data:', {
+              isWinner,
+              playerGold: isWinner ? rewardsGiven.winners?.coins : rewardsGiven.losers?.coins,
+              playerXP,
+              squadLadderPoints: isWinner ? rewardsGiven.squad?.ladderPointsWin : rewardsGiven.squad?.ladderPointsLoss,
+              squadGeneralPoints: isWinner ? rewardsGiven.squad?.generalPointsWin : rewardsGiven.squad?.generalPointsLoss
+            });
+            
+            setLadderReportData({
+              isWinner,
+              mySquad: mySquadData,
+              rewards: {
+                playerGold: isWinner ? rewardsGiven.winners?.coins : rewardsGiven.losers?.coins,
+                playerXP: playerXP,
+                squadLadderPoints: isWinner 
+                  ? rewardsGiven.squad?.ladderPointsWin 
+                  : rewardsGiven.squad?.ladderPointsLoss,
+                squadGeneralPoints: isWinner 
+                  ? rewardsGiven.squad?.generalPointsWin 
+                  : rewardsGiven.squad?.generalPointsLoss
+              },
+              mode: match.mode || selectedMode
+            });
+            
+            setTimeout(() => setShowLadderReport(true), 500);
+          } else {
+            console.warn('[MatchSheet] ⚠️ No rewardsGiven found in match result');
+          }
+        } else {
+          console.warn('[MatchSheet] ⚠️ Could not determine mySquadId');
+        }
+      } else {
+        console.warn('[MatchSheet] ⚠️ No match.result found');
+      }
+    }
+  }, [match?.status, match?._id, matchId, mySquad, user, isRankedMatch, selectedMode, reportShownForMatch]);
+
   // Poll for updates
   useEffect(() => {
     if (!initialLoadDone) return;
@@ -438,6 +643,11 @@ const MatchSheet = () => {
 
     const handleNewChatMessage = (data) => {
       if (data.matchId === matchId || data.matchId?.toString() === matchId) {
+        // Skip if this message was sent by us (already added locally)
+        if (data.message._id && sentMessageIdsRef.current.has(data.message._id)) {
+          console.log('[MatchSheet] Skipping duplicate socket message:', data.message._id);
+          return;
+        }
         // Vérifier si le message n'existe pas déjà
         setMessages(prev => {
           const exists = prev.some(m => m._id === data.message._id);
@@ -449,18 +659,22 @@ const MatchSheet = () => {
     };
 
     const handleMatchUpdate = (data) => {
-      console.log('[MatchSheet] matchUpdate received:', data);
+      console.log('[MatchSheet] 📨 matchUpdate received:', data);
+      
       if (data.matchId === matchId || data.matchId?.toString() === matchId) {
-        console.log('[MatchSheet] Match ID matches, updating...');
+        console.log('[MatchSheet] ✅ Match ID matches, updating state...');
         if (data.match) {
           // Si le match est annulé, rediriger vers la liste des matchs
           if (data.match.status === 'cancelled') {
             navigate('/matches');
             return;
           }
+          
+          console.log('[MatchSheet] Setting match with status:', data.match.status);
+          // Le useEffect séparé va détecter le changement et afficher le rapport
           setMatch(data.match);
         } else {
-          console.log('[MatchSheet] No match data, fetching...');
+          console.log('[MatchSheet] No match data in event, fetching...');
           fetchMatchData(false);
         }
       }
@@ -486,6 +700,31 @@ const MatchSheet = () => {
     socket.on('newChatMessage', handleNewChatMessage);
     socket.on('matchUpdate', handleMatchUpdate);
     socket.on('matchCancellationApproved', handleMatchCancelled);
+    
+    // Listener spécifique pour les mises à jour de matchs classés
+    if (isRankedMatch) {
+      const handleRankedMatchUpdate = (updatedMatch) => {
+        console.log('[MatchSheet] rankedMatchUpdate received:', updatedMatch);
+        handleMatchUpdate({ match: updatedMatch, matchId: updatedMatch._id });
+      };
+      
+      const handleRankedMatchMessage = (message) => {
+        console.log('[MatchSheet] rankedMatchMessage received:', message);
+        handleNewChatMessage({ message, matchId });
+      };
+      
+      socket.on('rankedMatchUpdate', handleRankedMatchUpdate);
+      socket.on('rankedMatchMessage', handleRankedMatchMessage);
+      
+      // Cleanup pour les listeners ranked
+      return () => {
+        socket.off('newChatMessage', handleNewChatMessage);
+        socket.off('matchUpdate', handleMatchUpdate);
+        socket.off('matchCancellationApproved', handleMatchCancelled);
+        socket.off('rankedMatchUpdate', handleRankedMatchUpdate);
+        socket.off('rankedMatchMessage', handleRankedMatchMessage);
+      };
+    }
     
     console.log('[MatchSheet] Socket listeners attached');
 
@@ -567,6 +806,39 @@ const MatchSheet = () => {
     }
   }, [initialLoadDone, messages.length]);
 
+  // Track sent message IDs to avoid duplicates
+  const sentMessageIdsRef = useRef(new Set());
+  
+  // Force result (admin/staff only)
+  const handleForceResult = async (winner) => {
+    if (!isStaff) return;
+    
+    setSubmittingResult(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/admin/${matchId}/force-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ winner, reason: 'Résultat forcé via feuille de match' })
+      });
+      
+      const data = await response.json();
+      console.log('[MatchSheet] Force result response:', data);
+      
+      if (data.success) {
+        setMatch(data.match);
+        setShowResultModal(false);
+      } else {
+        alert(data.message || 'Erreur lors du forçage du résultat');
+      }
+    } catch (err) {
+      console.error('Error forcing result:', err);
+      alert('Erreur lors du forçage du résultat');
+    } finally {
+      setSubmittingResult(false);
+    }
+  };
+  
   // Send message
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -587,7 +859,20 @@ const MatchSheet = () => {
 
       const data = await response.json();
       if (data.success) {
-        setMessages(prev => [...prev, data.message]);
+        // Track this message ID to avoid socket duplicate
+        if (data.message._id) {
+          sentMessageIdsRef.current.add(data.message._id);
+          // Clean up after 5 seconds
+          setTimeout(() => {
+            sentMessageIdsRef.current.delete(data.message._id);
+          }, 5000);
+        }
+        setMessages(prev => {
+          // Double check it doesn't exist
+          const exists = prev.some(m => m._id === data.message._id);
+          if (exists) return prev;
+          return [...prev, data.message];
+        });
         setNewMessage('');
         setTimeout(scrollChatToBottom, 50);
       }
@@ -624,7 +909,7 @@ const MatchSheet = () => {
   // Submit match result
   const handleSubmitResult = async (winner) => {
     if (isRankedMatch) {
-      if (!isReferent) return;
+      if (!isReferent && !isStaff) return;
     } else {
       if (!canManageMatch()) return;
     }
@@ -639,6 +924,8 @@ const MatchSheet = () => {
         ? { winner }
         : { winnerId: winner };
       
+      console.log('[MatchSheet] Submitting result:', { apiUrl, body });
+      
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -647,14 +934,30 @@ const MatchSheet = () => {
       });
 
       const data = await response.json();
+      console.log('[MatchSheet] Result response:', data);
+      
       if (data.success) {
         setMatch(data.match);
         setShowResultModal(false);
+        
+        // Afficher un message si on attend l'autre équipe
+        if (data.waitingForOther) {
+          // Ajouter un message système dans le chat
+          const systemMessage = {
+            _id: `result-report-${Date.now()}`,
+            isSystem: true,
+            message: data.message || `Rapport enregistré. En attente de l'autre équipe.`,
+            createdAt: new Date(),
+            user: { username: 'SYSTEM' }
+          };
+          setMessages(prev => [...prev, systemMessage]);
+        }
       } else {
         alert(data.message);
       }
     } catch (err) {
       console.error('Error submitting result:', err);
+      alert('Erreur lors de la soumission du résultat');
     } finally {
       setSubmittingResult(false);
     }
@@ -865,10 +1168,28 @@ const MatchSheet = () => {
   const isMyTeamChallenger = mySquad?._id?.toString() === match.challenger?._id?.toString();
   const isMyTeamOpponent = mySquad?._id?.toString() === match.opponent?._id?.toString();
   
-  const isRankedParticipant = isRankedMatch && match.players?.some(p => 
-    (p.user?._id || p.user)?.toString() === user?.id?.toString()
-  );
+  const isRankedParticipant = isRankedMatch && match.players?.some(p => {
+    const pUserId = (p.user?._id || p.user)?.toString();
+    const currentUserId = (user?._id || user?.id)?.toString();
+    return pUserId === currentUserId;
+  });
   const isParticipant = isRankedMatch ? isRankedParticipant : (isMyTeamChallenger || isMyTeamOpponent);
+  
+  // Debug logs for ranked validation
+  if (isRankedMatch) {
+    console.log('[MatchSheet] Ranked match validation check:', {
+      isRankedParticipant,
+      isReferent,
+      matchStatus: match.status,
+      canValidate: canValidateResult(),
+      myTeam,
+      userId: (user?._id || user?.id)?.toString(),
+      players: match.players?.map(p => ({
+        oderId: (p.user?._id || p.user)?.toString(),
+        username: p.user?.username
+      }))
+    });
+  }
   
   const statusBadge = getStatusBadge(match.status);
 
@@ -1674,9 +1995,56 @@ const MatchSheet = () => {
               {t.selectWinner}
             </h3>
             
+            {/* Info rapports existants (mode classé) */}
+            {isRankedMatch && (match.result?.team1Report || match.result?.team2Report) && (
+              <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
+                <p className="text-cyan-400 text-sm font-medium mb-2">📋 Rapports enregistrés :</p>
+                <div className="space-y-1 text-xs">
+                  {match.result?.team1Report && (
+                    <p className="text-gray-300">
+                      • Équipe 1 : <span className="text-green-400">Équipe {match.result.team1Report.winner} gagnante</span>
+                    </p>
+                  )}
+                  {match.result?.team2Report && (
+                    <p className="text-gray-300">
+                      • Équipe 2 : <span className="text-green-400">Équipe {match.result.team2Report.winner} gagnante</span>
+                    </p>
+                  )}
+                  {(!match.result?.team1Report || !match.result?.team2Report) && (
+                    <p className="text-orange-400 text-xs mt-2">
+                      ⏳ En attente du rapport de l'équipe {!match.result?.team1Report ? '1' : '2'}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-3">
               {isRankedMatch ? (
                 <>
+                  {/* Admin/Staff : Forcer le résultat */}
+                  {isStaff && (
+                    <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                      <p className="text-yellow-400 text-sm font-bold mb-3">⚡ Mode Staff - Forcer le résultat</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleForceResult(1)}
+                          disabled={submittingResult}
+                          className="flex-1 py-2 px-3 bg-blue-500/20 border border-blue-500/40 rounded-lg text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                        >
+                          Équipe 1 gagne
+                        </button>
+                        <button
+                          onClick={() => handleForceResult(2)}
+                          disabled={submittingResult}
+                          className="flex-1 py-2 px-3 bg-purple-500/20 border border-purple-500/40 rounded-lg text-purple-400 text-sm font-medium hover:bg-purple-500/30 transition-all disabled:opacity-50"
+                        >
+                          Équipe 2 gagne
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
                   {/* Mon équipe a gagné */}
                   <button
                     onClick={() => handleSubmitResult(myTeam)}
@@ -1893,6 +2261,33 @@ const MatchSheet = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Rapport de Combat (Mode Classé uniquement) */}
+      {isRankedMatch && showMatchReport && matchReportData && (
+        <RankedMatchReport
+          show={showMatchReport}
+          onClose={() => setShowMatchReport(false)}
+          isWinner={matchReportData.isWinner}
+          rewards={matchReportData.rewards}
+          oldRank={matchReportData.oldRank}
+          newRank={matchReportData.newRank}
+          mode={matchReportData.mode}
+          matchId={matchId}
+        />
+      )}
+
+      {/* Rapport de Combat (Match Ladder) */}
+      {!isRankedMatch && showLadderReport && ladderReportData && (
+        <LadderMatchReport
+          show={showLadderReport}
+          onClose={() => setShowLadderReport(false)}
+          isWinner={ladderReportData.isWinner}
+          mySquad={ladderReportData.mySquad}
+          rewards={ladderReportData.rewards}
+          mode={ladderReportData.mode}
+          matchId={matchId}
+        />
       )}
     </div>
   );

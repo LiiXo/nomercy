@@ -502,11 +502,17 @@ const HardcoreDashboard = () => {
     try {
       const squadRes = await fetch(`${API_URL}/matches/available/squad-team?mode=hardcore`);
       const squadData = await squadRes.json();
-      if (squadData.success) setSquadTeamMatches(squadData.matches);
+      if (squadData.success) {
+        console.log('[HardcoreDashboard] Fetched squadTeamMatches:', squadData.matches?.length);
+        setSquadTeamMatches(squadData.matches);
+      }
       
       const duoRes = await fetch(`${API_URL}/matches/available/duo-trio?mode=hardcore`);
       const duoData = await duoRes.json();
-      if (duoData.success) setDuoTrioMatches(duoData.matches);
+      if (duoData.success) {
+        console.log('[HardcoreDashboard] Fetched duoTrioMatches:', duoData.matches?.length);
+        setDuoTrioMatches(duoData.matches);
+      }
     } catch (err) {
       console.error('Error fetching matches:', err);
     } finally {
@@ -562,27 +568,40 @@ const HardcoreDashboard = () => {
     // Handle match accepted events
     const handleMatchAccepted = (data) => {
       if (data.mode === 'hardcore') {
+        console.log('[HardcoreDashboard] matchAccepted event:', data);
+        
+        const currentSquad = mySquadRef.current;
+        const currentSquadId = (currentSquad?._id || currentSquad?.id)?.toString();
+        const challengerId = data.match?.challenger?._id?.toString() || data.match?.challenger?.id?.toString();
+        const opponentId = data.match?.opponent?._id?.toString() || data.match?.opponent?.id?.toString();
+        const isMyMatch = currentSquadId && (challengerId === currentSquadId || opponentId === currentSquadId);
+        
+        console.log('[HardcoreDashboard] Is my match?', isMyMatch, {currentSquadId, challengerId, opponentId});
+        
+        // Retirer le match de la liste des disponibles (sauf si c'est mon match - il va dans myActiveMatches)
         if (data.ladderId === 'squad-team') {
-          setSquadTeamMatches(prev => prev.filter(m => m._id !== data.matchId));
+          setSquadTeamMatches(prev => {
+            const filtered = prev.filter(m => m._id !== data.matchId);
+            console.log('[HardcoreDashboard] squadTeamMatches updated:', prev.length, '->', filtered.length);
+            return filtered;
+          });
           setInProgressCounts(prev => ({ ...prev, 'squad-team': prev['squad-team'] + 1, total: prev.total + 1 }));
         } else if (data.ladderId === 'duo-trio') {
-          setDuoTrioMatches(prev => prev.filter(m => m._id !== data.matchId));
+          setDuoTrioMatches(prev => {
+            const filtered = prev.filter(m => m._id !== data.matchId);
+            console.log('[HardcoreDashboard] duoTrioMatches updated:', prev.length, '->', filtered.length);
+            return filtered;
+          });
           setInProgressCounts(prev => ({ ...prev, 'duo-trio': prev['duo-trio'] + 1, total: prev.total + 1 }));
         }
         
-        const currentSquad = mySquadRef.current;
-        if (data.match && currentSquad) {
-          const currentSquadId = (currentSquad._id || currentSquad.id)?.toString();
-          const challengerId = data.match.challenger?._id?.toString() || data.match.challenger?.id?.toString();
-          const opponentId = data.match.opponent?._id?.toString() || data.match.opponent?.id?.toString();
-          
-          const isMyMatch = currentSquadId && (challengerId === currentSquadId || opponentId === currentSquadId);
-          if (isMyMatch) {
-            setMyActiveMatches(prev => {
-              if (prev.some(m => m._id === data.match._id)) return prev;
-              return [data.match, ...prev];
-            });
-          }
+        // Ajouter à mes matchs actifs si c'est mon match
+        if (data.match && isMyMatch) {
+          setMyActiveMatches(prev => {
+            if (prev.some(m => m._id === data.match._id)) return prev;
+            console.log('[HardcoreDashboard] Adding to myActiveMatches:', data.match._id);
+            return [data.match, ...prev];
+          });
         }
         
         // Fallback: refresh active matches to ensure consistency
@@ -1388,12 +1407,6 @@ const HardcoreDashboard = () => {
     fetchTopSquads();
   }, [mySquad]);
 
-  const gameModes = [
-    { name: t('hardcoreSND'), icon: '💣', comingSoon: false },
-    { name: t('hardcoreTDM'), icon: '⚔️', comingSoon: true },
-    { name: t('hardcoreDuel'), icon: '🗡️', comingSoon: true },
-  ];
-
   return (
     <div className="min-h-screen bg-dark-950 relative">
       {/* Background */}
@@ -2045,29 +2058,6 @@ const HardcoreDashboard = () => {
             </div>
           </section>
 
-          {/* Game Modes */}
-          <section>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-neon-red/20 rounded-xl flex items-center justify-center">
-                <Target className="w-5 h-5 text-neon-red" />
-              </div>
-              <h2 className="text-2xl font-display text-white">{language === 'fr' ? 'MODES DE JEU' : 'GAME MODES'}</h2>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {gameModes.map((mode, index) => (
-                <div key={index} className={`glass-card rounded-2xl p-6 text-center card-hover neon-border-red ${mode.comingSoon ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer neon-border-red-hover'} relative`}>
-                  {mode.comingSoon && (
-                    <div className="absolute top-2 right-2 px-2 py-1 bg-orange-500/80 rounded-lg text-xs font-bold text-white">
-                      {language === 'fr' ? 'À venir' : language === 'de' ? 'Demnächst' : language === 'it' ? 'Prossimamente' : 'Coming Soon'}
-                    </div>
-                  )}
-                  <div className="text-5xl mb-4">{mode.icon}</div>
-                  <h3 className="text-white font-semibold">{mode.name}</h3>
-                </div>
-              ))}
-            </div>
-          </section>
         </div>
       </div>
 

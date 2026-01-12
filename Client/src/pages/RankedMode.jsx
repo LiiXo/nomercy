@@ -80,11 +80,16 @@ const RankedMode = () => {
     return () => clearInterval(interval);
   }, []);
   
-  // Fetch rules for Search & Destroy
+  // Fetch rules for the selected game mode
   const fetchRules = async () => {
     setLoadingRules(true);
     try {
-      const response = await fetch(`${API_URL}/game-mode-rules/${selectedMode}/ranked/snd`);
+      // Map game mode to rules slug
+      const gameModeSlug = selectedGameMode === 'Search & Destroy' ? 'snd' 
+        : selectedGameMode === 'Team Deathmatch' ? 'tdm' 
+        : selectedGameMode === 'Duel' ? 'duel' 
+        : 'snd';
+      const response = await fetch(`${API_URL}/game-mode-rules/${selectedMode}/ranked/${gameModeSlug}`);
       const data = await response.json();
       if (data.success && data.rules) {
         setRules(data.rules);
@@ -711,54 +716,76 @@ const RankedMode = () => {
                     </span>
                   </button>
 
-                  {/* Mêlée générale - Coming Soon */}
-                  <div className="relative p-4 rounded-2xl border-2 border-white/5 bg-dark-800/20 opacity-50 cursor-not-allowed">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Lock className="w-6 h-6 text-gray-600" />
+                  {/* Mêlée générale - Available */}
+                  <button
+                    onClick={() => setSelectedGameMode('Team Deathmatch')}
+                    className={`relative p-4 rounded-2xl border-2 transition-all ${
+                      selectedGameMode === 'Team Deathmatch'
+                        ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
+                        : 'border-white/10 bg-dark-800/30 hover:border-white/20'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                      selectedGameMode === 'Team Deathmatch'
+                        ? `bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`
+                        : 'bg-dark-700'
+                    }`}>
+                      <Swords className="w-6 h-6 text-white" />
                     </div>
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-dark-700/50 flex items-center justify-center">
-                      <Swords className="w-6 h-6 text-gray-600" />
-                    </div>
-                    <p className="text-gray-600 font-semibold text-sm">{t.teamDeathmatch}</p>
-                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-700/30 text-gray-600">
-                      {t.comingSoon}
+                    <p className="text-white font-semibold text-sm">{t.teamDeathmatch}</p>
+                    <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      selectedGameMode === 'Team Deathmatch'
+                        ? `bg-green-500/20 text-green-400`
+                        : 'bg-green-500/10 text-green-400/70'
+                    }`}>
+                      {t.available}
                     </span>
-                  </div>
+                  </button>
 
-                  {/* Duel - Coming Soon */}
-                  <div className="relative p-4 rounded-2xl border-2 border-white/5 bg-dark-800/20 opacity-50 cursor-not-allowed">
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Lock className="w-6 h-6 text-gray-600" />
+                  {/* Duel - Available */}
+                  <button
+                    onClick={() => setSelectedGameMode('Duel')}
+                    className={`relative p-4 rounded-2xl border-2 transition-all ${
+                      selectedGameMode === 'Duel'
+                        ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
+                        : 'border-white/10 bg-dark-800/30 hover:border-white/20'
+                    }`}
+                  >
+                    <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                      selectedGameMode === 'Duel'
+                        ? `bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`
+                        : 'bg-dark-700'
+                    }`}>
+                      <Target className="w-6 h-6 text-white" />
                     </div>
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-dark-700/50 flex items-center justify-center">
-                      <Target className="w-6 h-6 text-gray-600" />
-                    </div>
-                    <p className="text-gray-600 font-semibold text-sm">{t.duel}</p>
-                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-700/30 text-gray-600">
-                      {t.comingSoon}
+                    <p className="text-white font-semibold text-sm">{t.duel}</p>
+                    <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      selectedGameMode === 'Duel'
+                        ? `bg-green-500/20 text-green-400`
+                        : 'bg-green-500/10 text-green-400/70'
+                    }`}>
+                      {t.available}
                     </span>
-                  </div>
+                  </button>
                 </div>
                 
                 {/* Bouton Règles du mode */}
-                {selectedGameMode === 'Search & Destroy' && (
-                  <button
-                    onClick={() => {
-                      fetchRules();
-                      setShowRulesModal(true);
-                    }}
-                    className={`mt-4 w-full py-3 rounded-xl border border-${accent}-500/30 bg-${accent}-500/10 hover:bg-${accent}-500/20 transition-all flex items-center justify-center gap-2`}
-                  >
-                    <BookOpen className={`w-5 h-5 text-${accent}-400`} />
-                    <span className={`text-${accent}-400 font-semibold`}>
-                      {language === 'fr' ? 'Voir les règles du mode' : 'View game mode rules'}
-                    </span>
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    fetchRules();
+                    setShowRulesModal(true);
+                  }}
+                  className={`mt-4 w-full py-3 rounded-xl border border-${accent}-500/30 bg-${accent}-500/10 hover:bg-${accent}-500/20 transition-all flex items-center justify-center gap-2`}
+                >
+                  <BookOpen className={`w-5 h-5 text-${accent}-400`} />
+                  <span className={`text-${accent}-400 font-semibold`}>
+                    {language === 'fr' ? 'Voir les règles du mode' : 'View game mode rules'}
+                  </span>
+                </button>
               </div>
 
               {/* Matchmaking Section */}
-              {isAuthenticated && selectedGameMode === 'Search & Destroy' && (
+              {isAuthenticated && (
                 <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -938,11 +965,19 @@ const RankedMode = () => {
                       {/* Mode Info */}
                       <div className="flex items-center gap-4 p-4 rounded-2xl bg-dark-800/50 border border-white/5">
                         <div className={`p-3 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
-                          <Crosshair className="w-6 h-6 text-white" />
+                          {selectedGameMode === 'Search & Destroy' && <Crosshair className="w-6 h-6 text-white" />}
+                          {selectedGameMode === 'Team Deathmatch' && <Swords className="w-6 h-6 text-white" />}
+                          {selectedGameMode === 'Duel' && <Target className="w-6 h-6 text-white" />}
                         </div>
                         <div>
-                          <p className="text-white font-semibold">{t.searchDestroy}</p>
-                          <p className="text-gray-500 text-sm">{t.soloMode} • {t.format}</p>
+                          <p className="text-white font-semibold">
+                            {selectedGameMode === 'Search & Destroy' ? t.searchDestroy : 
+                             selectedGameMode === 'Team Deathmatch' ? t.teamDeathmatch : 
+                             t.duel}
+                          </p>
+                          <p className="text-gray-500 text-sm">
+                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : t.format}
+                          </p>
                         </div>
                       </div>
 
@@ -1107,15 +1142,25 @@ const RankedMode = () => {
             </div>
           </div>
 
-          {/* Horizontal Leaderboard - Bottom */}
-          <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
-                  <Crown className="w-5 h-5 text-white" />
-                </div>
-                {t.topPlayers}
-              </h3>
+          {/* Classement Mode Classé */}
+          <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 overflow-hidden">
+            {/* Header */}
+            <div className={`px-6 py-4 bg-gradient-to-r ${isHardcore ? 'from-red-500/20 to-orange-500/10' : 'from-cyan-500/20 to-blue-500/10'} border-b border-white/10`}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                  <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
+                    <Crown className="w-5 h-5 text-white" />
+                  </div>
+                  {t.leaderboard}
+                </h3>
+                <button 
+                  onClick={() => navigate('/rankings')}
+                  className={`text-sm text-${accent}-400 hover:text-${accent}-300 transition-colors flex items-center gap-1`}
+                >
+                  {t.viewAll}
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             
             {loadingLeaderboard ? (
@@ -1123,74 +1168,175 @@ const RankedMode = () => {
                 <Loader2 className={`w-8 h-8 text-${accent}-500 animate-spin`} />
               </div>
             ) : leaderboard.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-3">
-                {leaderboard.slice(0, 10).map((player, idx) => {
-                  const rank = getRankFromPoints(player.points);
-                  const RankIcon = rank.icon;
-                  const isTop3 = idx < 3;
-                  
-                  return (
-                    <button
-                      key={player._id}
-                      onClick={() => navigate(`/player/${player.user?._id}`)}
-                      className={`relative flex flex-col items-center p-4 rounded-2xl transition-all hover:scale-105 ${
-                        idx === 0 ? 'bg-gradient-to-br from-yellow-500/20 to-amber-600/10 border-2 border-yellow-500/40' :
-                        idx === 1 ? 'bg-gradient-to-br from-gray-400/20 to-slate-500/10 border-2 border-gray-400/40' :
-                        idx === 2 ? 'bg-gradient-to-br from-amber-700/20 to-orange-800/10 border-2 border-amber-700/40' :
-                        'bg-dark-800/50 border border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      {/* Rank Badge */}
-                      <div className={`absolute -top-2 -right-2 w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${
-                        idx === 0 ? 'bg-yellow-500 text-black' :
-                        idx === 1 ? 'bg-gray-400 text-black' :
-                        idx === 2 ? 'bg-amber-700 text-white' :
-                        'bg-dark-700 text-gray-400 border border-white/10'
-                      }`}>
-                        {idx + 1}
-                      </div>
-                      
-                      {/* Avatar */}
-                      <div className={`relative mb-3 ${isTop3 ? 'w-16 h-16' : 'w-12 h-12'}`}>
+              <div className="p-6">
+                {/* Top 3 Featured */}
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  {/* Second Place */}
+                  {leaderboard[1] && (() => {
+                    const player = leaderboard[1];
+                    const rank = getRankFromPoints(player.points);
+                    const RankIcon = rank.icon;
+                    return (
+                      <button
+                        onClick={() => navigate(`/player/${player.user?._id}`)}
+                        className="relative flex flex-col items-center p-4 pt-8 rounded-2xl bg-gradient-to-br from-gray-400/10 to-slate-500/5 border border-gray-400/30 hover:border-gray-400/50 transition-all hover:scale-[1.02] order-1"
+                      >
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center shadow-lg">
+                          <span className="text-lg">🥈</span>
+                        </div>
                         <img 
                           src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
                           alt=""
-                          className={`w-full h-full rounded-full object-cover ${isTop3 ? 'ring-2' : ''} ${
-                            idx === 0 ? 'ring-yellow-500' :
-                            idx === 1 ? 'ring-gray-400' :
-                            idx === 2 ? 'ring-amber-700' : ''
-                          }`}
+                          className="w-16 h-16 rounded-full object-cover ring-2 ring-gray-400 mb-3"
                           onError={(e) => { e.target.src = '/avatar.jpg'; }}
                         />
-                        {isTop3 && (
-                          <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full flex items-center justify-center ${
-                            idx === 0 ? 'bg-yellow-500' :
-                            idx === 1 ? 'bg-gray-400' :
-                            'bg-amber-700'
-                          }`}>
-                            <span className="text-sm">{idx === 0 ? '🥇' : idx === 1 ? '🥈' : '🥉'}</span>
+                        <p className="text-white font-semibold text-sm truncate w-full text-center">{player.user?.username || 'Unknown'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className={`w-5 h-5 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
+                            <RankIcon className="w-3 h-3 text-white" />
                           </div>
-                        )}
-                      </div>
-                      
-                      {/* Name */}
-                      <p className={`text-white font-medium truncate w-full text-center ${isTop3 ? 'text-sm' : 'text-xs'}`}>
-                        {player.user?.username || 'Unknown'}
-                      </p>
-                      
-                      {/* Rank & Points */}
-                      <div className="flex items-center gap-1 mt-1">
-                        <div className={`w-4 h-4 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
-                          <RankIcon className="w-2.5 h-2.5 text-white" />
+                          <span className="text-gray-300 font-bold">{player.points} pts</span>
                         </div>
-                        <span className={`text-xs font-bold text-${accent}-400`}>{player.points}</span>
-                      </div>
-                    </button>
-                  );
-                })}
+                        <span className="text-xs text-gray-500 mt-1">{player.wins}V - {player.losses}D</span>
+                      </button>
+                    );
+                  })()}
+                  
+                  {/* First Place */}
+                  {leaderboard[0] && (() => {
+                    const player = leaderboard[0];
+                    const rank = getRankFromPoints(player.points);
+                    const RankIcon = rank.icon;
+                    return (
+                      <button
+                        onClick={() => navigate(`/player/${player.user?._id}`)}
+                        className="relative flex flex-col items-center p-4 pt-10 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-600/10 border-2 border-yellow-500/50 hover:border-yellow-500/70 transition-all hover:scale-[1.02] order-2 -mt-4"
+                      >
+                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center shadow-lg shadow-yellow-500/30">
+                          <span className="text-xl">🥇</span>
+                        </div>
+                        <img 
+                          src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
+                          alt=""
+                          className="w-20 h-20 rounded-full object-cover ring-2 ring-yellow-500 mb-3 shadow-lg shadow-yellow-500/20"
+                          onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                        />
+                        <p className="text-yellow-400 font-bold text-base truncate w-full text-center">{player.user?.username || 'Unknown'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className={`w-6 h-6 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
+                            <RankIcon className="w-3.5 h-3.5 text-white" />
+                          </div>
+                          <span className="text-yellow-400 font-bold text-lg">{player.points} pts</span>
+                        </div>
+                        <span className="text-xs text-gray-400 mt-1">{player.wins}V - {player.losses}D</span>
+                      </button>
+                    );
+                  })()}
+                  
+                  {/* Third Place */}
+                  {leaderboard[2] && (() => {
+                    const player = leaderboard[2];
+                    const rank = getRankFromPoints(player.points);
+                    const RankIcon = rank.icon;
+                    return (
+                      <button
+                        onClick={() => navigate(`/player/${player.user?._id}`)}
+                        className="relative flex flex-col items-center p-4 pt-8 rounded-2xl bg-gradient-to-br from-amber-700/10 to-orange-800/5 border border-amber-700/30 hover:border-amber-700/50 transition-all hover:scale-[1.02] order-3"
+                      >
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-amber-700 flex items-center justify-center shadow-lg">
+                          <span className="text-lg">🥉</span>
+                        </div>
+                        <img 
+                          src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
+                          alt=""
+                          className="w-16 h-16 rounded-full object-cover ring-2 ring-amber-700 mb-3"
+                          onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                        />
+                        <p className="text-white font-semibold text-sm truncate w-full text-center">{player.user?.username || 'Unknown'}</p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className={`w-5 h-5 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
+                            <RankIcon className="w-3 h-3 text-white" />
+                          </div>
+                          <span className="text-amber-600 font-bold">{player.points} pts</span>
+                        </div>
+                        <span className="text-xs text-gray-500 mt-1">{player.wins}V - {player.losses}D</span>
+                      </button>
+                    );
+                  })()}
+                </div>
+                
+                {/* Rest of Leaderboard (4-10) */}
+                {leaderboard.length > 3 && (
+                  <div className="space-y-2">
+                    {leaderboard.slice(3, 10).map((player, idx) => {
+                      const position = idx + 4;
+                      const rank = getRankFromPoints(player.points);
+                      const RankIcon = rank.icon;
+                      const winRate = player.wins + player.losses > 0 
+                        ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
+                        : 0;
+                      
+                      return (
+                        <button
+                          key={player._id}
+                          onClick={() => navigate(`/player/${player.user?._id}`)}
+                          className="w-full flex items-center gap-4 p-3 rounded-xl bg-dark-800/50 border border-white/5 hover:border-white/10 transition-all hover:bg-dark-800/80"
+                        >
+                          {/* Position */}
+                          <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center">
+                            <span className="text-gray-400 font-bold text-sm">#{position}</span>
+                          </div>
+                          
+                          {/* Avatar */}
+                          <img 
+                            src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
+                            alt=""
+                            className="w-10 h-10 rounded-full object-cover"
+                            onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                          />
+                          
+                          {/* Name & Rank */}
+                          <div className="flex-1 min-w-0 text-left">
+                            <p className="text-white font-medium truncate">{player.user?.username || 'Unknown'}</p>
+                            <div className="flex items-center gap-2">
+                              <div className={`w-4 h-4 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
+                                <RankIcon className="w-2.5 h-2.5 text-white" />
+                              </div>
+                              <span className="text-xs text-gray-500">{rank.name}</span>
+                            </div>
+                          </div>
+                          
+                          {/* Stats */}
+                          <div className="hidden sm:flex items-center gap-4 text-sm">
+                            <div className="text-center">
+                              <span className="text-green-400 font-semibold">{player.wins}</span>
+                              <span className="text-gray-600 mx-1">-</span>
+                              <span className="text-red-400 font-semibold">{player.losses}</span>
+                            </div>
+                            <div className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              winRate >= 60 ? 'bg-green-500/20 text-green-400' :
+                              winRate >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {winRate}%
+                            </div>
+                          </div>
+                          
+                          {/* Points */}
+                          <div className={`text-${accent}-400 font-bold`}>
+                            {player.points} <span className="text-xs text-gray-500">pts</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
-              <p className="text-center text-gray-500 py-8">{t.noRankedPlayers}</p>
+              <div className="p-12 text-center">
+                <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-500">{t.noRankedPlayers}</p>
+              </div>
             )}
           </div>
         </div>
@@ -1205,7 +1351,10 @@ const RankedMode = () => {
                 <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
                   <BookOpen className="w-5 h-5 text-white" />
                 </div>
-                {language === 'fr' ? 'Règles - Search & Destroy' : 'Rules - Search & Destroy'}
+                {language === 'fr' ? 'Règles - ' : 'Rules - '}
+                {selectedGameMode === 'Search & Destroy' ? t.searchDestroy : 
+                 selectedGameMode === 'Team Deathmatch' ? t.teamDeathmatch : 
+                 t.duel}
               </h3>
               <button
                 onClick={() => setShowRulesModal(false)}

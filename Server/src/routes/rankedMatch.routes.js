@@ -10,8 +10,14 @@ const router = express.Router();
 
 /**
  * Distribue les récompenses aux joueurs après un match classé
- * - Gagnants: +points, +gold, +XP
- * - Perdants: consolation gold
+ * - Gagnants: +points ladder classé, +gold, +XP, +points top player
+ * - Perdants: -points ladder classé, +gold consolation, 0 XP
+ * 
+ * Explications:
+ * - Points Ladder Classé (Ranking): utilisés pour le classement spécifique du mode classé (avec rangs Bronze, Silver, Gold, etc.)
+ * - Points Top Player: utilisés pour le classement général des joueurs (stats.xp dans User)
+ * - Gold: monnaie du jeu (stats.gold dans User)
+ * - XP: expérience générale pour le classement top player (stats.xp dans User)
  */
 async function distributeRankedRewards(match) {
   try {
@@ -22,8 +28,12 @@ async function distributeRankedRewards(match) {
     const winningTeam = match.result.winner;
     const losingTeam = winningTeam === 1 ? 2 : 1;
     
+    console.log(`[RANKED REWARDS] ====================================`);
     console.log(`[RANKED REWARDS] Match ${match._id} - Winner: Team ${winningTeam}`);
-    console.log(`[RANKED REWARDS] Config - Win: ${pointsWin}pts, ${coinsWin}gold | Loss: ${pointsLoss}pts, ${coinsLoss}gold`);
+    console.log(`[RANKED REWARDS] Mode: ${match.mode} | GameMode: ${match.gameMode}`);
+    console.log(`[RANKED REWARDS] Config - Gagnants: ${pointsWin}pts ladder, ${coinsWin} gold, ${xpWinMin}-${xpWinMax} XP`);
+    console.log(`[RANKED REWARDS] Config - Perdants: ${pointsLoss}pts ladder, ${coinsLoss} gold (consolation), 0 XP`);
+    console.log(`[RANKED REWARDS] ====================================`);
     
     // Traiter chaque joueur
     for (const player of match.players) {
@@ -37,21 +47,36 @@ async function distributeRankedRewards(match) {
       const user = await User.findById(userId);
       if (!user) continue;
       
-      // Calculer les récompenses
-      const pointsChange = isWinner ? pointsWin : pointsLoss;
+      // ========== CALCULER LES RÉCOMPENSES ==========
+      
+      // Points pour le ladder classé (Ranking - avec rangs Bronze/Silver/Gold etc.)
+      const rankedPointsChange = isWinner ? pointsWin : pointsLoss;
+      
+      // Gold (monnaie du jeu)
       const goldChange = isWinner ? coinsWin : coinsLoss;
+      
+      // XP pour le classement Top Player (expérience générale)
       const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
       
-      // Mettre à jour ou créer le classement du joueur
+      // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
       let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
       if (!ranking) {
-        ranking = new Ranking({ user: userId, mode: match.mode, season: 1, points: 0, wins: 0, losses: 0 });
+        ranking = new Ranking({ 
+          user: userId, 
+          mode: match.mode, 
+          season: 1, 
+          points: 0, 
+          wins: 0, 
+          losses: 0 
+        });
       }
       
-      // Appliquer les changements de points (minimum 0)
-      ranking.points = Math.max(0, ranking.points + pointsChange);
+      // Appliquer les changements de points ladder classé (minimum 0)
+      const oldRankedPoints = ranking.points;
+      ranking.points = Math.max(0, ranking.points + rankedPointsChange);
+      const newRankedPoints = ranking.points;
       
-      // Mettre à jour les stats win/loss
+      // Mettre à jour les stats win/loss du ladder classé
       if (isWinner) {
         ranking.wins += 1;
         ranking.currentStreak = (ranking.currentStreak || 0) + 1;
@@ -65,12 +90,18 @@ async function distributeRankedRewards(match) {
       
       await ranking.save();
       
-      // Mettre à jour les stats et gold de l'utilisateur
+      // ========== METTRE À JOUR LES STATS GÉNÉRALES DU JOUEUR (User) ==========
       if (!user.stats) user.stats = {};
-      user.stats.gold = (user.stats.gold || 0) + goldChange;
-      user.stats.xp = (user.stats.xp || 0) + xpChange;
       
-      // Mettre à jour les stats globales
+      // Gold (monnaie)
+      const oldGold = user.stats.gold || 0;
+      user.stats.gold = oldGold + goldChange;
+      
+      // XP pour Top Player (classement général des joueurs basé sur l'XP)
+      const oldXP = user.stats.xp || 0;
+      user.stats.xp = oldXP + xpChange;
+      
+      // Mettre à jour les stats globales win/loss
       if (isWinner) {
         user.stats.wins = (user.stats.wins || 0) + 1;
       } else {
@@ -79,25 +110,37 @@ async function distributeRankedRewards(match) {
       
       await user.save();
       
-      // Enregistrer les récompenses dans le match
+      // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
       const playerIndex = match.players.findIndex(p => 
         p.user?.toString() === userId.toString() || p.user?._id?.toString() === userId.toString()
       );
       if (playerIndex !== -1) {
         match.players[playerIndex].rewards = {
-          pointsChange,
-          goldEarned: goldChange
+          pointsChange: rankedPointsChange, // Points pour le ladder classé
+          goldEarned: goldChange,
+          xpEarned: xpChange,
+          // Stocker explicitement les points avant/après pour le rapport
+          oldPoints: oldRankedPoints,
+          newPoints: newRankedPoints
         };
+        // Stocker aussi les points actuels du joueur pour calculer l'ancien/nouveau rang
+        match.players[playerIndex].points = newRankedPoints;
       }
       
-      console.log(`[RANKED REWARDS] Player ${user.username}: ${isWinner ? 'WIN' : 'LOSS'} | Points: ${pointsChange > 0 ? '+' : ''}${pointsChange} | Gold: +${goldChange} | XP: +${xpChange}`);
+      // ========== LOG DÉTAILLÉ ==========
+      console.log(`[RANKED REWARDS] Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
+      console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})`);
+      console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.stats.gold} (+${goldChange})`);
+      console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user.stats.xp} (+${xpChange})`);
+      console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
     }
     
     await match.save();
-    console.log(`[RANKED REWARDS] Rewards distributed successfully for match ${match._id}`);
+    console.log(`[RANKED REWARDS] ✅ Récompenses distribuées avec succès pour le match ${match._id}`);
+    console.log(`[RANKED REWARDS] ====================================\n`);
     
   } catch (error) {
-    console.error('[RANKED REWARDS] Error distributing rewards:', error);
+    console.error('[RANKED REWARDS] ❌ Erreur lors de la distribution des récompenses:', error);
   }
 }
 
@@ -375,38 +418,38 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     }
 
     // Enregistrer le rapport de cette équipe
+    const myTeam = isTeam1Referent ? 1 : 2;
     if (isTeam1Referent) {
       match.result.team1Report = { winner, reportedAt: new Date() };
     } else {
       match.result.team2Report = { winner, reportedAt: new Date() };
     }
 
-    // Vérifier si les deux référents ont rapporté et sont d'accord
+    // En mode classé, un seul référent peut valider le gagnant (pas besoin de confirmation)
     const team1Report = match.result.team1Report;
     const team2Report = match.result.team2Report;
 
-    if (team1Report?.winner && team2Report?.winner) {
-      if (team1Report.winner === team2Report.winner) {
-        // Les deux équipes sont d'accord
-        match.result.winner = team1Report.winner;
-        match.result.confirmed = true;
-        match.result.confirmedAt = new Date();
-        match.status = 'completed';
-        match.completedAt = new Date();
+    let resultMessage = '';
+    let waitingForOther = false;
 
-        // Attribuer les récompenses aux joueurs
-        await distributeRankedRewards(match);
-      } else {
-        // Conflit - ouvrir un litige automatique
-        match.status = 'disputed';
-        match.dispute = {
-          isActive: true,
-          reportedBy: user._id,
-          reportedByTeam: isTeam1Referent ? 1 : 2,
-          reportedAt: new Date(),
-          reason: 'Résultats contradictoires des référents'
-        };
-      }
+    // Un seul référent suffit pour valider le résultat
+    if (team1Report?.winner || team2Report?.winner) {
+      // Prendre le premier rapport disponible comme résultat final
+      const reportedWinner = team1Report?.winner || team2Report?.winner;
+      
+      match.result.winner = reportedWinner;
+      match.result.confirmed = true;
+      match.result.confirmedAt = new Date();
+      match.status = 'completed';
+      match.completedAt = new Date();
+
+      // Attribuer les récompenses aux joueurs
+      await distributeRankedRewards(match);
+      
+      console.log('[RANKED] ✅ Match completed by single referent validation');
+      console.log('[RANKED] Winner: Team', match.result.winner);
+      console.log('[RANKED] Validated by: Team', myTeam);
+      resultMessage = 'Match validé ! Résultat enregistré.';
     }
 
     await match.save();
@@ -419,13 +462,27 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       { path: 'chat.user', select: 'username roles' }
     ]);
 
+    console.log('[RANKED] 🚀 Emitting rankedMatchUpdate...');
+    console.log('[RANKED] Match status:', match.status);
+    if (match.status === 'completed') {
+      console.log('[RANKED] Sample player rewards:', match.players[0]?.rewards);
+      console.log('[RANKED] Sample player points:', match.players[0]?.points);
+    }
+
     // Émettre via socket
     const io = req.app.get('io');
     if (io) {
       io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+      console.log('[RANKED] ✅ Event emitted to room: ranked-match-' + matchId);
     }
 
-    res.json({ success: true, match });
+    res.json({ 
+      success: true, 
+      match, 
+      message: resultMessage,
+      waitingForOther,
+      myReport: { team: myTeam, winner }
+    });
   } catch (error) {
     console.error('Report ranked match result error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -651,10 +708,24 @@ router.post('/admin/:matchId/force-result', verifyToken, requireStaff, async (re
     
     await match.save();
     
+    // Repopuler le match avec toutes les données
+    await match.populate([
+      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'chat.user', select: 'username roles' }
+    ]);
+    
+    console.log('[RANKED] 🚀 Emitting rankedMatchUpdate with rewards...');
+    console.log('[RANKED] Match status:', match.status);
+    console.log('[RANKED] Winner:', match.result.winner);
+    console.log('[RANKED] Sample player rewards:', match.players[0]?.rewards);
+    
     // Notifier les joueurs
     const io = req.app.get('io');
     if (io) {
       io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+      console.log('[RANKED] ✅ Event emitted to room: ranked-match-' + matchId);
     }
     
     res.json({ success: true, message: 'Résultat forcé', match });
@@ -702,10 +773,26 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async 
     
     await match.save();
     
+    // Repopuler le match avec toutes les données
+    await match.populate([
+      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'chat.user', select: 'username roles' },
+      { path: 'dispute.reportedBy', select: 'username' },
+      { path: 'dispute.resolvedBy', select: 'username' }
+    ]);
+    
+    console.log('[RANKED] 🚀 Emitting rankedMatchUpdate with rewards (dispute resolved)...');
+    console.log('[RANKED] Match status:', match.status);
+    console.log('[RANKED] Winner:', match.result.winner);
+    console.log('[RANKED] Sample player rewards:', match.players[0]?.rewards);
+    
     // Notifier les joueurs
     const io = req.app.get('io');
     if (io) {
       io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+      console.log('[RANKED] ✅ Event emitted to room: ranked-match-' + matchId);
     }
     
     res.json({ success: true, message: 'Litige résolu', match });

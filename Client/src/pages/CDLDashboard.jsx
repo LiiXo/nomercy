@@ -204,12 +204,6 @@ const CDLDashboard = () => {
     }
   };
 
-  const gameModes = [
-    { name: 'Hardpoint', players: '3.2K', icon: '🎯', popular: true },
-    { name: 'Search & Destroy', players: '2.8K', icon: '💣', popular: true },
-    { name: 'Control', players: '2.1K', icon: '🏴', popular: true },
-  ];
-
   return (
     <div className="min-h-screen bg-dark-950 relative">
       {/* Background Effects - Blue/Cyan Theme */}
@@ -593,33 +587,6 @@ const CDLDashboard = () => {
           </div>
         </section>
 
-        {/* CDL Game Modes */}
-          <section>
-          <div className="flex items-center space-x-3 mb-6">
-              <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center">
-                <Target className="w-4 h-4 text-cyan-400" />
-              </div>
-              <h2 className="text-xl font-bold text-white">
-                {language === 'fr' ? 'Modes CDL' : 'CDL Modes'}
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-            {gameModes.map((mode, index) => (
-                <div key={index} className="bg-dark-900/80 backdrop-blur-xl rounded-xl p-8 border border-cyan-500/30 transition-all duration-300 cursor-pointer text-center hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/20">
-                  <div className="mb-3">
-                    <span className="px-3 py-1 bg-cyan-500 rounded-full text-dark-950 text-xs font-bold uppercase tracking-wider">Official CDL</span>
-                </div>
-                <div className="text-5xl mb-4">{mode.icon}</div>
-                  <h3 className="text-white font-bold text-lg mb-3">{mode.name}</h3>
-                <div className="flex items-center justify-center space-x-2 text-gray-400 text-sm">
-                  <Users className="w-4 h-4" />
-                    <span>{mode.players} players</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
         </div>
       </div>
     </div>

@@ -67,16 +67,72 @@ const configSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: () => ({
       hardcore: {
-        Duel: { pointsWin: 20, pointsLoss: -10, coinsWin: 50, xpWinMin: 700, xpWinMax: 800 },
-        'Team Deathmatch': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, xpWinMin: 700, xpWinMax: 800 },
-        Domination: { pointsWin: 35, pointsLoss: -18, coinsWin: 80, xpWinMin: 700, xpWinMax: 800 },
-        'Search & Destroy': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, xpWinMin: 700, xpWinMax: 800 }
+        Duel: { 
+          pointsWin: 20, 
+          pointsLoss: -10, 
+          coinsWin: 50, 
+          coinsLoss: 15, // Consolation pour les perdants
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        },
+        'Team Deathmatch': { 
+          pointsWin: 25, 
+          pointsLoss: -12, 
+          coinsWin: 60, 
+          coinsLoss: 20, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        },
+        Domination: { 
+          pointsWin: 35, 
+          pointsLoss: -18, 
+          coinsWin: 80, 
+          coinsLoss: 25, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        },
+        'Search & Destroy': { 
+          pointsWin: 35, 
+          pointsLoss: -18, 
+          coinsWin: 80, 
+          coinsLoss: 25, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        }
       },
       cdl: {
-        Duel: { pointsWin: 25, pointsLoss: -12, coinsWin: 60, xpWinMin: 700, xpWinMax: 800 },
-        'Team Deathmatch': { pointsWin: 30, pointsLoss: -15, coinsWin: 75, xpWinMin: 700, xpWinMax: 800 },
-        Domination: { pointsWin: 40, pointsLoss: -20, coinsWin: 90, xpWinMin: 700, xpWinMax: 800 },
-        'Search & Destroy': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, xpWinMin: 700, xpWinMax: 800 }
+        Duel: { 
+          pointsWin: 25, 
+          pointsLoss: -12, 
+          coinsWin: 60, 
+          coinsLoss: 20, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        },
+        'Team Deathmatch': { 
+          pointsWin: 30, 
+          pointsLoss: -15, 
+          coinsWin: 75, 
+          coinsLoss: 25, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        },
+        Domination: { 
+          pointsWin: 40, 
+          pointsLoss: -20, 
+          coinsWin: 90, 
+          coinsLoss: 30, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        },
+        'Search & Destroy': { 
+          pointsWin: 40, 
+          pointsLoss: -20, 
+          coinsWin: 90, 
+          coinsLoss: 30, 
+          xpWinMin: 700, 
+          xpWinMax: 800 
+        }
       }
     })
   },
