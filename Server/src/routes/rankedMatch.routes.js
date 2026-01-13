@@ -915,6 +915,122 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async 
   }
 });
 
+// Supprimer un match classé et rembourser les récompenses (admin/staff)
+router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const adminUser = await User.findById(req.user._id);
+    
+    const match = await RankedMatch.findById(matchId)
+      .populate('players.user', 'username');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    console.log(`[RANKED DELETE] ====================================`);
+    console.log(`[RANKED DELETE] Admin ${adminUser.username} supprime le match ${matchId}`);
+    console.log(`[RANKED DELETE] Status: ${match.status}, GameMode: ${match.gameMode}, Mode: ${match.mode}`);
+    
+    // Si le match est complété, on doit rembourser les récompenses
+    if (match.status === 'completed' && match.result?.winner) {
+      console.log(`[RANKED DELETE] Match complété - Remboursement des récompenses...`);
+      
+      const winningTeam = Number(match.result.winner);
+      
+      for (const player of match.players) {
+        // Ignorer les faux joueurs
+        if (player.isFake || !player.user) continue;
+        
+        const userId = player.user._id || player.user;
+        const username = player.user.username || player.username || 'Inconnu';
+        const playerTeam = Number(player.team);
+        const isWinner = playerTeam === winningTeam;
+        
+        // Récupérer les récompenses données
+        const rewards = player.rewards || {};
+        const pointsChange = rewards.pointsChange || 0;
+        const goldEarned = rewards.goldEarned || 0;
+        const xpEarned = rewards.xpEarned || 0;
+        
+        console.log(`[RANKED DELETE] Remboursement joueur: ${username}`);
+        console.log(`[RANKED DELETE]   └─ Points: ${pointsChange > 0 ? '+' : ''}${pointsChange} → retrait`);
+        console.log(`[RANKED DELETE]   └─ Gold: +${goldEarned} → retrait`);
+        console.log(`[RANKED DELETE]   └─ XP: +${xpEarned} → retrait`);
+        console.log(`[RANKED DELETE]   └─ ${isWinner ? 'Victoire' : 'Défaite'} → retrait`);
+        
+        // Mettre à jour le Ranking (points du ladder classé + wins/losses)
+        const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        if (ranking) {
+          // Retirer les points (mais ne pas descendre en dessous de 0)
+          ranking.points = Math.max(0, ranking.points - pointsChange);
+          
+          // Retirer la victoire ou défaite
+          if (isWinner) {
+            ranking.wins = Math.max(0, ranking.wins - 1);
+            // Reset de la série actuelle (on ne peut pas vraiment savoir l'état précédent)
+            if (ranking.currentStreak > 0) {
+              ranking.currentStreak = Math.max(0, ranking.currentStreak - 1);
+            }
+          } else {
+            ranking.losses = Math.max(0, ranking.losses - 1);
+          }
+          
+          await ranking.save();
+          console.log(`[RANKED DELETE]   └─ Ranking mis à jour: ${ranking.points} pts, ${ranking.wins}V/${ranking.losses}D`);
+        }
+        
+        // Mettre à jour l'User (gold, XP, wins/losses globaux)
+        const user = await User.findById(userId);
+        if (user) {
+          // Retirer le gold
+          user.goldCoins = Math.max(0, (user.goldCoins || 0) - goldEarned);
+          
+          // Retirer l'XP
+          if (!user.stats) user.stats = {};
+          user.stats.xp = Math.max(0, (user.stats.xp || 0) - xpEarned);
+          
+          // Retirer la victoire ou défaite des stats globales
+          if (isWinner) {
+            user.stats.wins = Math.max(0, (user.stats.wins || 0) - 1);
+          } else {
+            user.stats.losses = Math.max(0, (user.stats.losses || 0) - 1);
+          }
+          
+          await user.save();
+          console.log(`[RANKED DELETE]   └─ User mis à jour: ${user.goldCoins} gold, ${user.stats.xp} XP, ${user.stats.wins}V/${user.stats.losses}D`);
+        }
+      }
+      
+      console.log(`[RANKED DELETE] Remboursement terminé pour ${match.players.filter(p => !p.isFake && p.user).length} joueurs`);
+    } else {
+      console.log(`[RANKED DELETE] Match non complété - Pas de remboursement nécessaire`);
+    }
+    
+    // Supprimer le match
+    await RankedMatch.findByIdAndDelete(matchId);
+    
+    console.log(`[RANKED DELETE] Match supprimé avec succès`);
+    console.log(`[RANKED DELETE] ====================================`);
+    
+    // Notifier via socket si disponible
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ranked-match-${matchId}`).emit('rankedMatchDeleted', { matchId });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: match.status === 'completed' 
+        ? 'Match supprimé et récompenses remboursées' 
+        : 'Match supprimé'
+    });
+  } catch (error) {
+    console.error('Error deleting ranked match:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Historique des matchs classés d'un joueur (public)
 router.get('/player-history/:playerId', async (req, res) => {
   try {

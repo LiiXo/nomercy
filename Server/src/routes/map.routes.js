@@ -55,6 +55,27 @@ router.get('/random/:ladderId', async (req, res) => {
   }
 });
 
+// Obtenir les maps pour le mode classé (ranked)
+router.get('/ranked', async (req, res) => {
+  try {
+    const { gameMode, format } = req.query;
+    
+    const query = { 
+      isActive: true, 
+      ladders: 'ranked' 
+    };
+    if (gameMode) query.gameModes = gameMode;
+    // Filtrer par format (4v4 ou 5v5)
+    if (format) query.rankedFormats = format;
+    
+    const maps = await Map.find(query).sort({ name: 1 });
+    res.json({ success: true, maps });
+  } catch (error) {
+    console.error('Get ranked maps error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Admin/Staff: Ajouter une map
 router.post('/', verifyToken, requireStaff, async (req, res) => {
   try {
@@ -67,7 +88,7 @@ router.post('/', verifyToken, requireStaff, async (req, res) => {
     const map = new Map({
       name,
       image,
-      ladders: ladders || ['duo-trio', 'squad-team'],
+      ladders: ladders || ['duo-trio', 'squad-team', 'ranked'],
       gameModes: gameModes || ['Search & Destroy', 'Domination'],
       isActive: true
     });
@@ -84,7 +105,7 @@ router.post('/', verifyToken, requireStaff, async (req, res) => {
 router.put('/:mapId', verifyToken, requireStaff, async (req, res) => {
   try {
     const { mapId } = req.params;
-    const { name, image, ladders, gameModes, isActive } = req.body;
+    const { name, image, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     const map = await Map.findById(mapId);
     if (!map) {
@@ -95,6 +116,7 @@ router.put('/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (image !== undefined) map.image = image;
     if (ladders) map.ladders = ladders;
     if (gameModes) map.gameModes = gameModes;
+    if (rankedFormats !== undefined) map.rankedFormats = rankedFormats;
     if (isActive !== undefined) map.isActive = isActive;
     
     await map.save();
@@ -199,7 +221,7 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
 // Create map (admin)
 router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, gameMode, isActive } = req.body;
+    const { name, image, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     if (!name) {
       return res.status(400).json({ success: false, message: 'Nom requis' });
@@ -208,8 +230,9 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
     const map = new Map({
       name,
       image: image || '',
-      mode: mode || 'hardcore',
-      gameMode: gameMode || 'Search & Destroy',
+      ladders: ladders || [],
+      gameModes: gameModes || [],
+      rankedFormats: rankedFormats || [],
       isActive: isActive !== undefined ? isActive : true
     });
     
@@ -224,7 +247,7 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
 // Update map (admin)
 router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, gameMode, ladders, gameModes, isActive } = req.body;
+    const { name, image, mode, gameMode, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     const map = await Map.findById(req.params.mapId);
     if (!map) {
@@ -237,6 +260,7 @@ router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (gameMode !== undefined) map.gameMode = gameMode;
     if (ladders !== undefined) map.ladders = ladders;
     if (gameModes !== undefined) map.gameModes = gameModes;
+    if (rankedFormats !== undefined) map.rankedFormats = rankedFormats;
     if (isActive !== undefined) map.isActive = isActive;
     
     await map.save();

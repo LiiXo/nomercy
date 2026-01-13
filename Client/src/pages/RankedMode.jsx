@@ -508,14 +508,14 @@ const RankedMode = () => {
       playersInQueue: 'joueurs en file',
       matchIn: 'Match dans',
       waitingMore: 'En attente de joueurs...',
-      minPlayers: 'Minimum 4 joueurs (2v2)',
+      minPlayers: 'Minimum 8 joueurs (4v4)',
       activeMatch: 'Match en cours',
       rejoin: 'Rejoindre',
       ggsecureRequired: 'GGSecure requis pour les joueurs PC',
       leaderboard: 'Classement',
       ranks: 'Les rangs',
       soloMode: 'Mode solo uniquement',
-      dynamicFormat: 'Format automatique (2v2 → 5v5)',
+      dynamicFormat: 'Format automatique (4v4 → 5v5)',
       playersOnPage: 'joueurs sur cette page',
       activeMatches: 'match(s) en cours',
       addFakePlayers: 'Ajouter des joueurs test',
@@ -526,7 +526,6 @@ const RankedMode = () => {
       noRankedPlayers: 'Aucun joueur classé',
       you: 'Toi',
       position: 'Position',
-      ready3v3: '3v3 prêt, en attente du 4v4...',
       ready4v4: '4v4 prêt, en attente du 5v5...',
       creatingMatch: 'Création du match...',
       topPlayers: 'Meilleurs joueurs',
@@ -553,14 +552,14 @@ const RankedMode = () => {
       playersInQueue: 'players in queue',
       matchIn: 'Match in',
       waitingMore: 'Waiting for players...',
-      minPlayers: 'Minimum 4 players (2v2)',
+      minPlayers: 'Minimum 8 players (4v4)',
       activeMatch: 'Active Match',
       rejoin: 'Rejoin',
       ggsecureRequired: 'GGSecure required for PC players',
       leaderboard: 'Leaderboard',
       ranks: 'Ranks',
       soloMode: 'Solo mode only',
-      dynamicFormat: 'Automatic format (2v2 → 5v5)',
+      dynamicFormat: 'Automatic format (4v4 → 5v5)',
       playersOnPage: 'players on this page',
       activeMatches: 'active match(es)',
       addFakePlayers: 'Add test players',
@@ -571,7 +570,6 @@ const RankedMode = () => {
       noRankedPlayers: 'No ranked players',
       you: 'You',
       position: 'Position',
-      ready3v3: '3v3 ready, waiting for 4v4...',
       ready4v4: '4v4 ready, waiting for 5v5...',
       creatingMatch: 'Creating match...',
       topPlayers: 'Top Players',
@@ -598,14 +596,14 @@ const RankedMode = () => {
       playersInQueue: 'Spieler in Warteschlange',
       matchIn: 'Match in',
       waitingMore: 'Warte auf Spieler...',
-      minPlayers: 'Minimum 4 Spieler (2v2)',
+      minPlayers: 'Minimum 8 Spieler (4v4)',
       activeMatch: 'Aktives Match',
       rejoin: 'Beitreten',
       ggsecureRequired: 'GGSecure erforderlich für PC-Spieler',
       leaderboard: 'Bestenliste',
       ranks: 'Ränge',
       soloMode: 'Nur Solomodus',
-      dynamicFormat: 'Automatisches Format (2v2 → 5v5)',
+      dynamicFormat: 'Automatisches Format (4v4 → 5v5)',
       playersOnPage: 'Spieler auf dieser Seite',
       activeMatches: 'aktive(s) Match(es)',
       addFakePlayers: 'Testspieler hinzufügen',
@@ -616,7 +614,6 @@ const RankedMode = () => {
       noRankedPlayers: 'Keine platzierten Spieler',
       you: 'Du',
       position: 'Position',
-      ready3v3: '3v3 bereit, warte auf 4v4...',
       ready4v4: '4v4 bereit, warte auf 5v5...',
       creatingMatch: 'Match wird erstellt...',
       topPlayers: 'Top-Spieler',
@@ -643,14 +640,14 @@ const RankedMode = () => {
       playersInQueue: 'giocatori in coda',
       matchIn: 'Partita tra',
       waitingMore: 'In attesa di giocatori...',
-      minPlayers: 'Minimo 4 giocatori (2v2)',
+      minPlayers: 'Minimo 8 giocatori (4v4)',
       activeMatch: 'Partita in corso',
       rejoin: 'Rientra',
       ggsecureRequired: 'GGSecure richiesto per giocatori PC',
       leaderboard: 'Classifica',
       ranks: 'Gradi',
       soloMode: 'Solo modalità singola',
-      dynamicFormat: 'Formato automatico (2v2 → 5v5)',
+      dynamicFormat: 'Formato automatico (4v4 → 5v5)',
       playersOnPage: 'giocatori su questa pagina',
       activeMatches: 'partita/e in corso',
       addFakePlayers: 'Aggiungi giocatori test',
@@ -661,7 +658,6 @@ const RankedMode = () => {
       noRankedPlayers: 'Nessun giocatore classificato',
       you: 'Tu',
       position: 'Posizione',
-      ready3v3: '3v3 pronto, in attesa del 4v4...',
       ready4v4: '4v4 pronto, in attesa del 5v5...',
       creatingMatch: 'Creazione partita...',
       topPlayers: 'Migliori giocatori',
@@ -1168,9 +1164,8 @@ const RankedMode = () => {
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
                           </div>
                         </div>
-                        {/* Milestone markers */}
+                        {/* Milestone markers - 4v4 at 80%, 5v5 at 100% */}
                         <div className="absolute top-0 left-0 w-full h-3 flex items-center">
-                          <div className="absolute left-[60%] w-0.5 h-full bg-white/20" title="3v3" />
                           <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
                         </div>
                       </div>
@@ -1219,7 +1214,7 @@ const RankedMode = () => {
                              t.duel}
                           </p>
                           <p className="text-gray-500 text-sm">
-                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : selectedGameMode === 'Search & Destroy' ? '2v2 → 5v5' : '4v4'}
+                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : selectedGameMode === 'Search & Destroy' ? '4v4 → 5v5' : '4v4'}
                           </p>
                         </div>
                       </div>

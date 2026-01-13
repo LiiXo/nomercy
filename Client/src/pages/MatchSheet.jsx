@@ -116,6 +116,9 @@ const MatchSheet = () => {
       onlyLeaderCanValidate: 'Seul le leader ou un officier peut valider',
       onlyReferentCanValidate: 'Seul le référent peut valider',
       warningMessage: '⚠️ Rappel : Tout débordement ou comportement inacceptable peuvent entraîner des sanctions sévères.',
+      voiceChannelRequired: '🎙️ Salon vocal recommandé',
+      voiceChannelMessage: 'Tous les joueurs d\'une même équipe peuvent rejoindre un salon vocal sur le serveur Discord NoMercy. Ce n\'est pas obligatoire mais fortement recommandé.',
+      joinDiscord: 'Rejoindre le Discord',
       playerDisconnected: 's\'est déconnecté de l\'anti-cheat (GGSecure)',
       playerReconnected: 's\'est reconnecté à l\'anti-cheat (GGSecure)',
       requestCancellation: 'Demander l\'annulation',
@@ -186,6 +189,9 @@ const MatchSheet = () => {
       onlyLeaderCanValidate: 'Only the leader or an officer can validate',
       onlyReferentCanValidate: 'Only the referent can validate',
       warningMessage: '⚠️ Warning: Any misconduct or unacceptable behavior may result in severe penalties.',
+      voiceChannelRequired: '🎙️ Voice channel recommended',
+      voiceChannelMessage: 'All players on the same team can join a voice channel on the NoMercy Discord server. This is not mandatory but strongly recommended.',
+      joinDiscord: 'Join Discord',
       playerDisconnected: 'disconnected from anti-cheat (GGSecure)',
       playerReconnected: 'reconnected to anti-cheat (GGSecure)',
       requestCancellation: 'Request cancellation',
@@ -256,6 +262,9 @@ const MatchSheet = () => {
       onlyLeaderCanValidate: 'Nur der Leader oder ein Offizier kann bestätigen',
       onlyReferentCanValidate: 'Nur der Referent kann bestätigen',
       warningMessage: '⚠️ Warnung: Jedes Fehlverhalten oder inakzeptables Verhalten kann zu schweren Strafen führen.',
+      voiceChannelRequired: '🎙️ Sprachkanal empfohlen',
+      voiceChannelMessage: 'Alle Spieler im selben Team können einem Sprachkanal auf dem NoMercy Discord-Server beitreten. Dies ist nicht verpflichtend, aber sehr empfohlen.',
+      joinDiscord: 'Discord beitreten',
       playerDisconnected: 'hat sich vom Anti-Cheat (GGSecure) getrennt',
       playerReconnected: 'hat sich wieder mit dem Anti-Cheat (GGSecure) verbunden',
       requestCancellation: 'Stornierung anfordern',
@@ -326,6 +335,9 @@ const MatchSheet = () => {
       onlyLeaderCanValidate: 'Solo il leader o un ufficiale può confermare',
       onlyReferentCanValidate: 'Solo il referente può confermare',
       warningMessage: '⚠️ Avviso: Qualsiasi comportamento scorretto o inaccettabile può comportare sanzioni severe.',
+      voiceChannelRequired: '🎙️ Canale vocale consigliato',
+      voiceChannelMessage: 'Tutti i giocatori della stessa squadra possono unirsi a un canale vocale sul server Discord NoMercy. Questo non è obbligatorio ma fortemente consigliato.',
+      joinDiscord: 'Unisciti a Discord',
       playerDisconnected: 'si è disconnesso dall\'anti-cheat (GGSecure)',
       playerReconnected: 'si è riconnesso all\'anti-cheat (GGSecure)',
       requestCancellation: 'Richiedi annullamento',
@@ -1419,6 +1431,23 @@ const MatchSheet = () => {
             )}
           </div>
         </div>
+
+        {/* Voice Channel Warning - Only for ranked matches that are not completed */}
+        {isRankedMatch && !['completed', 'cancelled'].includes(match.status) && (
+          <div className="bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="p-2 sm:p-3 bg-purple-500/20 rounded-xl flex-shrink-0">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-white font-bold text-sm sm:text-base mb-1">{t.voiceChannelRequired}</h3>
+                <p className="text-gray-300 text-xs sm:text-sm">{t.voiceChannelMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column - Match Info */}

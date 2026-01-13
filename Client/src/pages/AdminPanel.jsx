@@ -58,6 +58,10 @@ const AdminPanel = () => {
   const [totalPages, setTotalPages] = useState(1);
   const ITEMS_PER_PAGE = 20;
   
+  // Matches tab sub-tab state
+  const [matchesSubTab, setMatchesSubTab] = useState('ladder'); // 'ladder' or 'ranked'
+  const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
+  
   // Modales
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -294,7 +298,7 @@ const AdminPanel = () => {
 
   useEffect(() => {
     loadTabData();
-  }, [activeTab, searchTerm, filterMode, filterStatus, page]);
+  }, [activeTab, searchTerm, filterMode, filterStatus, page, matchesSubTab, matchesFilter]);
 
   // Load appSettings on mount for staff access control
   useEffect(() => {
@@ -352,7 +356,12 @@ const AdminPanel = () => {
           await fetchGameRules();
           break;
         case 'matches':
-          await fetchLadderMatches();
+          // Charger les matchs selon le sous-onglet actif
+          if (matchesSubTab === 'ranked') {
+            await fetchAdminRankedMatches();
+          } else {
+            await fetchLadderMatches();
+          }
           break;
         case 'seasons':
           await fetchLadderSeasonHistory();
@@ -605,7 +614,7 @@ const AdminPanel = () => {
 
   const fetchHubPosts = async () => {
     try {
-      const response = await fetch(`${API_URL}/hub/admin/posts`, {
+      const response = await fetch(`${API_URL}/hub/admin/all`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -896,6 +905,7 @@ const AdminPanel = () => {
     let formDataCopy = { ...item };
     if (item.ladders) formDataCopy.ladders = [...item.ladders];
     if (item.gameModes) formDataCopy.gameModes = [...item.gameModes];
+    if (item.rankedFormats) formDataCopy.rankedFormats = [...item.rankedFormats];
     
     // For users, fetch complete data including ranked points
     if (type === 'user' && item._id) {
@@ -981,6 +991,7 @@ const AdminPanel = () => {
           image: '',
           ladders: [],
           gameModes: [],
+          rankedFormats: [],
           isActive: true
         };
       default:
@@ -3168,13 +3179,24 @@ const AdminPanel = () => {
 <h3 className="text-white font-bold mb-2">{map.name}</h3>
                   <div className="space-y-2 mb-3">
                     <div className="flex flex-col gap-1">
-                      <span className="text-gray-400 text-xs">Ladders</span>
+                      <span className="text-gray-400 text-xs">Ladders / Modes</span>
                       <div className="flex flex-wrap gap-1">
-                        {map.ladders?.length > 0 ? map.ladders.map((ladder, idx) => (
-                          <span key={idx} className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
-                            {ladder}
-                          </span>
-                        )) : <span className="text-gray-500 text-xs">Aucun</span>}
+                        {map.ladders?.length > 0 ? map.ladders.map((ladder, idx) => {
+                          const ladderLabels = {
+                            'duo-trio': 'Duo/Trio',
+                            'squad-team': 'Squad/Team',
+                            'ranked': 'Classé'
+                          };
+                          return (
+                            <span key={idx} className={`px-2 py-0.5 rounded text-xs ${
+                              ladder === 'ranked' 
+                                ? 'bg-orange-500/20 text-orange-400' 
+                                : 'bg-purple-500/20 text-purple-400'
+                            }`}>
+                              {ladderLabels[ladder] || ladder}
+                            </span>
+                          );
+                        }) : <span className="text-gray-500 text-xs">Aucun</span>}
                 </div>
                 </div>
                     <div className="flex flex-col gap-1">
@@ -3187,6 +3209,18 @@ const AdminPanel = () => {
                         )) : <span className="text-gray-500 text-xs">Aucun</span>}
                   </div>
                   </div>
+                    {map.ladders?.includes('ranked') && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-gray-400 text-xs">Formats Classé (S&D)</span>
+                        <div className="flex flex-wrap gap-1">
+                          {map.rankedFormats?.length > 0 ? map.rankedFormats.map((format, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-medium">
+                              {format}
+                            </span>
+                          )) : <span className="text-gray-500 text-xs">Aucun format</span>}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -4076,8 +4110,6 @@ const AdminPanel = () => {
   const [ladderMatches, setLadderMatches] = useState([]);
   const [adminRankedMatches, setAdminRankedMatches] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
-  const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
-  const [matchesSubTab, setMatchesSubTab] = useState('ladder'); // 'ladder' or 'ranked'
   const [matchToEdit, setMatchToEdit] = useState(null);
   const [matchToDelete, setMatchToDelete] = useState(null);
   const [rankedMatchToDelete, setRankedMatchToDelete] = useState(null);
@@ -4085,7 +4117,10 @@ const AdminPanel = () => {
   const fetchLadderMatches = async () => {
     setMatchesLoading(true);
     try {
-      const response = await fetch(`${API_URL}/matches/admin/all?status=${matchesFilter}&limit=50`, {
+      const params = new URLSearchParams({ limit: '50' });
+      if (matchesFilter !== 'all') params.append('status', matchesFilter);
+      
+      const response = await fetch(`${API_URL}/matches/admin/all?${params}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -4142,7 +4177,10 @@ const AdminPanel = () => {
   const fetchAdminRankedMatches = async () => {
     setMatchesLoading(true);
     try {
-      const response = await fetch(`${API_URL}/ranked-matches/admin/all?status=${matchesFilter}&limit=50`, {
+      const params = new URLSearchParams({ limit: '50' });
+      if (matchesFilter !== 'all') params.append('status', matchesFilter);
+      
+      const response = await fetch(`${API_URL}/ranked-matches/admin/all?${params}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -4164,7 +4202,7 @@ const AdminPanel = () => {
       });
       const data = await response.json();
       if (data.success) {
-        setSuccess('Match classé supprimé avec succès');
+        setSuccess(data.message || 'Match classé supprimé avec succès');
         setRankedMatchToDelete(null);
         fetchAdminRankedMatches();
       } else {
@@ -4230,7 +4268,6 @@ const AdminPanel = () => {
             onClick={() => {
               setMatchesSubTab('ladder');
               setMatchesFilter('all');
-              setTimeout(fetchLadderMatches, 100);
             }}
             className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
               matchesSubTab === 'ladder' 
@@ -4245,7 +4282,6 @@ const AdminPanel = () => {
             onClick={() => {
               setMatchesSubTab('ranked');
               setMatchesFilter('all');
-              setTimeout(fetchAdminRankedMatches, 100);
             }}
             className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
               matchesSubTab === 'ranked' 
@@ -4263,10 +4299,7 @@ const AdminPanel = () => {
           {['all', 'pending', 'in_progress', 'completed', 'disputed', 'cancelled'].map((filter) => (
             <button
               key={filter}
-              onClick={() => {
-                setMatchesFilter(filter);
-                setTimeout(matchesSubTab === 'ladder' ? fetchLadderMatches : fetchAdminRankedMatches, 100);
-              }}
+              onClick={() => setMatchesFilter(filter)}
               className={`px-4 py-2 rounded-lg transition-colors ${
                 matchesFilter === filter 
                   ? matchesSubTab === 'ladder' ? 'bg-purple-500 text-white' : 'bg-cyan-500 text-white'
@@ -4406,7 +4439,7 @@ const AdminPanel = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <a
-                            href={`/ranked/${match._id}`}
+                            href={`/ranked/match/${match._id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 px-3 py-2 bg-cyan-500/20 text-cyan-400 rounded-lg hover:bg-cyan-500/30 transition-colors text-sm"
@@ -4496,9 +4529,22 @@ const AdminPanel = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
             <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
               <h3 className="text-lg font-bold text-white mb-4">Supprimer le match classé ?</h3>
-              <p className="text-gray-400 mb-6">
+              <p className="text-gray-400 mb-4">
                 Cette action est irréversible. Le match sera définitivement supprimé.
               </p>
+              {rankedMatchToDelete.status === 'completed' && (
+                <div className="p-3 bg-yellow-500/20 border border-yellow-500/30 rounded-lg mb-4">
+                  <p className="text-yellow-400 text-sm">
+                    ⚠️ Ce match est terminé. La suppression va <strong>rembourser</strong> les récompenses :
+                  </p>
+                  <ul className="text-yellow-400/80 text-xs mt-2 space-y-1">
+                    <li>• Points classés (retirés aux gagnants, restitués aux perdants)</li>
+                    <li>• Gold gagné (retiré à tous)</li>
+                    <li>• XP gagnée (retirée aux gagnants)</li>
+                    <li>• Victoires/Défaites (retirées des stats)</li>
+                  </ul>
+                </div>
+              )}
               <div className="flex gap-3">
                 <button
                   onClick={() => setRankedMatchToDelete(null)}
@@ -5620,22 +5666,26 @@ const AdminPanel = () => {
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Ladders</label>
               <div className="flex flex-wrap gap-3">
-                {['duo-trio', 'squad-team'].map((ladder) => (
-                  <label key={ladder} className="flex items-center gap-2 cursor-pointer">
+                {[
+                  { value: 'duo-trio', label: 'Ladder Duo/Trio' },
+                  { value: 'squad-team', label: 'Ladder Squad/Team' },
+                  { value: 'ranked', label: 'Mode Classé (Ranked)' }
+                ].map((ladder) => (
+                  <label key={ladder.value} className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={(formData.ladders || []).includes(ladder)}
+                      checked={(formData.ladders || []).includes(ladder.value)}
                       onChange={(e) => {
                         const current = formData.ladders || [];
                         if (e.target.checked) {
-                          setFormData({ ...formData, ladders: [...current, ladder] });
+                          setFormData({ ...formData, ladders: [...current, ladder.value] });
                         } else {
-                          setFormData({ ...formData, ladders: current.filter(l => l !== ladder) });
+                          setFormData({ ...formData, ladders: current.filter(l => l !== ladder.value) });
                         }
                       }}
                       className="w-4 h-4"
                     />
-                    <span className="text-white">{ladder}</span>
+                    <span className="text-white">{ladder.label}</span>
                   </label>
                 ))}
               </div>
@@ -5663,6 +5713,40 @@ const AdminPanel = () => {
                 ))}
               </div>
             </div>
+            {/* Formats Ranked - S'affiche uniquement si 'ranked' est sélectionné */}
+            {(formData.ladders || []).includes('ranked') && (
+              <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                <label className="block text-sm font-medium text-orange-400 mb-3">
+                  🎮 Formats Mode Classé (Search & Destroy)
+                </label>
+                <div className="flex flex-wrap gap-4">
+                  {[
+                    { value: '4v4', label: 'Search & Destroy 4v4' },
+                    { value: '5v5', label: 'Search & Destroy 5v5' }
+                  ].map((format) => (
+                    <label key={format.value} className="flex items-center gap-2 cursor-pointer bg-dark-800 px-4 py-2 rounded-lg border border-orange-500/20 hover:border-orange-500/40 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={(formData.rankedFormats || []).includes(format.value)}
+                        onChange={(e) => {
+                          const current = formData.rankedFormats || [];
+                          if (e.target.checked) {
+                            setFormData({ ...formData, rankedFormats: [...current, format.value] });
+                          } else {
+                            setFormData({ ...formData, rankedFormats: current.filter(f => f !== format.value) });
+                          }
+                        }}
+                        className="w-4 h-4 accent-orange-500"
+                      />
+                      <span className="text-white font-medium">{format.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-gray-400 text-xs mt-2">
+                  Sélectionnez les formats dans lesquels cette map sera disponible en mode classé.
+                </p>
+              </div>
+            )}
             <div>
               <label className="flex items-center gap-2">
                 <input

@@ -3,9 +3,7 @@
  * 
  * Gère les files d'attente pour le mode classé:
  * - Search & Destroy: File unique, format déterminé par le nombre de joueurs
- *   - 4 joueurs → 1 min délai → 2v2
- *   - 6 joueurs → 1 min délai → 3v3
- *   - 8 joueurs → 1 min délai → 4v4
+ *   - 8 joueurs → 2 min délai → 4v4
  *   - 10 joueurs → match immédiat → 5v5
  * - Si nombre impair quand le timer expire, le dernier arrivé est éjecté
  */
@@ -22,15 +20,14 @@ const queues = {};
 
 // Configuration des seuils de joueurs pour S&D (format dynamique)
 // Le format est déterminé par le nombre de joueurs dans la file
+// Minimum 8 joueurs pour un 4v4
 const PLAYER_THRESHOLDS = [
-  { players: 4, format: '2v2', teamSize: 2 },
-  { players: 6, format: '3v3', teamSize: 3 },
   { players: 8, format: '4v4', teamSize: 4 },
   { players: 10, format: '5v5', teamSize: 5 }
 ];
 
-// Timer de 60 secondes (1 minute) pour lancer le match
-const MATCHMAKING_TIMER_SECONDS = 60;
+// Timer de 120 secondes (2 minutes) pour lancer le match
+const MATCHMAKING_TIMER_SECONDS = 120;
 
 // Timers actifs pour chaque file d'attente
 const queueTimers = {};
@@ -153,7 +150,7 @@ export const joinQueue = async (userId, gameMode, mode) => {
       searchAndDestroy: {
         enabled: true,
         rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
-        matchmaking: { minPlayers: 4, maxPlayers: 10, waitTimer: 60 }
+        matchmaking: { minPlayers: 8, maxPlayers: 10, waitTimer: 120 }
       }
     };
     
@@ -313,7 +310,7 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
       currentFormat: optimalFormat?.format || null,
       nextFormat: nextThreshold?.format || null,
       playersNeeded: nextThreshold ? nextThreshold.players - queue.length : 0,
-      minPlayers: 4,
+      minPlayers: 8,
       maxPlayers: 10
     };
   } catch (error) {
@@ -323,8 +320,8 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
 };
 
 /**
- * Vérifie si on peut démarrer le matchmaking (timer de 1 min)
- * Logique: À chaque seuil (4, 6, 8 joueurs), on lance un timer de 1 min
+ * Vérifie si on peut démarrer le matchmaking (timer de 2 min)
+ * Logique: À 8 joueurs, on lance un timer de 2 min pour un 4v4
  * Si 10 joueurs, match immédiat en 5v5
  */
 const checkMatchmakingStart = async (gameMode, mode) => {
@@ -622,7 +619,7 @@ const broadcastQueueUpdate = (gameMode, mode) => {
       currentFormat: optimalFormat?.format || null,
       nextFormat: nextThreshold?.format || null,
       playersNeeded: nextThreshold ? nextThreshold.players - queue.length : 0,
-      minPlayers: 4,
+      minPlayers: 8,
       maxPlayers: 10
     });
   }
