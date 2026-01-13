@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { 
   Trophy, TrendingUp, TrendingDown, Coins, Zap, X, 
-  Shield, Star, Users, Crown, AlertTriangle, Loader2
+  Shield, Star, Users, Crown
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -15,16 +15,11 @@ const LadderMatchReport = ({
   mySquad,
   rewards,
   mode = 'hardcore',
-  matchId,
-  canDispute = false  // true if user is leader or officer
+  matchId
 }) => {
   const navigate = useNavigate();
-  const params = useParams();
   const { refreshUser } = useAuth();
   const [animationStep, setAnimationStep] = useState(0);
-  const [disputeLoading, setDisputeLoading] = useState(false);
-  const [disputeError, setDisputeError] = useState(null);
-  const [disputeSuccess, setDisputeSuccess] = useState(false);
 
   console.log('[LadderMatchReport] Component rendered');
   console.log('[LadderMatchReport] show:', show);
@@ -68,44 +63,6 @@ const LadderMatchReport = ({
     // Redirection vers l'accueil du mode
     const modeRoute = mode === 'hardcore' ? '/hardcore' : '/cdl';
     navigate(modeRoute);
-  };
-
-  // Fonction pour créer un litige
-  const handleCreateDispute = async () => {
-    const mId = matchId || params?.matchId;
-    if (!mId) return;
-
-    setDisputeLoading(true);
-    setDisputeError(null);
-
-    try {
-      const response = await fetch(`${API_URL}/matches/${mId}/dispute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          reason: 'Litige signalé depuis le rapport de match' 
-        })
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setDisputeSuccess(true);
-        // Après 2 secondes, rediriger vers mes litiges
-        setTimeout(() => {
-          onClose();
-          navigate('/my-disputes');
-        }, 2000);
-      } else {
-        setDisputeError(data.message || 'Erreur lors de la création du litige');
-      }
-    } catch (err) {
-      console.error('Error creating dispute:', err);
-      setDisputeError('Erreur de connexion');
-    } finally {
-      setDisputeLoading(false);
-    }
   };
 
   if (!show) return null;
@@ -301,41 +258,12 @@ const LadderMatchReport = ({
             </div>
           </div>
 
-          {/* Message de succès/erreur du litige */}
-          {disputeSuccess && (
-            <div className="mt-4 p-4 rounded-xl bg-green-500/20 border border-green-500/30 text-center">
-              <p className="text-green-400 font-medium">✅ Litige créé avec succès ! Redirection...</p>
-            </div>
-          )}
-          {disputeError && (
-            <div className="mt-4 p-4 rounded-xl bg-red-500/20 border border-red-500/30 text-center">
-              <p className="text-red-400 font-medium">{disputeError}</p>
-            </div>
-          )}
-
           {/* Boutons d'action */}
-          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-            {/* Bouton litige - uniquement pour les leaders/officiers */}
-            {canDispute && !disputeSuccess && (
-              <button
-                onClick={handleCreateDispute}
-                disabled={disputeLoading}
-                className="px-6 py-3 rounded-xl font-semibold text-orange-400 border-2 border-orange-500/50 bg-orange-500/10 hover:bg-orange-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {disputeLoading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <AlertTriangle className="w-5 h-5" />
-                )}
-                Lancer un litige
-              </button>
-            )}
-            
+          <div className="mt-8 flex justify-center">
             {/* Bouton continuer */}
             <button
               onClick={handleClose}
-              disabled={disputeLoading}
-              className={`px-8 py-3 rounded-xl font-bold text-white transition-all hover:scale-105 disabled:opacity-50 ${
+              className={`px-8 py-3 rounded-xl font-bold text-white transition-all hover:scale-105 ${
                 isWinner 
                   ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700' 
                   : 'bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700'

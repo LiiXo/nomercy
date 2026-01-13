@@ -1226,10 +1226,13 @@ const RankedMode = () => {
 
                       {/* Matchmaking Disabled Message */}
                       {!matchmakingEnabled && (
-                        <div className="mb-4 p-4 rounded-2xl bg-yellow-500/20 border border-yellow-500/30 flex items-center gap-3">
-                          <AlertTriangle className="w-5 h-5 text-yellow-400" />
-                          <span className="text-yellow-300">
-                            {language === 'fr' ? 'Le matchmaking est temporairement désactivé.' : 'Matchmaking is temporarily disabled.'}
+                        <div className={`mb-4 p-4 rounded-2xl ${isStaffOrAdmin ? 'bg-purple-500/20 border-purple-500/30' : 'bg-yellow-500/20 border-yellow-500/30'} border flex items-center gap-3`}>
+                          <AlertTriangle className={`w-5 h-5 ${isStaffOrAdmin ? 'text-purple-400' : 'text-yellow-400'}`} />
+                          <span className={isStaffOrAdmin ? 'text-purple-300' : 'text-yellow-300'}>
+                            {isStaffOrAdmin 
+                              ? (language === 'fr' ? '⚡ Mode staff : Le matchmaking est publiquement fermé mais vous y avez accès.' : '⚡ Staff mode: Matchmaking is publicly closed but you have access.')
+                              : (language === 'fr' ? 'Le matchmaking est temporairement désactivé.' : 'Matchmaking is temporarily disabled.')
+                            }
                           </span>
                         </div>
                       )}
@@ -1237,7 +1240,7 @@ const RankedMode = () => {
                       {/* Find Match Button */}
                       <button
                         onClick={joinQueue}
-                        disabled={joiningQueue || !!activeMatch || (user?.platform === 'PC' && ggsecureConnected === false) || !matchmakingEnabled}
+                        disabled={joiningQueue || !!activeMatch || (user?.platform === 'PC' && ggsecureConnected === false) || (!matchmakingEnabled && !isStaffOrAdmin)}
                         className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
                           isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'
                         } text-white font-bold text-lg shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group`}

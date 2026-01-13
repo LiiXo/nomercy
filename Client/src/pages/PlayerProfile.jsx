@@ -439,7 +439,60 @@ const PlayerProfile = () => {
                 </div>
               </div>
               
-              <h1 className="text-3xl font-bold text-white mb-5">{playerData.username || playerData.discordUsername || 'Utilisateur'}</h1>
+              {/* Animated Username based on ranked division */}
+              <div className="relative group mb-5">
+                {division && (
+                  <>
+                    {/* Animated glow behind username for top ranks */}
+                    <div 
+                      className="absolute -inset-2 rounded-xl opacity-40 blur-xl transition-opacity"
+                      style={{
+                        background: `conic-gradient(from ${rankAnimationPhase}deg, ${division.hexColor}60, transparent, ${division.hexColor}80, transparent, ${division.hexColor}60)`
+                      }}
+                    />
+                    {/* Rotating border for top ranks */}
+                    {division.isTop && (
+                      <div 
+                        className="absolute -inset-1 rounded-xl opacity-50 blur-sm"
+                        style={{
+                          background: `linear-gradient(${rankAnimationPhase * 2}deg, ${division.hexColor}, transparent 40%, ${division.hexColor})`,
+                        }}
+                      />
+                    )}
+                  </>
+                )}
+                <h1 
+                  className={`relative text-3xl font-bold ${division ? '' : 'text-white'}`}
+                  style={division ? { 
+                    color: division.hexColor,
+                    textShadow: `0 0 20px ${division.hexColor}80, 0 0 40px ${division.hexColor}40`,
+                    animation: division.isTop ? 'pulse 3s ease-in-out infinite' : undefined
+                  } : {}}
+                >
+                  {division && division.isTop && (
+                    <Sparkles 
+                      className="inline w-6 h-6 mr-2 animate-pulse" 
+                      style={{ color: division.hexColor }}
+                    />
+                  )}
+                  {playerData.username || playerData.discordUsername || 'Utilisateur'}
+                  {division && division.isTop && (
+                    <Sparkles 
+                      className="inline w-6 h-6 ml-2 animate-pulse" 
+                      style={{ color: division.hexColor }}
+                    />
+                  )}
+                </h1>
+                {/* Division name under username */}
+                {division && (
+                  <p 
+                    className="text-sm font-semibold mt-1 opacity-80"
+                    style={{ color: division.hexColor }}
+                  >
+                    {division.icon} {division.name}
+                  </p>
+                )}
+              </div>
               
               <div className="flex flex-wrap items-center justify-center gap-3 text-sm mb-4">
                 {playerStats && playerStats.xp > 0 && (
@@ -474,60 +527,6 @@ const PlayerProfile = () => {
                     <Monitor className="w-4 h-4 text-purple-400" />
                     <span className="text-purple-400 font-medium">{playerData.platform}</span>
                   </span>
-                )}
-                {division && (
-                  <div className="relative group">
-                    {/* Animated glow effect */}
-                    <div 
-                      className="absolute -inset-1 rounded-xl opacity-60 blur-md transition-opacity group-hover:opacity-80"
-                      style={{
-                        background: `conic-gradient(from ${rankAnimationPhase}deg, ${division.hexColor}40, transparent, ${division.hexColor}60, transparent, ${division.hexColor}40)`
-                      }}
-                    />
-                    {/* Outer rotating border for top ranks */}
-                    {division.isTop && (
-                      <div 
-                        className="absolute -inset-0.5 rounded-xl opacity-70"
-                        style={{
-                          background: `linear-gradient(${rankAnimationPhase}deg, ${division.hexColor}, transparent, ${division.hexColor})`,
-                        }}
-                      />
-                    )}
-                    <span 
-                      className={`relative flex items-center gap-2 px-4 py-2 ${division.bgColor} border-2 rounded-xl transition-all group-hover:scale-105`}
-                      style={{ 
-                        borderColor: `${division.hexColor}50`,
-                        boxShadow: `0 0 20px ${division.hexColor}30`
-                      }}
-                    >
-                      {/* Animated icon */}
-                      <div 
-                        className={`w-7 h-7 rounded-lg bg-gradient-to-br ${division.color} flex items-center justify-center shadow-lg`}
-                        style={{ boxShadow: `0 0 12px ${division.hexColor}50` }}
-                      >
-                        <division.Icon 
-                          className="w-4 h-4 text-white" 
-                          style={{ 
-                            filter: `drop-shadow(0 0 4px ${division.hexColor})`,
-                            animation: division.isTop ? 'pulse 2s ease-in-out infinite' : undefined
-                          }}
-                        />
-                      </div>
-                      <span 
-                        className={`${division.textColor} font-bold`}
-                        style={{ textShadow: `0 0 10px ${division.hexColor}60` }}
-                      >
-                        {division.name}
-                      </span>
-                      {/* Sparkle for top ranks */}
-                      {division.isTop && (
-                        <Sparkles 
-                          className="w-4 h-4 animate-pulse" 
-                          style={{ color: division.hexColor }}
-                        />
-                      )}
-                    </span>
-                  </div>
                 )}
               </div>
               

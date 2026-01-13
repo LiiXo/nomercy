@@ -40,9 +40,6 @@ const MatchSheet = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [submittingResult, setSubmittingResult] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
-  const [showDisputeModal, setShowDisputeModal] = useState(false);
-  const [disputeReason, setDisputeReason] = useState('');
-  const [submittingDispute, setSubmittingDispute] = useState(false);
   const [showCancellationModal, setShowCancellationModal] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
   const [submittingCancellation, setSubmittingCancellation] = useState(false);
@@ -1078,38 +1075,6 @@ const MatchSheet = () => {
     return mySquad && match.hostTeam && match.hostTeam._id === mySquad._id;
   };
 
-  // Submit dispute
-  const handleSubmitDispute = async () => {
-    if (!disputeReason.trim()) return;
-    
-    setSubmittingDispute(true);
-    try {
-      const apiUrl = isRankedMatch 
-        ? `${API_URL}/ranked-matches/${matchId}/dispute`
-        : `${API_URL}/matches/${matchId}/dispute`;
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ reason: disputeReason })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setMatch(data.match);
-        setShowDisputeModal(false);
-        setDisputeReason('');
-      } else {
-        alert(data.message);
-      }
-    } catch (err) {
-      console.error('Error submitting dispute:', err);
-    } finally {
-      setSubmittingDispute(false);
-    }
-  };
-
   // Submit cancellation request (ladder matches only)
   const handleSubmitCancellation = async () => {
     if (!cancellationReason.trim()) return;
@@ -1232,14 +1197,6 @@ const MatchSheet = () => {
 
   // Check who can validate (leader/officer for ladder, referent for ranked)
   const canValidateResult = () => {
-    if (isRankedMatch) {
-      return isReferent;
-    }
-    return canManageMatch();
-  };
-
-  // Check who can report dispute
-  const canReportDispute = () => {
     if (isRankedMatch) {
       return isReferent;
     }
@@ -1640,23 +1597,15 @@ const MatchSheet = () => {
               </div>
             )}
 
-            {/* Actions - Sélectionner gagnant et signaler litige */}
+            {/* Actions - Sélectionner gagnant */}
             {isParticipant && canValidateResult() && ['accepted', 'in_progress', 'ready'].includes(match.status) && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowResultModal(true)}
-                  className={`flex-1 py-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2`}
-                >
-                  <Trophy className="w-4 h-4" />
-                  {t.selectWinner}
-                </button>
-                <button
-                  onClick={() => setShowDisputeModal(true)}
-                  className="px-4 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium hover:bg-red-500/20 transition-all flex items-center justify-center gap-2"
-                >
-                  <AlertTriangle className="w-4 h-4" />
-                </button>
-              </div>
+              <button
+                onClick={() => setShowResultModal(true)}
+                className={`w-full py-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2`}
+              >
+                <Trophy className="w-4 h-4" />
+                {t.selectWinner}
+              </button>
             )}
             
             {/* Staff Controls - For in_progress, ready, accepted matches */}
@@ -2345,60 +2294,6 @@ const MatchSheet = () => {
             >
               {language === 'fr' ? 'Annuler' : 'Cancel'}
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Dispute Modal */}
-      {showDisputeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-dark-900 rounded-2xl border border-red-500/30 p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-6 h-6 text-red-400" />
-              {t.reportDispute}
-            </h3>
-            
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-              <p className="text-red-400 text-sm">{t.disputeWarning}</p>
-            </div>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-400 mb-2">{t.disputeReason}</label>
-              <textarea
-                value={disputeReason}
-                onChange={(e) => setDisputeReason(e.target.value)}
-                placeholder={t.disputeReasonPlaceholder}
-                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-500/50 resize-none"
-                rows={4}
-                maxLength={500}
-              />
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowDisputeModal(false);
-                  setDisputeReason('');
-                }}
-                className="flex-1 py-2.5 bg-dark-800 hover:bg-dark-700 border border-white/10 rounded-lg text-gray-400 font-medium transition-colors"
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={handleSubmitDispute}
-                disabled={!disputeReason.trim() || submittingDispute}
-                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 rounded-lg text-white font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {submittingDispute ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    <AlertTriangle className="w-4 h-4" />
-                    {t.submitDispute}
-                  </>
-                )}
-              </button>
-            </div>
           </div>
         </div>
       )}

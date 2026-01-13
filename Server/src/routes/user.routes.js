@@ -1434,7 +1434,7 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
       });
     }
     
-    // Get ranked ladder points
+    // Get ranked ladder points and stats
     const Ranking = (await import('../models/Ranking.js')).default;
     const hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: 1 });
     const cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: 1 });
@@ -1443,6 +1443,16 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
     userObj.rankedPoints = {
       hardcore: hardcoreRanking?.points || 0,
       cdl: cdlRanking?.points || 0
+    };
+    userObj.rankedStats = {
+      hardcore: {
+        wins: hardcoreRanking?.wins || 0,
+        losses: hardcoreRanking?.losses || 0
+      },
+      cdl: {
+        wins: cdlRanking?.wins || 0,
+        losses: cdlRanking?.losses || 0
+      }
     };
 
     res.json({
@@ -1461,7 +1471,7 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
 // Admin: Update user
 router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { username, goldCoins, roles, platform, activisionId, bio, stats, rankedPoints } = req.body;
+    const { username, goldCoins, roles, platform, activisionId, bio, stats, rankedPoints, rankedStats } = req.body;
     
     const user = await User.findById(req.params.userId);
     if (!user) {
@@ -1490,30 +1500,46 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
 
     await user.save();
     
-    // Update ranked ladder points if provided
-    if (rankedPoints !== undefined) {
+    // Update ranked ladder points and stats if provided
+    if (rankedPoints !== undefined || rankedStats !== undefined) {
       const Ranking = (await import('../models/Ranking.js')).default;
       
       // Update hardcore ranking
-      if (rankedPoints.hardcore !== undefined) {
+      if (rankedPoints?.hardcore !== undefined || rankedStats?.hardcore !== undefined) {
         let hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: 1 });
         if (!hardcoreRanking) {
           hardcoreRanking = new Ranking({ user: req.params.userId, mode: 'hardcore', season: 1, points: 0 });
         }
-        hardcoreRanking.points = rankedPoints.hardcore;
+        if (rankedPoints?.hardcore !== undefined) {
+          hardcoreRanking.points = rankedPoints.hardcore;
+        }
+        if (rankedStats?.hardcore?.wins !== undefined) {
+          hardcoreRanking.wins = rankedStats.hardcore.wins;
+        }
+        if (rankedStats?.hardcore?.losses !== undefined) {
+          hardcoreRanking.losses = rankedStats.hardcore.losses;
+        }
         await hardcoreRanking.save();
-        console.log(`[ADMIN] Updated hardcore ranking for user ${user.username}: ${rankedPoints.hardcore} points`);
+        console.log(`[ADMIN] Updated hardcore ranking for user ${user.username}: ${hardcoreRanking.points} points, ${hardcoreRanking.wins}W/${hardcoreRanking.losses}L`);
       }
       
       // Update CDL ranking
-      if (rankedPoints.cdl !== undefined) {
+      if (rankedPoints?.cdl !== undefined || rankedStats?.cdl !== undefined) {
         let cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: 1 });
         if (!cdlRanking) {
           cdlRanking = new Ranking({ user: req.params.userId, mode: 'cdl', season: 1, points: 0 });
         }
-        cdlRanking.points = rankedPoints.cdl;
+        if (rankedPoints?.cdl !== undefined) {
+          cdlRanking.points = rankedPoints.cdl;
+        }
+        if (rankedStats?.cdl?.wins !== undefined) {
+          cdlRanking.wins = rankedStats.cdl.wins;
+        }
+        if (rankedStats?.cdl?.losses !== undefined) {
+          cdlRanking.losses = rankedStats.cdl.losses;
+        }
         await cdlRanking.save();
-        console.log(`[ADMIN] Updated CDL ranking for user ${user.username}: ${rankedPoints.cdl} points`);
+        console.log(`[ADMIN] Updated CDL ranking for user ${user.username}: ${cdlRanking.points} points, ${cdlRanking.wins}W/${cdlRanking.losses}L`);
       }
     }
 

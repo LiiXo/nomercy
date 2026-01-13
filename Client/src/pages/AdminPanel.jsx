@@ -77,9 +77,6 @@ const AdminPanel = () => {
   // App settings states (must be declared before tabGroups)
   const [appSettings, setAppSettings] = useState(null);
   
-  // Disputes states
-  const [disputedMatches, setDisputedMatches] = useState([]);
-  const [disputedRankedMatches, setDisputedRankedMatches] = useState([]);
   
   // Messages states
   const [allMessages, setAllMessages] = useState([]);
@@ -116,7 +113,6 @@ const AdminPanel = () => {
         { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false },
         { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false },
         { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false },
-        { id: 'disputes', label: 'Litiges', icon: AlertTriangle, adminOnly: false },
       ]
     },
     {
@@ -337,9 +333,6 @@ const AdminPanel = () => {
         case 'trophies':
           await fetchTrophies();
           break;
-        case 'disputes':
-          await fetchDisputedMatches();
-          break;
         case 'messages':
           await fetchAllMessages();
           break;
@@ -530,30 +523,6 @@ const AdminPanel = () => {
       }
     } catch (err) {
       console.error('Error fetching ranked matches:', err);
-    }
-  };
-
-  const fetchDisputedMatches = async () => {
-    try {
-      // Fetch squad matches in dispute
-      const squadResponse = await fetch(`${API_URL}/matches/admin/all?status=disputed`, {
-        credentials: 'include'
-      });
-      const squadData = await squadResponse.json();
-      if (squadData.success) {
-        setDisputedMatches(squadData.matches || []);
-      }
-      
-      // Fetch ranked matches in dispute
-      const rankedResponse = await fetch(`${API_URL}/ranked-matches/admin/all?status=disputed`, {
-        credentials: 'include'
-      });
-      const rankedData = await rankedResponse.json();
-      if (rankedData.success) {
-        setDisputedRankedMatches(rankedData.matches || []);
-      }
-    } catch (err) {
-      console.error('Error fetching disputed matches:', err);
     }
   };
 
@@ -917,17 +886,34 @@ const AdminPanel = () => {
     setSuccess('');
   };
 
-  const openEditModal = (type, item) => {
+  const openEditModal = async (type, item) => {
     setModalType(type);
     setEditingItem(item);
-    // Deep copy arrays for proper editing
-    const formDataCopy = { ...item };
-    if (item.ladders) formDataCopy.ladders = [...item.ladders];
-    if (item.gameModes) formDataCopy.gameModes = [...item.gameModes];
-    setFormData(formDataCopy);
-    setShowModal(true);
     setError('');
     setSuccess('');
+    
+    // Deep copy arrays for proper editing
+    let formDataCopy = { ...item };
+    if (item.ladders) formDataCopy.ladders = [...item.ladders];
+    if (item.gameModes) formDataCopy.gameModes = [...item.gameModes];
+    
+    // For users, fetch complete data including ranked points
+    if (type === 'user' && item._id) {
+      try {
+        const response = await fetch(`${API_URL}/users/admin/${item._id}`, {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        if (data.success && data.user) {
+          formDataCopy = { ...formDataCopy, ...data.user };
+        }
+      } catch (err) {
+        console.error('Error fetching user details:', err);
+      }
+    }
+    
+    setFormData(formDataCopy);
+    setShowModal(true);
   };
 
   const getDefaultFormData = (type) => {
@@ -2213,206 +2199,6 @@ const AdminPanel = () => {
             })
           )}
         </div>
-      </div>
-    );
-  };
-
-const renderDisputes = () => {
-    const currentSubTab = activeSubTab || 'squad';
-    const totalDisputes = disputedMatches.length + disputedRankedMatches.length;
-
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-              <AlertTriangle className="w-7 h-7 text-orange-400" />
-              Litiges en cours
-            </h2>
-            <p className="text-gray-400 mt-1">
-              {totalDisputes} match{totalDisputes > 1 ? 's' : ''} en litige nécessitant une intervention
-            </p>
-          </div>
-          <button
-            onClick={fetchDisputedMatches}
-            className="flex items-center gap-2 px-4 py-2 bg-dark-800 hover:bg-dark-700 text-white rounded-lg transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Actualiser
-          </button>
-        </div>
-
-        {/* Sub-tabs */}
-        <div className="flex items-center gap-4 border-b border-white/10 pb-4">
-          <button
-            onClick={() => setActiveSubTab('squad')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              currentSubTab === 'squad' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            Matchs Squad ({disputedMatches.length})
-          </button>
-          <button
-            onClick={() => setActiveSubTab('ranked')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              currentSubTab === 'ranked' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Swords className="w-4 h-4" />
-            Matchs Classés ({disputedRankedMatches.length})
-          </button>
-        </div>
-
-        {currentSubTab === 'squad' ? (
-          <div className="space-y-4">
-            {disputedMatches.length === 0 ? (
-              <div className="bg-dark-800/50 border border-white/10 rounded-xl p-8 text-center">
-                <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-                <p className="text-gray-400">Aucun match squad en litige</p>
-              </div>
-            ) : (
-              disputedMatches.map((match) => (
-                <div key={match._id} className="bg-dark-800/50 border border-orange-500/30 rounded-xl p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs font-medium rounded">
-                          EN LITIGE
-                        </span>
-                        <code className="text-gray-500 text-xs">{match._id}</code>
-                      </div>
-                      <h3 className="text-white font-bold text-lg">
-                        {match.challenger?.name || match.challengerInfo?.name || 'Team 1'} [{match.challenger?.tag || match.challengerInfo?.tag || '???'}] vs {match.opponent?.name || match.opponentInfo?.name || 'Team 2'} [{match.opponent?.tag || match.opponentInfo?.tag || '???'}]
-                      </h3>
-                      <p className="text-gray-400 text-sm">
-                        Mode: {match.mode} • Ladder: {match.ladderId || match.ladder} • {formatDate(match.createdAt)}
-                      </p>
-                      <div className="flex gap-4 mt-1 text-xs">
-                        {match.startedAt && (
-                          <span className="text-blue-400">
-                            🏁 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} à {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                        {match.result?.confirmedAt && (
-                          <span className="text-green-400">
-                            ✅ Validé: {new Date(match.result.confirmedAt).toLocaleDateString('fr-FR')} à {new Date(match.result.confirmedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`/match/${match._id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Voir le match
-                      </a>
-                      <button
-                        onClick={() => setDeleteConfirm({ type: 'match', id: match._id })}
-                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {match.dispute && (
-                    <div className="bg-dark-900/50 rounded-lg p-4 mt-4">
-                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-orange-400" />
-                        Détails du litige
-                      </h4>
-                      <p className="text-gray-300 text-sm">{match.dispute.reason || 'Aucune raison fournie'}</p>
-                      {match.dispute.initiatedBy && (
-                        <p className="text-gray-500 text-xs mt-2">
-                          Initié par: {match.dispute.initiatedBy}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {disputedRankedMatches.length === 0 ? (
-              <div className="bg-dark-800/50 border border-white/10 rounded-xl p-8 text-center">
-                <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
-                <p className="text-gray-400">Aucun match classé en litige</p>
-              </div>
-            ) : (
-              disputedRankedMatches.map((match) => (
-                <div key={match._id} className="bg-dark-800/50 border border-orange-500/30 rounded-xl p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs font-medium rounded">
-                          EN LITIGE
-                        </span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          match.mode === 'hardcore' ? 'bg-orange-500/20 text-orange-400' : 'bg-cyan-500/20 text-cyan-400'
-                        }`}>
-                          {match.mode?.toUpperCase()}
-                        </span>
-                        <code className="text-gray-500 text-xs">{match._id}</code>
-                      </div>
-                      <h3 className="text-white font-bold text-lg">
-                        {match.gameMode} • {match.players?.length || 0} joueurs
-                      </h3>
-                      <p className="text-gray-400 text-sm">
-                        Map: {match.map?.name || match.map || 'N/A'} • {formatDate(match.createdAt)}
-                      </p>
-                      <div className="flex gap-4 mt-1 text-xs">
-                        {match.startedAt && (
-                          <span className="text-blue-400">
-                            🏁 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} à {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                        {(match.result?.confirmedAt || match.completedAt) && (
-                          <span className="text-green-400">
-                            ✅ Fin: {new Date(match.result?.confirmedAt || match.completedAt).toLocaleDateString('fr-FR')} à {new Date(match.result?.confirmedAt || match.completedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={`/ranked/match/${match._id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                        Voir le match
-                      </a>
-                      <button
-                        onClick={() => setDeleteConfirm({ type: 'rankedMatch', id: match._id })}
-                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {match.dispute && (
-                    <div className="bg-dark-900/50 rounded-lg p-4 mt-4">
-                      <h4 className="text-white font-medium mb-2 flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-orange-400" />
-                        Détails du litige
-                      </h4>
-                      <p className="text-gray-300 text-sm">{match.dispute.reason || 'Aucune raison fournie'}</p>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        )}
       </div>
     );
   };
@@ -4193,7 +3979,6 @@ const renderDisputes = () => {
               { key: 'overview', label: 'Vue d\'ensemble' },
               { key: 'users', label: 'Utilisateurs' },
               { key: 'squads', label: 'Escouades' },
-              { key: 'disputes', label: 'Litiges' },
               { key: 'announcements', label: 'Annonces' },
               { key: 'hub', label: 'Hub' },
               { key: 'maps', label: 'Cartes' },
@@ -5151,7 +4936,8 @@ const renderDisputes = () => {
               <p className="text-gray-500 text-xs mb-3">
                 Ces points déterminent le rang du joueur en mode classé (Bronze, Silver, Gold, etc.)
               </p>
-              <div className="grid grid-cols-2 gap-4">
+              {/* Points */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Points Hardcore</label>
                   <input
@@ -5181,6 +4967,90 @@ const renderDisputes = () => {
                       } 
                     })}
                     className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/40 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                    min={0}
+                  />
+                </div>
+              </div>
+
+              {/* Wins/Losses Hardcore */}
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-green-400 mb-1">✅ Victoires Hardcore</label>
+                  <input
+                    type="number"
+                    value={formData.rankedStats?.hardcore?.wins || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      rankedStats: { 
+                        ...formData.rankedStats, 
+                        hardcore: {
+                          ...formData.rankedStats?.hardcore,
+                          wins: parseInt(e.target.value) || 0
+                        }
+                      } 
+                    })}
+                    className="w-full px-3 py-2 bg-dark-900 border border-green-500/40 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                    min={0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-red-400 mb-1">❌ Défaites Hardcore</label>
+                  <input
+                    type="number"
+                    value={formData.rankedStats?.hardcore?.losses || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      rankedStats: { 
+                        ...formData.rankedStats, 
+                        hardcore: {
+                          ...formData.rankedStats?.hardcore,
+                          losses: parseInt(e.target.value) || 0
+                        }
+                      } 
+                    })}
+                    className="w-full px-3 py-2 bg-dark-900 border border-red-500/40 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none"
+                    min={0}
+                  />
+                </div>
+              </div>
+
+              {/* Wins/Losses CDL */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-green-400 mb-1">✅ Victoires CDL</label>
+                  <input
+                    type="number"
+                    value={formData.rankedStats?.cdl?.wins || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      rankedStats: { 
+                        ...formData.rankedStats, 
+                        cdl: {
+                          ...formData.rankedStats?.cdl,
+                          wins: parseInt(e.target.value) || 0
+                        }
+                      } 
+                    })}
+                    className="w-full px-3 py-2 bg-dark-900 border border-green-500/40 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                    min={0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-red-400 mb-1">❌ Défaites CDL</label>
+                  <input
+                    type="number"
+                    value={formData.rankedStats?.cdl?.losses || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      rankedStats: { 
+                        ...formData.rankedStats, 
+                        cdl: {
+                          ...formData.rankedStats?.cdl,
+                          losses: parseInt(e.target.value) || 0
+                        }
+                      } 
+                    })}
+                    className="w-full px-3 py-2 bg-dark-900 border border-red-500/40 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none"
                     min={0}
                   />
                 </div>
@@ -5840,8 +5710,6 @@ const renderDisputes = () => {
         return renderShop();
       case 'trophies':
         return renderTrophies();
-      case 'disputes':
-        return renderDisputes();
       case 'announcements':
         return renderAnnouncements();
       case 'hub':

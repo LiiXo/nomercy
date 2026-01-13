@@ -12,12 +12,11 @@ const Footer = () => {
   
   const isHardcore = selectedMode === 'hardcore';
 
-  // Build quick links - ranked mode only visible to admin/staff
+  // Build quick links - ranked mode visible to everyone
   const quickLinks = [
     { label: t('home'), href: '/', icon: <Zap className="w-3.5 h-3.5" /> },
     { label: t('rankings'), href: `/${selectedMode}/rankings`, icon: <Trophy className="w-3.5 h-3.5" /> },
-    // Only show ranked mode to admin/staff users
-    ...(isStaff && isStaff() ? [{ label: t('rankedMode'), href: `/${selectedMode}/ranked`, icon: <Crosshair className="w-3.5 h-3.5" /> }] : []),
+    { label: t('rankedMode'), href: `/${selectedMode}/ranked`, icon: <Crosshair className="w-3.5 h-3.5" /> },
   ];
 
   const supportLinks = [

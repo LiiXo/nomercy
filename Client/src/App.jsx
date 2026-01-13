@@ -37,7 +37,6 @@ import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Messages from './pages/Messages';
 import MySquad from './pages/MySquad';
-import MyDisputes from './pages/MyDisputes';
 import GameModeRulesEditor from './components/GameModeRulesEditor';
 
 // Loading component
@@ -148,14 +147,13 @@ function AppContent() {
   const isSquadManagementPage = location.pathname === '/squad-management';
   const isMySquadPage = location.pathname === '/my-squad';
   const isMessagesPage = location.pathname === '/messages';
-  const isMyDisputesPage = location.pathname === '/my-disputes';
   const isRulesPage = location.pathname === '/rules';
   const isAnticheatPage = location.pathname === '/anticheat';
   const isTermsPage = location.pathname === '/terms';
   const isPrivacyPage = location.pathname === '/privacy';
 
   // Pages qui n'ont pas besoin d'un mode mais doivent afficher la navbar
-  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isMyDisputesPage || isRulesPage || isAnticheatPage || isTermsPage || isPrivacyPage;
+  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isRulesPage || isAnticheatPage || isTermsPage || isPrivacyPage;
 
   // Si on est sur une page standalone sans mode, on sélectionne hardcore par défaut
   React.useEffect(() => {
@@ -465,18 +463,6 @@ function AppContent() {
               <AuthenticatedRoute>
                 <PageTransition>
                   <MySquad />
-                </PageTransition>
-              </AuthenticatedRoute>
-            } 
-          />
-
-          {/* My Disputes - Authenticated users only */}
-          <Route 
-            path="/my-disputes" 
-            element={
-              <AuthenticatedRoute>
-                <PageTransition>
-                  <MyDisputes />
                 </PageTransition>
               </AuthenticatedRoute>
             } 
