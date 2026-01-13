@@ -4,10 +4,11 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
+import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -36,6 +37,10 @@ const RankedMode = () => {
   const [loadingRanking, setLoadingRanking] = useState(true);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  const [leaderboardPage, setLeaderboardPage] = useState(1);
+  const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(1);
+  const LEADERBOARD_PER_PAGE = 20;
+  const LEADERBOARD_TOTAL = 100;
   
   // Game mode & Matchmaking
   const [selectedGameMode, setSelectedGameMode] = useState('Search & Destroy');
@@ -45,6 +50,7 @@ const RankedMode = () => {
   const [timerActive, setTimerActive] = useState(false);
   const [timerEndTime, setTimerEndTime] = useState(null);
   const [timeRemaining, setTimeRemaining] = useState(null);
+  const [currentFormat, setCurrentFormat] = useState(null); // Format déterminé dynamiquement par le serveur
   const [joiningQueue, setJoiningQueue] = useState(false);
   const [leavingQueue, setLeavingQueue] = useState(false);
   const [matchmakingError, setMatchmakingError] = useState(null);
@@ -53,6 +59,9 @@ const RankedMode = () => {
   
   // Page viewers count
   const [pageViewers, setPageViewers] = useState(0);
+  
+  // Active matches stats
+  const [activeMatchesStats, setActiveMatchesStats] = useState({ totalMatches: 0, stats: [] });
   
   // Search animation state
   const [searchingDots, setSearchingDots] = useState('');
@@ -66,8 +75,18 @@ const RankedMode = () => {
   const [rules, setRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
   
+  // Rewards from config
+  const [rewardsConfig, setRewardsConfig] = useState(null);
+  const [loadingRewards, setLoadingRewards] = useState(true);
+  
+  // Matchmaking enabled/disabled
+  const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
+  
   // Rank animation state
   const [rankAnimationPhase, setRankAnimationPhase] = useState(0);
+  
+  // Ref for matchmaking section scroll
+  const matchmakingRef = useRef(null);
 
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
@@ -101,6 +120,51 @@ const RankedMode = () => {
     }
   };
 
+  // Fetch rewards config for the selected mode and game mode
+  const fetchRewardsConfig = async () => {
+    setLoadingRewards(true);
+    try {
+      const response = await fetch(`${API_URL}/config/rewards/ranked?mode=${selectedMode}&gameMode=${encodeURIComponent(selectedGameMode)}`);
+      const data = await response.json();
+      if (data.success && data.rewards) {
+        setRewardsConfig(data.rewards);
+      }
+    } catch (err) {
+      console.error('Error fetching rewards config:', err);
+    } finally {
+      setLoadingRewards(false);
+    }
+  };
+
+  // Fetch active matches stats
+  const fetchActiveMatchesStats = async () => {
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/active-matches/stats?mode=${selectedMode}`);
+      const data = await response.json();
+      if (data.success) {
+        setActiveMatchesStats({
+          totalMatches: data.totalMatches,
+          stats: data.stats
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching active matches stats:', err);
+    }
+  };
+
+  // Fetch matchmaking status (enabled/disabled)
+  const fetchMatchmakingStatus = async () => {
+    try {
+      const response = await fetch(`${API_URL}/config/ranked/matchmaking-status`);
+      const data = await response.json();
+      if (data.success) {
+        setMatchmakingEnabled(data.enabled);
+      }
+    } catch (err) {
+      console.error('Error fetching matchmaking status:', err);
+    }
+  };
+
   // Get rank from points
   const getRankFromPoints = (points) => {
     return RANKS.find(r => points >= r.min && points <= r.max) || RANKS[0];
@@ -124,13 +188,21 @@ const RankedMode = () => {
     }
   };
 
-  // Fetch leaderboard
-  const fetchLeaderboard = async () => {
+  // Fetch leaderboard with pagination
+  const fetchLeaderboard = async (page = 1) => {
     setLoadingLeaderboard(true);
     try {
-      const response = await fetch(`${API_URL}/rankings/leaderboard/${selectedMode}?limit=10`, { credentials: 'include' });
+      const response = await fetch(
+        `${API_URL}/rankings/leaderboard/${selectedMode}?limit=${LEADERBOARD_PER_PAGE}&page=${page}`, 
+        { credentials: 'include' }
+      );
       const data = await response.json();
-      if (data.success) setLeaderboard(data.rankings);
+      if (data.success) {
+        setLeaderboard(data.rankings);
+        // Calculate total pages based on total players (max 100)
+        const totalPlayers = Math.min(data.pagination?.total || 0, LEADERBOARD_TOTAL);
+        setLeaderboardTotalPages(Math.ceil(totalPlayers / LEADERBOARD_PER_PAGE));
+      }
     } catch (err) {
       console.error('Error fetching leaderboard:', err);
     } finally {
@@ -189,6 +261,7 @@ const RankedMode = () => {
         setQueuePosition(data.position);
         setTimerActive(data.timerActive);
         setTimerEndTime(data.timerEndTime);
+        setCurrentFormat(data.currentFormat || null);
         
         // Si le joueur a un match en cours
         if (data.inMatch && data.match) {
@@ -229,6 +302,10 @@ const RankedMode = () => {
         setInQueue(true);
         setQueueSize(data.queueSize);
         setQueuePosition(data.position);
+        // Scroll to matchmaking section
+        setTimeout(() => {
+          matchmakingRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       } else {
         setMatchmakingError(data.message);
         if (data.activeMatchId) setActiveMatch({ _id: data.activeMatchId });
@@ -257,6 +334,7 @@ const RankedMode = () => {
         setQueuePosition(null);
         setTimerActive(false);
         setTimerEndTime(null);
+        setCurrentFormat(null);
       }
     } catch (err) {
       console.error('Error leaving queue:', err);
@@ -342,6 +420,16 @@ const RankedMode = () => {
         setQueuePosition(data.position);
         setTimerActive(data.timerActive);
         setTimerEndTime(data.timerEndTime);
+        setCurrentFormat(data.currentFormat || null);
+      }
+      if (data.type === 'ejected') {
+        // Le joueur a été éjecté de la file pour équilibrer le match
+        setInQueue(false);
+        setQueueSize(0);
+        setQueuePosition(null);
+        setTimerActive(false);
+        setTimerEndTime(null);
+        setCurrentFormat(null);
       }
     });
     const unsubMatch = on('rankedMatchFound', (data) => {
@@ -364,15 +452,33 @@ const RankedMode = () => {
     return () => clearInterval(interval);
   }, [timerActive, timerEndTime]);
 
+  // Fetch leaderboard when page changes
+  useEffect(() => {
+    fetchLeaderboard(leaderboardPage);
+  }, [leaderboardPage, selectedMode]);
+
+  // Handle leaderboard page change
+  const handleLeaderboardPageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= leaderboardTotalPages) {
+      setLeaderboardPage(newPage);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     fetchMyRanking();
-    fetchLeaderboard();
+    fetchRewardsConfig();
+    fetchActiveMatchesStats();
+    fetchMatchmakingStatus();
     if (isAuthenticated) {
       checkActiveMatch();
       fetchQueueStatus();
       if (user?.platform === 'PC') checkGGSecure();
     }
+    
+    // Refresh active matches stats every 30 seconds
+    const statsInterval = setInterval(fetchActiveMatchesStats, 30000);
+    return () => clearInterval(statsInterval);
   }, [isAuthenticated, selectedMode, selectedGameMode]);
 
   const playerRank = myRanking ? getRankFromPoints(myRanking.points) : RANKS[0];
@@ -402,15 +508,16 @@ const RankedMode = () => {
       playersInQueue: 'joueurs en file',
       matchIn: 'Match dans',
       waitingMore: 'En attente de joueurs...',
-      minPlayers: 'Minimum 6 joueurs (3v3)',
+      minPlayers: 'Minimum 4 joueurs (2v2)',
       activeMatch: 'Match en cours',
       rejoin: 'Rejoindre',
       ggsecureRequired: 'GGSecure requis pour les joueurs PC',
       leaderboard: 'Classement',
       ranks: 'Les rangs',
       soloMode: 'Mode solo uniquement',
-      format: '3v3, 4v4 ou 5v5',
+      dynamicFormat: 'Format automatique (2v2 → 5v5)',
       playersOnPage: 'joueurs sur cette page',
+      activeMatches: 'match(s) en cours',
       addFakePlayers: 'Ajouter des joueurs test',
       searchingPlayers: 'Recherche de joueurs',
       loginToPlay: 'Connecte-toi pour jouer',
@@ -446,15 +553,16 @@ const RankedMode = () => {
       playersInQueue: 'players in queue',
       matchIn: 'Match in',
       waitingMore: 'Waiting for players...',
-      minPlayers: 'Minimum 6 players (3v3)',
+      minPlayers: 'Minimum 4 players (2v2)',
       activeMatch: 'Active Match',
       rejoin: 'Rejoin',
       ggsecureRequired: 'GGSecure required for PC players',
       leaderboard: 'Leaderboard',
       ranks: 'Ranks',
       soloMode: 'Solo mode only',
-      format: '3v3, 4v4 or 5v5',
+      dynamicFormat: 'Automatic format (2v2 → 5v5)',
       playersOnPage: 'players on this page',
+      activeMatches: 'active match(es)',
       addFakePlayers: 'Add test players',
       searchingPlayers: 'Searching for players',
       loginToPlay: 'Login to Play',
@@ -490,15 +598,16 @@ const RankedMode = () => {
       playersInQueue: 'Spieler in Warteschlange',
       matchIn: 'Match in',
       waitingMore: 'Warte auf Spieler...',
-      minPlayers: 'Minimum 6 Spieler (3v3)',
+      minPlayers: 'Minimum 4 Spieler (2v2)',
       activeMatch: 'Aktives Match',
       rejoin: 'Beitreten',
       ggsecureRequired: 'GGSecure erforderlich für PC-Spieler',
       leaderboard: 'Bestenliste',
       ranks: 'Ränge',
       soloMode: 'Nur Solomodus',
-      format: '3v3, 4v4 oder 5v5',
+      dynamicFormat: 'Automatisches Format (2v2 → 5v5)',
       playersOnPage: 'Spieler auf dieser Seite',
+      activeMatches: 'aktive(s) Match(es)',
       addFakePlayers: 'Testspieler hinzufügen',
       searchingPlayers: 'Suche nach Spielern',
       loginToPlay: 'Zum Spielen einloggen',
@@ -534,15 +643,16 @@ const RankedMode = () => {
       playersInQueue: 'giocatori in coda',
       matchIn: 'Partita tra',
       waitingMore: 'In attesa di giocatori...',
-      minPlayers: 'Minimo 6 giocatori (3v3)',
+      minPlayers: 'Minimo 4 giocatori (2v2)',
       activeMatch: 'Partita in corso',
       rejoin: 'Rientra',
       ggsecureRequired: 'GGSecure richiesto per giocatori PC',
       leaderboard: 'Classifica',
       ranks: 'Gradi',
       soloMode: 'Solo modalità singola',
-      format: '3v3, 4v4 o 5v5',
+      dynamicFormat: 'Formato automatico (2v2 → 5v5)',
       playersOnPage: 'giocatori su questa pagina',
+      activeMatches: 'partita/e in corso',
       addFakePlayers: 'Aggiungi giocatori test',
       searchingPlayers: 'Ricerca giocatori',
       loginToPlay: 'Accedi per giocare',
@@ -600,6 +710,7 @@ const RankedMode = () => {
                       <Loader2 className={`w-8 h-8 text-${accent}-500 animate-spin`} />
                     </div>
                   ) : myRanking ? (
+                    <>
                     <div className="flex flex-col md:flex-row items-center gap-6">
                       {/* Rank Badge - Animated */}
                       <div className="relative group">
@@ -668,6 +779,75 @@ const RankedMode = () => {
                         </div>
                       </div>
                     </div>
+                    
+                    {/* Progress Bar to Next Rank */}
+                    {(() => {
+                      const currentRankIndex = RANKS.findIndex(r => myRanking.points >= r.min && myRanking.points <= r.max);
+                      const currentRank = RANKS[currentRankIndex] || RANKS[0];
+                      const nextRank = RANKS[currentRankIndex + 1];
+                      
+                      if (!nextRank) {
+                        // Already at max rank (Champion)
+                        return (
+                          <div className="w-full mt-4 pt-4 border-t border-white/10">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm text-gray-400">{language === 'fr' ? 'Rang Maximum Atteint' : 'Maximum Rank Achieved'}</span>
+                              <span className="text-sm font-bold" style={{ color: currentRank.color }}>🏆 Champion</span>
+                            </div>
+                            <div className="relative h-3 rounded-full overflow-hidden bg-dark-700">
+                              <div 
+                                className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600"
+                                style={{ width: '100%' }}
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent animate-pulse" />
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      const pointsInCurrentRank = myRanking.points - currentRank.min;
+                      const pointsNeededForNextRank = nextRank.min - currentRank.min;
+                      const progressPercent = Math.min(100, (pointsInCurrentRank / pointsNeededForNextRank) * 100);
+                      const pointsToNextRank = nextRank.min - myRanking.points;
+                      
+                      return (
+                        <div className="w-full mt-4 pt-4 border-t border-white/10">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-gray-400">{language === 'fr' ? 'Prochain rang:' : 'Next rank:'}</span>
+                              <span className="text-sm font-bold" style={{ color: nextRank.color }}>{nextRank.name}</span>
+                            </div>
+                            <span className="text-sm text-gray-400">
+                              <span className="font-bold" style={{ color: nextRank.color }}>{pointsToNextRank}</span> pts restants
+                            </span>
+                          </div>
+                          <div className="relative h-3 rounded-full overflow-hidden bg-dark-700">
+                            {/* Progress fill */}
+                            <div 
+                              className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
+                              style={{ 
+                                width: `${progressPercent}%`,
+                                background: `linear-gradient(90deg, ${currentRank.color}, ${nextRank.color})`
+                              }}
+                            />
+                            {/* Glow effect on the edge */}
+                            <div 
+                              className="absolute inset-y-0 w-4 rounded-full blur-sm"
+                              style={{ 
+                                left: `calc(${progressPercent}% - 8px)`,
+                                background: nextRank.color,
+                                opacity: 0.6
+                              }}
+                            />
+                          </div>
+                          <div className="flex justify-between mt-1">
+                            <span className="text-xs text-gray-500">{currentRank.min} pts</span>
+                            <span className="text-xs text-gray-500">{nextRank.min} pts</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    </>
                   ) : (
                     <div className="text-center py-8">
                       <div className={`w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${RANKS[0].gradient} p-1`}>
@@ -716,57 +896,95 @@ const RankedMode = () => {
                     </span>
                   </button>
 
-                  {/* Mêlée générale - Available */}
+                  {/* Mêlée générale - Indisponible */}
                   <button
-                    onClick={() => setSelectedGameMode('Team Deathmatch')}
-                    className={`relative p-4 rounded-2xl border-2 transition-all ${
-                      selectedGameMode === 'Team Deathmatch'
-                        ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
-                        : 'border-white/10 bg-dark-800/30 hover:border-white/20'
-                    }`}
+                    disabled
+                    className="relative p-4 rounded-2xl border-2 transition-all border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50"
                   >
-                    <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
-                      selectedGameMode === 'Team Deathmatch'
-                        ? `bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`
-                        : 'bg-dark-700'
-                    }`}>
-                      <Swords className="w-6 h-6 text-white" />
+                    <div className="absolute top-2 right-2">
+                      <Lock className="w-4 h-4 text-gray-500" />
                     </div>
-                    <p className="text-white font-semibold text-sm">{t.teamDeathmatch}</p>
-                    <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      selectedGameMode === 'Team Deathmatch'
-                        ? `bg-green-500/20 text-green-400`
-                        : 'bg-green-500/10 text-green-400/70'
-                    }`}>
-                      {t.available}
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center bg-dark-700/50">
+                      <Swords className="w-6 h-6 text-gray-500" />
+                    </div>
+                    <p className="text-gray-500 font-semibold text-sm">{t.teamDeathmatch}</p>
+                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-500/10 text-gray-500">
+                      {t.comingSoon}
                     </span>
                   </button>
 
-                  {/* Duel - Available */}
+                  {/* Duel - Indisponible */}
                   <button
-                    onClick={() => setSelectedGameMode('Duel')}
-                    className={`relative p-4 rounded-2xl border-2 transition-all ${
-                      selectedGameMode === 'Duel'
-                        ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
-                        : 'border-white/10 bg-dark-800/30 hover:border-white/20'
-                    }`}
+                    disabled
+                    className="relative p-4 rounded-2xl border-2 transition-all border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50"
                   >
-                    <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
-                      selectedGameMode === 'Duel'
-                        ? `bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`
-                        : 'bg-dark-700'
-                    }`}>
-                      <Target className="w-6 h-6 text-white" />
+                    <div className="absolute top-2 right-2">
+                      <Lock className="w-4 h-4 text-gray-500" />
                     </div>
-                    <p className="text-white font-semibold text-sm">{t.duel}</p>
-                    <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      selectedGameMode === 'Duel'
-                        ? `bg-green-500/20 text-green-400`
-                        : 'bg-green-500/10 text-green-400/70'
-                    }`}>
-                      {t.available}
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center bg-dark-700/50">
+                      <Target className="w-6 h-6 text-gray-500" />
+                    </div>
+                    <p className="text-gray-500 font-semibold text-sm">{t.duel}</p>
+                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-500/10 text-gray-500">
+                      {t.comingSoon}
                     </span>
                   </button>
+                </div>
+                
+                {/* Récompenses du mode */}
+                <div className="mt-4 p-4 rounded-xl bg-dark-900/50 border border-white/5">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">
+                    {language === 'fr' ? 'Récompenses' : 'Rewards'}
+                  </h4>
+                  {loadingRewards ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className={`w-5 h-5 text-${accent}-500 animate-spin`} />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Victoire */}
+                      <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                        <p className="text-xs text-green-400 font-medium mb-2">
+                          {language === 'fr' ? '🏆 Victoire' : '🏆 Victory'}
+                        </p>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                            <span className="text-xs text-gray-300">+{rewardsConfig?.pointsWin || 25} {language === 'fr' ? 'points' : 'points'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Coins className="w-3.5 h-3.5 text-yellow-400" />
+                            <span className="text-xs text-gray-300">+{rewardsConfig?.coinsWin || 50} gold</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                            <span className="text-xs text-gray-300">+{rewardsConfig?.xpWinMin || 350}-{rewardsConfig?.xpWinMax || 550} XP</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Défaite */}
+                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                        <p className="text-xs text-red-400 font-medium mb-2">
+                          {language === 'fr' ? '💔 Défaite' : '💔 Defeat'}
+                        </p>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-3.5 h-3.5 text-purple-400 rotate-180" />
+                            <span className="text-xs text-gray-300">{rewardsConfig?.pointsLoss || -15} {language === 'fr' ? 'points' : 'points'}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Coins className="w-3.5 h-3.5 text-orange-400" />
+                            <span className="text-xs text-gray-300">+{rewardsConfig?.coinsLoss || 10} gold</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Zap className="w-3.5 h-3.5 text-gray-500" />
+                            <span className="text-xs text-gray-500">0 XP</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Bouton Règles du mode */}
@@ -786,7 +1004,7 @@ const RankedMode = () => {
 
               {/* Matchmaking Section */}
               {isAuthenticated && (
-                <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
+                <div ref={matchmakingRef} className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                       <Swords className={`w-5 h-5 text-${accent}-500`} />
@@ -800,6 +1018,35 @@ const RankedMode = () => {
                       </span>
                     </div>
                   </div>
+
+                  {/* Active Matches Stats */}
+                  {activeMatchesStats.totalMatches > 0 && (
+                    <div className="mb-4 p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Swords className="w-4 h-4 text-green-400" />
+                        <span className="text-green-400 font-semibold">
+                          {activeMatchesStats.totalMatches} {t.activeMatches}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {activeMatchesStats.stats.map((stat, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <span className="px-2 py-1 rounded-lg bg-dark-800/50 text-xs text-gray-300">
+                              {stat.gameMode}
+                            </span>
+                            {stat.formats.map((f, fIdx) => (
+                              <span 
+                                key={fIdx} 
+                                className={`px-2 py-1 rounded-lg text-xs font-medium ${isHardcore ? 'bg-red-500/20 text-red-300' : 'bg-cyan-500/20 text-cyan-300'}`}
+                              >
+                                {f.count}× {f.format}
+                              </span>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Active Match Alert */}
                   {activeMatch && (
@@ -928,10 +1175,6 @@ const RankedMode = () => {
                         </div>
                       </div>
 
-                      <p className="text-center text-sm text-gray-500">
-                        {queueSize < 6 ? t.minPlayers : queueSize < 8 ? t.ready3v3 : queueSize < 10 ? t.ready4v4 : t.creatingMatch}
-                      </p>
-
                       {/* Staff/Admin: Add fake players button */}
                       {isStaffOrAdmin && (
                         <button
@@ -976,15 +1219,25 @@ const RankedMode = () => {
                              t.duel}
                           </p>
                           <p className="text-gray-500 text-sm">
-                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : t.format}
+                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : selectedGameMode === 'Search & Destroy' ? '2v2 → 5v5' : '4v4'}
                           </p>
                         </div>
                       </div>
 
+                      {/* Matchmaking Disabled Message */}
+                      {!matchmakingEnabled && (
+                        <div className="mb-4 p-4 rounded-2xl bg-yellow-500/20 border border-yellow-500/30 flex items-center gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-400" />
+                          <span className="text-yellow-300">
+                            {language === 'fr' ? 'Le matchmaking est temporairement désactivé.' : 'Matchmaking is temporarily disabled.'}
+                          </span>
+                        </div>
+                      )}
+
                       {/* Find Match Button */}
                       <button
                         onClick={joinQueue}
-                        disabled={joiningQueue || !!activeMatch || (user?.platform === 'PC' && ggsecureConnected === false)}
+                        disabled={joiningQueue || !!activeMatch || (user?.platform === 'PC' && ggsecureConnected === false) || !matchmakingEnabled}
                         className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
                           isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'
                         } text-white font-bold text-lg shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group`}
@@ -1146,21 +1399,12 @@ const RankedMode = () => {
           <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 overflow-hidden">
             {/* Header */}
             <div className={`px-6 py-4 bg-gradient-to-r ${isHardcore ? 'from-red-500/20 to-orange-500/10' : 'from-cyan-500/20 to-blue-500/10'} border-b border-white/10`}>
-              <div className="flex items-center justify-between">
-                <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                  <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
-                    <Crown className="w-5 h-5 text-white" />
-                  </div>
-                  {t.leaderboard}
-                </h3>
-                <button 
-                  onClick={() => navigate('/rankings')}
-                  className={`text-sm text-${accent}-400 hover:text-${accent}-300 transition-colors flex items-center gap-1`}
-                >
-                  {t.viewAll}
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
+                  <Crown className="w-5 h-5 text-white" />
+                </div>
+                {t.leaderboard} - Top 100
+              </h3>
             </div>
             
             {loadingLeaderboard ? (
@@ -1168,168 +1412,170 @@ const RankedMode = () => {
                 <Loader2 className={`w-8 h-8 text-${accent}-500 animate-spin`} />
               </div>
             ) : leaderboard.length > 0 ? (
-              <div className="p-6">
-                {/* Top 3 Featured */}
-                <div className="grid grid-cols-3 gap-4 mb-6">
-                  {/* Second Place */}
-                  {leaderboard[1] && (() => {
-                    const player = leaderboard[1];
-                    const rank = getRankFromPoints(player.points);
-                    const RankIcon = rank.icon;
-                    return (
-                      <button
-                        onClick={() => navigate(`/player/${player.user?._id}`)}
-                        className="relative flex flex-col items-center p-4 pt-8 rounded-2xl bg-gradient-to-br from-gray-400/10 to-slate-500/5 border border-gray-400/30 hover:border-gray-400/50 transition-all hover:scale-[1.02] order-1"
-                      >
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center shadow-lg">
-                          <span className="text-lg">🥈</span>
-                        </div>
-                        <img 
-                          src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
-                          alt=""
-                          className="w-16 h-16 rounded-full object-cover ring-2 ring-gray-400 mb-3"
-                          onError={(e) => { e.target.src = '/avatar.jpg'; }}
-                        />
-                        <p className="text-white font-semibold text-sm truncate w-full text-center">{player.user?.username || 'Unknown'}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <div className={`w-5 h-5 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
-                            <RankIcon className="w-3 h-3 text-white" />
-                          </div>
-                          <span className="text-gray-300 font-bold">{player.points} pts</span>
-                        </div>
-                        <span className="text-xs text-gray-500 mt-1">{player.wins}V - {player.losses}D</span>
-                      </button>
-                    );
-                  })()}
+              <div className="p-4 space-y-2">
+                {leaderboard.map((player, idx) => {
+                  // Calculate actual position based on current page
+                  const position = (leaderboardPage - 1) * LEADERBOARD_PER_PAGE + idx + 1;
+                  const rank = getRankFromPoints(player.points);
+                  const RankIcon = rank.icon;
+                  const winRate = player.wins + player.losses > 0 
+                    ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
+                    : 0;
+                  const isMe = user && player.user?._id === user._id;
                   
-                  {/* First Place */}
-                  {leaderboard[0] && (() => {
-                    const player = leaderboard[0];
-                    const rank = getRankFromPoints(player.points);
-                    const RankIcon = rank.icon;
-                    return (
-                      <button
-                        onClick={() => navigate(`/player/${player.user?._id}`)}
-                        className="relative flex flex-col items-center p-4 pt-10 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-amber-600/10 border-2 border-yellow-500/50 hover:border-yellow-500/70 transition-all hover:scale-[1.02] order-2 -mt-4"
-                      >
-                        <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-10 h-10 rounded-full bg-yellow-500 flex items-center justify-center shadow-lg shadow-yellow-500/30">
-                          <span className="text-xl">🥇</span>
-                        </div>
-                        <img 
-                          src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
-                          alt=""
-                          className="w-20 h-20 rounded-full object-cover ring-2 ring-yellow-500 mb-3 shadow-lg shadow-yellow-500/20"
-                          onError={(e) => { e.target.src = '/avatar.jpg'; }}
-                        />
-                        <p className="text-yellow-400 font-bold text-base truncate w-full text-center">{player.user?.username || 'Unknown'}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <div className={`w-6 h-6 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
-                            <RankIcon className="w-3.5 h-3.5 text-white" />
-                          </div>
-                          <span className="text-yellow-400 font-bold text-lg">{player.points} pts</span>
-                        </div>
-                        <span className="text-xs text-gray-400 mt-1">{player.wins}V - {player.losses}D</span>
-                      </button>
-                    );
-                  })()}
-                  
-                  {/* Third Place */}
-                  {leaderboard[2] && (() => {
-                    const player = leaderboard[2];
-                    const rank = getRankFromPoints(player.points);
-                    const RankIcon = rank.icon;
-                    return (
-                      <button
-                        onClick={() => navigate(`/player/${player.user?._id}`)}
-                        className="relative flex flex-col items-center p-4 pt-8 rounded-2xl bg-gradient-to-br from-amber-700/10 to-orange-800/5 border border-amber-700/30 hover:border-amber-700/50 transition-all hover:scale-[1.02] order-3"
-                      >
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-amber-700 flex items-center justify-center shadow-lg">
-                          <span className="text-lg">🥉</span>
-                        </div>
-                        <img 
-                          src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
-                          alt=""
-                          className="w-16 h-16 rounded-full object-cover ring-2 ring-amber-700 mb-3"
-                          onError={(e) => { e.target.src = '/avatar.jpg'; }}
-                        />
-                        <p className="text-white font-semibold text-sm truncate w-full text-center">{player.user?.username || 'Unknown'}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <div className={`w-5 h-5 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
-                            <RankIcon className="w-3 h-3 text-white" />
-                          </div>
-                          <span className="text-amber-600 font-bold">{player.points} pts</span>
-                        </div>
-                        <span className="text-xs text-gray-500 mt-1">{player.wins}V - {player.losses}D</span>
-                      </button>
-                    );
-                  })()}
-                </div>
-                
-                {/* Rest of Leaderboard (4-10) */}
-                {leaderboard.length > 3 && (
-                  <div className="space-y-2">
-                    {leaderboard.slice(3, 10).map((player, idx) => {
-                      const position = idx + 4;
-                      const rank = getRankFromPoints(player.points);
-                      const RankIcon = rank.icon;
-                      const winRate = player.wins + player.losses > 0 
-                        ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
-                        : 0;
+                  return (
+                    <button
+                      key={player._id}
+                      onClick={() => navigate(`/player/${player.user?._id}`)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all hover:bg-white/5 ${
+                        isMe ? `${isHardcore ? 'bg-red-500/10 border border-red-500/30' : 'bg-cyan-500/10 border border-cyan-500/30'}` : ''
+                      }`}
+                    >
+                      {/* Position */}
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
+                        position === 1 ? 'bg-yellow-500/20 text-yellow-400' :
+                        position === 2 ? 'bg-gray-400/20 text-gray-300' :
+                        position === 3 ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-dark-800 text-gray-500'
+                      }`}>
+                        {position <= 3 ? (
+                          position === 1 ? <Crown className="w-4 h-4" /> :
+                          <Medal className="w-4 h-4" />
+                        ) : position}
+                      </div>
                       
-                      return (
-                        <button
-                          key={player._id}
-                          onClick={() => navigate(`/player/${player.user?._id}`)}
-                          className="w-full flex items-center gap-4 p-3 rounded-xl bg-dark-800/50 border border-white/5 hover:border-white/10 transition-all hover:bg-dark-800/80"
-                        >
-                          {/* Position */}
-                          <div className="w-8 h-8 rounded-lg bg-dark-700 flex items-center justify-center">
-                            <span className="text-gray-400 font-bold text-sm">#{position}</span>
+                      {/* Avatar */}
+                      <img 
+                        src={getUserAvatar(player.user)}
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                      />
+                      
+                      {/* Name & Rank */}
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-white font-medium truncate">{player.user?.username || 'Unknown'}</p>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-4 h-4 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
+                            <RankIcon className="w-2.5 h-2.5 text-white" />
                           </div>
-                          
-                          {/* Avatar */}
-                          <img 
-                            src={player.user?.avatar || `https://cdn.discordapp.com/avatars/${player.user?.discordId}/${player.user?.discordAvatar}.png` || '/avatar.jpg'}
-                            alt=""
-                            className="w-10 h-10 rounded-full object-cover"
-                            onError={(e) => { e.target.src = '/avatar.jpg'; }}
-                          />
-                          
-                          {/* Name & Rank */}
-                          <div className="flex-1 min-w-0 text-left">
-                            <p className="text-white font-medium truncate">{player.user?.username || 'Unknown'}</p>
-                            <div className="flex items-center gap-2">
-                              <div className={`w-4 h-4 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
-                                <RankIcon className="w-2.5 h-2.5 text-white" />
-                              </div>
-                              <span className="text-xs text-gray-500">{rank.name}</span>
-                            </div>
-                          </div>
-                          
-                          {/* Stats */}
-                          <div className="hidden sm:flex items-center gap-4 text-sm">
-                            <div className="text-center">
-                              <span className="text-green-400 font-semibold">{player.wins}</span>
-                              <span className="text-gray-600 mx-1">-</span>
-                              <span className="text-red-400 font-semibold">{player.losses}</span>
-                            </div>
-                            <div className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              winRate >= 60 ? 'bg-green-500/20 text-green-400' :
-                              winRate >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
-                              'bg-red-500/20 text-red-400'
-                            }`}>
-                              {winRate}%
-                            </div>
-                          </div>
-                          
-                          {/* Points */}
-                          <div className={`text-${accent}-400 font-bold`}>
-                            {player.points} <span className="text-xs text-gray-500">pts</span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                          <span className="text-xs text-gray-500">{rank.name}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Stats */}
+                      <div className="text-right flex-shrink-0">
+                        <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{player.points} pts</p>
+                        <p className="text-xs text-gray-500">
+                          <span className="text-green-400">{player.wins}V</span>
+                          <span className="mx-1">/</span>
+                          <span className="text-red-400">{player.losses}D</span>
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+                
+                {/* Pagination controls */}
+                {leaderboardTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 pt-4 border-t border-white/10 mt-4">
+                    <button
+                      onClick={() => handleLeaderboardPageChange(leaderboardPage - 1)}
+                      disabled={leaderboardPage === 1}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        leaderboardPage === 1 
+                          ? 'bg-dark-800 text-gray-600 cursor-not-allowed' 
+                          : `bg-${accent}-500/20 text-${accent}-400 hover:bg-${accent}-500/30`
+                      }`}
+                    >
+                      ←
+                    </button>
+                    
+                    {Array.from({ length: leaderboardTotalPages }, (_, i) => i + 1).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => handleLeaderboardPageChange(page)}
+                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
+                          page === leaderboardPage 
+                            ? `bg-${accent}-500 text-white` 
+                            : 'bg-dark-800 text-gray-400 hover:bg-white/10'
+                        }`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    
+                    <button
+                      onClick={() => handleLeaderboardPageChange(leaderboardPage + 1)}
+                      disabled={leaderboardPage === leaderboardTotalPages}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        leaderboardPage === leaderboardTotalPages 
+                          ? 'bg-dark-800 text-gray-600 cursor-not-allowed' 
+                          : `bg-${accent}-500/20 text-${accent}-400 hover:bg-${accent}-500/30`
+                      }`}
+                    >
+                      →
+                    </button>
                   </div>
+                )}
+
+                {/* Show my position if I'm not in top 100 */}
+                {myRanking && myRanking.rank > LEADERBOARD_TOTAL && user && (
+                  <>
+                    {/* Separator */}
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="flex-1 border-t border-white/10"></div>
+                      <span className="text-xs text-gray-500">...</span>
+                      <div className="flex-1 border-t border-white/10"></div>
+                    </div>
+                    
+                    {/* My position */}
+                    <button
+                      onClick={() => navigate(`/player/${user._id}`)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        isHardcore ? 'bg-red-500/10 border border-red-500/30' : 'bg-cyan-500/10 border border-cyan-500/30'
+                      }`}
+                    >
+                      {/* Position */}
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm bg-dark-800 text-gray-500">
+                        {myRanking.rank}
+                      </div>
+                      
+                      {/* Avatar */}
+                      <img 
+                        src={getUserAvatar(user)}
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                      />
+                      
+                      {/* Name & Rank */}
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center gap-2">
+                          <p className="text-white font-medium truncate">{user.username}</p>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isHardcore ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                            {t.you}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-4 h-4 rounded bg-gradient-to-br ${playerRank.gradient} flex items-center justify-center`}>
+                            <PlayerRankIcon className="w-2.5 h-2.5 text-white" />
+                          </div>
+                          <span className="text-xs text-gray-500">{playerRank.name}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Stats */}
+                      <div className="text-right flex-shrink-0">
+                        <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{myRanking.points} pts</p>
+                        <p className="text-xs text-gray-500">
+                          <span className="text-green-400">{myRanking.wins}V</span>
+                          <span className="mx-1">/</span>
+                          <span className="text-red-400">{myRanking.losses}D</span>
+                        </p>
+                      </div>
+                    </button>
+                  </>
                 )}
               </div>
             ) : (

@@ -2,9 +2,12 @@
  * Ranked Matchmaking Service
  * 
  * Gère les files d'attente pour le mode classé:
- * - Search & Destroy: 3v3 (6 joueurs), 4v4 (8 joueurs), 5v5 (10 joueurs)
- * - Timer de 2 minutes quand 6 joueurs atteints pour attendre plus de joueurs
- * - Si 7 ou 9 joueurs, le dernier arrivé est éjecté
+ * - Search & Destroy: File unique, format déterminé par le nombre de joueurs
+ *   - 4 joueurs → 1 min délai → 2v2
+ *   - 6 joueurs → 1 min délai → 3v3
+ *   - 8 joueurs → 1 min délai → 4v4
+ *   - 10 joueurs → match immédiat → 5v5
+ * - Si nombre impair quand le timer expire, le dernier arrivé est éjecté
  */
 
 import RankedMatch from '../models/RankedMatch.js';
@@ -13,9 +16,21 @@ import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
 import GameMap from '../models/Map.js';
 
-// Files d'attente par mode de jeu et mode (hardcore/cdl)
+// Files d'attente par mode de jeu et mode (hardcore/cdl) - UNE SEULE FILE PAR MODE
 // Structure: { 'Search & Destroy_hardcore': [{ userId, username, rank, points, platform, joinedAt }] }
 const queues = {};
+
+// Configuration des seuils de joueurs pour S&D (format dynamique)
+// Le format est déterminé par le nombre de joueurs dans la file
+const PLAYER_THRESHOLDS = [
+  { players: 4, format: '2v2', teamSize: 2 },
+  { players: 6, format: '3v3', teamSize: 3 },
+  { players: 8, format: '4v4', teamSize: 4 },
+  { players: 10, format: '5v5', teamSize: 5 }
+];
+
+// Timer de 60 secondes (1 minute) pour lancer le match
+const MATCHMAKING_TIMER_SECONDS = 60;
 
 // Timers actifs pour chaque file d'attente
 const queueTimers = {};
@@ -32,7 +47,7 @@ export const initMatchmaking = (socketIo) => {
 };
 
 /**
- * Obtient la clé unique pour une file d'attente
+ * Obtient la clé unique pour une file d'attente (sans format - file unique)
  */
 const getQueueKey = (gameMode, mode) => `${gameMode}_${mode}`;
 
@@ -45,6 +60,31 @@ const getQueue = (gameMode, mode) => {
     queues[key] = [];
   }
   return queues[key];
+};
+
+/**
+ * Détermine le format optimal basé sur le nombre de joueurs
+ */
+const getOptimalFormat = (playerCount) => {
+  // Trouver le plus grand format possible avec le nombre de joueurs
+  for (let i = PLAYER_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (playerCount >= PLAYER_THRESHOLDS[i].players) {
+      return PLAYER_THRESHOLDS[i];
+    }
+  }
+  return null; // Pas assez de joueurs
+};
+
+/**
+ * Détermine le prochain seuil de joueurs
+ */
+const getNextThreshold = (currentCount) => {
+  for (const threshold of PLAYER_THRESHOLDS) {
+    if (currentCount < threshold.players) {
+      return threshold;
+    }
+  }
+  return PLAYER_THRESHOLDS[PLAYER_THRESHOLDS.length - 1]; // Max atteint
 };
 
 /**
@@ -113,7 +153,7 @@ export const joinQueue = async (userId, gameMode, mode) => {
       searchAndDestroy: {
         enabled: true,
         rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
-        matchmaking: { minPlayers: 6, maxPlayers: 10, waitTimer: 120 }
+        matchmaking: { minPlayers: 4, maxPlayers: 10, waitTimer: 60 }
       }
     };
     
@@ -165,9 +205,9 @@ export const joinQueue = async (userId, gameMode, mode) => {
     
     const queue = getQueue(gameMode, mode);
     
-    // Vérifier si le joueur n'est pas déjà dans une file
+    // Vérifier si le joueur n'est pas déjà dans la file
     if (queue.some(p => p.userId.toString() === userId.toString())) {
-      return { success: false, message: 'Vous êtes déjà dans la file d\'attente.' };
+      return { success: false, message: 'Vous êtes déjà dans une file d\'attente.' };
     }
     
     // Vérifier si le joueur n'est pas déjà dans un match actif
@@ -221,22 +261,25 @@ export const joinQueue = async (userId, gameMode, mode) => {
 export const leaveQueue = async (userId, gameMode, mode) => {
   try {
     const queue = getQueue(gameMode, mode);
-    const index = queue.findIndex(p => p.userId.toString() === userId.toString());
+    const playerIndex = queue.findIndex(p => p.userId.toString() === userId.toString());
     
-    if (index === -1) {
+    if (playerIndex === -1) {
       return { success: false, message: 'Vous n\'êtes pas dans la file d\'attente.' };
     }
     
-    const player = queue[index];
-    queue.splice(index, 1);
+    const player = queue[playerIndex];
+    queue.splice(playerIndex, 1);
     console.log(`[Ranked Matchmaking] ${player.username} left ${gameMode} ${mode} queue. Queue size: ${queue.length}`);
     
     // Notifier les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
     
-    // Si on descend sous 6 joueurs, annuler le timer
-    if (queue.length < 6) {
+    // Si on descend sous le minimum de joueurs (4), annuler le timer
+    if (queue.length < 4) {
       cancelMatchmakingTimer(gameMode, mode);
+    } else {
+      // Vérifier si on doit relancer le timer avec le nouveau format
+      checkMatchmakingStart(gameMode, mode);
     }
     
     return { success: true, message: 'Vous avez quitté la file d\'attente.' };
@@ -256,14 +299,21 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
     const timerKey = getQueueKey(gameMode, mode);
     const timerInfo = queueTimers[timerKey];
     
+    // Déterminer le format actuel basé sur le nombre de joueurs
+    const optimalFormat = getOptimalFormat(queue.length);
+    const nextThreshold = getNextThreshold(queue.length);
+    
     return {
       success: true,
       inQueue: !!playerInQueue,
       queueSize: queue.length,
-      position: playerInQueue ? queue.indexOf(playerInQueue) + 1 : null,
+      position: playerInQueue ? queue.findIndex(p => p.userId.toString() === userId.toString()) + 1 : null,
       timerActive: !!timerInfo,
       timerEndTime: timerInfo?.endTime || null,
-      minPlayers: 6,
+      currentFormat: optimalFormat?.format || null,
+      nextFormat: nextThreshold?.format || null,
+      playersNeeded: nextThreshold ? nextThreshold.players - queue.length : 0,
+      minPlayers: 4,
       maxPlayers: 10
     };
   } catch (error) {
@@ -273,35 +323,39 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
 };
 
 /**
- * Vérifie si on peut démarrer le matchmaking (timer de 2 min)
+ * Vérifie si on peut démarrer le matchmaking (timer de 1 min)
+ * Logique: À chaque seuil (4, 6, 8 joueurs), on lance un timer de 1 min
+ * Si 10 joueurs, match immédiat en 5v5
  */
 const checkMatchmakingStart = async (gameMode, mode) => {
   const queue = getQueue(gameMode, mode);
   const timerKey = getQueueKey(gameMode, mode);
   
-  // Si on a 6+ joueurs et pas de timer actif
-  if (queue.length >= 6 && !queueTimers[timerKey]) {
-    // Timer par défaut: 120 secondes (2 minutes)
-    const waitTimer = 120;
-    const endTime = Date.now() + (waitTimer * 1000);
+  // Si 10 joueurs ou plus, match immédiat en 5v5
+  if (queue.length >= 10) {
+    console.log(`[Ranked Matchmaking] 10 players reached for ${gameMode} ${mode}, creating 5v5 match now`);
+    cancelMatchmakingTimer(gameMode, mode);
+    createMatchFromQueue(gameMode, mode);
+    return;
+  }
+  
+  // Trouver le format optimal pour le nombre actuel de joueurs
+  const optimalFormat = getOptimalFormat(queue.length);
+  
+  // Si on a assez de joueurs pour au moins un format (4+)
+  if (optimalFormat && !queueTimers[timerKey]) {
+    const endTime = Date.now() + (MATCHMAKING_TIMER_SECONDS * 1000);
     
-    console.log(`[Ranked Matchmaking] Starting ${waitTimer}s timer for ${gameMode} ${mode}`);
+    console.log(`[Ranked Matchmaking] Starting ${MATCHMAKING_TIMER_SECONDS}s timer for ${gameMode} ${mode} (current format: ${optimalFormat.format})`);
     
     const timer = setTimeout(() => {
       createMatchFromQueue(gameMode, mode);
-    }, waitTimer * 1000);
+    }, MATCHMAKING_TIMER_SECONDS * 1000);
     
-    queueTimers[timerKey] = { timer, endTime };
+    queueTimers[timerKey] = { timer, endTime, format: optimalFormat.format };
     
     // Notifier les joueurs du démarrage du timer
     broadcastQueueUpdate(gameMode, mode);
-  }
-  
-  // Si on a 10 joueurs (max), créer le match immédiatement
-  if (queue.length >= 10) {
-    console.log(`[Ranked Matchmaking] Max players reached for ${gameMode} ${mode}, creating match now`);
-    cancelMatchmakingTimer(gameMode, mode);
-    createMatchFromQueue(gameMode, mode);
   }
 };
 
@@ -321,60 +375,80 @@ const cancelMatchmakingTimer = (gameMode, mode) => {
 
 /**
  * Crée un match à partir de la file d'attente
+ * Le format est déterminé dynamiquement selon le nombre de joueurs
+ * Si nombre impair, le dernier arrivé est éjecté
  */
 const createMatchFromQueue = async (gameMode, mode) => {
   const queue = getQueue(gameMode, mode);
+  const timerKey = getQueueKey(gameMode, mode);
   
-  if (queue.length < 6) {
+  // Supprimer le timer
+  delete queueTimers[timerKey];
+  
+  if (queue.length < 4) {
     console.log(`[Ranked Matchmaking] Not enough players for ${gameMode} ${mode}`);
     return;
   }
   
-  // Déterminer le nombre de joueurs (6, 8 ou 10)
-  let playerCount;
-  if (queue.length >= 10) {
-    playerCount = 10; // 5v5
-  } else if (queue.length >= 8) {
-    playerCount = 8; // 4v4
-  } else {
-    playerCount = 6; // 3v3
-  }
-  
-  // Si nombre impair (7 ou 9), éjecter le dernier arrivé
-  const playersForMatch = [];
-  let ejectedPlayer = null;
-  
   // Trier par date d'arrivée (les premiers arrivés en premier)
-  const sortedQueue = [...queue].sort((a, b) => a.joinedAt - b.joinedAt);
+  const sortedQueue = [...queue].sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
   
-  for (let i = 0; i < sortedQueue.length && playersForMatch.length < playerCount; i++) {
-    playersForMatch.push(sortedQueue[i]);
+  // Déterminer le nombre de joueurs pour le match (pair, max selon les seuils)
+  let playerCount = sortedQueue.length;
+  
+  // Si nombre impair, on doit éjecter le dernier arrivé
+  const ejectedPlayers = [];
+  if (playerCount % 2 !== 0) {
+    const ejected = sortedQueue.pop();
+    ejectedPlayers.push(ejected);
+    playerCount--;
+    console.log(`[Ranked Matchmaking] Ejecting ${ejected.username} (odd number of players)`);
   }
   
-  // Trouver le joueur éjecté si nécessaire
-  if (queue.length > playerCount) {
-    ejectedPlayer = sortedQueue[playerCount]; // Le premier qui n'est pas inclus
-    console.log(`[Ranked Matchmaking] Ejecting ${ejectedPlayer.username} (joined last)`);
+  // Maintenant on a un nombre pair, trouver le format optimal
+  const optimalFormat = getOptimalFormat(playerCount);
+  if (!optimalFormat) {
+    console.log(`[Ranked Matchmaking] No valid format for ${playerCount} players`);
+    return;
   }
   
-  // Retirer les joueurs de la file (sauf le joueur éjecté qui reste)
+  // Si on a plus de joueurs que le format max (10), on prend les 10 premiers
+  if (playerCount > 10) {
+    const excess = sortedQueue.splice(10);
+    ejectedPlayers.push(...excess);
+    playerCount = 10;
+    console.log(`[Ranked Matchmaking] Capping to 10 players, ${excess.length} players stay in queue`);
+  }
+  
+  const playersForMatch = sortedQueue.slice(0, playerCount);
+  const format = getOptimalFormat(playerCount).format;
+  const teamSize = playerCount / 2;
+  
+  // Retirer les joueurs du match ET les joueurs éjectés de la file
   const playerIdsForMatch = playersForMatch.map(p => p.userId.toString());
-  const newQueue = queue.filter(p => !playerIdsForMatch.includes(p.userId.toString()));
+  const ejectedPlayerIds = ejectedPlayers.map(p => p.userId.toString());
+  const newQueue = queue.filter(p => 
+    !playerIdsForMatch.includes(p.userId.toString()) && 
+    !ejectedPlayerIds.includes(p.userId.toString())
+  );
   queues[getQueueKey(gameMode, mode)] = newQueue;
   
-  // Notifier le joueur éjecté qu'il reste dans la file
-  if (ejectedPlayer && io) {
-    io.to(`user-${ejectedPlayer.userId}`).emit('rankedQueueUpdate', {
-      type: 'stayed_in_queue',
-      message: 'Vous restez dans la file d\'attente pour le prochain match.',
-      queueSize: newQueue.length,
-      position: 1
-    });
+  // Notifier les joueurs éjectés qu'ils ont été retirés de la file (ils devront relancer une recherche)
+  for (const ejectedPlayer of ejectedPlayers) {
+    if (io) {
+      io.to(`user-${ejectedPlayer.userId}`).emit('rankedQueueUpdate', {
+        type: 'ejected',
+        message: 'Match lancé sans vous (nombre impair). Veuillez relancer une recherche.',
+        queueSize: 0,
+        position: null
+      });
+    }
   }
+  
+  console.log(`[Ranked Matchmaking] Creating ${format} match with ${playerCount} players`);
   
   // Créer le match
   try {
-    const teamSize = playerCount / 2;
     
     // Mélanger aléatoirement les joueurs
     const shuffled = [...playersForMatch].sort(() => Math.random() - 0.5);
@@ -476,7 +550,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
       if (team2ReferentId) await match.populate('team2Referent', 'username');
     }
     
-    console.log(`[Ranked Matchmaking] Match created: ${match._id} (${teamSize}v${teamSize})`);
+    console.log(`[Ranked Matchmaking] Match created: ${match._id} (${teamSize}v${teamSize}) format: ${format}`);
     
     // Ajouter un message système
     match.chat.push({
@@ -494,6 +568,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
           matchId: match._id,
           gameMode,
           mode,
+          format,
           teamSize,
           yourTeam: player.team,
           isReferent: player.isReferent,
@@ -504,6 +579,11 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     // Mettre à jour le statut de la file pour les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
+    
+    // Si des joueurs restent dans la file, relancer le processus
+    if (newQueue.length >= 4) {
+      checkMatchmakingStart(gameMode, mode);
+    }
     
   } catch (error) {
     console.error('[Ranked Matchmaking] Error creating match:', error);
@@ -528,6 +608,8 @@ const broadcastQueueUpdate = (gameMode, mode) => {
   const queue = getQueue(gameMode, mode);
   const timerKey = getQueueKey(gameMode, mode);
   const timerInfo = queueTimers[timerKey];
+  const optimalFormat = getOptimalFormat(queue.length);
+  const nextThreshold = getNextThreshold(queue.length);
   
   for (let i = 0; i < queue.length; i++) {
     const player = queue[i];
@@ -537,7 +619,10 @@ const broadcastQueueUpdate = (gameMode, mode) => {
       position: i + 1,
       timerActive: !!timerInfo,
       timerEndTime: timerInfo?.endTime || null,
-      minPlayers: 6,
+      currentFormat: optimalFormat?.format || null,
+      nextFormat: nextThreshold?.format || null,
+      playersNeeded: nextThreshold ? nextThreshold.players - queue.length : 0,
+      minPlayers: 4,
       maxPlayers: 10
     });
   }

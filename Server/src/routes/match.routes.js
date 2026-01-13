@@ -3103,4 +3103,125 @@ router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, re
   }
 });
 
+// Cancel match (admin/staff)
+router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const match = await Match.findById(req.params.matchId)
+      .populate('challenger', 'name')
+      .populate('opponent', 'name');
+    
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'Match non trouvé'
+      });
+    }
+    
+    if (['completed', 'cancelled'].includes(match.status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce match ne peut plus être annulé'
+      });
+    }
+    
+    match.status = 'cancelled';
+    match.cancelledAt = new Date();
+    match.cancelledBy = req.user._id;
+    match.cancelReason = reason || 'Annulé par le staff';
+    
+    await match.save();
+    
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${req.params.matchId}`).emit('matchCancelled', {
+        matchId: req.params.matchId,
+        reason: match.cancelReason
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Match annulé',
+      match
+    });
+  } catch (error) {
+    console.error('Cancel match error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Resolve dispute (admin/staff)
+router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { winner, resolution } = req.body;
+    
+    const match = await Match.findById(req.params.matchId)
+      .populate('challenger', 'name')
+      .populate('opponent', 'name')
+      .populate('challengerRoster.user', 'username')
+      .populate('opponentRoster.user', 'username');
+    
+    if (!match) {
+      return res.status(404).json({
+        success: false,
+        message: 'Match non trouvé'
+      });
+    }
+    
+    if (match.status !== 'disputed') {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce match n\'est pas en litige'
+      });
+    }
+    
+    // Resolve dispute
+    if (match.dispute) {
+      match.dispute.isActive = false;
+      match.dispute.resolvedBy = req.user._id;
+      match.dispute.resolvedAt = new Date();
+      match.dispute.resolution = resolution || 'Résolu par le staff';
+    }
+    
+    // Set winner
+    match.result = match.result || {};
+    match.result.winner = winner;
+    match.result.confirmedAt = new Date();
+    match.status = 'completed';
+    match.completedAt = new Date();
+    
+    await match.save();
+    
+    // Repopulate for response
+    await match.populate([
+      { path: 'challenger', select: 'name tag' },
+      { path: 'opponent', select: 'name tag' },
+      { path: 'result.winner', select: 'name tag' }
+    ]);
+    
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`match-${req.params.matchId}`).emit('matchUpdate', { match });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Litige résolu',
+      match
+    });
+  } catch (error) {
+    console.error('Resolve dispute error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
 export default router;

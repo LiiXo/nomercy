@@ -171,6 +171,12 @@ const configSchema = new mongoose.Schema({
       Domination: '• Mode par équipes\n• Capturez et tenez les points\n• Communication requise',
       'Search & Destroy': '• Mode par équipes\n• Pas de respawn\n• Attaque/Défense alternée'
     })
+  },
+  
+  // Activation/désactivation du matchmaking mode classé
+  rankedMatchmakingEnabled: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true

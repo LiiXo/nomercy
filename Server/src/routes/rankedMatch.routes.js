@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
-import { getQueueStatus, joinQueue, leaveQueue } from '../services/rankedMatchmaking.service.js';
+import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers } from '../services/rankedMatchmaking.service.js';
 
 const router = express.Router();
 
@@ -25,7 +25,8 @@ async function distributeRankedRewards(match) {
     const rewards = await getRankedMatchRewards(match.gameMode, match.mode);
     const { pointsWin, pointsLoss, coinsWin, coinsLoss, xpWinMin, xpWinMax } = rewards;
     
-    const winningTeam = match.result.winner;
+    // S'assurer que winningTeam est un Number pour les comparaisons
+    const winningTeam = Number(match.result.winner);
     const losingTeam = winningTeam === 1 ? 2 : 1;
     
     console.log(`[RANKED REWARDS] ====================================`);
@@ -40,8 +41,12 @@ async function distributeRankedRewards(match) {
       // Ignorer les faux joueurs (bots)
       if (player.isFake || !player.user) continue;
       
-      const isWinner = player.team === winningTeam;
+      // S'assurer que la comparaison est faite avec des nombres
+      const playerTeam = Number(player.team);
+      const isWinner = playerTeam === winningTeam;
       const userId = player.user;
+      
+      console.log(`[RANKED REWARDS]   └─ Player team: ${playerTeam}, winningTeam: ${winningTeam}, isWinner: ${isWinner}`);
       
       // Charger l'utilisateur
       const user = await User.findById(userId);
@@ -93,9 +98,9 @@ async function distributeRankedRewards(match) {
       // ========== METTRE À JOUR LES STATS GÉNÉRALES DU JOUEUR (User) ==========
       if (!user.stats) user.stats = {};
       
-      // Gold (monnaie)
-      const oldGold = user.stats.gold || 0;
-      user.stats.gold = oldGold + goldChange;
+      // Gold (monnaie) - stocké dans user.goldCoins, pas stats.gold
+      const oldGold = user.goldCoins || 0;
+      user.goldCoins = oldGold + goldChange;
       
       // XP pour Top Player (classement général des joueurs basé sur l'XP)
       const oldXP = user.stats.xp || 0;
@@ -111,26 +116,34 @@ async function distributeRankedRewards(match) {
       await user.save();
       
       // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
-      const playerIndex = match.players.findIndex(p => 
-        p.user?.toString() === userId.toString() || p.user?._id?.toString() === userId.toString()
-      );
+      const playerIndex = match.players.findIndex(p => {
+        const pUserId = p.user?._id?.toString() || p.user?.toString();
+        return pUserId === userId.toString();
+      });
+      
+      console.log(`[RANKED REWARDS]   └─ Player index in match: ${playerIndex}`);
+      
       if (playerIndex !== -1) {
+        // Mettre à jour le sous-document rewards
         match.players[playerIndex].rewards = {
           pointsChange: rankedPointsChange, // Points pour le ladder classé
           goldEarned: goldChange,
           xpEarned: xpChange,
-          // Stocker explicitement les points avant/après pour le rapport
           oldPoints: oldRankedPoints,
           newPoints: newRankedPoints
         };
         // Stocker aussi les points actuels du joueur pour calculer l'ancien/nouveau rang
         match.players[playerIndex].points = newRankedPoints;
+        
+        console.log(`[RANKED REWARDS]   └─ Rewards saved to match.players[${playerIndex}]:`, match.players[playerIndex].rewards);
+      } else {
+        console.warn(`[RANKED REWARDS]   └─ ⚠️ Could not find player ${user.username} in match.players!`);
       }
       
       // ========== LOG DÉTAILLÉ ==========
       console.log(`[RANKED REWARDS] Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
       console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})`);
-      console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.stats.gold} (+${goldChange})`);
+      console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})`);
       console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user.stats.xp} (+${xpChange})`);
       console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
     }
@@ -198,13 +211,70 @@ router.get('/matchmaking/status', verifyToken, async (req, res) => {
       position: queueStatus.position || null,
       timerActive: queueStatus.timerActive || false,
       timerEndTime: queueStatus.timerEndTime || null,
-      minPlayers: queueStatus.minPlayers || 6,
+      currentFormat: queueStatus.currentFormat || null,
+      nextFormat: queueStatus.nextFormat || null,
+      playersNeeded: queueStatus.playersNeeded || 0,
+      minPlayers: queueStatus.minPlayers || 4,
       maxPlayers: queueStatus.maxPlayers || 10,
       match: null
     });
     
   } catch (error) {
     console.error('Error fetching matchmaking status:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Obtenir les statistiques des matchs en cours (public)
+router.get('/active-matches/stats', async (req, res) => {
+  try {
+    const { mode = 'hardcore' } = req.query;
+    
+    // Récupérer tous les matchs actifs (ready ou in_progress)
+    const activeMatches = await RankedMatch.find({
+      mode,
+      status: { $in: ['ready', 'in_progress'] }
+    }).select('gameMode teamSize status');
+    
+    // Grouper par mode de jeu et format
+    const matchesByGameMode = {};
+    
+    activeMatches.forEach(match => {
+      const key = `${match.gameMode}`;
+      if (!matchesByGameMode[key]) {
+        matchesByGameMode[key] = {
+          gameMode: match.gameMode,
+          formats: {},
+          total: 0
+        };
+      }
+      
+      const formatKey = `${match.teamSize}v${match.teamSize}`;
+      if (!matchesByGameMode[key].formats[formatKey]) {
+        matchesByGameMode[key].formats[formatKey] = 0;
+      }
+      matchesByGameMode[key].formats[formatKey]++;
+      matchesByGameMode[key].total++;
+    });
+    
+    // Convertir en tableau
+    const stats = Object.values(matchesByGameMode).map(gm => ({
+      gameMode: gm.gameMode,
+      total: gm.total,
+      formats: Object.entries(gm.formats).map(([format, count]) => ({
+        format,
+        count
+      }))
+    }));
+    
+    res.json({
+      success: true,
+      totalMatches: activeMatches.length,
+      stats,
+      mode
+    });
+  } catch (error) {
+    console.error('Error fetching active matches stats:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -392,7 +462,10 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
 router.post('/:matchId/result', verifyToken, async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { winner } = req.body; // 1 ou 2 (équipe gagnante)
+    let { winner } = req.body; // 1 ou 2 (équipe gagnante)
+    
+    // S'assurer que winner est un Number (peut arriver en string depuis le JSON)
+    winner = Number(winner);
 
     if (!winner || ![1, 2].includes(winner)) {
       return res.status(400).json({ success: false, message: 'Équipe gagnante invalide (1 ou 2)' });
@@ -435,7 +508,8 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     // Un seul référent suffit pour valider le résultat
     if (team1Report?.winner || team2Report?.winner) {
       // Prendre le premier rapport disponible comme résultat final
-      const reportedWinner = team1Report?.winner || team2Report?.winner;
+      // S'assurer que c'est un Number pour les comparaisons cohérentes
+      const reportedWinner = Number(team1Report?.winner || team2Report?.winner);
       
       match.result.winner = reportedWinner;
       match.result.confirmed = true;
@@ -464,9 +538,12 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
 
     console.log('[RANKED] 🚀 Emitting rankedMatchUpdate...');
     console.log('[RANKED] Match status:', match.status);
+    console.log('[RANKED] Result winner:', match.result?.winner, '(type:', typeof match.result?.winner, ')');
     if (match.status === 'completed') {
-      console.log('[RANKED] Sample player rewards:', match.players[0]?.rewards);
-      console.log('[RANKED] Sample player points:', match.players[0]?.points);
+      console.log('[RANKED] All players rewards:');
+      match.players.forEach((p, i) => {
+        console.log(`[RANKED]   Player ${i}: team=${p.team}, rewards=`, p.rewards);
+      });
     }
 
     // Émettre via socket
@@ -597,7 +674,43 @@ router.post('/:matchId/code', verifyToken, async (req, res) => {
   }
 });
 
-// ==================== ADMIN ROUTES ====================
+// ==================== ADMIN/DEV ROUTES ====================
+
+// Ajouter des faux joueurs à la file d'attente (staff/admin)
+router.post('/matchmaking/add-fake-players', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore', count = 5 } = req.body;
+    
+    const result = await addFakePlayers(gameMode, mode, count);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error adding fake players:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Supprimer les faux joueurs de la file d'attente (staff/admin)
+router.post('/matchmaking/remove-fake-players', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore' } = req.body;
+    
+    const result = await removeFakePlayers(gameMode, mode);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error removing fake players:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
 
 // Lister tous les matchs classés (admin/staff)
 router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
@@ -798,6 +911,75 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async 
     res.json({ success: true, message: 'Litige résolu', match });
   } catch (error) {
     console.error('Error resolving ranked match dispute:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Historique des matchs classés d'un joueur (public)
+router.get('/player-history/:playerId', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { limit = 10 } = req.query;
+
+    // Récupérer les matchs classés où le joueur a participé
+    const matches = await RankedMatch.find({
+      'players.user': playerId,
+      status: 'completed'
+    })
+      .populate('players.user', 'username avatarUrl discordAvatar discordId')
+      .select('gameMode mode teamSize players result status completedAt createdAt')
+      .sort({ completedAt: -1 })
+      .limit(parseInt(limit));
+
+    // Transformer les données pour le frontend
+    const formattedMatches = matches.map(match => {
+      // Trouver le joueur dans ce match
+      const playerInfo = match.players.find(p => 
+        p.user?._id?.toString() === playerId || p.user?.toString() === playerId
+      );
+      
+      const team1Players = match.players.filter(p => Number(p.team) === 1);
+      const team2Players = match.players.filter(p => Number(p.team) === 2);
+      
+      // S'assurer que la comparaison est faite avec des nombres
+      const isWinner = playerInfo && Number(playerInfo.team) === Number(match.result?.winner);
+      
+      return {
+        _id: match._id,
+        gameMode: match.gameMode,
+        mode: match.mode,
+        teamSize: match.teamSize,
+        playerTeam: playerInfo?.team || null,
+        result: match.result,
+        isWinner,
+        rewards: playerInfo?.rewards || null,
+        team1: team1Players.map(p => ({
+          userId: p.user?._id || null,
+          username: p.user?.username || p.username || 'Joueur',
+          avatarUrl: p.user?.avatarUrl || null,
+          discordId: p.user?.discordId || null,
+          discordAvatar: p.user?.discordAvatar || null,
+          rank: p.rank
+        })),
+        team2: team2Players.map(p => ({
+          userId: p.user?._id || null,
+          username: p.user?.username || p.username || 'Joueur',
+          avatarUrl: p.user?.avatarUrl || null,
+          discordId: p.user?.discordId || null,
+          discordAvatar: p.user?.discordAvatar || null,
+          rank: p.rank
+        })),
+        completedAt: match.completedAt,
+        createdAt: match.createdAt
+      };
+    });
+
+    res.json({ 
+      success: true, 
+      matches: formattedMatches 
+    });
+  } catch (error) {
+    console.error('Error fetching ranked player history:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

@@ -61,6 +61,46 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get ranked match rewards (public - for ranked mode page display)
+// Accept mode (hardcore/cdl) and gameMode query params
+router.get('/rewards/ranked', async (req, res) => {
+  try {
+    const config = await Config.getOrCreate();
+    const { mode = 'hardcore', gameMode = 'Search & Destroy' } = req.query;
+    
+    // Get mode rewards (hardcore or cdl)
+    const modeRewards = config.rankedMatchRewards?.[mode];
+    
+    // Default values
+    const defaultRewards = {
+      pointsWin: 25,
+      pointsLoss: -15,
+      coinsWin: 50,
+      coinsLoss: 10,
+      xpWinMin: 350,
+      xpWinMax: 550
+    };
+    
+    let rewards = defaultRewards;
+    
+    if (modeRewards && modeRewards[gameMode]) {
+      rewards = {
+        pointsWin: modeRewards[gameMode].pointsWin ?? defaultRewards.pointsWin,
+        pointsLoss: modeRewards[gameMode].pointsLoss ?? defaultRewards.pointsLoss,
+        coinsWin: modeRewards[gameMode].coinsWin ?? defaultRewards.coinsWin,
+        coinsLoss: modeRewards[gameMode].coinsLoss ?? defaultRewards.coinsLoss,
+        xpWinMin: modeRewards[gameMode].xpWinMin ?? defaultRewards.xpWinMin,
+        xpWinMax: modeRewards[gameMode].xpWinMax ?? defaultRewards.xpWinMax
+      };
+    }
+    
+    res.json({ success: true, rewards, mode, gameMode });
+  } catch (error) {
+    console.error('Get ranked rewards config error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Get squad match rewards (public - for match sheet display)
 // Accept ladderId query param to return correct rewards (duo-trio = chill, squad-team = competitive)
 router.get('/rewards/squad', async (req, res) => {
@@ -108,6 +148,20 @@ router.get('/rewards/squad', async (req, res) => {
     res.json({ success: true, rewards, ladderId: ladderId || 'duo-trio' });
   } catch (error) {
     console.error('Get squad rewards config error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get ranked matchmaking status (public - whether matchmaking is enabled)
+router.get('/ranked/matchmaking-status', async (req, res) => {
+  try {
+    const config = await Config.getOrCreate();
+    res.json({ 
+      success: true, 
+      enabled: config.rankedMatchmakingEnabled !== false // default to true if not set
+    });
+  } catch (error) {
+    console.error('Get ranked matchmaking status error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

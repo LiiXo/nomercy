@@ -662,6 +662,15 @@ router.get('/profile/:username', async (req, res) => {
 // Get user by ID (public profile)
 router.get('/by-id/:id', async (req, res) => {
   try {
+    // Validate MongoDB ObjectId format
+    const mongoose = await import('mongoose');
+    if (!mongoose.default.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format.'
+      });
+    }
+    
     const user = await User.findOne({ 
       _id: req.params.id,
       isProfileComplete: true,
@@ -711,27 +720,18 @@ router.get('/by-id/:id', async (req, res) => {
     });
 
     for (const match of rankedMatches) {
-      const player = match.players.find(p => p.user.toString() === user._id.toString());
+      const player = match.players.find(p => {
+        const pUserId = p.user?._id?.toString() || p.user?.toString();
+        return pUserId === user._id.toString();
+      });
       if (!player) continue;
 
-      if (match.gameMode === 'Duel') {
-        if (match.result.winnerUser && match.result.winnerUser.toString() === user._id.toString()) {
-          totalWins++;
-        } else {
-          totalLosses++;
-        }
-      } else if (match.gameMode === 'Team Deathmatch') {
-        if (match.result.winnerUser && match.result.winnerUser.toString() === user._id.toString()) {
-          totalWins++;
-        } else {
-          totalLosses++;
-        }
+      // match.result.winner est un nombre (1 ou 2) représentant l'équipe gagnante
+      const winningTeam = match.result.winner;
+      if (player.team === winningTeam) {
+        totalWins++;
       } else {
-        if (player.team && match.result.winner === `team${player.team}`) {
-          totalWins++;
-        } else {
-          totalLosses++;
-        }
+        totalLosses++;
       }
     }
 
@@ -1433,12 +1433,24 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
         message: 'User not found.'
       });
     }
+    
+    // Get ranked ladder points
+    const Ranking = (await import('../models/Ranking.js')).default;
+    const hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: 1 });
+    const cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: 1 });
+    
+    const userObj = user.toObject();
+    userObj.rankedPoints = {
+      hardcore: hardcoreRanking?.points || 0,
+      cdl: cdlRanking?.points || 0
+    };
 
     res.json({
       success: true,
-      user
+      user: userObj
     });
   } catch (error) {
+    console.error('Get user details error:', error);
     res.status(500).json({
       success: false,
       message: 'An error occurred.'
@@ -1449,7 +1461,7 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
 // Admin: Update user
 router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { username, goldCoins, roles, platform, activisionId, bio, stats } = req.body;
+    const { username, goldCoins, roles, platform, activisionId, bio, stats, rankedPoints } = req.body;
     
     const user = await User.findById(req.params.userId);
     if (!user) {
@@ -1477,6 +1489,33 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
     }
 
     await user.save();
+    
+    // Update ranked ladder points if provided
+    if (rankedPoints !== undefined) {
+      const Ranking = (await import('../models/Ranking.js')).default;
+      
+      // Update hardcore ranking
+      if (rankedPoints.hardcore !== undefined) {
+        let hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: 1 });
+        if (!hardcoreRanking) {
+          hardcoreRanking = new Ranking({ user: req.params.userId, mode: 'hardcore', season: 1, points: 0 });
+        }
+        hardcoreRanking.points = rankedPoints.hardcore;
+        await hardcoreRanking.save();
+        console.log(`[ADMIN] Updated hardcore ranking for user ${user.username}: ${rankedPoints.hardcore} points`);
+      }
+      
+      // Update CDL ranking
+      if (rankedPoints.cdl !== undefined) {
+        let cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: 1 });
+        if (!cdlRanking) {
+          cdlRanking = new Ranking({ user: req.params.userId, mode: 'cdl', season: 1, points: 0 });
+        }
+        cdlRanking.points = rankedPoints.cdl;
+        await cdlRanking.save();
+        console.log(`[ADMIN] Updated CDL ranking for user ${user.username}: ${rankedPoints.cdl} points`);
+      }
+    }
 
     res.json({
       success: true,

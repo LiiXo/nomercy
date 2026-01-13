@@ -457,22 +457,54 @@ const MatchSheet = () => {
       // ========== RAPPORT MODE CLASSÉ ==========
       console.log('[MatchSheet] 📊 Preparing RANKED match report');
       console.log('[MatchSheet] Players:', match.players);
-      console.log('[MatchSheet] User ID:', user?._id);
+      console.log('[MatchSheet] User ID:', user?._id || user?.id);
       
-      // Trouver le joueur actuel
+      // Trouver le joueur actuel - utiliser user._id OU user.id selon le contexte
+      const currentUserId = (user?._id || user?.id)?.toString();
       const currentPlayer = match.players?.find(p => {
         const pUserId = p.user?._id?.toString() || p.user?.toString();
-        const currentUserId = user?._id?.toString();
         return pUserId === currentUserId;
       });
       
       console.log('[MatchSheet] Current player:', currentPlayer);
+      console.log('[MatchSheet] Current user ID used:', currentUserId);
       
       if (currentPlayer && currentPlayer.rewards) {
-        const isWinner = currentPlayer.team === match.result?.winner;
         const pointsChange = currentPlayer.rewards.pointsChange || 0;
         const goldEarned = currentPlayer.rewards.goldEarned || 0;
         const xpEarned = currentPlayer.rewards.xpEarned || 0;
+        
+        // Déterminer si le joueur a gagné
+        // IMPORTANT: Convertir en Number pour éviter les problèmes de comparaison string vs number
+        const playerTeam = Number(currentPlayer.team);
+        const winnerTeam = Number(match.result?.winner);
+        
+        console.log('[MatchSheet] 🎯 Winner determination:', {
+          playerTeam,
+          winnerTeam,
+          playerTeamType: typeof currentPlayer.team,
+          winnerTeamType: typeof match.result?.winner,
+          pointsChange
+        });
+        
+        // Utiliser les points comme source de vérité principale car ils reflètent ce qui a été calculé côté serveur
+        // Si pointsChange > 0 = victoire, si pointsChange < 0 = défaite
+        let isWinner = pointsChange > 0;
+        
+        // Vérification de cohérence avec l'équipe gagnante
+        if (winnerTeam && playerTeam) {
+          const teamBasedWinner = playerTeam === winnerTeam;
+          if (teamBasedWinner !== isWinner) {
+            console.warn('[MatchSheet] ⚠️ Mismatch between pointsChange and team winner!', {
+              pointsBasedWinner: isWinner,
+              teamBasedWinner,
+              playerTeam,
+              winnerTeam
+            });
+          }
+        }
+        
+        console.log('[MatchSheet] 🏆 Final isWinner:', isWinner);
         
         // Utiliser les points explicites si disponibles, sinon calculer
         const newPoints = currentPlayer.rewards.newPoints ?? currentPlayer.points ?? 0;
@@ -834,6 +866,80 @@ const MatchSheet = () => {
     } catch (err) {
       console.error('Error forcing result:', err);
       alert('Erreur lors du forçage du résultat');
+    } finally {
+      setSubmittingResult(false);
+    }
+  };
+  
+  // Resolve dispute (admin/staff only)
+  const handleResolveDispute = async (winner) => {
+    if (!isStaff) return;
+    
+    setSubmittingResult(true);
+    try {
+      const apiUrl = isRankedMatch 
+        ? `${API_URL}/ranked-matches/admin/${matchId}/resolve-dispute`
+        : `${API_URL}/matches/admin/${matchId}/resolve-dispute`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          winner: isRankedMatch ? winner : (winner === 1 ? match.challenger?._id : match.opponent?._id), 
+          resolution: 'Résolu par le staff via feuille de match' 
+        })
+      });
+      
+      const data = await response.json();
+      console.log('[MatchSheet] Resolve dispute response:', data);
+      
+      if (data.success) {
+        setMatch(data.match);
+        alert(language === 'fr' ? 'Litige résolu avec succès !' : 'Dispute resolved successfully!');
+      } else {
+        alert(data.message || 'Erreur lors de la résolution du litige');
+      }
+    } catch (err) {
+      console.error('Error resolving dispute:', err);
+      alert('Erreur lors de la résolution du litige');
+    } finally {
+      setSubmittingResult(false);
+    }
+  };
+  
+  // Cancel match (admin/staff only)
+  const handleCancelMatch = async () => {
+    if (!isStaff) return;
+    
+    const reason = prompt(language === 'fr' ? 'Raison de l\'annulation :' : 'Cancellation reason:');
+    if (!reason) return;
+    
+    setSubmittingResult(true);
+    try {
+      const apiUrl = isRankedMatch 
+        ? `${API_URL}/ranked-matches/admin/${matchId}/cancel`
+        : `${API_URL}/matches/admin/${matchId}/cancel`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reason })
+      });
+      
+      const data = await response.json();
+      console.log('[MatchSheet] Cancel match response:', data);
+      
+      if (data.success) {
+        alert(language === 'fr' ? 'Match annulé avec succès !' : 'Match cancelled successfully!');
+        navigate(-1);
+      } else {
+        alert(data.message || 'Erreur lors de l\'annulation du match');
+      }
+    } catch (err) {
+      console.error('Error cancelling match:', err);
+      alert('Erreur lors de l\'annulation du match');
     } finally {
       setSubmittingResult(false);
     }
@@ -1552,6 +1658,47 @@ const MatchSheet = () => {
                 </button>
               </div>
             )}
+            
+            {/* Staff Controls - For in_progress, ready, accepted matches */}
+            {isStaff && ['accepted', 'in_progress', 'ready'].includes(match.status) && (
+              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                <p className="text-yellow-400 text-sm font-bold mb-3 flex items-center gap-2">
+                  ⚡ {language === 'fr' ? 'Actions Staff' : 'Staff Actions'}
+                </p>
+                
+                <div className="space-y-3">
+                  {/* Forcer un résultat */}
+                  <div>
+                    <p className="text-gray-400 text-xs mb-2">{language === 'fr' ? 'Forcer le résultat :' : 'Force result:'}</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => isRankedMatch ? handleForceResult(1) : handleResolveDispute(1)}
+                        disabled={submittingResult}
+                        className="flex-1 py-2 px-3 bg-blue-500/20 border border-blue-500/40 rounded-lg text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                      >
+                        {isRankedMatch ? `${t.team} 1` : match.challenger?.name}
+                      </button>
+                      <button
+                        onClick={() => isRankedMatch ? handleForceResult(2) : handleResolveDispute(2)}
+                        disabled={submittingResult}
+                        className="flex-1 py-2 px-3 bg-purple-500/20 border border-purple-500/40 rounded-lg text-purple-400 text-sm font-medium hover:bg-purple-500/30 transition-all disabled:opacity-50"
+                      >
+                        {isRankedMatch ? `${t.team} 2` : match.opponent?.name}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Annuler le match */}
+                  <button
+                    onClick={handleCancelMatch}
+                    disabled={submittingResult}
+                    className="w-full py-2 px-3 bg-red-500/20 border border-red-500/40 rounded-lg text-red-400 text-sm font-medium hover:bg-red-500/30 transition-all disabled:opacity-50"
+                  >
+                    {language === 'fr' ? '❌ Annuler le match' : '❌ Cancel Match'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Bouton demande d'annulation - Uniquement pour les matchs ladder */}
             {/* Afficher si pas de demande en cours OU si la dernière demande a été refusée OU si pending sans requestedBy (données corrompues) */}
@@ -1616,6 +1763,47 @@ const MatchSheet = () => {
                       <p className="text-white text-sm">{match.dispute.reason}</p>
                     </div>
                   )}
+                  
+                  {/* Staff Controls for Dispute Resolution */}
+                  {isStaff && (
+                    <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                      <p className="text-yellow-400 text-sm font-bold mb-3 flex items-center gap-2">
+                        ⚡ {language === 'fr' ? 'Résoudre le litige (Staff)' : 'Resolve Dispute (Staff)'}
+                      </p>
+                      
+                      <div className="space-y-3">
+                        {/* Donner la victoire */}
+                        <div>
+                          <p className="text-gray-400 text-xs mb-2">{language === 'fr' ? 'Donner la victoire à :' : 'Award victory to:'}</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleResolveDispute(1)}
+                              disabled={submittingResult}
+                              className="flex-1 py-2 px-3 bg-blue-500/20 border border-blue-500/40 rounded-lg text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50"
+                            >
+                              {isRankedMatch ? `${t.team} 1` : match.challenger?.name}
+                            </button>
+                            <button
+                              onClick={() => handleResolveDispute(2)}
+                              disabled={submittingResult}
+                              className="flex-1 py-2 px-3 bg-purple-500/20 border border-purple-500/40 rounded-lg text-purple-400 text-sm font-medium hover:bg-purple-500/30 transition-all disabled:opacity-50"
+                            >
+                              {isRankedMatch ? `${t.team} 2` : match.opponent?.name}
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Annuler le match */}
+                        <button
+                          onClick={handleCancelMatch}
+                          disabled={submittingResult}
+                          className="w-full py-2 px-3 bg-red-500/20 border border-red-500/40 rounded-lg text-red-400 text-sm font-medium hover:bg-red-500/30 transition-all disabled:opacity-50"
+                        >
+                          {language === 'fr' ? '❌ Annuler le match' : '❌ Cancel Match'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1671,10 +1859,16 @@ const MatchSheet = () => {
                       </div>
                     </div>
                     
-                    {messages.map((msg, index) => {
+                    {messages.filter(msg => {
+                      // Filtrer les messages vides (sauf messages système avec messageType)
+                      if (msg.isSystem && msg.messageType) return true;
+                      if (msg.isSystem && msg.message && msg.message.trim()) return true;
+                      if (!msg.isSystem && msg.message && msg.message.trim()) return true;
+                      return false;
+                    }).map((msg, index) => {
                       // Message système
                       if (msg.isSystem) {
-                        let displayMessage = msg.message;
+                        let displayMessage = msg.message || '';
                         let messageStyle = 'default'; // default, disconnect, reconnect, cancellation
                         
                         // Si c'est un message GGSecure avec messageType, traduire
@@ -2274,6 +2468,7 @@ const MatchSheet = () => {
           newRank={matchReportData.newRank}
           mode={matchReportData.mode}
           matchId={matchId}
+          isReferent={isReferent}
         />
       )}
 
@@ -2287,6 +2482,7 @@ const MatchSheet = () => {
           rewards={ladderReportData.rewards}
           mode={ladderReportData.mode}
           matchId={matchId}
+          canDispute={canManageMatch()}
         />
       )}
     </div>

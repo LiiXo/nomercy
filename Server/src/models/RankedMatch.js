@@ -29,7 +29,10 @@ const rankedPlayerSchema = new mongoose.Schema({
   // Récompenses attribuées à ce joueur
   rewards: {
     pointsChange: { type: Number, default: 0 },
-    goldEarned: { type: Number, default: 0 }
+    goldEarned: { type: Number, default: 0 },
+    xpEarned: { type: Number, default: 0 },
+    oldPoints: { type: Number, default: 0 },
+    newPoints: { type: Number, default: 0 }
   },
   // Date d'entrée dans la file d'attente (pour savoir qui éjecter)
   queueJoinedAt: {
@@ -51,10 +54,10 @@ const rankedMatchSchema = new mongoose.Schema({
     required: true,
     enum: ['hardcore', 'cdl']
   },
-  // Taille des équipes (3v3, 4v4, 5v5)
+  // Taille des équipes (1v1, 2v2, 3v3, 4v4, 5v5)
   teamSize: {
     type: Number,
-    enum: [3, 4, 5],
+    enum: [1, 2, 3, 4, 5],
     required: true
   },
   // Liste des joueurs

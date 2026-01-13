@@ -3979,6 +3979,48 @@ const renderDisputes = () => {
           </div>
         </div>
 
+        {/* Ranked Matchmaking Toggle */}
+        <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Power className="w-5 h-5 text-purple-400" />
+                🎮 Matchmaking Mode Classé
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">
+                Activer ou désactiver la recherche de match en mode classé pour tous les joueurs.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const newConfig = { ...editedConfig };
+                newConfig.rankedMatchmakingEnabled = !newConfig.rankedMatchmakingEnabled;
+                setEditedConfig(newConfig);
+              }}
+              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
+                editedConfig?.rankedMatchmakingEnabled !== false ? 'bg-green-500' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                  editedConfig?.rankedMatchmakingEnabled !== false ? 'translate-x-7' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          <div className={`mt-3 px-3 py-2 rounded-lg ${
+            editedConfig?.rankedMatchmakingEnabled !== false 
+              ? 'bg-green-500/20 border border-green-500/30' 
+              : 'bg-red-500/20 border border-red-500/30'
+          }`}>
+            <span className={`text-sm font-medium ${
+              editedConfig?.rankedMatchmakingEnabled !== false ? 'text-green-400' : 'text-red-400'
+            }`}>
+              {editedConfig?.rankedMatchmakingEnabled !== false ? '✅ Matchmaking activé' : '❌ Matchmaking désactivé'}
+            </span>
+          </div>
+        </div>
+
         {/* Ranked Match Rewards */}
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -5099,6 +5141,52 @@ const renderDisputes = () => {
                 </div>
               </div>
             </div>
+            
+            {/* Ranked Ladder Points */}
+            <div className="border-t border-white/10 pt-4 mt-4">
+              <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
+                <Trophy className="w-4 h-4" />
+                Points Mode Classé (Ranked Ladder)
+              </h4>
+              <p className="text-gray-500 text-xs mb-3">
+                Ces points déterminent le rang du joueur en mode classé (Bronze, Silver, Gold, etc.)
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Points Hardcore</label>
+                  <input
+                    type="number"
+                    value={formData.rankedPoints?.hardcore || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      rankedPoints: { 
+                        ...formData.rankedPoints, 
+                        hardcore: parseInt(e.target.value) || 0 
+                      } 
+                    })}
+                    className="w-full px-3 py-2 bg-dark-900 border border-orange-500/40 rounded-lg text-orange-400 text-sm font-semibold focus:border-orange-500 focus:outline-none"
+                    min={0}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Points CDL</label>
+                  <input
+                    type="number"
+                    value={formData.rankedPoints?.cdl || 0}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      rankedPoints: { 
+                        ...formData.rankedPoints, 
+                        cdl: parseInt(e.target.value) || 0 
+                      } 
+                    })}
+                    className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/40 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                    min={0}
+                  />
+                </div>
+              </div>
+            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Rôles</label>
               <div className="space-y-2">

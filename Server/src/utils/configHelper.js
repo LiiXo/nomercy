@@ -91,12 +91,8 @@ export const getRankedMatchRewards = async (gameMode, mode = 'hardcore') => {
   // Get mode rewards (hardcore or cdl)
   const modeRewards = config.rankedMatchRewards?.[mode];
   
-  // Debug log - show full config structure
-  console.log(`[CONFIG] Full rankedMatchRewards:`, JSON.stringify(config.rankedMatchRewards, null, 2));
-  console.log(`[CONFIG] Looking for mode: "${mode}", gameMode: "${gameMode}"`);
-  console.log(`[CONFIG] Available modes in config:`, Object.keys(config.rankedMatchRewards || {}));
-  console.log(`[CONFIG] Available gameModes for ${mode}:`, modeRewards ? Object.keys(modeRewards) : 'none');
-  console.log(`[CONFIG] Found rewards:`, modeRewards?.[gameMode]);
+  // Debug log - moins verbeux en production
+  console.log(`[CONFIG] Getting ranked rewards for mode="${mode}", gameMode="${gameMode}"`);
   
   // Check if we have valid rewards for this game mode
   if (modeRewards && modeRewards[gameMode]) {
@@ -109,13 +105,14 @@ export const getRankedMatchRewards = async (gameMode, mode = 'hardcore') => {
       xpWinMin: typeof rewards.xpWinMin === 'number' ? rewards.xpWinMin : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.xpWinMin ?? 700),
       xpWinMax: typeof rewards.xpWinMax === 'number' ? rewards.xpWinMax : (DEFAULT_RANKED_REWARDS[mode]?.[gameMode]?.xpWinMax ?? 800)
     };
-    console.log(`[CONFIG] Final rewards for ${mode}/${gameMode}:`, finalRewards);
+    console.log(`[CONFIG] ✅ Rewards from config: pointsWin=${finalRewards.pointsWin}, pointsLoss=${finalRewards.pointsLoss}, coinsWin=${finalRewards.coinsWin}, coinsLoss=${finalRewards.coinsLoss}, xp=${finalRewards.xpWinMin}-${finalRewards.xpWinMax}`);
     return finalRewards;
   }
   
   // Fallback to defaults
-  console.log(`[CONFIG] Using fallback defaults for ${mode}/${gameMode}`);
-  return DEFAULT_RANKED_REWARDS[mode]?.[gameMode] || DEFAULT_RANKED_REWARDS.hardcore['Duel'];
+  const fallback = DEFAULT_RANKED_REWARDS[mode]?.[gameMode] || DEFAULT_RANKED_REWARDS.hardcore['Search & Destroy'];
+  console.log(`[CONFIG] ⚠️ Using fallback defaults for ${mode}/${gameMode}:`, fallback);
+  return fallback;
 };
 
 

@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame } from 'lucide-react';
 
-import { getAvatarUrl, getDefaultAvatar } from '../utils/avatar';
+import { getAvatarUrl, getDefaultAvatar, getUserAvatar } from '../utils/avatar';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
@@ -30,6 +30,10 @@ const PlayerProfile = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [showMatchDetails, setShowMatchDetails] = useState(false);
+  const [rankedMatchHistory, setRankedMatchHistory] = useState([]);
+  const [loadingRankedHistory, setLoadingRankedHistory] = useState(false);
+  const [selectedRankedMatch, setSelectedRankedMatch] = useState(null);
+  const [showRankedMatchDetails, setShowRankedMatchDetails] = useState(false);
   
   // Rank animation state
   const [rankAnimationPhase, setRankAnimationPhase] = useState(0);
@@ -298,6 +302,26 @@ const PlayerProfile = () => {
     fetchMatchHistory();
   }, [playerData?.id]);
 
+  // Fetch ranked match history when player data is loaded
+  useEffect(() => {
+    const fetchRankedMatchHistory = async () => {
+      if (!playerData?.id) return;
+      setLoadingRankedHistory(true);
+      try {
+        const response = await fetch(`${API_URL}/ranked-matches/player-history/${playerData.id}?limit=5`);
+        const data = await response.json();
+        if (data.success) {
+          setRankedMatchHistory(data.matches);
+        }
+      } catch (err) {
+        console.error('Error fetching ranked match history:', err);
+      } finally {
+        setLoadingRankedHistory(false);
+      }
+    };
+    fetchRankedMatchHistory();
+  }, [playerData?.id]);
+
   // Get player stats (global stats)
   const getPlayerStats = () => {
     const userStats = playerData?.stats || { points: 0, wins: 0, losses: 0, xp: 0 };
@@ -345,7 +369,8 @@ const PlayerProfile = () => {
     return { name: 'Bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉', hexColor: '#CD7F32', Icon: Shield, isTop: false };
   };
 
-  const division = playerStats ? getDivision(playerStats.points) : null;
+  // Use ranking.points from the ranked ladder, not playerStats.points (which are global stats)
+  const division = ranking ? getDivision(ranking.points || 0) : (playerStats ? getDivision(0) : null);
 
   if (loading) {
     return (
@@ -718,6 +743,102 @@ const PlayerProfile = () => {
               </div>
             )}
           </div>
+
+          {/* Ranked Match History */}
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-6`}>
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
+              <Trophy className="w-5 h-5 text-purple-400" />
+              <span>{language === 'fr' ? 'Historique Mode Classé' : 'Ranked History'}</span>
+            </h2>
+            
+            {loadingRankedHistory ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+              </div>
+            ) : rankedMatchHistory.length > 0 ? (
+              <div className="space-y-3">
+                {rankedMatchHistory.map((match) => (
+                  <div 
+                    key={match._id}
+                    className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
+                      match.isWinner 
+                        ? 'border-green-500/30' 
+                        : 'border-red-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      {/* Left: Result + Mode + Format */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Result badge */}
+                        <div className={`px-2.5 py-1 rounded text-xs font-bold ${
+                          match.isWinner 
+                            ? 'bg-green-500/20 text-green-400' 
+                            : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {match.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+                        </div>
+                        
+                        {/* Game mode */}
+                        <span className="px-2 py-1 bg-purple-500/20 rounded text-xs font-medium text-purple-400">
+                          {match.gameMode === 'Search & Destroy' ? 'S&D' : 
+                           match.gameMode === 'Team Deathmatch' ? 'TDM' : 
+                           match.gameMode}
+                        </span>
+                        
+                        {/* Format */}
+                        <div className="flex items-center gap-1 px-2 py-1 bg-dark-700 rounded text-xs text-gray-400">
+                          <Users className="w-3 h-3" />
+                          <span>{match.teamSize}v{match.teamSize}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Right: Date + View Details */}
+                      <div className="flex items-center gap-3">
+                        {/* Date */}
+                        <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>
+                            {new Date(match.completedAt || match.createdAt).toLocaleDateString(
+                              language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                              { day: 'numeric', month: 'short', year: 'numeric' }
+                            )}
+                          </span>
+                        </div>
+                        
+                        {/* View Details Button */}
+                        <button
+                          onClick={() => {
+                            setSelectedRankedMatch(match);
+                            setShowRankedMatchDetails(true);
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1.5"
+                        >
+                          <Play className="w-3 h-3" />
+                          <span>{language === 'fr' ? 'Voir détails' : 'View details'}</span>
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Mobile: Date on second row */}
+                    <div className="sm:hidden flex items-center gap-1.5 text-gray-500 text-xs mt-2">
+                      <Clock className="w-3 h-3" />
+                      <span>
+                        {new Date(match.completedAt || match.createdAt).toLocaleDateString(
+                          language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                          { day: 'numeric', month: 'short', year: 'numeric' }
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-500">{language === 'fr' ? 'Aucun match classé joué' : 'No ranked matches played'}</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -922,6 +1043,234 @@ const PlayerProfile = () => {
                   );
                 })()}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ranked Match Details Modal */}
+      {showRankedMatchDetails && selectedRankedMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-dark-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl border border-purple-500/30">
+            {/* Header */}
+            <div className="p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r from-purple-500 to-pink-600">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                  <Trophy className="w-5 sm:w-6 h-5 sm:h-6" />
+                  {language === 'fr' ? 'Détails du match classé' : 'Ranked Match Details'}
+                </h2>
+                <button 
+                  onClick={() => {
+                    setShowRankedMatchDetails(false);
+                    setSelectedRankedMatch(null);
+                  }}
+                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+              
+              {/* Match Info */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 sm:mt-4">
+                <span className={`px-2.5 py-1 rounded-lg text-xs sm:text-sm font-bold ${
+                  selectedRankedMatch.isWinner 
+                    ? 'bg-green-500/30 text-green-300' 
+                    : 'bg-red-500/30 text-red-300'
+                }`}>
+                  {selectedRankedMatch.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+                </span>
+                <span className="px-2.5 py-1 bg-white/20 rounded-lg text-xs sm:text-sm font-medium text-white">
+                  {selectedRankedMatch.gameMode}
+                </span>
+                <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
+                  <Users className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                  <span>{selectedRankedMatch.teamSize}v{selectedRankedMatch.teamSize}</span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
+                  <Clock className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                  <span>
+                    {new Date(selectedRankedMatch.completedAt || selectedRankedMatch.createdAt).toLocaleDateString(
+                      language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                      { day: 'numeric', month: 'short', year: 'numeric' }
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Content - Teams */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                {/* Team 1 */}
+                <div className={`p-4 rounded-xl border-2 ${
+                  selectedRankedMatch.result?.winner === 1
+                    ? 'bg-green-500/10 border-green-500/50' 
+                    : 'bg-red-500/10 border-red-500/50'
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                      {language === 'fr' ? 'Équipe 1' : 'Team 1'}
+                    </h3>
+                    {selectedRankedMatch.result?.winner === 1 ? (
+                      <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5" />
+                        {language === 'fr' ? 'Victoire' : 'Winner'}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                        {language === 'fr' ? 'Défaite' : 'Defeat'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Roster */}
+                  <div className="space-y-2">
+                    {selectedRankedMatch.team1?.map((player, idx) => {
+                      // Build avatar URL: custom upload > discord > default
+                      let playerAvatar = player.avatarUrl ? getAvatarUrl(player.avatarUrl) : null;
+                      if (!playerAvatar && player.discordId && player.discordAvatar) {
+                        playerAvatar = `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
+                      }
+                      if (!playerAvatar) {
+                        playerAvatar = getDefaultAvatar(player.username);
+                      }
+                      
+                      return (
+                        <div key={idx} className="flex items-center gap-3 p-2.5 rounded-lg bg-dark-800/50">
+                          <img 
+                            src={playerAvatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            {player.userId ? (
+                              <Link 
+                                to={`/player/${player.userId}`}
+                                className="text-white hover:text-purple-400 transition-colors font-medium text-sm truncate block"
+                              >
+                                {player.username}
+                              </Link>
+                            ) : (
+                              <span className="text-white font-medium text-sm truncate block">
+                                {player.username}
+                              </span>
+                            )}
+                          </div>
+                          {selectedRankedMatch.playerTeam === 1 && player.userId === playerId && (
+                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">
+                              {language === 'fr' ? 'Ce joueur' : 'This player'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Team 2 */}
+                <div className={`p-4 rounded-xl border-2 ${
+                  selectedRankedMatch.result?.winner === 2
+                    ? 'bg-green-500/10 border-green-500/50' 
+                    : 'bg-red-500/10 border-red-500/50'
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                      {language === 'fr' ? 'Équipe 2' : 'Team 2'}
+                    </h3>
+                    {selectedRankedMatch.result?.winner === 2 ? (
+                      <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5" />
+                        {language === 'fr' ? 'Victoire' : 'Winner'}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                        {language === 'fr' ? 'Défaite' : 'Defeat'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Roster */}
+                  <div className="space-y-2">
+                    {selectedRankedMatch.team2?.map((player, idx) => {
+                      // Build avatar URL: custom upload > discord > default
+                      let playerAvatar = player.avatarUrl ? getAvatarUrl(player.avatarUrl) : null;
+                      if (!playerAvatar && player.discordId && player.discordAvatar) {
+                        playerAvatar = `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
+                      }
+                      if (!playerAvatar) {
+                        playerAvatar = getDefaultAvatar(player.username);
+                      }
+                      
+                      return (
+                        <div key={idx} className="flex items-center gap-3 p-2.5 rounded-lg bg-dark-800/50">
+                          <img 
+                            src={playerAvatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            {player.userId ? (
+                              <Link 
+                                to={`/player/${player.userId}`}
+                                className="text-white hover:text-purple-400 transition-colors font-medium text-sm truncate block"
+                              >
+                                {player.username}
+                              </Link>
+                            ) : (
+                              <span className="text-white font-medium text-sm truncate block">
+                                {player.username}
+                              </span>
+                            )}
+                          </div>
+                          {selectedRankedMatch.playerTeam === 2 && player.userId === playerId && (
+                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">
+                              {language === 'fr' ? 'Ce joueur' : 'This player'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Rewards Summary */}
+              {selectedRankedMatch.rewards && (
+                <div className="mt-6 p-4 rounded-xl bg-dark-800/50 border border-white/10">
+                  <h4 className="text-sm font-bold text-gray-400 mb-3">
+                    {language === 'fr' ? 'Récompenses' : 'Rewards'}
+                  </h4>
+                  <div className="flex flex-wrap gap-4">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className={`w-4 h-4 ${selectedRankedMatch.rewards.pointsChange >= 0 ? 'text-green-400' : 'text-red-400'}`} />
+                      <span className={`text-sm font-semibold ${selectedRankedMatch.rewards.pointsChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {selectedRankedMatch.rewards.pointsChange >= 0 ? '+' : ''}{selectedRankedMatch.rewards.pointsChange} pts
+                      </span>
+                    </div>
+                    {selectedRankedMatch.rewards.goldEarned > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Coins className="w-4 h-4 text-yellow-400" />
+                        <span className="text-sm font-semibold text-yellow-400">
+                          +{selectedRankedMatch.rewards.goldEarned} gold
+                        </span>
+                      </div>
+                    )}
+                    {selectedRankedMatch.rewards.xpEarned > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-semibold text-cyan-400">
+                          +{selectedRankedMatch.rewards.xpEarned} XP
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
         </div>
