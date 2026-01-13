@@ -70,6 +70,10 @@ const RankedMode = () => {
   // Adding fake players (staff/admin)
   const [addingFakePlayers, setAddingFakePlayers] = useState(false);
   
+  // Staff test match
+  const [startingTestMatch, setStartingTestMatch] = useState(false);
+  const [testMatchTeamSize, setTestMatchTeamSize] = useState(4);
+  
   // Rules modal
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rules, setRules] = useState(null);
@@ -367,6 +371,41 @@ const RankedMode = () => {
     }
   };
   
+  // Start test match (staff only - separate matchmaking with bots)
+  const startTestMatch = async () => {
+    setMatchmakingError(null);
+    setStartingTestMatch(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/matchmaking/start-test-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          gameMode: selectedGameMode, 
+          mode: selectedMode, 
+          teamSize: testMatchTeamSize 
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Le socket va nous rediriger vers le match
+        if (data.matchId) {
+          navigate(`/ranked/match/${data.matchId}`);
+        }
+      } else {
+        setMatchmakingError(data.message);
+        if (data.activeMatchId) {
+          setActiveMatch({ _id: data.activeMatchId });
+        }
+      }
+    } catch (err) {
+      console.error('Error starting test match:', err);
+      setMatchmakingError(language === 'fr' ? 'Erreur lors du lancement du test' : 'Error starting test match');
+    } finally {
+      setStartingTestMatch(false);
+    }
+  };
+  
   // Check if user is staff or admin
   const isStaffOrAdmin = user?.roles?.includes('staff') || user?.roles?.includes('admin');
 
@@ -519,6 +558,8 @@ const RankedMode = () => {
       playersOnPage: 'joueurs sur cette page',
       activeMatches: 'match(s) en cours',
       addFakePlayers: 'Ajouter des joueurs test',
+      startTestMatch: 'Lancer un match de test',
+      testMatchInfo: 'Match solo avec bots (file séparée)',
       searchingPlayers: 'Recherche de joueurs',
       loginToPlay: 'Connecte-toi pour jouer',
       loginRequired: 'Tu dois être connecté pour accéder au mode classé.',
@@ -563,6 +604,8 @@ const RankedMode = () => {
       playersOnPage: 'players on this page',
       activeMatches: 'active match(es)',
       addFakePlayers: 'Add test players',
+      startTestMatch: 'Start test match',
+      testMatchInfo: 'Solo match with bots (separate queue)',
       searchingPlayers: 'Searching for players',
       loginToPlay: 'Login to Play',
       loginRequired: 'You must be logged in to access ranked mode.',
@@ -607,6 +650,8 @@ const RankedMode = () => {
       playersOnPage: 'Spieler auf dieser Seite',
       activeMatches: 'aktive(s) Match(es)',
       addFakePlayers: 'Testspieler hinzufügen',
+      startTestMatch: 'Testmatch starten',
+      testMatchInfo: 'Solo-Match mit Bots (separate Warteschlange)',
       searchingPlayers: 'Suche nach Spielern',
       loginToPlay: 'Zum Spielen einloggen',
       loginRequired: 'Du musst eingeloggt sein, um den Ranglisten-Modus zu nutzen.',
@@ -651,6 +696,8 @@ const RankedMode = () => {
       playersOnPage: 'giocatori su questa pagina',
       activeMatches: 'partita/e in corso',
       addFakePlayers: 'Aggiungi giocatori test',
+      startTestMatch: 'Avvia partita di test',
+      testMatchInfo: 'Partita singola con bot (coda separata)',
       searchingPlayers: 'Ricerca giocatori',
       loginToPlay: 'Accedi per giocare',
       loginRequired: 'Devi effettuare l\'accesso per la modalità classificata.',
@@ -1229,6 +1276,63 @@ const RankedMode = () => {
                               : (language === 'fr' ? 'Le matchmaking est temporairement désactivé.' : 'Matchmaking is temporarily disabled.')
                             }
                           </span>
+                        </div>
+                      )}
+
+                      {/* Staff Test Match Section */}
+                      {isStaffOrAdmin && (
+                        <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-indigo-500/10 border border-purple-500/30">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Bot className="w-5 h-5 text-purple-400" />
+                            <span className="text-purple-300 font-semibold">
+                              {language === 'fr' ? '⚡ Mode Test Staff' : '⚡ Staff Test Mode'}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-400 mb-3">
+                            {t.testMatchInfo}
+                          </p>
+                          
+                          {/* Team size selector */}
+                          <div className="flex items-center gap-3 mb-3">
+                            <span className="text-sm text-gray-400">Format:</span>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setTestMatchTeamSize(4)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                  testMatchTeamSize === 4 
+                                    ? 'bg-purple-500 text-white' 
+                                    : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
+                                }`}
+                              >
+                                4v4
+                              </button>
+                              <button
+                                onClick={() => setTestMatchTeamSize(5)}
+                                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                  testMatchTeamSize === 5 
+                                    ? 'bg-purple-500 text-white' 
+                                    : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
+                                }`}
+                              >
+                                5v5
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <button
+                            onClick={startTestMatch}
+                            disabled={startingTestMatch || !!activeMatch}
+                            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          >
+                            {startingTestMatch ? (
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                              <>
+                                <Zap className="w-5 h-5" />
+                                {t.startTestMatch}
+                              </>
+                            )}
+                          </button>
                         </div>
                       )}
 

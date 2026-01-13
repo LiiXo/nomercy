@@ -741,6 +741,214 @@ export const removeFakePlayers = async (gameMode, mode) => {
   }
 };
 
+/**
+ * Crée un match de test pour un membre du staff (matchmaking séparé avec bots)
+ * Le staff joue seul et les autres slots sont remplis par des bots
+ * @param {string} userId - ID du staff
+ * @param {string} gameMode - Mode de jeu (Search & Destroy, etc.)
+ * @param {string} mode - Mode (hardcore/cdl)
+ * @param {number} teamSize - Taille de l'équipe (4 ou 5)
+ */
+export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) => {
+  try {
+    // Récupérer l'utilisateur staff
+    const user = await User.findById(userId).select('username platform roles');
+    if (!user) {
+      return { success: false, message: 'Utilisateur non trouvé.' };
+    }
+    
+    // Vérifier que c'est bien un staff ou admin
+    const isStaffOrAdmin = user.roles?.includes('staff') || user.roles?.includes('admin');
+    if (!isStaffOrAdmin) {
+      return { success: false, message: 'Accès réservé au staff.' };
+    }
+    
+    // Vérifier si le joueur n'est pas déjà dans un match actif
+    const activeMatch = await RankedMatch.findOne({
+      'players.user': userId,
+      status: { $in: ['pending', 'ready', 'in_progress'] }
+    });
+    
+    if (activeMatch) {
+      return { 
+        success: false, 
+        message: 'Vous avez déjà un match en cours.',
+        activeMatchId: activeMatch._id
+      };
+    }
+    
+    // Récupérer ou créer le ranking pour le staff
+    let ranking = await Ranking.findOne({ user: userId, mode });
+    if (!ranking) {
+      ranking = await Ranking.create({
+        user: userId,
+        mode,
+        points: 0,
+        wins: 0,
+        losses: 0,
+        rank: 1
+      });
+    }
+    
+    console.log(`[Ranked Matchmaking] Starting staff test match for ${user.username} (${teamSize}v${teamSize})`);
+    
+    // Créer les faux joueurs pour remplir le match
+    const fakeNames = [
+      'Bot_Alpha', 'Bot_Bravo', 'Bot_Charlie', 'Bot_Delta', 
+      'Bot_Echo', 'Bot_Foxtrot', 'Bot_Golf', 'Bot_Hotel', 
+      'Bot_India'
+    ];
+    const fakeRanks = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
+    
+    const totalPlayers = teamSize * 2;
+    const fakePlayers = [];
+    
+    // Créer totalPlayers - 1 bots (le staff prend une place)
+    for (let i = 0; i < totalPlayers - 1; i++) {
+      const fakeId = `fake-test-${Date.now()}-${i}-${Math.random().toString(36).substring(7)}`;
+      const randomPoints = Math.floor(Math.random() * 2000);
+      
+      fakePlayers.push({
+        userId: fakeId,
+        username: fakeNames[i % fakeNames.length] + '_' + Math.floor(Math.random() * 1000),
+        rank: fakeRanks[Math.floor(Math.random() * fakeRanks.length)],
+        points: randomPoints,
+        platform: 'PC',
+        joinedAt: new Date(),
+        isFake: true
+      });
+    }
+    
+    // Le staff player
+    const staffPlayer = {
+      userId: userId,
+      username: user.username,
+      rank: getRankFromPoints(ranking.points),
+      points: ranking.points,
+      platform: user.platform || 'PC',
+      joinedAt: new Date(),
+      isFake: false
+    };
+    
+    // Mélanger tous les joueurs
+    const allPlayers = [staffPlayer, ...fakePlayers].sort(() => Math.random() - 0.5);
+    
+    // Diviser en 2 équipes
+    const team1Players = allPlayers.slice(0, teamSize);
+    const team2Players = allPlayers.slice(teamSize);
+    
+    // Trouver le référent (de préférence le staff, sinon le premier de chaque équipe)
+    const team1HasStaff = team1Players.some(p => !p.isFake);
+    const team2HasStaff = team2Players.some(p => !p.isFake);
+    
+    const team1Referent = team1Players.find(p => !p.isFake) || team1Players[0];
+    const team2Referent = team2Players.find(p => !p.isFake) || team2Players[0];
+    
+    // Tirer au sort l'équipe hôte (mettre le staff hôte pour faciliter les tests)
+    const staffTeam = team1HasStaff ? 1 : 2;
+    const hostTeam = staffTeam; // Le staff est toujours hôte pour les tests
+    
+    // Sélectionner 3 maps aléatoires pour le BO3
+    const ladderType = teamSize === 5 ? 'squad-team' : 'duo-trio';
+    const maps = await GameMap.find({ 
+      isActive: true,
+      ladders: ladderType
+    });
+    
+    const availableMaps = maps.length >= 3 ? maps : await GameMap.find({ isActive: true });
+    const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, 3).map((map, index) => ({
+      name: map.name,
+      image: map.image || null,
+      order: index + 1,
+      winner: null
+    }));
+    
+    // Créer les données des joueurs pour le match
+    const matchPlayers = [
+      ...team1Players.map(p => ({
+        user: p.isFake ? null : p.userId,
+        username: p.username,
+        rank: p.rank,
+        points: p.points,
+        team: 1,
+        isReferent: p.userId.toString() === team1Referent.userId.toString(),
+        isFake: p.isFake,
+        queueJoinedAt: p.joinedAt
+      })),
+      ...team2Players.map(p => ({
+        user: p.isFake ? null : p.userId,
+        username: p.username,
+        rank: p.rank,
+        points: p.points,
+        team: 2,
+        isReferent: p.userId.toString() === team2Referent.userId.toString(),
+        isFake: p.isFake,
+        queueJoinedAt: p.joinedAt
+      }))
+    ];
+    
+    // Pour les référents, seulement définir si c'est un vrai joueur
+    const team1ReferentId = !team1Referent.isFake ? team1Referent.userId : null;
+    const team2ReferentId = !team2Referent.isFake ? team2Referent.userId : null;
+    
+    // Créer le match avec le flag isTestMatch
+    const match = await RankedMatch.create({
+      gameMode,
+      mode,
+      teamSize,
+      players: matchPlayers,
+      team1Referent: team1ReferentId,
+      team2Referent: team2ReferentId,
+      hostTeam,
+      status: 'ready',
+      maps: selectedMaps,
+      matchmakingStartedAt: new Date(),
+      isTestMatch: true // Flag pour identifier un match de test
+    });
+    
+    // Populate pour envoyer au client
+    await match.populate('players.user', 'username avatar discordId discordAvatar platform');
+    if (team1ReferentId) await match.populate('team1Referent', 'username');
+    if (team2ReferentId) await match.populate('team2Referent', 'username');
+    
+    console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${teamSize}v${teamSize})`);
+    
+    // Ajouter un message système
+    match.chat.push({
+      isSystem: true,
+      messageType: 'test_match_created',
+      message: `⚡ Match de test ${teamSize}v${teamSize} créé ! Ce match n'affecte pas les statistiques.`
+    });
+    await match.save();
+    
+    // Notifier le staff du match trouvé
+    if (io) {
+      io.to(`user-${userId}`).emit('rankedMatchFound', {
+        matchId: match._id,
+        gameMode,
+        mode,
+        format: `${teamSize}v${teamSize}`,
+        teamSize,
+        yourTeam: staffTeam,
+        isReferent: true,
+        isHost: true,
+        isTestMatch: true
+      });
+    }
+    
+    return {
+      success: true,
+      message: `Match de test ${teamSize}v${teamSize} créé avec succès !`,
+      matchId: match._id,
+      match
+    };
+    
+  } catch (error) {
+    console.error('[Ranked Matchmaking] Error starting staff test match:', error);
+    return { success: false, message: 'Erreur lors de la création du match de test.' };
+  }
+};
+
 export default {
   initMatchmaking,
   joinQueue,
@@ -749,6 +957,7 @@ export default {
   getAllQueues,
   forceCreateMatch,
   addFakePlayers,
-  removeFakePlayers
+  removeFakePlayers,
+  startStaffTestMatch
 };
 

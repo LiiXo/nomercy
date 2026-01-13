@@ -4,7 +4,7 @@ import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
-import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers } from '../services/rankedMatchmaking.service.js';
+import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
 
 const router = express.Router();
 
@@ -21,6 +21,12 @@ const router = express.Router();
  */
 async function distributeRankedRewards(match) {
   try {
+    // Ne pas distribuer de récompenses pour les matchs de test
+    if (match.isTestMatch) {
+      console.log(`[RANKED REWARDS] ⚡ Match de test ${match._id} - Aucune récompense distribuée`);
+      return;
+    }
+    
     // Récupérer la configuration des récompenses
     const rewards = await getRankedMatchRewards(match.gameMode, match.mode);
     const { pointsWin, pointsLoss, coinsWin, coinsLoss, xpWinMin, xpWinMax } = rewards;
@@ -34,98 +40,125 @@ async function distributeRankedRewards(match) {
     console.log(`[RANKED REWARDS] Mode: ${match.mode} | GameMode: ${match.gameMode}`);
     console.log(`[RANKED REWARDS] Config - Gagnants: ${pointsWin}pts ladder, ${coinsWin} gold, ${xpWinMin}-${xpWinMax} XP`);
     console.log(`[RANKED REWARDS] Config - Perdants: ${pointsLoss}pts ladder, ${coinsLoss} gold (consolation), 0 XP`);
+    console.log(`[RANKED REWARDS] Total players in match: ${match.players.length}`);
     console.log(`[RANKED REWARDS] ====================================`);
     
-    // Traiter chaque joueur
-    for (const player of match.players) {
-      // Ignorer les faux joueurs (bots)
-      if (player.isFake || !player.user) continue;
+    let processedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+    
+    // Traiter chaque joueur INDIVIDUELLEMENT avec gestion d'erreur
+    for (let i = 0; i < match.players.length; i++) {
+      const player = match.players[i];
       
-      // S'assurer que la comparaison est faite avec des nombres
-      const playerTeam = Number(player.team);
-      const isWinner = playerTeam === winningTeam;
-      const userId = player.user;
-      
-      console.log(`[RANKED REWARDS]   └─ Player team: ${playerTeam}, winningTeam: ${winningTeam}, isWinner: ${isWinner}`);
-      
-      // Charger l'utilisateur
-      const user = await User.findById(userId);
-      if (!user) continue;
-      
-      // ========== CALCULER LES RÉCOMPENSES ==========
-      
-      // Points pour le ladder classé (Ranking - avec rangs Bronze/Silver/Gold etc.)
-      const rankedPointsChange = isWinner ? pointsWin : pointsLoss;
-      
-      // Gold (monnaie du jeu)
-      const goldChange = isWinner ? coinsWin : coinsLoss;
-      
-      // XP pour le classement Top Player (expérience générale)
-      const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
-      
-      // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
-      let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
-      if (!ranking) {
-        ranking = new Ranking({ 
-          user: userId, 
-          mode: match.mode, 
-          season: 1, 
-          points: 0, 
-          wins: 0, 
-          losses: 0 
-        });
-      }
-      
-      // Appliquer les changements de points ladder classé (minimum 0)
-      const oldRankedPoints = ranking.points;
-      ranking.points = Math.max(0, ranking.points + rankedPointsChange);
-      const newRankedPoints = ranking.points;
-      
-      // Mettre à jour les stats win/loss du ladder classé
-      if (isWinner) {
-        ranking.wins += 1;
-        ranking.currentStreak = (ranking.currentStreak || 0) + 1;
-        if (ranking.currentStreak > (ranking.bestStreak || 0)) {
-          ranking.bestStreak = ranking.currentStreak;
+      try {
+        // Ignorer les faux joueurs (bots)
+        if (player.isFake) {
+          console.log(`[RANKED REWARDS] Player ${i}: Skipped (fake player)`);
+          skippedCount++;
+          continue;
         }
-      } else {
-        ranking.losses += 1;
-        ranking.currentStreak = 0;
-      }
-      
-      await ranking.save();
-      
-      // ========== METTRE À JOUR LES STATS GÉNÉRALES DU JOUEUR (User) ==========
-      if (!user.stats) user.stats = {};
-      
-      // Gold (monnaie) - stocké dans user.goldCoins, pas stats.gold
-      const oldGold = user.goldCoins || 0;
-      user.goldCoins = oldGold + goldChange;
-      
-      // XP pour Top Player (classement général des joueurs basé sur l'XP)
-      const oldXP = user.stats.xp || 0;
-      user.stats.xp = oldXP + xpChange;
-      
-      // Mettre à jour les stats globales win/loss
-      if (isWinner) {
-        user.stats.wins = (user.stats.wins || 0) + 1;
-      } else {
-        user.stats.losses = (user.stats.losses || 0) + 1;
-      }
-      
-      await user.save();
-      
-      // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
-      const playerIndex = match.players.findIndex(p => {
-        const pUserId = p.user?._id?.toString() || p.user?.toString();
-        return pUserId === userId.toString();
-      });
-      
-      console.log(`[RANKED REWARDS]   └─ Player index in match: ${playerIndex}`);
-      
-      if (playerIndex !== -1) {
-        // Mettre à jour le sous-document rewards
-        match.players[playerIndex].rewards = {
+        
+        // Récupérer l'ID utilisateur (gérer les cas populé vs ObjectId)
+        const userId = player.user?._id || player.user;
+        
+        if (!userId) {
+          console.log(`[RANKED REWARDS] Player ${i}: Skipped (no user ID)`);
+          skippedCount++;
+          continue;
+        }
+        
+        // S'assurer que la comparaison est faite avec des nombres
+        // Vérifier que player.team est défini et valide
+        const playerTeam = Number(player.team);
+        
+        if (isNaN(playerTeam) || (playerTeam !== 1 && playerTeam !== 2)) {
+          console.error(`[RANKED REWARDS] ⚠️ Player ${i}: Invalid team value: ${player.team} (type: ${typeof player.team})`);
+          errorCount++;
+          continue;
+        }
+        
+        const isWinner = playerTeam === winningTeam;
+        
+        console.log(`[RANKED REWARDS] Player ${i}: team=${playerTeam}, winningTeam=${winningTeam}, isWinner=${isWinner}, userId=${userId}`);
+        
+        // Charger l'utilisateur
+        const user = await User.findById(userId);
+        if (!user) {
+          console.error(`[RANKED REWARDS] ⚠️ Player ${i}: User not found in database (ID: ${userId})`);
+          errorCount++;
+          continue;
+        }
+        
+        // ========== CALCULER LES RÉCOMPENSES ==========
+        
+        // Points pour le ladder classé (Ranking - avec rangs Bronze/Silver/Gold etc.)
+        const rankedPointsChange = isWinner ? pointsWin : pointsLoss;
+        
+        // Gold (monnaie du jeu)
+        const goldChange = isWinner ? coinsWin : coinsLoss;
+        
+        // XP pour le classement Top Player (expérience générale)
+        const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
+        
+        // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
+        let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        if (!ranking) {
+          console.log(`[RANKED REWARDS] Player ${i}: Creating new ranking entry for ${user.username}`);
+          ranking = new Ranking({ 
+            user: userId, 
+            mode: match.mode, 
+            season: 1, 
+            points: 0, 
+            wins: 0, 
+            losses: 0 
+          });
+        }
+        
+        // Appliquer les changements de points ladder classé (minimum 0)
+        const oldRankedPoints = ranking.points || 0;
+        ranking.points = Math.max(0, (ranking.points || 0) + rankedPointsChange);
+        const newRankedPoints = ranking.points;
+        
+        // Mettre à jour les stats win/loss du ladder classé
+        if (isWinner) {
+          ranking.wins = (ranking.wins || 0) + 1;
+          ranking.currentStreak = (ranking.currentStreak || 0) + 1;
+          if (ranking.currentStreak > (ranking.bestStreak || 0)) {
+            ranking.bestStreak = ranking.currentStreak;
+          }
+        } else {
+          ranking.losses = (ranking.losses || 0) + 1;
+          ranking.currentStreak = 0;
+        }
+        
+        await ranking.save();
+        console.log(`[RANKED REWARDS] Player ${i}: Ranking saved - ${ranking.wins}W/${ranking.losses}L, ${ranking.points} pts`);
+        
+        // ========== METTRE À JOUR LES STATS GÉNÉRALES DU JOUEUR (User) ==========
+        if (!user.stats) user.stats = {};
+        
+        // Gold (monnaie) - stocké dans user.goldCoins, pas stats.gold
+        const oldGold = user.goldCoins || 0;
+        user.goldCoins = oldGold + goldChange;
+        
+        // XP pour Top Player (classement général des joueurs basé sur l'XP)
+        const oldXP = user.stats.xp || 0;
+        user.stats.xp = oldXP + xpChange;
+        
+        // Mettre à jour les stats globales win/loss
+        if (isWinner) {
+          user.stats.wins = (user.stats.wins || 0) + 1;
+        } else {
+          user.stats.losses = (user.stats.losses || 0) + 1;
+        }
+        
+        await user.save();
+        console.log(`[RANKED REWARDS] Player ${i}: User saved - ${user.stats.wins}W/${user.stats.losses}L, ${user.goldCoins} gold, ${user.stats.xp} XP`);
+        
+        // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
+        // Mettre à jour directement via l'index (plus fiable)
+        match.players[i].rewards = {
           pointsChange: rankedPointsChange, // Points pour le ladder classé
           goldEarned: goldChange,
           xpEarned: xpChange,
@@ -133,27 +166,37 @@ async function distributeRankedRewards(match) {
           newPoints: newRankedPoints
         };
         // Stocker aussi les points actuels du joueur pour calculer l'ancien/nouveau rang
-        match.players[playerIndex].points = newRankedPoints;
+        match.players[i].points = newRankedPoints;
         
-        console.log(`[RANKED REWARDS]   └─ Rewards saved to match.players[${playerIndex}]:`, match.players[playerIndex].rewards);
-      } else {
-        console.warn(`[RANKED REWARDS]   └─ ⚠️ Could not find player ${user.username} in match.players!`);
+        // ========== LOG DÉTAILLÉ ==========
+        console.log(`[RANKED REWARDS] ✅ Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
+        console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})`);
+        console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})`);
+        console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user.stats.xp} (+${xpChange})`);
+        console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
+        
+        processedCount++;
+        
+      } catch (playerError) {
+        console.error(`[RANKED REWARDS] ❌ Error processing player ${i}:`, playerError);
+        errorCount++;
+        // Continue avec le joueur suivant au lieu d'arrêter tout le processus
       }
-      
-      // ========== LOG DÉTAILLÉ ==========
-      console.log(`[RANKED REWARDS] Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
-      console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})`);
-      console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})`);
-      console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user.stats.xp} (+${xpChange})`);
-      console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
     }
     
+    // Marquer le document comme modifié pour s'assurer que les subdocuments sont sauvegardés
+    match.markModified('players');
     await match.save();
-    console.log(`[RANKED REWARDS] ✅ Récompenses distribuées avec succès pour le match ${match._id}`);
+    
+    console.log(`[RANKED REWARDS] ====================================`);
+    console.log(`[RANKED REWARDS] ✅ Récompenses distribuées pour le match ${match._id}`);
+    console.log(`[RANKED REWARDS]   └─ Traités: ${processedCount} joueurs`);
+    console.log(`[RANKED REWARDS]   └─ Ignorés: ${skippedCount} (bots/sans ID)`);
+    console.log(`[RANKED REWARDS]   └─ Erreurs: ${errorCount}`);
     console.log(`[RANKED REWARDS] ====================================\n`);
     
   } catch (error) {
-    console.error('[RANKED REWARDS] ❌ Erreur lors de la distribution des récompenses:', error);
+    console.error('[RANKED REWARDS] ❌ Erreur globale lors de la distribution des récompenses:', error);
   }
 }
 
@@ -712,6 +755,28 @@ router.post('/matchmaking/remove-fake-players', verifyToken, requireStaff, async
   }
 });
 
+// Lancer un match de test pour le staff (matchmaking séparé avec bots)
+router.post('/matchmaking/start-test-match', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore', teamSize = 4 } = req.body;
+    const userId = req.user._id;
+    
+    // Valider la taille de l'équipe
+    const validTeamSize = [4, 5].includes(teamSize) ? teamSize : 4;
+    
+    const result = await startStaffTestMatch(userId, gameMode, mode, validTeamSize);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error starting staff test match:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Lister tous les matchs classés (admin/staff)
 router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   try {
@@ -1049,16 +1114,28 @@ router.get('/player-history/:playerId', async (req, res) => {
 
     // Transformer les données pour le frontend
     const formattedMatches = matches.map(match => {
-      // Trouver le joueur dans ce match
-      const playerInfo = match.players.find(p => 
-        p.user?._id?.toString() === playerId || p.user?.toString() === playerId
-      );
+      // Trouver le joueur dans ce match (gérer les cas populé vs ObjectId)
+      const playerInfo = match.players.find(p => {
+        const pUserId = p.user?._id?.toString() || p.user?.toString();
+        return pUserId === playerId;
+      });
       
       const team1Players = match.players.filter(p => Number(p.team) === 1);
       const team2Players = match.players.filter(p => Number(p.team) === 2);
       
       // S'assurer que la comparaison est faite avec des nombres
-      const isWinner = playerInfo && Number(playerInfo.team) === Number(match.result?.winner);
+      // Vérifier que les deux valeurs sont des nombres valides avant de comparer
+      const playerTeam = playerInfo ? Number(playerInfo.team) : null;
+      const winnerTeam = match.result?.winner != null ? Number(match.result.winner) : null;
+      
+      // isWinner: true seulement si les deux valeurs sont valides et égales
+      const isWinner = playerTeam !== null && 
+                       winnerTeam !== null && 
+                       !isNaN(playerTeam) && 
+                       !isNaN(winnerTeam) && 
+                       playerTeam === winnerTeam;
+      
+      console.log(`[PLAYER HISTORY] Match ${match._id}: playerTeam=${playerTeam}, winnerTeam=${winnerTeam}, isWinner=${isWinner}`);
       
       return {
         _id: match._id,

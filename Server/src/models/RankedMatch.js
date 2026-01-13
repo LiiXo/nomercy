@@ -183,6 +183,11 @@ const rankedMatchSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  // Match de test (staff uniquement, ne compte pas dans les stats)
+  isTestMatch: {
+    type: Boolean,
+    default: false
+  },
   // Timestamps
   matchmakingStartedAt: Date, // Quand le timer de 2 min a commencé
   startedAt: Date, // Quand le match a réellement commencé
