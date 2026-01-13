@@ -619,7 +619,7 @@ const PlayerProfile = () => {
           )}
 
           {/* Match History */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6`}>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>
             <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
               <Swords className={`w-5 h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
               <span>{t.matchHistory}</span>
