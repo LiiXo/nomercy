@@ -4,6 +4,10 @@ import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import GameModeRulesEditor from '../components/GameModeRulesEditor';
 import { getAvatarUrl } from '../utils/avatar';
+import AdminOverview from '../components/admin/AdminOverview';
+import AdminUsers from '../components/admin/AdminUsers';
+import AdminSquads from '../components/admin/AdminSquads';
+import AdminApplication from '../components/admin/AdminApplication';
 import { 
   ArrowLeft, Shield, Package, Users, BarChart3, Plus, Edit2, Trash2, 
   Save, X, Loader2, Search, ChevronDown, Eye, EyeOff, Coins, TrendingUp,
@@ -12,7 +16,7 @@ import {
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
-  ShieldAlert, Link, ExternalLink, MessageSquare
+  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -45,7 +49,6 @@ const AdminPanel = () => {
   const [announcements, setAnnouncements] = useState([]);
   const [seasons, setSeasons] = useState([]);
   const [rankings, setRankings] = useState([]);
-  const [hubPosts, setHubPosts] = useState([]);
   const [maps, setMaps] = useState([]);
   const [config, setConfig] = useState(null);
   const [stats, setStats] = useState(null);
@@ -61,6 +64,9 @@ const AdminPanel = () => {
   // Matches tab sub-tab state
   const [matchesSubTab, setMatchesSubTab] = useState('ladder'); // 'ladder' or 'ranked'
   const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
+  
+  // Mobile menu state
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   
   // Modales
   const [showModal, setShowModal] = useState(false);
@@ -125,7 +131,6 @@ const AdminPanel = () => {
         { id: 'shop', label: 'Boutique', icon: ShoppingBag, adminOnly: true },
         { id: 'trophies', label: 'Trophées', icon: Trophy, adminOnly: true },
         { id: 'announcements', label: 'Annonces', icon: Megaphone, adminOnly: false },
-        { id: 'hub', label: 'Hub', icon: Users, adminOnly: false },
         { id: 'maps', label: 'Cartes', icon: MapPin, adminOnly: false },
         { id: 'gamerules', label: 'Règles', icon: FileText, adminOnly: false },
       ]
@@ -345,9 +350,6 @@ const AdminPanel = () => {
           break;
         case 'announcements':
           await fetchAnnouncements();
-          break;
-        case 'hub':
-          await fetchHubPosts();
           break;
         case 'maps':
           await fetchMaps();
@@ -612,20 +614,6 @@ const AdminPanel = () => {
     }
   };
 
-  const fetchHubPosts = async () => {
-    try {
-      const response = await fetch(`${API_URL}/hub/admin/all`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setHubPosts(data.posts || []);
-      }
-    } catch (err) {
-      console.error('Error fetching hub posts:', err);
-    }
-  };
-
   const fetchMaps = async () => {
     try {
       const response = await fetch(`${API_URL}/maps/admin/all`, {
@@ -826,9 +814,6 @@ const AdminPanel = () => {
           break;
         case 'rankedMatch':
           endpoint = `/ranked-matches/admin/${id}`;
-          break;
-        case 'hubPost':
-          endpoint = `/hub/admin/posts/${id}`;
           break;
         case 'map':
           endpoint = `/maps/admin/${id}`;
@@ -1236,10 +1221,10 @@ const AdminPanel = () => {
     const maxVisitors = visitorsData.length > 0 ? Math.max(...visitorsData.map(d => d.value), 1) : 1;
 
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-white">Vue d'ensemble</h2>
+      <div className="space-y-4 sm:space-y-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-white">Vue d'ensemble</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {statCards.map((stat, index) => {
             const Icon = stat.icon;
             return (
@@ -2230,7 +2215,6 @@ const AdminPanel = () => {
       ladderPosting: { label: 'Création de matchs Ladder', desc: 'Poster des matchs ladder' },
       squadCreation: { label: 'Création d\'escouades', desc: 'Créer de nouvelles escouades' },
       squadInvites: { label: 'Invitations escouade', desc: 'Envoyer des invitations' },
-      hubPosting: { label: 'Publication Hub', desc: 'Poster sur le hub' },
       shopPurchases: { label: 'Achats boutique', desc: 'Effectuer des achats' },
       profileEditing: { label: 'Modification de profil', desc: 'Modifier son profil' },
       hardcoreMode: { label: 'Mode Hardcore', desc: 'Accès au mode Hardcore' },
@@ -2239,14 +2223,14 @@ const AdminPanel = () => {
     };
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Power className="w-7 h-7 text-purple-400" />
+            <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+              <Power className="w-5 sm:w-7 h-5 sm:h-7 text-purple-400" />
               Gestion de l'Application
             </h2>
-            <p className="text-gray-400 mt-1">
+            <p className="text-gray-400 mt-1 text-sm sm:text-base">
               Activez ou désactivez les fonctionnalités de l'application
             </p>
           </div>
@@ -3051,94 +3035,6 @@ const AdminPanel = () => {
             ))
               )}
             </div>
-      </div>
-    );
-  };
-
-  const renderHub = () => {
-    return (
-      <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-white">Posts du Hub</h2>
-                </div>
-
-        {/* Hub Posts Table */}
-        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-dark-900/50">
-                <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Type</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Titre</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Auteur</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Escouade</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
-                  <th className="px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {hubPosts.length === 0 ? (
-                  <tr>
-                    <td colSpan="7" className="px-6 py-8 text-center text-gray-400">
-                      Aucun post trouvé
-                    </td>
-                  </tr>
-                ) : (
-                  hubPosts.map((post) => (
-                    <tr key={post._id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          post.type === 'recruitment' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'
-                        }`}>
-                          {post.type === 'recruitment' ? 'Recrutement' : 'Recherche escouade'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-white font-medium max-w-xs truncate">{post.title}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-white">{post.author?.username || post.author?.discordUsername || 'Inconnu'}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        {post.squad ? (
-                          <p className="text-white">{post.squad.name}</p>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {post.isActive ? (
-                          <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
-                            Actif
-                          </span>
-                        ) : (
-                          <span className="px-2 py-1 text-xs font-medium rounded bg-gray-500/20 text-gray-400">
-                            Inactif
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-gray-400 text-sm">
-                        {formatDate(post.createdAt)}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setDeleteConfirm({ type: 'hubPost', id: post._id })}
-                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-            </div>
-                      </td>
-                    </tr>
-                  ))
-          )}
-              </tbody>
-            </table>
-        </div>
-      </div>
       </div>
     );
   };
@@ -4014,7 +3910,6 @@ const AdminPanel = () => {
               { key: 'users', label: 'Utilisateurs' },
               { key: 'squads', label: 'Escouades' },
               { key: 'announcements', label: 'Annonces' },
-              { key: 'hub', label: 'Hub' },
               { key: 'maps', label: 'Cartes' },
               { key: 'gamerules', label: 'Règles de Jeu' }
             ].map(({ key, label }) => {
@@ -4244,70 +4139,70 @@ const AdminPanel = () => {
     };
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Swords className="w-7 h-7 text-purple-400" />
+            <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+              <Swords className="w-5 sm:w-7 h-5 sm:h-7 text-purple-400" />
               Gestion des Matchs
             </h2>
-            <p className="text-gray-400 mt-1">Gérer les matchs ladder et classés</p>
+            <p className="text-gray-400 mt-1 text-xs sm:text-sm">Gérer les matchs ladder et classés</p>
           </div>
           <button
             onClick={matchesSubTab === 'ladder' ? fetchLadderMatches : fetchAdminRankedMatches}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors text-sm"
           >
             <RefreshCw className="w-4 h-4" />
-            Actualiser
+            <span className="hidden sm:inline">Actualiser</span>
           </button>
         </div>
 
         {/* Sub Tabs - Ladder vs Ranked */}
-        <div className="flex gap-2 p-1 bg-dark-800/50 rounded-lg w-fit">
+        <div className="flex gap-1 sm:gap-2 p-1 bg-dark-800/50 rounded-lg w-full sm:w-fit overflow-x-auto">
           <button
             onClick={() => {
               setMatchesSubTab('ladder');
               setMatchesFilter('all');
             }}
-            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap ${
               matchesSubTab === 'ladder' 
                 ? 'bg-purple-500 text-white' 
                 : 'text-gray-400 hover:text-white'
             }`}
           >
             <Shield className="w-4 h-4" />
-            Matchs Ladder
+            <span className="hidden xs:inline">Matchs</span> Ladder
           </button>
           <button
             onClick={() => {
               setMatchesSubTab('ranked');
               setMatchesFilter('all');
             }}
-            className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap ${
               matchesSubTab === 'ranked' 
                 ? 'bg-cyan-500 text-white' 
                 : 'text-gray-400 hover:text-white'
             }`}
           >
             <Target className="w-4 h-4" />
-            Matchs Classés
+            <span className="hidden xs:inline">Matchs</span> Classés
           </button>
         </div>
 
         {/* Filters */}
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 sm:gap-2 flex-wrap">
           {['all', 'pending', 'in_progress', 'completed', 'disputed', 'cancelled'].map((filter) => (
             <button
               key={filter}
               onClick={() => setMatchesFilter(filter)}
-              className={`px-4 py-2 rounded-lg transition-colors ${
+              className={`px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg transition-colors text-xs sm:text-sm ${
                 matchesFilter === filter 
                   ? matchesSubTab === 'ladder' ? 'bg-purple-500 text-white' : 'bg-cyan-500 text-white'
                   : 'bg-dark-800 text-gray-400 hover:bg-dark-700'
               }`}
             >
               {filter === 'all' ? 'Tous' : 
-               filter === 'pending' ? 'En attente' : 
+               filter === 'pending' ? 'Attente' : 
                filter === 'in_progress' ? 'En cours' : 
                filter === 'completed' ? 'Terminés' : 
                filter === 'disputed' ? 'Litiges' : 'Annulés'}
@@ -4325,44 +4220,44 @@ const AdminPanel = () => {
             ) : ladderMatches.length > 0 ? (
               <div className="space-y-3">
                 {ladderMatches.map((match) => (
-                  <div key={match._id} className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-4">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-4 flex-wrap">
+                  <div key={match._id} className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-3 sm:p-4">
+                    {/* Mobile Layout */}
+                    <div className="sm:hidden space-y-3">
+                      <div className="flex items-center justify-between">
                         <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
                           LADDER
                         </span>
-                        <div className="flex items-center gap-2">
-                          <div className="text-white font-medium">{match.challenger?.name || 'Équipe inconnue'}</div>
-                          <span className="text-gray-500">vs</span>
-                          <div className="text-white font-medium">{match.opponent?.name || 'En attente'}</div>
-                        </div>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                           match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
                           match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
                           match.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
                           match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
-                          match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
-                          'bg-blue-500/20 text-blue-400'
+                          'bg-gray-500/20 text-gray-400'
                         }`}>
                           {match.status}
                         </span>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-white font-medium text-sm truncate">{match.challenger?.name || 'Équipe inconnue'}</div>
+                        <span className="text-gray-500 text-xs">vs</span>
+                        <div className="text-white font-medium text-sm truncate">{match.opponent?.name || 'En attente'}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <a
                           href={`/match/${match._id}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500/20 text-blue-400 rounded-lg text-xs"
                         >
-                          <ExternalLink className="w-4 h-4" />
+                          <ExternalLink className="w-3 h-3" />
                           Voir
                         </a>
                         <select
                           value={match.status}
                           onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
-                          className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
+                          className="flex-1 px-2 py-1.5 bg-dark-900 border border-white/10 rounded-lg text-white text-xs"
                         >
-                          <option value="pending">En attente</option>
+                          <option value="pending">Attente</option>
                           <option value="accepted">Accepté</option>
                           <option value="in_progress">En cours</option>
                           <option value="completed">Terminé</option>
@@ -4371,29 +4266,84 @@ const AdminPanel = () => {
                         </select>
                         <button
                           onClick={() => setMatchToDelete(match)}
-                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
-                    <div className="mt-2 text-gray-500 text-sm space-y-1">
-                      <div>
-                        Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
-                        Ladder: {match.ladderId || 'N/A'} • 
-                        Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                    
+                    {/* Desktop Layout */}
+                    <div className="hidden sm:block">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-4 flex-wrap">
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
+                            LADDER
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <div className="text-white font-medium">{match.challenger?.name || 'Équipe inconnue'}</div>
+                            <span className="text-gray-500">vs</span>
+                            <div className="text-white font-medium">{match.opponent?.name || 'En attente'}</div>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-xs font-medium ${
+                            match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                            match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                            match.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
+                            match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
+                            match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
+                            'bg-blue-500/20 text-blue-400'
+                          }`}>
+                            {match.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`/match/${match._id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            Voir
+                          </a>
+                          <select
+                            value={match.status}
+                            onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
+                            className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
+                          >
+                            <option value="pending">En attente</option>
+                            <option value="accepted">Accepté</option>
+                            <option value="in_progress">En cours</option>
+                            <option value="completed">Terminé</option>
+                            <option value="disputed">Litige</option>
+                            <option value="cancelled">Annulé</option>
+                          </select>
+                          <button
+                            onClick={() => setMatchToDelete(match)}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-gray-500 text-sm space-y-1">
+                        <div>
+                          Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
+                          Ladder: {match.ladderId || 'N/A'} • 
+                          Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-20">
-                <Swords className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">Aucun match ladder trouvé</p>
+              <div className="text-center py-12 sm:py-20">
+                <Swords className="w-10 sm:w-12 h-10 sm:h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 text-sm sm:text-base">Aucun match ladder trouvé</p>
                 <button
                   onClick={fetchLadderMatches}
-                  className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                  className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors text-sm"
                 >
                   Charger les matchs
                 </button>
@@ -4838,39 +4788,38 @@ const AdminPanel = () => {
     };
 
     return (
-      <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-white">Gestion Système</h2>
+      <div className="space-y-4 sm:space-y-6">
+        <h2 className="text-xl sm:text-2xl font-bold text-white">Gestion Système</h2>
 
         {/* Danger Zone */}
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5" />
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-4 sm:w-5 h-4 sm:h-5" />
             Zone Dangereuse
           </h3>
           
           <div className="space-y-4">
             <div>
-              <p className="text-white font-medium mb-2">Réinitialisation Complète du Système</p>
-              <p className="text-gray-400 text-sm mb-4">
+              <p className="text-white font-medium mb-2 text-sm sm:text-base">Réinitialisation Complète du Système</p>
+              <p className="text-gray-400 text-xs sm:text-sm mb-4">
                 Cette action supprimera TOUTES les données suivantes:
               </p>
-              <ul className="text-gray-400 text-sm space-y-1 list-disc list-inside mb-4">
+              <ul className="text-gray-400 text-xs sm:text-sm space-y-1 list-disc list-inside mb-4">
                 <li>Tous les utilisateurs (y compris les admins)</li>
                 <li>Toutes les escouades</li>
                 <li>Tous les matchs (ladder et classés)</li>
                 <li>Tous les classements</li>
-                <li>Tous les posts du hub</li>
                 <li>Toutes les annonces</li>
                 <li>Tous les achats et utilisations d'items</li>
                 <li>Toutes les saisons</li>
               </ul>
-              <p className="text-yellow-400 text-sm font-medium mb-4">
+              <p className="text-yellow-400 text-xs sm:text-sm font-medium mb-4">
                 ⚠️ Données PRÉSERVÉES: Règles de jeu, Cartes, Items de boutique, Trophées, Configuration (points/coins)
               </p>
-                    </div>
+            </div>
 
-                        <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+            <div>
+              <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
                 Tapez "RESET ALL" pour confirmer
               </label>
               <input
@@ -4878,48 +4827,50 @@ const AdminPanel = () => {
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder="RESET ALL"
-                className="w-full px-4 py-3 bg-dark-800 border border-red-500/30 rounded-xl text-white focus:outline-none focus:border-red-500"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-800 border border-red-500/30 rounded-xl text-white text-sm focus:outline-none focus:border-red-500"
               />
-                      </div>
+            </div>
 
             <button
               onClick={handleFullReset}
               disabled={resetting || confirmText !== 'RESET ALL'}
-              className="w-full py-3 px-4 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+              className="w-full py-2.5 sm:py-3 px-4 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
             >
               {resetting ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Réinitialisation en cours...
+                  <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
+                  <span className="hidden sm:inline">Réinitialisation en cours...</span>
+                  <span className="sm:hidden">Reset...</span>
                 </>
               ) : (
                 <>
-                  <Skull className="w-5 h-5" />
-                  RÉINITIALISER TOUT LE SYSTÈME
+                  <Skull className="w-4 sm:w-5 h-4 sm:h-5" />
+                  <span className="hidden sm:inline">RÉINITIALISER TOUT LE SYSTÈME</span>
+                  <span className="sm:hidden">RÉINITIALISER</span>
                 </>
               )}
             </button>
           </div>
-                    </div>
+        </div>
 
         {/* System Info */}
-        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <Database className="w-5 h-5" />
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Database className="w-4 sm:w-5 h-4 sm:h-5" />
             Informations Système
-                      </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
             <div>
-              <span className="text-gray-400">Version de la plateforme:</span>
+              <span className="text-gray-400">Version:</span>
               <span className="text-white ml-2 font-medium">2.0.0</span>
-                        </div>
+            </div>
             <div>
               <span className="text-gray-400">Environnement:</span>
               <span className="text-white ml-2 font-medium">Production</span>
-                        </div>
-                        </div>
-                        </div>
-                      </div>
+            </div>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -5781,11 +5732,41 @@ const AdminPanel = () => {
 
     switch (activeTab) {
       case 'overview':
-        return renderOverview();
+        return <AdminOverview stats={stats} />;
       case 'users':
-        return renderUsers();
+        return (
+          <AdminUsers
+            users={users}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            page={page}
+            setPage={setPage}
+            totalPages={totalPages}
+            openEditModal={openEditModal}
+            openBanModal={openBanModal}
+            setResetStatsConfirm={setResetStatsConfirm}
+            setDeleteConfirm={setDeleteConfirm}
+            formatDate={formatDate}
+            getRoleColor={getRoleColor}
+          />
+        );
       case 'squads':
-        return renderSquads();
+        return (
+          <AdminSquads
+            squads={squads}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            page={page}
+            setPage={setPage}
+            totalPages={totalPages}
+            userIsAdmin={userIsAdmin}
+            openEditModal={openEditModal}
+            openLadderPointsModal={openLadderPointsModal}
+            openSquadTrophyModal={openSquadTrophyModal}
+            setDeleteConfirm={setDeleteConfirm}
+            handleKickMember={handleKickMember}
+          />
+        );
       case 'deleted-accounts':
         return renderDeletedAccounts();
       case 'messages':
@@ -5796,8 +5777,6 @@ const AdminPanel = () => {
         return renderTrophies();
       case 'announcements':
         return renderAnnouncements();
-      case 'hub':
-        return renderHub();
       case 'maps':
         return renderMaps();
       case 'gamerules':
@@ -5805,7 +5784,15 @@ const AdminPanel = () => {
       case 'matches':
         return renderMatches();
       case 'application':
-        return renderApplication();
+        return (
+          <AdminApplication
+            appSettings={appSettings}
+            setAppSettings={setAppSettings}
+            fetchAppSettings={fetchAppSettings}
+            setSuccess={setSuccess}
+            setError={setError}
+          />
+        );
       case 'config':
         return renderConfig();
       case 'seasons':
@@ -5875,18 +5862,94 @@ const AdminPanel = () => {
                 </div>
       )}
 
-      {/* Navigation Tabs - Grouped Layout */}
+      {/* Navigation Tabs - Mobile Dropdown + Desktop Tabs */}
       <div className="bg-dark-900/80 backdrop-blur-xl border-b border-white/10 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2 sm:gap-6 overflow-x-auto py-2 sm:py-3 pb-3 sm:pb-4 scrollbar-hide" style={{
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          {/* Mobile Navigation */}
+          <div className="lg:hidden py-3">
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-dark-800/80 border border-white/10 rounded-xl text-white"
+            >
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const currentTab = allTabs.find(t => t.id === activeTab);
+                  const Icon = currentTab?.icon || BarChart3;
+                  return (
+                    <>
+                      <Icon className="w-5 h-5 text-purple-400" />
+                      <span className="font-medium">{currentTab?.label || 'Menu'}</span>
+                    </>
+                  );
+                })()}
+              </div>
+              <Menu className={`w-5 h-5 text-gray-400 transition-transform ${showMobileMenu ? 'rotate-90' : ''}`} />
+            </button>
+            
+            {/* Mobile Dropdown Menu */}
+            {showMobileMenu && (
+              <div className="absolute left-3 right-3 mt-2 bg-dark-800 border border-white/10 rounded-xl shadow-2xl shadow-black/50 overflow-hidden z-50">
+                <div className="max-h-[70vh] overflow-y-auto">
+                  {tabGroups.map((group) => {
+                    if (group.adminOnly && !userIsAdmin) return null;
+                    
+                    const visibleTabs = group.tabs.filter(tab => {
+                      if (tab.adminOnly && !userIsAdmin) return false;
+                      if (!userIsAdmin && !getStaffAccess(tab.id)) return false;
+                      return true;
+                    });
+                    
+                    if (visibleTabs.length === 0) return null;
+                    
+                    return (
+                      <div key={group.name} className="border-b border-white/5 last:border-b-0">
+                        <div className="px-4 py-2 bg-dark-900/50">
+                          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            {group.name}
+                          </span>
+                        </div>
+                        <div className="py-1">
+                          {visibleTabs.map((tab) => {
+                            const Icon = tab.icon;
+                            const isActive = activeTab === tab.id;
+                            return (
+                              <button
+                                key={tab.id}
+                                onClick={() => {
+                                  setActiveTab(tab.id);
+                                  setActiveSubTab('');
+                                  setSearchTerm('');
+                                  setPage(1);
+                                  setShowMobileMenu(false);
+                                }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all ${
+                                  isActive
+                                    ? 'bg-gradient-to-r from-purple-500/20 to-pink-600/20 text-white border-l-2 border-purple-500'
+                                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                <Icon className={`w-5 h-5 ${isActive ? 'text-purple-400' : ''}`} />
+                                <span className="font-medium">{tab.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* Desktop Navigation */}
+          <div className="hidden lg:flex items-center gap-4 overflow-x-auto py-3 pb-4 scrollbar-hide" style={{
             scrollbarWidth: 'thin',
             scrollbarColor: '#6b21a8 #1f2937'
           }}>
             {tabGroups.map((group) => {
-              // Skip admin-only groups for non-admin users
               if (group.adminOnly && !userIsAdmin) return null;
               
-              // Filter tabs within the group
               const visibleTabs = group.tabs.filter(tab => {
                 if (tab.adminOnly && !userIsAdmin) return false;
                 if (!userIsAdmin && !getStaffAccess(tab.id)) return false;
@@ -5896,8 +5959,8 @@ const AdminPanel = () => {
               if (visibleTabs.length === 0) return null;
               
               return (
-                <div key={group.name} className="flex items-center gap-1">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-2 hidden sm:block">
+                <div key={group.name} className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">
                     {group.name}
                   </span>
                   <div className="flex items-center gap-1 bg-dark-800/50 rounded-xl p-1 border border-white/5">
@@ -5921,7 +5984,7 @@ const AdminPanel = () => {
                           title={tab.label}
                         >
                           <Icon className={`w-4 h-4 ${isActive ? '' : 'opacity-70'}`} />
-                          <span className="hidden md:inline text-sm">{tab.label}</span>
+                          <span className="text-sm">{tab.label}</span>
                         </button>
                       );
                     })}
@@ -5932,62 +5995,70 @@ const AdminPanel = () => {
           </div>
         </div>
       </div>
+      
+      {/* Mobile Menu Overlay */}
+      {showMobileMenu && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden" 
+          onClick={() => setShowMobileMenu(false)}
+        />
+      )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {renderContent()}
-                              </div>
+      </div>
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowModal(false)}></div>
-          <div className="relative bg-dark-900 border border-white/10 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-dark-900 border-b border-white/10 p-6 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">
+          <div className="relative bg-dark-900 border-t sm:border border-white/10 rounded-t-2xl sm:rounded-2xl max-w-2xl w-full max-h-[85vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-dark-900 border-b border-white/10 p-4 sm:p-6 flex items-center justify-between">
+              <h2 className="text-lg sm:text-2xl font-bold text-white">
                 {editingItem ? 'Modifier' : 'Créer'} {modalType}
               </h2>
-                            <button
+              <button
                 onClick={() => setShowModal(false)}
                 className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                            >
-                <X className="w-6 h-6 text-gray-400" />
-                            </button>
-                          </div>
+              >
+                <X className="w-5 sm:w-6 h-5 sm:h-6 text-gray-400" />
+              </button>
+            </div>
             
-            <form onSubmit={editingItem ? handleUpdate : handleCreate} className="p-6 space-y-4">
+            <form onSubmit={editingItem ? handleUpdate : handleCreate} className="p-4 sm:p-6 space-y-4">
               {/* Form content based on modalType */}
               {renderModalForm()}
 
               {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
                   <p className="text-red-400 text-sm">{error}</p>
-                  </div>
-                )}
+                </div>
+              )}
 
-              <div className="flex gap-3 pt-4">
-                  <button 
-                    type="button" 
-                    onClick={() => setShowModal(false)} 
-                    className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
-                  >
-                    Annuler
-                  </button>
-                  <button 
+              <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
+                <button 
+                  type="button" 
+                  onClick={() => setShowModal(false)} 
+                  className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button 
                   type="submit"
                   disabled={saving}
                   className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-500 to-pink-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
                   {saving ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <>
                       <Save className="w-5 h-5" />
                       {editingItem ? 'Mettre à jour' : 'Créer'}
-                      </>
-                    )}
-                  </button>
-                </div>
+                    </>
+                  )}
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -5995,16 +6066,16 @@ const AdminPanel = () => {
 
       {/* Ban Modal */}
       {showBanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowBanModal(false)}></div>
-          <div className="relative bg-dark-900 border border-orange-500/20 rounded-2xl p-6 max-w-md w-full">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 bg-orange-500/20 rounded-xl">
-                <Ban className="w-6 h-6 text-orange-400" />
+          <div className="relative bg-dark-900 border-t sm:border border-orange-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-3 bg-orange-500/20 rounded-xl">
+                <Ban className="w-5 sm:w-6 h-5 sm:h-6 text-orange-400" />
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-white">Bannir {banData.username}</h3>
-                <p className="text-gray-400 text-sm">Configurez les paramètres du bannissement</p>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">Bannir {banData.username}</h3>
+                <p className="text-gray-400 text-xs sm:text-sm">Configurez les paramètres du bannissement</p>
               </div>
             </div>
 
@@ -6061,7 +6132,7 @@ const AdminPanel = () => {
               )}
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 sm:mt-6">
               <button
                 onClick={() => setShowBanModal(false)}
                 className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
@@ -6250,14 +6321,14 @@ const AdminPanel = () => {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setDeleteConfirm(null)}></div>
-          <div className="relative bg-dark-900 border border-red-500/20 rounded-2xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold text-white mb-4">Confirmer la suppression</h3>
-            <p className="text-gray-400 mb-6">
+          <div className="relative bg-dark-900 border-t sm:border border-red-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full">
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4">Confirmer la suppression</h3>
+            <p className="text-gray-400 mb-4 sm:mb-6 text-sm sm:text-base">
               Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col-reverse sm:flex-row gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
                 className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
@@ -6278,11 +6349,11 @@ const AdminPanel = () => {
 
       {/* Reset Stats Confirmation Modal */}
       {resetStatsConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setResetStatsConfirm(null)}></div>
-          <div className="relative bg-dark-900 border border-purple-500/20 rounded-2xl p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-              <RotateCcw className="w-6 h-6 text-purple-400" />
+          <div className="relative bg-dark-900 border-t sm:border border-purple-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 flex items-center gap-2">
+              <RotateCcw className="w-5 sm:w-6 h-5 sm:h-6 text-purple-400" />
               Reset Stats & Historique
             </h3>
             <div className="mb-4 p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
