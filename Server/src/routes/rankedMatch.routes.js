@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import RankedMatch from '../models/RankedMatch.js';
 import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
@@ -1101,24 +1102,49 @@ router.get('/player-history/:playerId', async (req, res) => {
   try {
     const { playerId } = req.params;
     const { limit = 10 } = req.query;
+    
+    // IMPORTANT: Convertir playerId en ObjectId pour la recherche MongoDB
+    let playerObjectId;
+    try {
+      playerObjectId = new mongoose.Types.ObjectId(playerId);
+    } catch (e) {
+      console.error(`[PLAYER HISTORY] Invalid playerId format: ${playerId}`);
+      return res.status(400).json({ success: false, message: 'ID joueur invalide' });
+    }
+
+    console.log(`[PLAYER HISTORY] Recherche matchs pour joueur: ${playerId}`);
 
     // Récupérer les matchs classés où le joueur a participé
+    // Utiliser ObjectId pour la recherche
     const matches = await RankedMatch.find({
-      'players.user': playerId,
+      'players.user': playerObjectId,
       status: 'completed'
     })
       .populate('players.user', 'username avatarUrl discordAvatar discordId')
       .select('gameMode mode teamSize players result status completedAt createdAt')
       .sort({ completedAt: -1 })
       .limit(parseInt(limit));
+    
+    console.log(`[PLAYER HISTORY] Trouvé ${matches.length} matchs pour le joueur ${playerId}`);
 
     // Transformer les données pour le frontend
     const formattedMatches = matches.map(match => {
       // Trouver le joueur dans ce match (gérer les cas populé vs ObjectId)
       const playerInfo = match.players.find(p => {
+        if (!p.user) return false;
         const pUserId = p.user?._id?.toString() || p.user?.toString();
         return pUserId === playerId;
       });
+      
+      if (!playerInfo) {
+        console.log(`[PLAYER HISTORY] ⚠️ Match ${match._id}: Joueur ${playerId} non trouvé dans players malgré la requête!`);
+        console.log(`[PLAYER HISTORY]   Players dans ce match:`, match.players.map(p => ({
+          userId: p.user?._id?.toString() || p.user?.toString(),
+          username: p.username || p.user?.username,
+          team: p.team,
+          isFake: p.isFake
+        })));
+      }
       
       const team1Players = match.players.filter(p => Number(p.team) === 1);
       const team2Players = match.players.filter(p => Number(p.team) === 2);
@@ -1135,7 +1161,7 @@ router.get('/player-history/:playerId', async (req, res) => {
                        !isNaN(winnerTeam) && 
                        playerTeam === winnerTeam;
       
-      console.log(`[PLAYER HISTORY] Match ${match._id}: playerTeam=${playerTeam}, winnerTeam=${winnerTeam}, isWinner=${isWinner}`);
+      console.log(`[PLAYER HISTORY] Match ${match._id}: playerTeam=${playerTeam}, winnerTeam=${winnerTeam}, isWinner=${isWinner}, rewards=${JSON.stringify(playerInfo?.rewards)}`);
       
       return {
         _id: match._id,

@@ -34,6 +34,11 @@ const PlayerProfile = () => {
   const [loadingRankedHistory, setLoadingRankedHistory] = useState(false);
   const [selectedRankedMatch, setSelectedRankedMatch] = useState(null);
   const [showRankedMatchDetails, setShowRankedMatchDetails] = useState(false);
+  const [rankedPage, setRankedPage] = useState(1);
+  const [rankedTotalPages, setRankedTotalPages] = useState(1);
+  const [ladderPage, setLadderPage] = useState(1);
+  const [ladderTotalPages, setLadderTotalPages] = useState(1);
+  const MATCHES_PER_PAGE = 10;
   
   // Rank animation state
   const [rankAnimationPhase, setRankAnimationPhase] = useState(0);
@@ -288,10 +293,12 @@ const PlayerProfile = () => {
       if (!playerData?.id) return;
       setLoadingHistory(true);
       try {
-        const response = await fetch(`${API_URL}/matches/player-history/${playerData.id}?limit=5`);
+        const response = await fetch(`${API_URL}/matches/player-history/${playerData.id}?limit=500`);
         const data = await response.json();
         if (data.success) {
           setMatchHistory(data.matches);
+          setLadderTotalPages(Math.ceil(data.matches.length / MATCHES_PER_PAGE));
+          setLadderPage(1);
         }
       } catch (err) {
         console.error('Error fetching match history:', err);
@@ -302,16 +309,25 @@ const PlayerProfile = () => {
     fetchMatchHistory();
   }, [playerData?.id]);
 
+  // Get paginated ladder matches
+  const getPaginatedLadderMatches = () => {
+    const startIndex = (ladderPage - 1) * MATCHES_PER_PAGE;
+    const endIndex = startIndex + MATCHES_PER_PAGE;
+    return matchHistory.slice(startIndex, endIndex);
+  };
+
   // Fetch ranked match history when player data is loaded
   useEffect(() => {
     const fetchRankedMatchHistory = async () => {
       if (!playerData?.id) return;
       setLoadingRankedHistory(true);
       try {
-        const response = await fetch(`${API_URL}/ranked-matches/player-history/${playerData.id}?limit=5`);
+        const response = await fetch(`${API_URL}/ranked-matches/player-history/${playerData.id}?limit=500`);
         const data = await response.json();
         if (data.success) {
           setRankedMatchHistory(data.matches);
+          setRankedTotalPages(Math.ceil(data.matches.length / MATCHES_PER_PAGE));
+          setRankedPage(1); // Reset to page 1 when data changes
         }
       } catch (err) {
         console.error('Error fetching ranked match history:', err);
@@ -321,6 +337,13 @@ const PlayerProfile = () => {
     };
     fetchRankedMatchHistory();
   }, [playerData?.id]);
+
+  // Get paginated ranked matches
+  const getPaginatedRankedMatches = () => {
+    const startIndex = (rankedPage - 1) * MATCHES_PER_PAGE;
+    const endIndex = startIndex + MATCHES_PER_PAGE;
+    return rankedMatchHistory.slice(startIndex, endIndex);
+  };
 
   // Get player stats (global stats)
   const getPlayerStats = () => {
@@ -346,12 +369,37 @@ const PlayerProfile = () => {
     return `${Math.round((playerStats.wins / total) * 100)}%`;
   };
 
-  // Calculate total win rate
+  // Calculate combined stats from ladder + ranked match histories
+  const getCombinedStats = () => {
+    let wins = 0;
+    let losses = 0;
+    
+    // Count from ladder match history
+    matchHistory.forEach(match => {
+      const playerSquadId = match.playerSquad?._id || match.playerSquad;
+      const winnerId = typeof match.result?.winner === 'object' 
+        ? match.result?.winner?._id 
+        : match.result?.winner;
+      const isWinner = playerSquadId?.toString?.() === winnerId?.toString?.();
+      if (isWinner) wins++;
+      else losses++;
+    });
+    
+    // Count from ranked match history
+    rankedMatchHistory.forEach(match => {
+      if (match.isWinner) wins++;
+      else losses++;
+    });
+    
+    return { wins, losses, total: wins + losses };
+  };
+  
+  const combinedStats = getCombinedStats();
+
+  // Calculate total win rate from combined stats
   const getTotalWinRate = () => {
-    if (!playerData?.stats) return '0%';
-    const total = (playerData.stats.wins || 0) + (playerData.stats.losses || 0);
-    if (total === 0) return '0%';
-    return `${Math.round((playerData.stats.wins / total) * 100)}%`;
+    if (combinedStats.total === 0) return '0%';
+    return `${Math.round((combinedStats.wins / combinedStats.total) * 100)}%`;
   };
 
   // Get rank for ornament (use ranking.rank from DB)
@@ -570,7 +618,7 @@ const PlayerProfile = () => {
           </div>
         </div>
 
-          {/* Total Stats (all modes combined) */}
+          {/* Total Stats (ladder + ranked combined) */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
             <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
               <Trophy className={`w-4 sm:w-5 h-4 sm:h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
@@ -580,17 +628,17 @@ const PlayerProfile = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
               <div className="bg-dark-800/50 rounded-lg p-3 sm:p-4 text-center border border-white/5 hover:border-purple-500/30 transition-colors">
                 <Swords className="w-4 sm:w-5 h-4 sm:h-5 text-purple-400 mx-auto mb-1 sm:mb-2" />
-                <div className="text-xl sm:text-2xl font-bold text-purple-400">{(playerData?.stats?.wins || 0) + (playerData?.stats?.losses || 0)}</div>
+                <div className="text-xl sm:text-2xl font-bold text-purple-400">{combinedStats.total}</div>
                 <div className="text-gray-500 text-[10px] sm:text-xs">{t.totalMatches}</div>
               </div>
               <div className="bg-dark-800/50 rounded-lg p-3 sm:p-4 text-center border border-white/5 hover:border-green-500/30 transition-colors">
                 <Medal className="w-4 sm:w-5 h-4 sm:h-5 text-green-400 mx-auto mb-1 sm:mb-2" />
-                <div className="text-xl sm:text-2xl font-bold text-green-400">{playerData?.stats?.wins || 0}</div>
+                <div className="text-xl sm:text-2xl font-bold text-green-400">{combinedStats.wins}</div>
                 <div className="text-gray-500 text-[10px] sm:text-xs">{t.totalWins}</div>
               </div>
               <div className="bg-dark-800/50 rounded-lg p-3 sm:p-4 text-center border border-white/5 hover:border-red-500/30 transition-colors">
                 <Target className="w-4 sm:w-5 h-4 sm:h-5 text-red-400 mx-auto mb-1 sm:mb-2" />
-                <div className="text-xl sm:text-2xl font-bold text-red-400">{playerData?.stats?.losses || 0}</div>
+                <div className="text-xl sm:text-2xl font-bold text-red-400">{combinedStats.losses}</div>
                 <div className="text-gray-500 text-[10px] sm:text-xs">{t.totalLosses}</div>
               </div>
               <div className={`bg-dark-800/50 rounded-lg p-3 sm:p-4 text-center border border-white/5 hover:border-${accentColor}-500/30 transition-colors`}>
@@ -620,121 +668,161 @@ const PlayerProfile = () => {
 
           {/* Match History */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-6 mb-6`}>
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-              <Swords className={`w-5 h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
-              <span>{t.matchHistory}</span>
-          </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <Swords className={`w-5 h-5 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
+                <span>{t.matchHistory}</span>
+                {matchHistory.length > 0 && (
+                  <span className="text-sm font-normal text-gray-500">({matchHistory.length})</span>
+                )}
+              </h2>
+            </div>
             
             {loadingHistory ? (
               <div className="flex justify-center py-8">
                 <Loader2 className={`w-8 h-8 animate-spin ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
               </div>
             ) : matchHistory.length > 0 ? (
-            <div className="space-y-3">
-                {matchHistory.map((match) => {
-                  // Get playerSquadId handling both string IDs and populated objects
-                  const playerSquadId = match.playerSquad?._id || match.playerSquad;
-                  const challengerId = match.challenger?._id || match.challenger;
-                  
-                  // Get winner ID (can be object or string)
-                  const winnerId = typeof match.result?.winner === 'object' 
-                    ? match.result?.winner?._id 
-                    : match.result?.winner;
-                  
-                  // Determine if player won by comparing their squad with the winner
-                  const isWinner = playerSquadId?.toString?.() === winnerId?.toString?.();
-                  
-                  // Determine if player was challenger or opponent
-                  const playerWasChallenger = playerSquadId?.toString?.() === challengerId?.toString?.();
-                  
-                  // Get opponent info correctly
-                  const opponent = playerWasChallenger ? match.opponent : match.challenger;
-                  const opponentInfo = playerWasChallenger ? match.opponentInfo : match.challengerInfo;
-                  const opponentName = opponent?.name || opponentInfo?.name || (language === 'fr' ? 'Équipe supprimée' : 'Deleted team');
-                  const opponentLinkId = opponent?._id;
-                  
-                  return (
-                    <div 
-                      key={match._id}
-                      className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
-                        isWinner 
-                          ? 'border-green-500/30' 
-                          : 'border-red-500/30'
-                      }`}
-                    >
-                      {/* Mobile: Stack layout / Desktop: Row layout */}
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        {/* Top row on mobile: Result + Game mode + Format */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          {/* Result badge */}
-                          <div className={`px-2 py-1 rounded text-xs font-bold ${
-                            isWinner 
-                              ? 'bg-green-500/20 text-green-400' 
-                              : 'bg-red-500/20 text-red-400'
-                          }`}>
-                            {isWinner ? t.victory : t.defeat}
-                          </div>
-                          
-                          {/* Game mode */}
-                          <span className={`px-2 py-1 bg-${accentColor}-500/20 rounded text-xs font-medium text-${accentColor}-400`}>
-                            {t.gameModes?.[match.gameMode] || match.gameMode}
-                          </span>
-                          
-                          {/* Format */}
-                          <div className="flex items-center gap-1 text-gray-400 text-xs sm:text-sm">
-                            <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                            <span>{match.teamSize}v{match.teamSize}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Opponent - separate row on mobile */}
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500 text-sm">{t.vs}</span>
-                          {opponentLinkId ? (
-                            <Link 
-                              to={`/squad/${opponentLinkId}`}
-                              className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate max-w-[150px] sm:max-w-none"
-                            >
-                              {opponentName}
-                            </Link>
-                          ) : (
-                            <span className="text-gray-400 italic text-sm truncate max-w-[150px] sm:max-w-none">{opponentName}</span>
-                          )}
-                        </div>
-                        
-                        {/* Bottom row: Date + Button */}
-                        <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
-                          {/* Date */}
-                          <div className="flex items-center gap-1.5 text-gray-500 text-xs sm:text-sm">
-                            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            <span>
-                              {new Date(match.createdAt).toLocaleDateString(
-                                language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                                { day: 'numeric', month: 'short' }
-                              )}
+              <>
+                <div className="space-y-3">
+                  {getPaginatedLadderMatches().map((match) => {
+                    // Get playerSquadId handling both string IDs and populated objects
+                    const playerSquadId = match.playerSquad?._id || match.playerSquad;
+                    const challengerId = match.challenger?._id || match.challenger;
+                    
+                    // Get winner ID (can be object or string)
+                    const winnerId = typeof match.result?.winner === 'object' 
+                      ? match.result?.winner?._id 
+                      : match.result?.winner;
+                    
+                    // Determine if player won by comparing their squad with the winner
+                    const isWinner = playerSquadId?.toString?.() === winnerId?.toString?.();
+                    
+                    // Determine if player was challenger or opponent
+                    const playerWasChallenger = playerSquadId?.toString?.() === challengerId?.toString?.();
+                    
+                    // Get opponent info correctly
+                    const opponent = playerWasChallenger ? match.opponent : match.challenger;
+                    const opponentInfo = playerWasChallenger ? match.opponentInfo : match.challengerInfo;
+                    const opponentName = opponent?.name || opponentInfo?.name || (language === 'fr' ? 'Équipe supprimée' : 'Deleted team');
+                    const opponentLinkId = opponent?._id;
+                    
+                    return (
+                      <div 
+                        key={match._id}
+                        className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
+                          isWinner 
+                            ? 'border-green-500/30' 
+                            : 'border-red-500/30'
+                        }`}
+                      >
+                        {/* Mobile: Stack layout / Desktop: Row layout */}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          {/* Top row on mobile: Result + Game mode + Format */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Result badge */}
+                            <div className={`px-2 py-1 rounded text-xs font-bold ${
+                              isWinner 
+                                ? 'bg-green-500/20 text-green-400' 
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {isWinner ? t.victory : t.defeat}
+                            </div>
+                            
+                            {/* Game mode */}
+                            <span className={`px-2 py-1 bg-${accentColor}-500/20 rounded text-xs font-medium text-${accentColor}-400`}>
+                              {t.gameModes?.[match.gameMode] || match.gameMode}
                             </span>
+                            
+                            {/* Format */}
+                            <div className="flex items-center gap-1 text-gray-400 text-xs sm:text-sm">
+                              <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              <span>{match.teamSize}v{match.teamSize}</span>
+                            </div>
                           </div>
+                          
+                          {/* Opponent - separate row on mobile */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-500 text-sm">{t.vs}</span>
+                            {opponentLinkId ? (
+                              <Link 
+                                to={`/squad/${opponentLinkId}`}
+                                className="text-white hover:text-yellow-400 transition-colors font-medium text-sm truncate max-w-[150px] sm:max-w-none"
+                              >
+                                {opponentName}
+                              </Link>
+                            ) : (
+                              <span className="text-gray-400 italic text-sm truncate max-w-[150px] sm:max-w-none">{opponentName}</span>
+                            )}
+                          </div>
+                          
+                          {/* Bottom row: Date + Button */}
+                          <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+                            {/* Date */}
+                            <div className="flex items-center gap-1.5 text-gray-500 text-xs sm:text-sm">
+                              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                              <span>
+                                {new Date(match.createdAt).toLocaleDateString(
+                                  language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                                  { day: 'numeric', month: 'short' }
+                                )}
+                              </span>
+                            </div>
 
-                          {/* View Details Button */}
-                          {match.status === 'completed' && (
-                            <button
-                              onClick={() => {
-                                setSelectedMatch(match);
-                                setShowMatchDetails(true);
-                              }}
-                              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 transition-colors flex items-center gap-1.5`}
-                            >
-                              <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                              <span className="hidden sm:inline">{t.viewDetails}</span>
-                              <span className="sm:hidden">{language === 'fr' ? 'Voir' : 'View'}</span>
-                            </button>
-                          )}
+                            {/* View Details Button */}
+                            {match.status === 'completed' && (
+                              <button
+                                onClick={() => {
+                                  setSelectedMatch(match);
+                                  setShowMatchDetails(true);
+                                }}
+                                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 transition-colors flex items-center gap-1.5`}
+                              >
+                                <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                <span className="hidden sm:inline">{t.viewDetails}</span>
+                                <span className="sm:hidden">{language === 'fr' ? 'Voir' : 'View'}</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
                 </div>
+                
+                {/* Pagination */}
+                {ladderTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-white/10">
+                    <button
+                      onClick={() => setLadderPage(p => Math.max(1, p - 1))}
+                      disabled={ladderPage === 1}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        ladderPage === 1 
+                          ? 'bg-dark-700 text-gray-600 cursor-not-allowed' 
+                          : `bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30`
+                      }`}
+                    >
+                      {language === 'fr' ? '← Précédent' : '← Previous'}
+                    </button>
+                    
+                    <span className="text-gray-400 text-sm px-3">
+                      {ladderPage} / {ladderTotalPages}
+                    </span>
+                    
+                    <button
+                      onClick={() => setLadderPage(p => Math.min(ladderTotalPages, p + 1))}
+                      disabled={ladderPage === ladderTotalPages}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        ladderPage === ladderTotalPages 
+                          ? 'bg-dark-700 text-gray-600 cursor-not-allowed' 
+                          : `bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30`
+                      }`}
+                    >
+                      {language === 'fr' ? 'Suivant →' : 'Next →'}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-8">
                 <Swords className="w-12 h-12 text-gray-600 mx-auto mb-3" />
@@ -745,92 +833,132 @@ const PlayerProfile = () => {
 
           {/* Ranked Match History */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-6`}>
-            <h2 className="text-lg font-bold text-white mb-4 flex items-center space-x-2">
-              <Trophy className="w-5 h-5 text-purple-400" />
-              <span>{language === 'fr' ? 'Historique Mode Classé' : 'Ranked History'}</span>
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <Trophy className="w-5 h-5 text-purple-400" />
+                <span>{language === 'fr' ? 'Historique Mode Classé' : 'Ranked History'}</span>
+                {rankedMatchHistory.length > 0 && (
+                  <span className="text-sm font-normal text-gray-500">({rankedMatchHistory.length})</span>
+                )}
+              </h2>
+            </div>
             
             {loadingRankedHistory ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
               </div>
             ) : rankedMatchHistory.length > 0 ? (
-              <div className="space-y-3">
-                {rankedMatchHistory.map((match) => (
-                  <div 
-                    key={match._id}
-                    className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
-                      match.isWinner 
-                        ? 'border-green-500/30' 
-                        : 'border-red-500/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      {/* Left: Result + Mode + Format */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Result badge */}
-                        <div className={`px-2.5 py-1 rounded text-xs font-bold ${
-                          match.isWinner 
-                            ? 'bg-green-500/20 text-green-400' 
-                            : 'bg-red-500/20 text-red-400'
-                        }`}>
-                          {match.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+              <>
+                <div className="space-y-3">
+                  {getPaginatedRankedMatches().map((match) => (
+                    <div 
+                      key={match._id}
+                      className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
+                        match.isWinner 
+                          ? 'border-green-500/30' 
+                          : 'border-red-500/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        {/* Left: Result + Mode + Format */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Result badge */}
+                          <div className={`px-2.5 py-1 rounded text-xs font-bold ${
+                            match.isWinner 
+                              ? 'bg-green-500/20 text-green-400' 
+                              : 'bg-red-500/20 text-red-400'
+                          }`}>
+                            {match.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+                          </div>
+                          
+                          {/* Game mode */}
+                          <span className="px-2 py-1 bg-purple-500/20 rounded text-xs font-medium text-purple-400">
+                            {match.gameMode === 'Search & Destroy' ? 'S&D' : 
+                             match.gameMode === 'Team Deathmatch' ? 'TDM' : 
+                             match.gameMode}
+                          </span>
+                          
+                          {/* Format */}
+                          <div className="flex items-center gap-1 px-2 py-1 bg-dark-700 rounded text-xs text-gray-400">
+                            <Users className="w-3 h-3" />
+                            <span>{match.teamSize}v{match.teamSize}</span>
+                          </div>
                         </div>
                         
-                        {/* Game mode */}
-                        <span className="px-2 py-1 bg-purple-500/20 rounded text-xs font-medium text-purple-400">
-                          {match.gameMode === 'Search & Destroy' ? 'S&D' : 
-                           match.gameMode === 'Team Deathmatch' ? 'TDM' : 
-                           match.gameMode}
-                        </span>
-                        
-                        {/* Format */}
-                        <div className="flex items-center gap-1 px-2 py-1 bg-dark-700 rounded text-xs text-gray-400">
-                          <Users className="w-3 h-3" />
-                          <span>{match.teamSize}v{match.teamSize}</span>
+                        {/* Right: Date + View Details */}
+                        <div className="flex items-center gap-3">
+                          {/* Date */}
+                          <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>
+                              {new Date(match.completedAt || match.createdAt).toLocaleDateString(
+                                language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                                { day: 'numeric', month: 'short', year: 'numeric' }
+                              )}
+                            </span>
+                          </div>
+                          
+                          {/* View Details Button */}
+                          <button
+                            onClick={() => {
+                              setSelectedRankedMatch(match);
+                              setShowRankedMatchDetails(true);
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1.5"
+                          >
+                            <Play className="w-3 h-3" />
+                            <span>{language === 'fr' ? 'Voir détails' : 'View details'}</span>
+                          </button>
                         </div>
                       </div>
                       
-                      {/* Right: Date + View Details */}
-                      <div className="flex items-center gap-3">
-                        {/* Date */}
-                        <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>
-                            {new Date(match.completedAt || match.createdAt).toLocaleDateString(
-                              language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                              { day: 'numeric', month: 'short', year: 'numeric' }
-                            )}
-                          </span>
-                        </div>
-                        
-                        {/* View Details Button */}
-                        <button
-                          onClick={() => {
-                            setSelectedRankedMatch(match);
-                            setShowRankedMatchDetails(true);
-                          }}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1.5"
-                        >
-                          <Play className="w-3 h-3" />
-                          <span>{language === 'fr' ? 'Voir détails' : 'View details'}</span>
-                        </button>
+                      {/* Mobile: Date on second row */}
+                      <div className="sm:hidden flex items-center gap-1.5 text-gray-500 text-xs mt-2">
+                        <Clock className="w-3 h-3" />
+                        <span>
+                          {new Date(match.completedAt || match.createdAt).toLocaleDateString(
+                            language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                            { day: 'numeric', month: 'short', year: 'numeric' }
+                          )}
+                        </span>
                       </div>
                     </div>
+                  ))}
+                </div>
+                
+                {/* Pagination */}
+                {rankedTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-white/10">
+                    <button
+                      onClick={() => setRankedPage(p => Math.max(1, p - 1))}
+                      disabled={rankedPage === 1}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        rankedPage === 1 
+                          ? 'bg-dark-700 text-gray-600 cursor-not-allowed' 
+                          : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                      }`}
+                    >
+                      {language === 'fr' ? '← Précédent' : '← Previous'}
+                    </button>
                     
-                    {/* Mobile: Date on second row */}
-                    <div className="sm:hidden flex items-center gap-1.5 text-gray-500 text-xs mt-2">
-                      <Clock className="w-3 h-3" />
-                      <span>
-                        {new Date(match.completedAt || match.createdAt).toLocaleDateString(
-                          language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                          { day: 'numeric', month: 'short', year: 'numeric' }
-                        )}
-                      </span>
-                    </div>
+                    <span className="text-gray-400 text-sm px-3">
+                      {rankedPage} / {rankedTotalPages}
+                    </span>
+                    
+                    <button
+                      onClick={() => setRankedPage(p => Math.min(rankedTotalPages, p + 1))}
+                      disabled={rankedPage === rankedTotalPages}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        rankedPage === rankedTotalPages 
+                          ? 'bg-dark-700 text-gray-600 cursor-not-allowed' 
+                          : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                      }`}
+                    >
+                      {language === 'fr' ? 'Suivant →' : 'Next →'}
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             ) : (
               <div className="text-center py-8">
                 <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-3" />
@@ -1102,7 +1230,7 @@ const PlayerProfile = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 {/* Team 1 */}
                 <div className={`p-4 rounded-xl border-2 ${
-                  selectedRankedMatch.result?.winner === 1
+                  Number(selectedRankedMatch.result?.winner) === 1
                     ? 'bg-green-500/10 border-green-500/50' 
                     : 'bg-red-500/10 border-red-500/50'
                 }`}>
@@ -1111,7 +1239,7 @@ const PlayerProfile = () => {
                       <div className="w-3 h-3 rounded-full bg-blue-500"></div>
                       {language === 'fr' ? 'Équipe 1' : 'Team 1'}
                     </h3>
-                    {selectedRankedMatch.result?.winner === 1 ? (
+                    {Number(selectedRankedMatch.result?.winner) === 1 ? (
                       <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
                         <Trophy className="w-3.5 h-3.5" />
                         {language === 'fr' ? 'Victoire' : 'Winner'}
@@ -1126,13 +1254,21 @@ const PlayerProfile = () => {
                   {/* Roster */}
                   <div className="space-y-2">
                     {selectedRankedMatch.team1?.map((player, idx) => {
+                      // Safe username with fallback
+                      const safeUsername = player?.username || 'Joueur';
+                      
                       // Build avatar URL: custom upload > discord > default
-                      let playerAvatar = player.avatarUrl ? getAvatarUrl(player.avatarUrl) : null;
-                      if (!playerAvatar && player.discordId && player.discordAvatar) {
-                        playerAvatar = `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
-                      }
-                      if (!playerAvatar) {
-                        playerAvatar = getDefaultAvatar(player.username);
+                      let playerAvatar = null;
+                      try {
+                        playerAvatar = player?.avatarUrl ? getAvatarUrl(player.avatarUrl) : null;
+                        if (!playerAvatar && player?.discordId && player?.discordAvatar) {
+                          playerAvatar = `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
+                        }
+                        if (!playerAvatar) {
+                          playerAvatar = getDefaultAvatar(safeUsername);
+                        }
+                      } catch (e) {
+                        playerAvatar = '/avatar.jpg';
                       }
                       
                       return (
@@ -1144,20 +1280,20 @@ const PlayerProfile = () => {
                             onError={(e) => { e.target.src = '/avatar.jpg'; }}
                           />
                           <div className="flex-1 min-w-0">
-                            {player.userId ? (
+                            {player?.userId ? (
                               <Link 
                                 to={`/player/${player.userId}`}
                                 className="text-white hover:text-purple-400 transition-colors font-medium text-sm truncate block"
                               >
-                                {player.username}
+                                {safeUsername}
                               </Link>
                             ) : (
                               <span className="text-white font-medium text-sm truncate block">
-                                {player.username}
+                                {safeUsername}
                               </span>
                             )}
                           </div>
-                          {selectedRankedMatch.playerTeam === 1 && player.userId === playerId && (
+                          {selectedRankedMatch.playerTeam === 1 && player?.userId === playerId && (
                             <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">
                               {language === 'fr' ? 'Ce joueur' : 'This player'}
                             </span>
@@ -1170,7 +1306,7 @@ const PlayerProfile = () => {
 
                 {/* Team 2 */}
                 <div className={`p-4 rounded-xl border-2 ${
-                  selectedRankedMatch.result?.winner === 2
+                  Number(selectedRankedMatch.result?.winner) === 2
                     ? 'bg-green-500/10 border-green-500/50' 
                     : 'bg-red-500/10 border-red-500/50'
                 }`}>
@@ -1179,7 +1315,7 @@ const PlayerProfile = () => {
                       <div className="w-3 h-3 rounded-full bg-purple-500"></div>
                       {language === 'fr' ? 'Équipe 2' : 'Team 2'}
                     </h3>
-                    {selectedRankedMatch.result?.winner === 2 ? (
+                    {Number(selectedRankedMatch.result?.winner) === 2 ? (
                       <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
                         <Trophy className="w-3.5 h-3.5" />
                         {language === 'fr' ? 'Victoire' : 'Winner'}
@@ -1194,13 +1330,21 @@ const PlayerProfile = () => {
                   {/* Roster */}
                   <div className="space-y-2">
                     {selectedRankedMatch.team2?.map((player, idx) => {
+                      // Safe username with fallback
+                      const safeUsername = player?.username || 'Joueur';
+                      
                       // Build avatar URL: custom upload > discord > default
-                      let playerAvatar = player.avatarUrl ? getAvatarUrl(player.avatarUrl) : null;
-                      if (!playerAvatar && player.discordId && player.discordAvatar) {
-                        playerAvatar = `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
-                      }
-                      if (!playerAvatar) {
-                        playerAvatar = getDefaultAvatar(player.username);
+                      let playerAvatar = null;
+                      try {
+                        playerAvatar = player?.avatarUrl ? getAvatarUrl(player.avatarUrl) : null;
+                        if (!playerAvatar && player?.discordId && player?.discordAvatar) {
+                          playerAvatar = `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
+                        }
+                        if (!playerAvatar) {
+                          playerAvatar = getDefaultAvatar(safeUsername);
+                        }
+                      } catch (e) {
+                        playerAvatar = '/avatar.jpg';
                       }
                       
                       return (
@@ -1212,20 +1356,20 @@ const PlayerProfile = () => {
                             onError={(e) => { e.target.src = '/avatar.jpg'; }}
                           />
                           <div className="flex-1 min-w-0">
-                            {player.userId ? (
+                            {player?.userId ? (
                               <Link 
                                 to={`/player/${player.userId}`}
                                 className="text-white hover:text-purple-400 transition-colors font-medium text-sm truncate block"
                               >
-                                {player.username}
+                                {safeUsername}
                               </Link>
                             ) : (
                               <span className="text-white font-medium text-sm truncate block">
-                                {player.username}
+                                {safeUsername}
                               </span>
                             )}
                           </div>
-                          {selectedRankedMatch.playerTeam === 2 && player.userId === playerId && (
+                          {selectedRankedMatch.playerTeam === 2 && player?.userId === playerId && (
                             <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">
                               {language === 'fr' ? 'Ce joueur' : 'This player'}
                             </span>

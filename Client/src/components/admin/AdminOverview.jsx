@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Shield, Swords, Eye, Activity, UserPlus } from 'lucide-react';
+import { Users, Shield, Swords, Eye, Activity, UserPlus, Target } from 'lucide-react';
 
 const AdminOverview = ({ stats }) => {
   if (!stats) return <div className="text-gray-400">Chargement des statistiques...</div>;
@@ -44,29 +44,43 @@ const AdminOverview = ({ stats }) => {
         })}
       </div>
 
-      {/* Matchs par Ladder */}
+      {/* Matchs Ladder (Completed) */}
       {stats.matchesByLadder && (
-        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 sm:p-6">
+        <div className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-4 sm:p-6">
           <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
-            <Swords className="w-4 sm:w-5 h-4 sm:h-5 text-green-400" />
-            Matchs Completed par Ladder
+            <Shield className="w-4 sm:w-5 h-4 sm:h-5 text-purple-400" />
+            Matchs Ladder (Completed)
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-white/5">
-              <p className="text-gray-400 text-xs sm:text-sm mb-1">Chill</p>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-green-500/20">
+              <p className="text-gray-400 text-xs sm:text-sm mb-1">🎮 Chill (Duo/Trio)</p>
               <p className="text-xl sm:text-2xl font-bold text-green-400">{stats.matchesByLadder.duoTrio || 0}</p>
             </div>
-            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-white/5">
-              <p className="text-gray-400 text-xs sm:text-sm mb-1">Compétitif</p>
+            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-purple-500/20">
+              <p className="text-gray-400 text-xs sm:text-sm mb-1">⚔️ Compétitif (Squad/Team)</p>
               <p className="text-xl sm:text-2xl font-bold text-purple-400">{stats.matchesByLadder.squadTeam || 0}</p>
-            </div>
-            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-white/5">
-              <p className="text-gray-400 text-xs sm:text-sm mb-1">Ranked</p>
-              <p className="text-xl sm:text-2xl font-bold text-yellow-400">{stats.matchesByLadder.ranked || 0}</p>
             </div>
           </div>
         </div>
       )}
+
+      {/* Matchs Ranked (Completed) */}
+      <div className="bg-dark-800/50 border border-orange-500/20 rounded-xl p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <Target className="w-4 sm:w-5 h-4 sm:h-5 text-orange-400" />
+          Matchs Ranked (Completed)
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-orange-500/20">
+            <p className="text-gray-400 text-xs sm:text-sm mb-1">🎯 Total Matchs Classés</p>
+            <p className="text-xl sm:text-2xl font-bold text-orange-400">{stats.matchesByLadder?.ranked || stats.totalRankedMatches || 0}</p>
+          </div>
+          <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-cyan-500/20">
+            <p className="text-gray-400 text-xs sm:text-sm mb-1">🔥 Search & Destroy</p>
+            <p className="text-xl sm:text-2xl font-bold text-cyan-400">{stats.rankedByMode?.searchAndDestroy || stats.matchesByLadder?.ranked || 0}</p>
+          </div>
+        </div>
+      </div>
 
       {/* Visitors Chart - Last 30 Days */}
       <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 sm:p-6">

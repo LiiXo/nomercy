@@ -5,7 +5,8 @@
  * @returns {string} - The avatar URL
  */
 export const getDefaultAvatar = (name) => {
-  if (!name) {
+  // Safe default for missing/invalid names
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return 'https://ui-avatars.com/api/?name=U&background=374151&color=fff&size=128&bold=true';
   }
   
@@ -15,10 +16,16 @@ export const getDefaultAvatar = (name) => {
     'a855f7', 'd946ef', 'ec4899', 'f43f5e'
   ];
   
-  const colorIndex = name.charCodeAt(0) % colors.length;
-  const initial = name.charAt(0).toUpperCase();
-  
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=${colors[colorIndex]}&color=fff&size=128&bold=true`;
+  try {
+    const safeName = name.trim();
+    const colorIndex = safeName.charCodeAt(0) % colors.length;
+    const initial = safeName.charAt(0).toUpperCase();
+    
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=${colors[colorIndex]}&color=fff&size=128&bold=true`;
+  } catch (e) {
+    console.error('Error generating default avatar:', e);
+    return 'https://ui-avatars.com/api/?name=U&background=374151&color=fff&size=128&bold=true';
+  }
 };
 
 const API_URL = 'https://api-nomercy.ggsecure.io';
@@ -26,16 +33,22 @@ const API_URL = 'https://api-nomercy.ggsecure.io';
 /**
  * Get the full avatar URL, handling custom uploads and Discord avatars
  * @param {string} avatar - The avatar path or URL
- * @returns {string} - The full avatar URL
+ * @returns {string|null} - The full avatar URL or null if invalid
  */
 export const getAvatarUrl = (avatar) => {
-  if (!avatar) return null;
-  // Custom uploaded avatar - needs API URL prefix
-  if (avatar.startsWith('/uploads/')) {
-    return `${API_URL}${avatar}`;
+  if (!avatar || typeof avatar !== 'string') return null;
+  
+  try {
+    // Custom uploaded avatar - needs API URL prefix
+    if (avatar.startsWith('/uploads/')) {
+      return `${API_URL}${avatar}`;
+    }
+    // Already a full URL (Discord, etc.)
+    return avatar;
+  } catch (e) {
+    console.error('Error processing avatar URL:', e);
+    return null;
   }
-  // Already a full URL (Discord, etc.)
-  return avatar;
 };
 
 /**
