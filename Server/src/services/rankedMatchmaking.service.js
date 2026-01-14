@@ -461,13 +461,33 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const realTeam1Players = team1Players.filter(p => !isFakePlayer(p));
     const realTeam2Players = team2Players.filter(p => !isFakePlayer(p));
     
-    // Tirer au sort les référents (de préférence un vrai joueur, sinon le premier)
-    const team1Referent = realTeam1Players.length > 0 
-      ? realTeam1Players[Math.floor(Math.random() * realTeam1Players.length)]
-      : team1Players[0];
-    const team2Referent = realTeam2Players.length > 0 
-      ? realTeam2Players[Math.floor(Math.random() * realTeam2Players.length)]
-      : team2Players[0];
+    // Récupérer les IDs des joueurs réels pour vérifier le ban référent
+    const realPlayerIds = [...realTeam1Players, ...realTeam2Players]
+      .filter(p => !isFakePlayer(p))
+      .map(p => p.userId);
+    
+    // Charger les infos de ban référent depuis la DB
+    const usersWithReferentBan = await User.find({
+      _id: { $in: realPlayerIds },
+      isReferentBanned: true
+    }).select('_id');
+    const referentBannedIds = new Set(usersWithReferentBan.map(u => u._id.toString()));
+    
+    // Filtrer les joueurs éligibles pour être référent (vrais joueurs non bannis)
+    const eligibleTeam1Referents = realTeam1Players.filter(p => !referentBannedIds.has(p.userId.toString()));
+    const eligibleTeam2Referents = realTeam2Players.filter(p => !referentBannedIds.has(p.userId.toString()));
+    
+    // Tirer au sort les référents (de préférence un joueur éligible, sinon un vrai joueur, sinon le premier)
+    const team1Referent = eligibleTeam1Referents.length > 0 
+      ? eligibleTeam1Referents[Math.floor(Math.random() * eligibleTeam1Referents.length)]
+      : realTeam1Players.length > 0 
+        ? realTeam1Players[Math.floor(Math.random() * realTeam1Players.length)]
+        : team1Players[0];
+    const team2Referent = eligibleTeam2Referents.length > 0 
+      ? eligibleTeam2Referents[Math.floor(Math.random() * eligibleTeam2Referents.length)]
+      : realTeam2Players.length > 0 
+        ? realTeam2Players[Math.floor(Math.random() * realTeam2Players.length)]
+        : team2Players[0];
     
     // Tirer au sort l'équipe hôte
     const hostTeam = Math.random() < 0.5 ? 1 : 2;
@@ -837,12 +857,17 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const team1Players = allPlayers.slice(0, teamSize);
     const team2Players = allPlayers.slice(teamSize);
     
-    // Trouver le référent (de préférence le staff, sinon le premier de chaque équipe)
+    // Trouver le référent (de préférence le staff non banni référent, sinon le premier de chaque équipe)
     const team1HasStaff = team1Players.some(p => !p.isFake);
     const team2HasStaff = team2Players.some(p => !p.isFake);
     
-    const team1Referent = team1Players.find(p => !p.isFake) || team1Players[0];
-    const team2Referent = team2Players.find(p => !p.isFake) || team2Players[0];
+    // Vérifier si le staff est banni référent
+    const staffUser = await User.findById(userId).select('isReferentBanned');
+    const isStaffReferentBanned = staffUser?.isReferentBanned || false;
+    
+    // Si le staff est banni référent, il ne peut pas être référent (mais peut quand même jouer)
+    const team1Referent = team1Players.find(p => !p.isFake && !isStaffReferentBanned) || team1Players[0];
+    const team2Referent = team2Players.find(p => !p.isFake && !isStaffReferentBanned) || team2Players[0];
     
     // Tirer au sort l'équipe hôte (mettre le staff hôte pour faciliter les tests)
     const staffTeam = team1HasStaff ? 1 : 2;

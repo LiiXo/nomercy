@@ -471,7 +471,30 @@ const HardcoreDashboard = () => {
     localStorage.setItem('hardcoreMatchFilters', JSON.stringify(activeModes));
   }, [activeModes]);
 
-  // App settings, ladder rewards, and top stats are now provided by DataContext
+  // Fetch Hardcore-specific top player and top squad
+  useEffect(() => {
+    const fetchTopStats = async () => {
+      try {
+        const [playerRes, squadRes] = await Promise.all([
+          fetch(`${API_URL}/rankings/top-player?mode=hardcore`),
+          fetch(`${API_URL}/rankings/top-squad?mode=hardcore`)
+        ]);
+        const [playerData, squadData] = await Promise.all([playerRes.json(), squadRes.json()]);
+        
+        if (playerData.success && playerData.player) {
+          setTopPlayer(playerData.player);
+        }
+        if (squadData.success && squadData.squad) {
+          setTopSquad(squadData.squad);
+        }
+      } catch (err) {
+        console.error('Error fetching Hardcore top stats:', err);
+      }
+    };
+    fetchTopStats();
+  }, []);
+
+  // App settings and ladder rewards are now provided by DataContext
 
   const gameModeApiNames = {
     fr: { 'Search & Destroy': 'Recherche & Destruction', 'Team Deathmatch': 'Mêlée générale', 'Duel': 'Duel' },

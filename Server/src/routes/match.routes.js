@@ -1927,9 +1927,12 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       }
     };
 
-    // Mettre à jour les stats GLOBALES des joueurs gagnants (depuis le roster)
+    // Mettre à jour les stats des joueurs gagnants (depuis le roster) - par mode
+    // statsField is already defined above for squad stats
+    const playerStatsField = getStatsFieldForMode(match.mode);
+    
     if (winnerRoster && winnerRoster.length > 0) {
-      console.log(`[MATCH RESULT] Processing ${winnerRoster.length} winner players...`);
+      console.log(`[MATCH RESULT] Processing ${winnerRoster.length} winner players... (${playerStatsField})`);
       for (const rosterEntry of winnerRoster) {
         const playerId = rosterEntry.user?._id || rosterEntry.user;
         console.log(`[MATCH RESULT] Winner roster entry:`, JSON.stringify(rosterEntry));
@@ -1940,18 +1943,19 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
           const xpGained = Math.floor(Math.random() * (playerXPWinMax - playerXPWinMin + 1)) + playerXPWinMin;
           rewardsGiven.winners.xpGained.push({ playerId: playerId.toString(), xp: xpGained });
           
-          console.log(`[MATCH RESULT] Updating player ${playerId} with: goldCoins +${playerCoinsWin}, xp +${xpGained}, wins +1`);
+          console.log(`[MATCH RESULT] Updating player ${playerId} with: goldCoins +${playerCoinsWin}, xp +${xpGained}, wins +1 (${playerStatsField})`);
           
           const updatedPlayer = await User.findByIdAndUpdate(playerId, {
             $inc: { 
               goldCoins: playerCoinsWin,
-              'stats.xp': xpGained,
-              'stats.wins': 1
+              [`${playerStatsField}.xp`]: xpGained,
+              [`${playerStatsField}.wins`]: 1
             }
           }, { new: true });
           
           if (updatedPlayer) {
-            console.log(`[MATCH RESULT] ✅ Winner player ${updatedPlayer.username}: goldCoins=${updatedPlayer.goldCoins}, xp=${updatedPlayer.stats?.xp}, wins=${updatedPlayer.stats?.wins}`);
+            const modeStats = updatedPlayer[playerStatsField] || {};
+            console.log(`[MATCH RESULT] ✅ Winner player ${updatedPlayer.username}: goldCoins=${updatedPlayer.goldCoins}, xp=${modeStats.xp}, wins=${modeStats.wins} (${playerStatsField})`);
           } else {
             console.log(`[MATCH RESULT] ❌ FAILED to update player ${playerId} - player not found!`);
           }
@@ -1964,7 +1968,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       console.log(`[MATCH RESULT] winnerRoster value:`, winnerRoster);
     }
 
-    // Mettre à jour les stats GLOBALES des joueurs perdants (depuis le roster)
+    // Mettre à jour les stats des joueurs perdants (depuis le roster) - par mode
     if (loserRoster && loserRoster.length > 0) {
       for (const rosterEntry of loserRoster) {
         const playerId = rosterEntry.user?._id || rosterEntry.user;
@@ -1973,10 +1977,10 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
           const updatedPlayer = await User.findByIdAndUpdate(playerId, {
             $inc: { 
               goldCoins: playerCoinsLoss,
-              'stats.losses': 1
+              [`${playerStatsField}.losses`]: 1
             }
           }, { new: true });
-          console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: +${playerCoinsLoss} coins consolation`);
+          console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: +${playerCoinsLoss} coins consolation (${playerStatsField})`);
         }
       }
     } else {
@@ -2832,8 +2836,11 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
         losers: { coins: playerCoinsLoss },
         squad: { ladderPointsWin: pointsWin, ladderPointsLoss: pointsLoss, generalPointsWin, generalPointsLoss }
       };
+      
+      // Get the stats field based on match mode for player stats
+      const playerStatsFieldResolve = getStatsFieldForMode(match.mode);
 
-      // Mettre à jour les stats GLOBALES des joueurs gagnants (depuis le roster)
+      // Mettre à jour les stats des joueurs gagnants (depuis le roster) - par mode
       if (winnerRoster && winnerRoster.length > 0) {
         for (const rosterEntry of winnerRoster) {
           const playerId = rosterEntry.user?._id || rosterEntry.user;
@@ -2844,15 +2851,15 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
             await User.findByIdAndUpdate(playerId, {
               $inc: { 
                 goldCoins: playerCoinsWin,
-                'stats.xp': xpGained,
-                'stats.wins': 1
+                [`${playerStatsFieldResolve}.xp`]: xpGained,
+                [`${playerStatsFieldResolve}.wins`]: 1
               }
             });
           }
         }
       }
 
-      // Mettre à jour les stats GLOBALES des joueurs perdants (depuis le roster)
+      // Mettre à jour les stats des joueurs perdants (depuis le roster) - par mode
       if (loserRoster && loserRoster.length > 0) {
         for (const rosterEntry of loserRoster) {
           const playerId = rosterEntry.user?._id || rosterEntry.user;
@@ -2861,7 +2868,7 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
             await User.findByIdAndUpdate(playerId, {
               $inc: { 
                 goldCoins: playerCoinsLoss,
-                'stats.losses': 1
+                [`${playerStatsFieldResolve}.losses`]: 1
               }
             });
           }

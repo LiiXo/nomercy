@@ -23,15 +23,13 @@ export const DataProvider = ({ children }) => {
     competitive: { playerCoinsWin: 60 }
   });
   
-  // Top stats (shared between dashboard and rankings)
-  const [topPlayer, setTopPlayer] = useState(null);
-  const [topSquad, setTopSquad] = useState(null);
+  // Note: topPlayer and topSquad are now fetched locally in each dashboard
+  // with the appropriate mode (hardcore or cdl) to keep stats separate
   
   // Cache timestamps for smart refetching
   const [lastFetchTimes, setLastFetchTimes] = useState({
     appSettings: 0,
-    ladderRewards: 0,
-    topStats: 0
+    ladderRewards: 0
   });
   
   // Cache duration in ms (5 minutes for most data)
@@ -89,41 +87,12 @@ export const DataProvider = ({ children }) => {
     return ladderRewards;
   }, [ladderRewards, lastFetchTimes.ladderRewards]);
   
-  // Fetch top stats with caching
-  const fetchTopStats = useCallback(async (mode = 'hardcore', force = false) => {
-    const now = Date.now();
-    if (!force && topPlayer && topSquad && (now - lastFetchTimes.topStats) < CACHE_DURATION) {
-      return { topPlayer, topSquad };
-    }
-    
-    try {
-      const [playerRes, squadRes] = await Promise.all([
-        fetch(`${API_URL}/rankings/top-player?mode=${mode}`),
-        fetch(`${API_URL}/rankings/top-squad?mode=${mode}`)
-      ]);
-      const [playerData, squadData] = await Promise.all([playerRes.json(), squadRes.json()]);
-      
-      if (playerData.success && playerData.player) {
-        setTopPlayer(playerData.player);
-      }
-      if (squadData.success && squadData.squad) {
-        setTopSquad(squadData.squad);
-      }
-      setLastFetchTimes(prev => ({ ...prev, topStats: now }));
-      return { topPlayer: playerData.player, topSquad: squadData.squad };
-    } catch (err) {
-      console.error('Error fetching top stats:', err);
-    }
-    return { topPlayer, topSquad };
-  }, [topPlayer, topSquad, lastFetchTimes.topStats]);
-  
   // Initial fetch on mount
   useEffect(() => {
     const initFetch = async () => {
       await Promise.all([
         fetchAppSettings(),
-        fetchLadderRewards(),
-        fetchTopStats('hardcore')
+        fetchLadderRewards()
       ]);
     };
     initFetch();
@@ -174,11 +143,6 @@ export const DataProvider = ({ children }) => {
     fetchLadderRewards,
     getGoldCoinsForLadder,
     
-    // Top stats
-    topPlayer,
-    topSquad,
-    fetchTopStats,
-    
     // Computed values
     isDuoTrioOpen,
   }), [
@@ -188,9 +152,6 @@ export const DataProvider = ({ children }) => {
     ladderRewards, 
     fetchLadderRewards, 
     getGoldCoinsForLadder,
-    topPlayer, 
-    topSquad, 
-    fetchTopStats,
     isDuoTrioOpen
   ]);
   

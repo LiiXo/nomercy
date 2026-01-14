@@ -746,6 +746,8 @@ router.get('/by-id/:id', async (req, res) => {
         platform: user.platform,
         activisionId: user.activisionId,
         stats: user.stats,
+        statsHardcore: user.statsHardcore,
+        statsCdl: user.statsCdl,
         totalStats: {
           wins: totalWins,
           losses: totalLosses
@@ -1230,6 +1232,62 @@ router.put('/admin/:userId/ban', verifyToken, requireStaff, async (req, res) => 
       }
     });
   } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred.'
+    });
+  }
+});
+
+// Admin: Toggle referent ban (prevents user from being selected as referent in ranked matches)
+router.put('/admin/:userId/referent-ban', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { ban } = req.body;
+
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.'
+      });
+    }
+
+    // Can't ban admins
+    if (user.roles.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot ban an admin from being referent.'
+      });
+    }
+
+    user.isReferentBanned = ban;
+    
+    if (ban) {
+      user.referentBannedAt = new Date();
+      user.referentBannedBy = req.user._id;
+    } else {
+      user.referentBannedAt = null;
+      user.referentBannedBy = null;
+    }
+    
+    await user.save();
+
+    // Populate referentBannedBy for response
+    await user.populate('referentBannedBy', 'username');
+
+    res.json({
+      success: true,
+      message: ban ? 'User banned from being referent.' : 'User can now be referent.',
+      user: {
+        id: user._id,
+        username: user.username,
+        isReferentBanned: user.isReferentBanned,
+        referentBannedAt: user.referentBannedAt,
+        referentBannedBy: user.referentBannedBy
+      }
+    });
+  } catch (error) {
+    console.error('Toggle referent ban error:', error);
     res.status(500).json({
       success: false,
       message: 'An error occurred.'

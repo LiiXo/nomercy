@@ -1104,6 +1104,39 @@ const AdminPanel = () => {
     }
   };
 
+  // Toggle referent ban (prevents user from being selected as referent in ranked matches)
+  const handleToggleReferentBan = async (user) => {
+    const newBanState = !user.isReferentBanned;
+    const actionText = newBanState ? 'empêcher d\'être référent' : 'autoriser à être référent';
+    
+    if (!window.confirm(`Voulez-vous vraiment ${actionText} pour ${user.username} ?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${user._id}/referent-ban`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ ban: newBanState })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(newBanState 
+          ? `${user.username} ne peut plus être référent dans les matchs classés` 
+          : `${user.username} peut maintenant être référent dans les matchs classés`);
+        fetchUsers();
+      } else {
+        setError(data.message || 'Erreur lors de la modification');
+      }
+    } catch (err) {
+      console.error('Toggle referent ban error:', err);
+      setError('Erreur lors de la modification du statut référent');
+    }
+  };
+
   // Reset user stats and match history
   const handleResetUserStats = async (userId) => {
     setResettingStats(true);
@@ -1427,6 +1460,7 @@ const AdminPanel = () => {
                   <div className="flex items-center gap-1 ml-auto">
                     <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>
                     <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>
+                    <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                     <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`}><Ban className="w-4 h-4" /></button>
                     <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                   </div>
@@ -1525,6 +1559,7 @@ const AdminPanel = () => {
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>
                           <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>
+                          <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg transition-colors ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                           <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg transition-colors ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`} title={user.isBanned ? 'Débannir' : 'Bannir'}><Ban className="w-4 h-4" /></button>
                           <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                         </div>
@@ -5746,6 +5781,7 @@ const AdminPanel = () => {
             openBanModal={openBanModal}
             setResetStatsConfirm={setResetStatsConfirm}
             setDeleteConfirm={setDeleteConfirm}
+            handleToggleReferentBan={handleToggleReferentBan}
             formatDate={formatDate}
             getRoleColor={getRoleColor}
           />

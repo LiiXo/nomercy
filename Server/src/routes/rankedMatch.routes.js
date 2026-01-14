@@ -136,26 +136,28 @@ async function distributeRankedRewards(match) {
         await ranking.save();
         console.log(`[RANKED REWARDS] Player ${i}: Ranking saved - ${ranking.wins}W/${ranking.losses}L, ${ranking.points} pts`);
         
-        // ========== METTRE À JOUR LES STATS GÉNÉRALES DU JOUEUR (User) ==========
-        if (!user.stats) user.stats = {};
+        // ========== METTRE À JOUR LES STATS DU JOUEUR PAR MODE (User) ==========
+        // Use mode-specific stats field
+        const statsField = match.mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+        if (!user[statsField]) user[statsField] = {};
         
-        // Gold (monnaie) - stocké dans user.goldCoins, pas stats.gold
+        // Gold (monnaie) - stocké dans user.goldCoins (shared between modes)
         const oldGold = user.goldCoins || 0;
         user.goldCoins = oldGold + goldChange;
         
-        // XP pour Top Player (classement général des joueurs basé sur l'XP)
-        const oldXP = user.stats.xp || 0;
-        user.stats.xp = oldXP + xpChange;
+        // XP pour Top Player (classement par mode basé sur l'XP)
+        const oldXP = user[statsField].xp || 0;
+        user[statsField].xp = oldXP + xpChange;
         
-        // Mettre à jour les stats globales win/loss
+        // Mettre à jour les stats win/loss par mode
         if (isWinner) {
-          user.stats.wins = (user.stats.wins || 0) + 1;
+          user[statsField].wins = (user[statsField].wins || 0) + 1;
         } else {
-          user.stats.losses = (user.stats.losses || 0) + 1;
+          user[statsField].losses = (user[statsField].losses || 0) + 1;
         }
         
         await user.save();
-        console.log(`[RANKED REWARDS] Player ${i}: User saved - ${user.stats.wins}W/${user.stats.losses}L, ${user.goldCoins} gold, ${user.stats.xp} XP`);
+        console.log(`[RANKED REWARDS] Player ${i}: User saved - ${user[statsField].wins}W/${user[statsField].losses}L, ${user.goldCoins} gold, ${user[statsField].xp} XP (${statsField})`);
         
         // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
         // Mettre à jour directement via l'index (plus fiable)
@@ -173,7 +175,7 @@ async function distributeRankedRewards(match) {
         console.log(`[RANKED REWARDS] ✅ Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
         console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})`);
         console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})`);
-        console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user.stats.xp} (+${xpChange})`);
+        console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user[statsField].xp} (+${xpChange}) (${statsField})`);
         console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
         
         processedCount++;
@@ -981,6 +983,61 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async 
   }
 });
 
+// Mettre à jour le statut d'un match classé (admin/staff)
+router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { status } = req.body;
+    
+    const validStatuses = ['pending', 'ready', 'in_progress', 'completed', 'cancelled', 'disputed'];
+    
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Statut invalide'
+      });
+    }
+    
+    const match = await RankedMatch.findById(matchId);
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    const oldStatus = match.status;
+    match.status = status;
+    
+    // Ajouter des timestamps selon le statut
+    if (status === 'cancelled') {
+      match.cancelledAt = new Date();
+      match.cancelledBy = req.user._id;
+    } else if (status === 'completed') {
+      match.completedAt = new Date();
+    } else if (status === 'in_progress') {
+      match.startedAt = new Date();
+    }
+    
+    await match.save();
+    
+    console.log(`[RANKED ADMIN] Match ${matchId} status changed: ${oldStatus} → ${status}`);
+    
+    // Notifier les joueurs via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Statut du match classé mis à jour',
+      match
+    });
+  } catch (error) {
+    console.error('Error updating ranked match status:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Supprimer un match classé et rembourser les récompenses (admin/staff)
 router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
   try {
@@ -1046,25 +1103,28 @@ router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => 
           console.log(`[RANKED DELETE]   └─ Ranking mis à jour: ${ranking.points} pts, ${ranking.wins}V/${ranking.losses}D`);
         }
         
-        // Mettre à jour l'User (gold, XP, wins/losses globaux)
+        // Mettre à jour l'User (gold, XP, wins/losses par mode)
         const user = await User.findById(userId);
         if (user) {
-          // Retirer le gold
+          // Use mode-specific stats field
+          const statsFieldDel = match.mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+          if (!user[statsFieldDel]) user[statsFieldDel] = {};
+          
+          // Retirer le gold (shared between modes)
           user.goldCoins = Math.max(0, (user.goldCoins || 0) - goldEarned);
           
-          // Retirer l'XP
-          if (!user.stats) user.stats = {};
-          user.stats.xp = Math.max(0, (user.stats.xp || 0) - xpEarned);
+          // Retirer l'XP par mode
+          user[statsFieldDel].xp = Math.max(0, (user[statsFieldDel].xp || 0) - xpEarned);
           
-          // Retirer la victoire ou défaite des stats globales
+          // Retirer la victoire ou défaite des stats par mode
           if (isWinner) {
-            user.stats.wins = Math.max(0, (user.stats.wins || 0) - 1);
+            user[statsFieldDel].wins = Math.max(0, (user[statsFieldDel].wins || 0) - 1);
           } else {
-            user.stats.losses = Math.max(0, (user.stats.losses || 0) - 1);
+            user[statsFieldDel].losses = Math.max(0, (user[statsFieldDel].losses || 0) - 1);
           }
           
           await user.save();
-          console.log(`[RANKED DELETE]   └─ User mis à jour: ${user.goldCoins} gold, ${user.stats.xp} XP, ${user.stats.wins}V/${user.stats.losses}D`);
+          console.log(`[RANKED DELETE]   └─ User mis à jour: ${user.goldCoins} gold, ${user[statsFieldDel].xp} XP, ${user[statsFieldDel].wins}V/${user[statsFieldDel].losses}D (${statsFieldDel})`);
         }
       }
       

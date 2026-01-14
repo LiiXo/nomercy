@@ -345,17 +345,19 @@ const PlayerProfile = () => {
     return rankedMatchHistory.slice(startIndex, endIndex);
   };
 
-  // Get player stats (global stats)
+  // Get player stats (mode-specific stats)
   const getPlayerStats = () => {
-    const userStats = playerData?.stats || { points: 0, wins: 0, losses: 0, xp: 0 };
+    // Use mode-specific stats (statsHardcore or statsCdl), fallback to legacy stats
+    const modeStats = selectedMode === 'cdl' 
+      ? (playerData?.statsCdl || playerData?.stats || {})
+      : (playerData?.statsHardcore || playerData?.stats || {});
     
-    // Use global user stats
     return {
-      points: userStats.points || 0,
-      xp: userStats.xp || 0,
-      wins: userStats.wins || 0,
-      losses: userStats.losses || 0,
-      rank: userStats.rank || ranking?.rank || 999
+      points: modeStats.points || 0,
+      xp: modeStats.xp || 0,
+      wins: modeStats.wins || 0,
+      losses: modeStats.losses || 0,
+      rank: modeStats.rank || ranking?.rank || 999
     };
   };
 

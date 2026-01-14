@@ -68,7 +68,25 @@ const userSchema = new mongoose.Schema({
     default: ['user']
   },
 
-  // Game Stats (global - all modes combined)
+  // Game Stats per mode (Hardcore)
+  statsHardcore: {
+    points: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: Number, default: 0 }
+  },
+  
+  // Game Stats per mode (CDL)
+  statsCdl: {
+    points: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: Number, default: 0 }
+  },
+  
+  // Legacy stats field (deprecated, kept for backward compatibility)
   stats: {
     points: { type: Number, default: 0 },
     xp: { type: Number, default: 0 },
@@ -115,6 +133,21 @@ const userSchema = new mongoose.Schema({
     default: null // null = permanent ban
   },
   bannedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+
+  // Ban référent - empêche d'être sélectionné comme référent dans les matchs classés
+  isReferentBanned: {
+    type: Boolean,
+    default: false
+  },
+  referentBannedAt: {
+    type: Date,
+    default: null
+  },
+  referentBannedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     default: null
