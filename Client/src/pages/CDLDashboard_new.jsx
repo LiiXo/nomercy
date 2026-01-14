@@ -56,13 +56,11 @@ const CDLDashboard = () => {
   const { 
     appSettings, 
     ladderRewards, 
+    topPlayer, 
+    topSquad, 
     getGoldCoinsForLadder,
     isDuoTrioOpen: duoTrioOpenFromContext 
   } = useData();
-  
-  // CDL-specific top player and squad (separate from hardcore)
-  const [topPlayer, setTopPlayer] = useState(null);
-  const [topSquad, setTopSquad] = useState(null);
   
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
@@ -471,30 +469,7 @@ const CDLDashboard = () => {
     localStorage.setItem('cdlMatchFilters', JSON.stringify(activeModes));
   }, [activeModes]);
 
-  // Fetch CDL-specific top player and top squad
-  useEffect(() => {
-    const fetchTopStats = async () => {
-      try {
-        const [playerRes, squadRes] = await Promise.all([
-          fetch(`${API_URL}/rankings/top-player?mode=cdl`),
-          fetch(`${API_URL}/rankings/top-squad?mode=cdl`)
-        ]);
-        const [playerData, squadData] = await Promise.all([playerRes.json(), squadRes.json()]);
-        
-        if (playerData.success && playerData.player) {
-          setTopPlayer(playerData.player);
-        }
-        if (squadData.success && squadData.squad) {
-          setTopSquad(squadData.squad);
-        }
-      } catch (err) {
-        console.error('Error fetching CDL top stats:', err);
-      }
-    };
-    fetchTopStats();
-  }, []);
-
-  // App settings and ladder rewards are now provided by DataContext
+  // App settings, ladder rewards, and top stats are now provided by DataContext
 
   const gameModeApiNames = {
     fr: { 'Hardpoint': 'Hardpoint', 'Search & Destroy': 'Recherche & Destruction', 'Control': 'Contrôle' },

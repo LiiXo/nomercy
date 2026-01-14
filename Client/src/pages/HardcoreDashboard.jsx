@@ -56,11 +56,13 @@ const HardcoreDashboard = () => {
   const { 
     appSettings, 
     ladderRewards, 
-    topPlayer, 
-    topSquad, 
     getGoldCoinsForLadder,
     isDuoTrioOpen: duoTrioOpenFromContext 
   } = useData();
+  
+  // Hardcore-specific top player and squad (separate from CDL)
+  const [topPlayer, setTopPlayer] = useState(null);
+  const [topSquad, setTopSquad] = useState(null);
   
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));

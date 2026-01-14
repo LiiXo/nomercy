@@ -52,7 +52,7 @@ const LoadingScreen = () => (
 // Composant pour protéger les routes selon le mode sélectionné
 const ProtectedRoute = ({ children, requiredMode }) => {
   const { selectedMode } = useMode();
-  const { isAuthenticated, isProfileComplete, loading } = useAuth();
+  const { isAuthenticated, isProfileComplete, loading, isStaff } = useAuth();
   
   if (loading) {
     return <LoadingScreen />;
@@ -62,8 +62,8 @@ const ProtectedRoute = ({ children, requiredMode }) => {
     return <Navigate to="/" replace />;
   }
 
-  // Mode CDL temporairement indisponible
-  if (requiredMode === 'cdl') {
+  // Mode CDL temporairement indisponible (sauf pour staff/admin)
+  if (requiredMode === 'cdl' && !isStaff()) {
     return <Navigate to="/" replace />;
   }
   

@@ -54,6 +54,11 @@ const isAdminOrStaff = (user) => {
   return user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 };
 
+// Helper function to get the stats field name based on match mode
+const getStatsFieldForMode = (mode) => {
+  return mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+};
+
 // Helper function to check if a squad is "new" (< 3 days old AND < 3 completed matches)
 const isNewSquad = async (squadId) => {
   const squad = await Squad.findById(squadId);
@@ -1808,26 +1813,28 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     console.log(`[MATCH RESULT] Config - Ladder Points Win: ${pointsWin}, Loss: ${pointsLoss}, General Win: ${generalPointsWin}, Loss: ${generalPointsLoss}`);
 
     // 1. Mettre à jour le classement (ladder) du gagnant
+    const statsField = getStatsFieldForMode(match.mode);
     const winnerUpdate = await Squad.findOneAndUpdate(
       { _id: winnerId, 'registeredLadders.ladderId': match.ladderId },
       {
         $inc: {
           'registeredLadders.$.points': pointsWin,
           'registeredLadders.$.wins': 1,
-          'stats.totalWins': 1,
-          'stats.totalPoints': generalPointsWin
+          [`${statsField}.totalWins`]: 1,
+          [`${statsField}.totalPoints`]: generalPointsWin
         }
       },
       { new: true }
     );
-    console.log(`[MATCH RESULT] Winner squad updated: ${winnerUpdate?.name}, Ladder +${pointsWin}, Total +${generalPointsWin}`);
+    console.log(`[MATCH RESULT] Winner squad updated: ${winnerUpdate?.name}, Ladder +${pointsWin}, Total +${generalPointsWin} (${statsField})`);
 
     // 2. Mettre à jour le classement (ladder) du perdant (empêcher les points négatifs)
     const loserSquad = await Squad.findById(loserId);
     if (loserSquad) {
       const ladderData = loserSquad.registeredLadders?.find(l => l.ladderId === match.ladderId);
       const currentLadderPoints = ladderData?.points || 0;
-      const currentTotalPoints = loserSquad.stats?.totalPoints || 0;
+      const loserModeStats = loserSquad[statsField] || {};
+      const currentTotalPoints = loserModeStats.totalPoints || 0;
       
       // Calculer les nouveaux points (minimum 0)
       const newLadderPoints = Math.max(0, currentLadderPoints - pointsLoss);
@@ -1841,13 +1848,13 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
           $inc: {
             'registeredLadders.$.points': -actualLadderLoss,
             'registeredLadders.$.losses': 1,
-            'stats.totalLosses': 1,
-            'stats.totalPoints': -actualTotalLoss
+            [`${statsField}.totalLosses`]: 1,
+            [`${statsField}.totalPoints`]: -actualTotalLoss
           }
         },
         { new: true }
       );
-      console.log(`[MATCH RESULT] Loser squad updated: ${loserUpdate?.name}, Ladder -${actualLadderLoss}, Total -${actualTotalLoss}`);
+      console.log(`[MATCH RESULT] Loser squad updated: ${loserUpdate?.name}, Ladder -${actualLadderLoss}, Total -${actualTotalLoss} (${statsField})`);
     }
 
     // 3. Mettre à jour les stats individuelles des joueurs du roster
@@ -2180,6 +2187,9 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
     const pointsLoss = rewardsConfigConfirm.ladderPointsLoss;
     const generalPointsWin = rewardsConfigConfirm.generalSquadPointsWin;
     const generalPointsLoss = rewardsConfigConfirm.generalSquadPointsLoss;
+    
+    // Get the stats field based on match mode
+    const statsFieldConfirm = getStatsFieldForMode(match.mode);
 
     // Mettre à jour le gagnant
     await Squad.findOneAndUpdate(
@@ -2188,8 +2198,8 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
         $inc: {
           'registeredLadders.$.points': pointsWin,
           'registeredLadders.$.wins': 1,
-          'stats.totalWins': 1,
-          'stats.totalPoints': generalPointsWin
+          [`${statsFieldConfirm}.totalWins`]: 1,
+          [`${statsFieldConfirm}.totalPoints`]: generalPointsWin
         }
       }
     );
@@ -2199,7 +2209,8 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
     if (loserSquadConfirm) {
       const ladderDataConfirm = loserSquadConfirm.registeredLadders?.find(l => l.ladderId === match.ladderId);
       const currentLadderPointsConfirm = ladderDataConfirm?.points || 0;
-      const currentTotalPointsConfirm = loserSquadConfirm.stats?.totalPoints || 0;
+      const loserModeStatsConfirm = loserSquadConfirm[statsFieldConfirm] || {};
+      const currentTotalPointsConfirm = loserModeStatsConfirm.totalPoints || 0;
       
       // Calculer les nouveaux points (minimum 0)
       const newLadderPointsConfirm = Math.max(0, currentLadderPointsConfirm - pointsLoss);
@@ -2213,8 +2224,8 @@ router.post('/:matchId/confirm', verifyToken, async (req, res) => {
           $inc: {
             'registeredLadders.$.points': -actualLadderLossConfirm,
             'registeredLadders.$.losses': 1,
-            'stats.totalLosses': 1,
-            'stats.totalPoints': -actualTotalLossConfirm
+            [`${statsFieldConfirm}.totalLosses`]: 1,
+            [`${statsFieldConfirm}.totalPoints`]: -actualTotalLossConfirm
           }
         }
       );
@@ -2732,6 +2743,9 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
       const generalPointsWin = rewardsConfigResolve.generalSquadPointsWin ?? 15;
       const generalPointsLoss = rewardsConfigResolve.generalSquadPointsLoss ?? 7;
       const playerCoinsWin = rewardsConfigResolve.playerCoinsWin ?? 50;
+      
+      // Get the stats field based on match mode
+      const statsFieldResolve = getStatsFieldForMode(match.mode);
 
       // Mettre à jour le gagnant
       await Squad.findOneAndUpdate(
@@ -2740,8 +2754,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
           $inc: {
             'registeredLadders.$.points': pointsWin,
             'registeredLadders.$.wins': 1,
-            'stats.totalWins': 1,
-            'stats.totalPoints': generalPointsWin
+            [`${statsFieldResolve}.totalWins`]: 1,
+            [`${statsFieldResolve}.totalPoints`]: generalPointsWin
           }
         }
       );
@@ -2751,7 +2765,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
       if (loserSquad) {
         const ladderData = loserSquad.registeredLadders?.find(l => l.ladderId === match.ladderId);
         const currentLadderPoints = ladderData?.points || 0;
-        const currentTotalPoints = loserSquad.stats?.totalPoints || 0;
+        const loserModeStatsResolve = loserSquad[statsFieldResolve] || {};
+        const currentTotalPoints = loserModeStatsResolve.totalPoints || 0;
         
         const newLadderPoints = Math.max(0, currentLadderPoints - pointsLoss);
         const newTotalPoints = Math.max(0, currentTotalPoints - generalPointsLoss);
@@ -2764,8 +2779,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
             $inc: {
               'registeredLadders.$.points': -actualLadderLoss,
               'registeredLadders.$.losses': 1,
-              'stats.totalLosses': 1,
-              'stats.totalPoints': -actualTotalLoss
+              [`${statsFieldResolve}.totalLosses`]: 1,
+              [`${statsFieldResolve}.totalPoints`]: -actualTotalLoss
             }
           }
         );

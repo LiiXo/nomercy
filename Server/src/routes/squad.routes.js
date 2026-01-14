@@ -1232,6 +1232,9 @@ router.get('/:squadId/rank', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Squad not found' });
     }
     
+    // Use the appropriate stats field based on mode
+    const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+    
     // Get all squads sorted by points for this mode
     const query = {
       $or: [{ mode }, { mode: 'both' }],
@@ -1244,8 +1247,8 @@ router.get('/:squadId/rank', async (req, res) => {
         select: 'isBanned isDeleted',
         match: { isBanned: false, isDeleted: { $ne: true } }
       })
-      .sort({ 'stats.totalPoints': -1 })
-      .select('stats');
+      .sort({ [`${statsField}.totalPoints`]: -1 })
+      .select(`${statsField} stats`);
     
     // Filter valid squads and find rank
     const validSquads = allSquads.filter(s => s.leader !== null);
@@ -1255,10 +1258,13 @@ router.get('/:squadId/rank', async (req, res) => {
       return res.json({ success: false, message: 'Squad not ranked' });
     }
     
+    // Get points from mode-specific stats, fallback to legacy stats
+    const modeStats = targetSquad[statsField] || targetSquad.stats || {};
+    
     res.json({
       success: true,
       rank,
-      points: targetSquad.stats?.totalPoints || 0,
+      points: modeStats.totalPoints || 0,
       totalSquads: validSquads.length
     });
   } catch (error) {
@@ -1277,6 +1283,9 @@ router.get('/leaderboard/:mode', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
     
+    // Use the appropriate stats field based on mode
+    const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+    
     const query = {
       $or: [{ mode }, { mode: 'both' }],
       isDeleted: false // Exclude deleted squads
@@ -1293,10 +1302,10 @@ router.get('/leaderboard/:mode', async (req, res) => {
         select: 'username avatarUrl discordAvatar discordId isDeleted',
         match: { isDeleted: { $ne: true } } // Exclude deleted members
       })
-      .sort({ 'stats.totalPoints': -1 })
+      .sort({ [`${statsField}.totalPoints`]: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit))
-      .select('name tag description color logo mode members stats');
+      .select(`name tag description color logo mode members ${statsField} stats`);
     
     // Filter out squads with banned/deleted leaders
     const validSquads = squads.filter(s => s.leader !== null);
@@ -1310,14 +1319,18 @@ router.get('/leaderboard/:mode', async (req, res) => {
       });
     const total = allSquads.filter(s => s.leader !== null).length;
     
-    // Add rank numbers and calculate total matches
+    // Add rank numbers and calculate total matches using mode-specific stats
     const startRank = (parseInt(page) - 1) * parseInt(limit);
     const rankedSquads = validSquads.map((squad, index) => {
       const squadData = squad.toJSON();
-      const totalWins = squadData.stats?.totalWins || 0;
-      const totalLosses = squadData.stats?.totalLosses || 0;
+      // Use mode-specific stats, fallback to legacy stats for backward compatibility
+      const modeStats = squadData[statsField] || squadData.stats || {};
+      const totalWins = modeStats.totalWins || 0;
+      const totalLosses = modeStats.totalLosses || 0;
+      const totalPoints = modeStats.totalPoints || 0;
       return {
         ...squadData,
+        stats: { totalWins, totalLosses, totalPoints }, // Normalize to stats for frontend compatibility
         rank: startRank + index + 1,
         totalMatches: totalWins + totalLosses,
         totalWins,

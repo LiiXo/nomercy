@@ -94,7 +94,21 @@ const squadSchema = new mongoose.Schema({
     default: 'both'
   },
   
-  // Stats
+  // Stats per mode (Hardcore)
+  statsHardcore: {
+    totalWins: { type: Number, default: 0 },
+    totalLosses: { type: Number, default: 0 },
+    totalPoints: { type: Number, default: 0 }
+  },
+  
+  // Stats per mode (CDL)
+  statsCdl: {
+    totalWins: { type: Number, default: 0 },
+    totalLosses: { type: Number, default: 0 },
+    totalPoints: { type: Number, default: 0 }
+  },
+  
+  // Legacy stats field (deprecated, kept for backward compatibility)
   stats: {
     totalWins: { type: Number, default: 0 },
     totalLosses: { type: Number, default: 0 },

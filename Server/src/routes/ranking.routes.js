@@ -139,19 +139,26 @@ router.get('/top-player', async (req, res) => {
 router.get('/top-squad', async (req, res) => {
   try {
     const { mode = 'hardcore' } = req.query;
+    
+    // Use the appropriate stats field based on mode
+    const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
 
-    // Find squad with most stats.totalPoints (Points Top Escouade)
+    // Find squad with most points for this mode
     const topSquad = await Squad.findOne({
       isDeleted: { $ne: true },
-      'stats.totalPoints': { $gt: 0 }
+      $or: [{ mode }, { mode: 'both' }],
+      [`${statsField}.totalPoints`]: { $gt: 0 }
     })
-      .select('name tag logo color stats registeredLadders')
-      .sort({ 'stats.totalPoints': -1 })
+      .select(`name tag logo color ${statsField} stats registeredLadders`)
+      .sort({ [`${statsField}.totalPoints`]: -1 })
       .lean();
 
     if (!topSquad) {
       return res.json({ success: true, squad: null });
     }
+    
+    // Get mode-specific stats, fallback to legacy stats
+    const modeStats = topSquad[statsField] || topSquad.stats || {};
 
     res.json({
       success: true,
@@ -161,10 +168,10 @@ router.get('/top-squad', async (req, res) => {
         tag: topSquad.tag,
         logo: topSquad.logo,
         color: topSquad.color,
-        stats: topSquad.stats,
-        totalPoints: topSquad.stats?.totalPoints || 0,
-        totalWins: topSquad.stats?.totalWins || 0,
-        totalLosses: topSquad.stats?.totalLosses || 0
+        stats: modeStats,
+        totalPoints: modeStats.totalPoints || 0,
+        totalWins: modeStats.totalWins || 0,
+        totalLosses: modeStats.totalLosses || 0
       }
     });
   } catch (error) {

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
+import { useAuth } from '../AuthContext';
 import { Skull, Shield, ArrowRight, Zap, Users, Trophy, ChevronDown, Flame, Target, Crosshair } from 'lucide-react';
 import { useBackgroundAudio } from '../AudioProvider';
 
@@ -16,14 +17,16 @@ const ModeSelection = () => {
   const navigate = useNavigate();
   const { t, language, setLanguage } = useLanguage();
   const { selectMode } = useMode();
+  const { isStaff } = useAuth();
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [hoveredMode, setHoveredMode] = useState(null);
   const { requestPlay } = useBackgroundAudio();
 
   const currentLanguage = languages.find(lang => lang.code === language);
+  const canAccessCDL = isStaff();
 
   const handleSelectMode = (mode) => {
-    if (mode === 'cdl') return;
+    if (mode === 'cdl' && !canAccessCDL) return;
     selectMode(mode);
     navigate(`/${mode}`);
   };
@@ -214,27 +217,38 @@ const ModeSelection = () => {
 
             {/* CDL Mode */}
             <div
+              onClick={() => canAccessCDL && handleSelectMode('cdl')}
               onMouseEnter={() => setHoveredMode('cdl')}
               onMouseLeave={() => setHoveredMode(null)}
-              className="group relative glass-card rounded-3xl p-8 cursor-not-allowed overflow-hidden opacity-60"
-              style={{ border: '2px solid rgba(0, 212, 255, 0.2)' }}
+              className={`group relative glass-card rounded-3xl p-8 overflow-hidden ${
+                canAccessCDL 
+                  ? 'cursor-pointer card-hover' 
+                  : 'cursor-not-allowed opacity-60'
+              }`}
+              style={{ border: `2px solid rgba(0, 212, 255, ${canAccessCDL ? '0.3' : '0.2'})` }}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-accent-500/5 to-transparent" />
-              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-accent-500/10 to-transparent rounded-bl-full" />
+              <div className={`absolute inset-0 bg-gradient-to-br from-accent-500/10 to-transparent ${canAccessCDL ? 'opacity-0 group-hover:opacity-100' : ''} transition-all duration-500`} />
+              <div className={`absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-accent-500/30 to-transparent rounded-bl-full ${canAccessCDL ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'} transition-all duration-500`} />
               
               <div className="relative z-10">
                 {/* Icon */}
                 <div className="flex items-center justify-between mb-8">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-accent-500 to-blue-600 flex items-center justify-center shadow-neon-cyan">
+                  <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-accent-500 to-blue-600 flex items-center justify-center shadow-neon-cyan ${canAccessCDL ? 'group-hover:scale-110 group-hover:rotate-3' : ''} transition-all duration-500`}>
                     <Shield className="w-10 h-10 text-white" />
                   </div>
-                  <div className="px-4 py-2 rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-bold animate-pulse">
-                    {getText('comingSoon')}
-                  </div>
+                  {canAccessCDL ? (
+                    <div className="px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-400 text-sm font-bold">
+                      STAFF ACCESS
+                    </div>
+                  ) : (
+                    <div className="px-4 py-2 rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-bold animate-pulse">
+                      {getText('comingSoon')}
+                    </div>
+                  )}
                 </div>
 
                 {/* Title */}
-                <h3 className="text-4xl font-display text-white mb-4">
+                <h3 className={`text-4xl font-display text-white mb-4 ${canAccessCDL ? 'group-hover:text-accent-400' : ''} transition-colors`}>
                   {getText('cdl')}
                 </h3>
 
@@ -256,9 +270,16 @@ const ModeSelection = () => {
                 </div>
 
                 {/* Button */}
-                <div className="w-full py-4 bg-white/5 border border-white/10 rounded-xl text-gray-500 font-bold text-lg text-center">
-                  {getText('comingSoon')}
-                </div>
+                {canAccessCDL ? (
+                  <button className="w-full py-4 bg-gradient-to-r from-accent-500 to-blue-600 rounded-xl text-white font-bold text-lg flex items-center justify-center gap-3 group-hover:shadow-neon-cyan-lg transition-all duration-500 hover:scale-[1.02]">
+                    <span>{getText('play')}</span>
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                ) : (
+                  <div className="w-full py-4 bg-white/5 border border-white/10 rounded-xl text-gray-500 font-bold text-lg text-center">
+                    {getText('comingSoon')}
+                  </div>
+                )}
               </div>
             </div>
           </div>
