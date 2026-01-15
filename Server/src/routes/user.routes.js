@@ -113,6 +113,20 @@ const GGSECURE_PROJECT_ID = '693cef61be96745c4607e233';
 // Clé API GGSecure (à configurer dans .env : GGSECURE_API_KEY=votre_cle)
 const GGSECURE_API_KEY = process.env.GGSECURE_API_KEY;
 
+// Get username by user ID (returns plain text)
+router.get('/username/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId).select('username');
+    if (!user) {
+      return res.status(404).type('text/plain').send('User not found');
+    }
+    res.type('text/plain').send(user.username);
+  } catch (error) {
+    console.error('Error fetching username:', error);
+    res.status(500).type('text/plain').send('Error');
+  }
+});
+
 router.get('/anticheat-status/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -969,6 +983,146 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Une erreur est survenue.'
+    });
+  }
+});
+
+// Reset own stats (costs 2000 gold)
+router.post('/reset-my-stats', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const RESET_COST = 2000;
+
+    // Check if user has enough gold
+    if (req.user.goldCoins < RESET_COST) {
+      return res.status(400).json({
+        success: false,
+        message: `Vous avez besoin de ${RESET_COST} gold pour réinitialiser vos stats. Vous avez ${req.user.goldCoins} gold.`
+      });
+    }
+
+    // Check if user is in an active match
+    const activeRankedMatch = await RankedMatch.findOne({
+      'players.user': userId,
+      status: { $in: ['pending', 'ready', 'in_progress'] }
+    });
+
+    if (activeRankedMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous ne pouvez pas réinitialiser vos stats pendant un match classé actif.'
+      });
+    }
+
+    const activeMatch = await Match.findOne({
+      $or: [
+        { 'challengerRoster.user': userId },
+        { 'opponentRoster.user': userId }
+      ],
+      status: { $in: ['pending', 'accepted', 'in_progress'] }
+    });
+
+    if (activeMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous ne pouvez pas réinitialiser vos stats pendant un match actif.'
+      });
+    }
+
+    // Deduct gold
+    req.user.goldCoins -= RESET_COST;
+
+    // Reset stats
+    req.user.stats = {
+      wins: 0,
+      losses: 0,
+      points: 0,
+      rank: null
+    };
+    
+    // Reset hardcore stats if they exist
+    if (req.user.statsHardcore) {
+      req.user.statsHardcore = {
+        wins: 0,
+        losses: 0,
+        points: 0,
+        rank: null
+      };
+    }
+    
+    // Reset CDL stats if they exist
+    if (req.user.statsCdl) {
+      req.user.statsCdl = {
+        wins: 0,
+        losses: 0,
+        points: 0,
+        rank: null
+      };
+    }
+
+    await req.user.save();
+
+    // Reset rankings in Ranking collection (for ranked mode)
+    await Ranking.updateMany(
+      { user: userId },
+      { 
+        $set: { 
+          points: 0, 
+          wins: 0, 
+          losses: 0,
+          matchesPlayed: 0
+        } 
+      }
+    );
+
+    // Count matches that will be affected (for logging)
+    const ladderMatchCount = await Match.countDocuments({
+      $or: [
+        { 'challengerRoster.user': userId },
+        { 'opponentRoster.user': userId }
+      ],
+      status: 'completed'
+    });
+
+    const rankedMatchCount = await RankedMatch.countDocuments({
+      'players.user': userId,
+      status: 'completed'
+    });
+
+    // Remove user from completed matches in ladder (remove from rosters, don't delete matches)
+    await Match.updateMany(
+      { 'challengerRoster.user': userId, status: 'completed' },
+      { $pull: { challengerRoster: { user: userId } } }
+    );
+    
+    await Match.updateMany(
+      { 'opponentRoster.user': userId, status: 'completed' },
+      { $pull: { opponentRoster: { user: userId } } }
+    );
+
+    // Remove user from ranked match history (remove from players array)
+    await RankedMatch.updateMany(
+      { 'players.user': userId, status: 'completed' },
+      { $pull: { players: { user: userId } } }
+    );
+
+    console.log(`[RESET STATS] User ${req.user.username} (${userId}) reset their stats. Cost: ${RESET_COST} gold. Ladder matches: ${ladderMatchCount}, Ranked matches: ${rankedMatchCount}`);
+
+    res.json({
+      success: true,
+      message: 'Vos statistiques ont été réinitialisées avec succès.',
+      goldSpent: RESET_COST,
+      newGoldBalance: req.user.goldCoins,
+      matchesCleared: {
+        ladder: ladderMatchCount,
+        ranked: rankedMatchCount
+      }
+    });
+  } catch (error) {
+    console.error('Reset my stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Une erreur est survenue lors de la réinitialisation.'
     });
   }
 });

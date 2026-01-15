@@ -8,10 +8,129 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
+
+// Audio pour le matchmaking - Web Audio API avec fichier sound.mp3
+let audioContext = null;
+let audioBuffer = null;
+let audioLoaded = false;
+
+// URL du son - essayer plusieurs chemins
+const SOUND_URLS = [
+  '/sound.mp3',
+  './sound.mp3',
+  'https://nomercy.ggsecure.io/sound.mp3',
+  `${window.location.origin}/sound.mp3`
+];
+
+const initAudioContext = async () => {
+  if (audioContext && audioBuffer) return;
+  
+  try {
+    // Créer le contexte audio
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      console.log('[Audio] AudioContext créé');
+    }
+    
+    // Charger le fichier audio - essayer plusieurs URLs
+    if (!audioBuffer) {
+      console.log('[Audio] Origin:', window.location.origin);
+      console.log('[Audio] Href:', window.location.href);
+      
+      for (const url of SOUND_URLS) {
+        try {
+          console.log('[Audio] Essai de:', url);
+          const response = await fetch(url);
+          console.log('[Audio] Réponse:', response.status);
+          
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer();
+            console.log('[Audio] Taille:', arrayBuffer.byteLength, 'bytes');
+            
+            if (arrayBuffer.byteLength > 0) {
+              audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+              audioLoaded = true;
+              console.log('[Audio] ✓ Audio chargé depuis:', url);
+              return;
+            }
+          }
+        } catch (err) {
+          console.log('[Audio] Échec pour', url, ':', err.message);
+        }
+      }
+      
+      console.error('[Audio] ✗ Aucune URL valide trouvée');
+    }
+  } catch (err) {
+    console.error('[Audio] Erreur initialisation:', err);
+  }
+};
+
+const playMatchFoundSound = () => {
+  console.log('[Audio] Tentative de lecture...', { hasContext: !!audioContext, hasBuffer: !!audioBuffer, loaded: audioLoaded });
+  
+  if (!audioContext || !audioBuffer) {
+    console.warn('[Audio] Audio non prêt, tentative de lecture avec fallback...');
+    // Fallback: essayer avec un simple bip
+    playFallbackBeep();
+    return;
+  }
+  
+  // Reprendre le contexte si suspendu
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+  
+  try {
+    const source = audioContext.createBufferSource();
+    const gainNode = audioContext.createGain();
+    
+    source.buffer = audioBuffer;
+    source.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    gainNode.gain.value = 0.5;
+    
+    source.start(0);
+    console.log('[Audio] Lecture en cours!');
+  } catch (err) {
+    console.warn('[Audio] Erreur lecture:', err);
+    playFallbackBeep();
+  }
+};
+
+const playFallbackBeep = () => {
+  if (!audioContext) return;
+  try {
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.frequency.value = 880;
+    oscillator.type = 'sine';
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
+    console.log('[Audio] Fallback beep joué');
+  } catch (err) {
+    console.warn('[Audio] Fallback échoué:', err);
+  }
+};
+
+const unlockMatchFoundAudio = async () => {
+  console.log('[Audio] Déblocage et chargement...');
+  
+  await initAudioContext();
+  
+  if (audioContext && audioContext.state === 'suspended') {
+    await audioContext.resume();
+    console.log('[Audio] AudioContext repris');
+  }
+};
 
 // Default rank data avec couleurs et icônes (sera mis à jour avec les seuils de config)
 const DEFAULT_RANK_THRESHOLDS = {
@@ -108,6 +227,14 @@ const RankedMode = () => {
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rules, setRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
+  
+  
+  // Shuffle animation state
+  const [showShuffleAnimation, setShowShuffleAnimation] = useState(false);
+  const [shuffleMatchData, setShuffleMatchData] = useState(null);
+  const [shufflePhase, setShufflePhase] = useState(0); // 0: mixing, 1: distributing, 2: complete, 3: countdown
+  const [shuffledPlayers, setShuffledPlayers] = useState([]);
+  const [shuffleCountdown, setShuffleCountdown] = useState(10);
   
   // Rewards from config
   const [rewardsConfig, setRewardsConfig] = useState(null);
@@ -341,8 +468,14 @@ const RankedMode = () => {
     }
   };
 
+  // Unlock audio (call on user interaction to enable audio playback)
+  const unlockAudio = async () => {
+    await unlockMatchFoundAudio();
+  };
+
   // Join queue
   const joinQueue = async () => {
+    unlockAudio(); // Unlock audio on user interaction
     setMatchmakingError(null);
     if (user?.platform === 'PC') {
       const connected = await checkGGSecure();
@@ -431,6 +564,7 @@ const RankedMode = () => {
   
   // Start test match (staff only - separate matchmaking with bots)
   const startTestMatch = async () => {
+    unlockAudio(); // Unlock audio on user interaction
     setMatchmakingError(null);
     setStartingTestMatch(true);
     try {
@@ -446,10 +580,9 @@ const RankedMode = () => {
       });
       const data = await response.json();
       if (data.success) {
-        // Le socket va nous rediriger vers le match
-        if (data.matchId) {
-          navigate(`/ranked/match/${data.matchId}`);
-        }
+        // Le socket 'rankedMatchFound' va gérer l'animation puis la redirection
+        // Ne pas naviguer directement ici pour permettre l'animation de s'afficher
+        console.log('[Test Match] Match créé, en attente de l\'événement socket pour l\'animation...');
       } else {
         setMatchmakingError(data.message);
         if (data.activeMatchId) {
@@ -525,8 +658,22 @@ const RankedMode = () => {
       }
     });
     const unsubMatch = on('rankedMatchFound', (data) => {
+      console.log('[RankedMode] Match trouvé!', data);
       setInQueue(false);
-      navigate(`/ranked/match/${data.matchId}`);
+      
+      // Jouer le son quand le match est trouvé
+      playMatchFoundSound();
+      
+      // Show shuffle animation before navigating
+      if (data.players && data.players.length > 0) {
+        setShuffleMatchData(data);
+        setShuffledPlayers(data.players.map((p, i) => ({ ...p, shuffleIndex: i })));
+        setShufflePhase(0);
+        setShowShuffleAnimation(true);
+      } else {
+        // No player data, navigate directly
+        navigate(`/ranked/match/${data.matchId}`);
+      }
     });
     return () => { unsubQueue(); unsubMatch(); };
   }, [isAuthenticated, isConnected, on, navigate]);
@@ -543,6 +690,69 @@ const RankedMode = () => {
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, [timerActive, timerEndTime]);
+
+  // Init audio context on mount
+  useEffect(() => {
+    initAudioContext();
+  }, []);
+
+  // Shuffle animation effect
+  useEffect(() => {
+    if (!showShuffleAnimation || !shuffleMatchData) return;
+
+    // Phase 0: Mixing animation (shuffle the players visually for 2 seconds)
+    if (shufflePhase === 0) {
+      let shuffleCount = 0;
+      const shuffleInterval = setInterval(() => {
+        setShuffledPlayers(prev => {
+          const shuffled = [...prev];
+          // Fisher-Yates shuffle for visual effect
+          for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+          }
+          return shuffled.map((p, i) => ({ ...p, shuffleIndex: i }));
+        });
+        shuffleCount++;
+        if (shuffleCount >= 10) {
+          clearInterval(shuffleInterval);
+          setShufflePhase(1);
+        }
+      }, 200);
+
+      return () => clearInterval(shuffleInterval);
+    }
+
+    // Phase 1: Distributing to teams (1.5 seconds)
+    if (shufflePhase === 1) {
+      const timer = setTimeout(() => {
+        setShufflePhase(2);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+
+    // Phase 2: Show final teams, then start countdown
+    if (shufflePhase === 2) {
+      const timer = setTimeout(() => {
+        setShuffleCountdown(10);
+        setShufflePhase(3);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+
+    // Phase 3: Countdown 10 seconds then navigate
+    if (shufflePhase === 3) {
+      if (shuffleCountdown <= 0) {
+        setShowShuffleAnimation(false);
+        navigate(`/ranked/match/${shuffleMatchData.matchId}`);
+        return;
+      }
+      const timer = setTimeout(() => {
+        setShuffleCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showShuffleAnimation, shuffleMatchData, shufflePhase, shuffleCountdown, navigate]);
 
   // Fetch leaderboard when page changes
   useEffect(() => {
@@ -638,6 +848,18 @@ const RankedMode = () => {
       creatingMatch: 'Création du match...',
       topPlayers: 'Meilleurs joueurs',
       mandatoryMatchWarning: '⚠️ En lançant un match classé, vous vous engagez à le jouer. Ne pas jouer un match après l\'avoir lancé peut entraîner des sanctions si cela se reproduit plusieurs fois.',
+      recentMatches: 'Derniers matchs',
+      viewRecentMatches: 'Voir les 30 derniers matchs',
+      noRecentMatches: 'Aucun match récent',
+      matchDuration: 'Durée',
+      winner: 'Gagnant',
+      host: 'Hôte',
+      referent: 'Référent',
+      matchFound: 'Match trouvé !',
+      shufflingPlayers: 'Mélange des joueurs...',
+      distributingTeams: 'Répartition dans les équipes...',
+      teamsReady: 'Équipes prêtes !',
+      redirecting: 'Redirection vers le match...',
     },
     en: {
       title: 'Ranked Mode',
@@ -686,6 +908,18 @@ const RankedMode = () => {
       creatingMatch: 'Creating match...',
       topPlayers: 'Top Players',
       mandatoryMatchWarning: '⚠️ By starting a ranked match, you commit to playing it. Not playing a match after starting it may result in sanctions if repeated multiple times.',
+      recentMatches: 'Recent Matches',
+      viewRecentMatches: 'View last 30 matches',
+      noRecentMatches: 'No recent matches',
+      matchDuration: 'Duration',
+      winner: 'Winner',
+      host: 'Host',
+      referent: 'Referent',
+      matchFound: 'Match found!',
+      shufflingPlayers: 'Shuffling players...',
+      distributingTeams: 'Distributing to teams...',
+      teamsReady: 'Teams ready!',
+      redirecting: 'Redirecting to match...',
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -734,6 +968,18 @@ const RankedMode = () => {
       creatingMatch: 'Match wird erstellt...',
       topPlayers: 'Top-Spieler',
       mandatoryMatchWarning: '⚠️ Mit dem Starten eines Ranglistenspiels verpflichten Sie sich, es zu spielen. Wenn Sie ein Spiel nach dem Starten nicht spielen, kann dies bei mehrfacher Wiederholung zu Sanktionen führen.',
+      recentMatches: 'Letzte Spiele',
+      viewRecentMatches: 'Letzte 30 Spiele anzeigen',
+      noRecentMatches: 'Keine kürzlichen Spiele',
+      matchDuration: 'Dauer',
+      winner: 'Gewinner',
+      host: 'Host',
+      referent: 'Referent',
+      matchFound: 'Spiel gefunden!',
+      shufflingPlayers: 'Spieler werden gemischt...',
+      distributingTeams: 'Aufteilung in Teams...',
+      teamsReady: 'Teams bereit!',
+      redirecting: 'Weiterleitung zum Spiel...',
     },
     it: {
       title: 'Modalità Classificata',
@@ -782,6 +1028,18 @@ const RankedMode = () => {
       creatingMatch: 'Creazione partita...',
       topPlayers: 'Migliori giocatori',
       mandatoryMatchWarning: '⚠️ Avviando una partita classificata, ti impegni a giocarla. Non giocare una partita dopo averla avviata può comportare sanzioni se ripetuto più volte.',
+      recentMatches: 'Partite recenti',
+      viewRecentMatches: 'Vedi ultime 30 partite',
+      noRecentMatches: 'Nessuna partita recente',
+      matchDuration: 'Durata',
+      winner: 'Vincitore',
+      host: 'Ospite',
+      referent: 'Referente',
+      matchFound: 'Partita trovata!',
+      shufflingPlayers: 'Mescolando i giocatori...',
+      distributingTeams: 'Distribuzione nelle squadre...',
+      teamsReady: 'Squadre pronte!',
+      redirecting: 'Reindirizzamento alla partita...',
     }
   };
   
@@ -1173,6 +1431,17 @@ const RankedMode = () => {
                   <BookOpen className={`w-5 h-5 text-${accent}-400`} />
                   <span className={`text-${accent}-400 font-semibold`}>
                     {language === 'fr' ? 'Voir les règles du mode' : 'View game mode rules'}
+                  </span>
+                </button>
+                
+                {/* Bouton Historique des matchs récents */}
+                <button
+                  onClick={() => navigate(`/${selectedMode}/ranked/recent-matches`)}
+                  className={`mt-2 w-full py-3 rounded-xl border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 transition-all flex items-center justify-center gap-2`}
+                >
+                  <Clock className="w-5 h-5 text-purple-400" />
+                  <span className="text-purple-400 font-semibold">
+                    {t.viewRecentMatches || 'Voir les 30 derniers matchs'}
                   </span>
                 </button>
               </div>
@@ -1912,6 +2181,175 @@ const RankedMode = () => {
             >
               {language === 'fr' ? 'Fermer' : 'Close'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Shuffle Animation Modal */}
+      {showShuffleAnimation && shuffleMatchData && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60]">
+          <div className="w-full max-w-4xl mx-4">
+            {/* Title */}
+            <div className="text-center mb-8">
+              <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r ${isHardcore ? 'from-red-500/20 to-orange-500/20 border-red-500/50' : 'from-cyan-500/20 to-blue-500/20 border-cyan-500/50'} border mb-4`}>
+                <Swords className={`w-6 h-6 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${shufflePhase === 0 ? 'animate-pulse' : ''}`} />
+                <span className="text-2xl font-bold text-white">
+                  {t.matchFound || 'Match trouvé !'}
+                </span>
+                <Swords className={`w-6 h-6 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${shufflePhase === 0 ? 'animate-pulse' : ''}`} />
+              </div>
+              <p className={`text-lg ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
+                {shufflePhase === 0 && (t.shufflingPlayers || 'Mélange des joueurs...')}
+                {shufflePhase === 1 && (t.distributingTeams || 'Répartition dans les équipes...')}
+                {shufflePhase === 2 && (t.teamsReady || 'Équipes prêtes !')}
+                {shufflePhase === 3 && (t.getReady || 'Préparez-vous !')}
+              </p>
+            </div>
+
+            {/* Players Display */}
+            <div className="relative">
+              {/* Phase 0: Shuffling - All players in center */}
+              {shufflePhase === 0 && (
+                <div className="flex flex-wrap justify-center gap-4 animate-pulse">
+                  {shuffledPlayers.map((player, index) => (
+                    <div
+                      key={player.id || index}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800/80 border border-gray-600/50 transform transition-all duration-300`}
+                      style={{
+                        transform: `translateX(${Math.sin(index * 0.8) * 20}px) translateY(${Math.cos(index * 0.8) * 10}px)`,
+                      }}
+                    >
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-700">
+                        <img
+                          src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.target.src = `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`; }}
+                        />
+                      </div>
+                      <span className="text-white font-medium">{player.username || `Joueur ${index + 1}`}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Phase 1, 2 & 3: Teams Split */}
+              {(shufflePhase === 1 || shufflePhase === 2 || shufflePhase === 3) && (
+                <div className="grid grid-cols-2 gap-8">
+                  {/* Team A */}
+                  <div className={`p-6 rounded-2xl border-2 transition-all duration-500 ${
+                    (shufflePhase === 2 || shufflePhase === 3)
+                      ? 'bg-cyan-500/10 border-cyan-500/50'
+                      : 'bg-gray-800/50 border-gray-600/30'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-3 h-3 rounded-full bg-cyan-400"></div>
+                      <h3 className="text-xl font-bold text-cyan-400">Team A</h3>
+                    </div>
+                    <div className="space-y-3">
+                      {shuffleMatchData.players
+                        ?.filter(p => p.team === 1 || p.team === 'A')
+                        .map((player, index) => (
+                          <div
+                            key={player.id || index}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/50 border border-cyan-500/20 transform transition-all duration-500 ${
+                              (shufflePhase === 2 || shufflePhase === 3) ? 'translate-x-0 opacity-100' : '-translate-x-8 opacity-0'
+                            }`}
+                            style={{ transitionDelay: `${index * 100}ms` }}
+                          >
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-cyan-500/50">
+                              <img
+                                src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.target.src = `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`; }}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-white font-semibold">{player.username || `Joueur ${index + 1}`}</span>
+                              {player.isHost && <span className="ml-2 text-yellow-400 text-xs">(Host)</span>}
+                              {player.isReferent && <span className="ml-2 text-purple-400 text-xs">(Réf.)</span>}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* VS Divider */}
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl ${
+                      isHardcore 
+                        ? 'bg-gradient-to-br from-red-500 to-orange-600' 
+                        : 'bg-gradient-to-br from-cyan-400 to-blue-600'
+                    } shadow-lg ${(shufflePhase === 2 || shufflePhase === 3) ? 'animate-bounce' : ''}`}>
+                      VS
+                    </div>
+                  </div>
+
+                  {/* Team B */}
+                  <div className={`p-6 rounded-2xl border-2 transition-all duration-500 ${
+                    (shufflePhase === 2 || shufflePhase === 3)
+                      ? 'bg-orange-500/10 border-orange-500/50'
+                      : 'bg-gray-800/50 border-gray-600/30'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-4 justify-end">
+                      <h3 className="text-xl font-bold text-orange-400">Team B</h3>
+                      <div className="w-3 h-3 rounded-full bg-orange-400"></div>
+                    </div>
+                    <div className="space-y-3">
+                      {shuffleMatchData.players
+                        ?.filter(p => p.team === 2 || p.team === 'B')
+                        .map((player, index) => (
+                          <div
+                            key={player.id || index}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/50 border border-orange-500/20 transform transition-all duration-500 ${
+                              (shufflePhase === 2 || shufflePhase === 3) ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
+                            }`}
+                            style={{ transitionDelay: `${index * 100}ms` }}
+                          >
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-orange-500/50">
+                              <img
+                                src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.target.src = `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`; }}
+                              />
+                            </div>
+                            <div>
+                              <span className="text-white font-semibold">{player.username || `Joueur ${index + 1}`}</span>
+                              {player.isHost && <span className="ml-2 text-yellow-400 text-xs">(Host)</span>}
+                              {player.isReferent && <span className="ml-2 text-purple-400 text-xs">(Réf.)</span>}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Redirect indicator / Countdown */}
+            {(shufflePhase === 2 || shufflePhase === 3) && (
+              <div className="text-center mt-8">
+                {shufflePhase === 3 ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold border-4 ${
+                      isHardcore 
+                        ? 'bg-red-500/20 border-red-500 text-red-400' 
+                        : 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                    } animate-pulse`}>
+                      {shuffleCountdown}
+                    </div>
+                    <span className="text-gray-400">{t.redirectingIn || 'Redirection dans...'}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 text-gray-400">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>{t.teamsReady || 'Équipes prêtes !'}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

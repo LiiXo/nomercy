@@ -325,6 +325,87 @@ router.get('/active-matches/stats', async (req, res) => {
   }
 });
 
+// Historique des matchs classés récents (public)
+router.get('/history/recent', async (req, res) => {
+  try {
+    const { mode = 'hardcore', limit = 30 } = req.query;
+    
+    // Récupérer les matchs complétés récents
+    const matches = await RankedMatch.find({
+      mode,
+      status: 'completed',
+      isTestMatch: { $ne: true } // Exclure les matchs de test
+    })
+      .populate('players.user', 'username avatarUrl discordAvatar discordId platform')
+      .populate('team1Referent', 'username avatarUrl discordAvatar discordId')
+      .populate('team2Referent', 'username avatarUrl discordAvatar discordId')
+      .select('gameMode mode teamSize players team1Referent team2Referent hostTeam status result maps startedAt completedAt createdAt')
+      .sort({ completedAt: -1 })
+      .limit(Math.min(parseInt(limit), 50)); // Max 50 matchs
+    
+    // Formater les données pour le frontend
+    const formattedMatches = matches.map(match => {
+      const team1Players = match.players.filter(p => p.team === 1);
+      const team2Players = match.players.filter(p => p.team === 2);
+      
+      return {
+        _id: match._id,
+        gameMode: match.gameMode,
+        mode: match.mode,
+        teamSize: match.teamSize,
+        format: `${match.teamSize}v${match.teamSize}`,
+        result: {
+          winner: match.result?.winner,
+          team1Score: match.result?.team1Score || 0,
+          team2Score: match.result?.team2Score || 0
+        },
+        team1: {
+          players: team1Players.map(p => ({
+            username: p.user?.username || p.username || 'Joueur',
+            avatarUrl: p.user?.avatarUrl || null,
+            discordId: p.user?.discordId || null,
+            discordAvatar: p.user?.discordAvatar || null,
+            isReferent: p.isReferent
+          })),
+          referent: match.team1Referent ? {
+            username: match.team1Referent.username,
+            avatarUrl: match.team1Referent.avatarUrl
+          } : null,
+          isHost: match.hostTeam === 1
+        },
+        team2: {
+          players: team2Players.map(p => ({
+            username: p.user?.username || p.username || 'Joueur',
+            avatarUrl: p.user?.avatarUrl || null,
+            discordId: p.user?.discordId || null,
+            discordAvatar: p.user?.discordAvatar || null,
+            isReferent: p.isReferent
+          })),
+          referent: match.team2Referent ? {
+            username: match.team2Referent.username,
+            avatarUrl: match.team2Referent.avatarUrl
+          } : null,
+          isHost: match.hostTeam === 2
+        },
+        maps: match.maps || [],
+        startedAt: match.startedAt,
+        completedAt: match.completedAt,
+        createdAt: match.createdAt
+      };
+    });
+    
+    res.json({
+      success: true,
+      matches: formattedMatches,
+      total: formattedMatches.length,
+      mode
+    });
+  } catch (error) {
+    console.error('Error fetching recent matches history:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Rejoindre la file d'attente du matchmaking
 router.post('/matchmaking/join', verifyToken, async (req, res) => {
   try {
@@ -720,6 +801,177 @@ router.post('/:matchId/code', verifyToken, async (req, res) => {
   }
 });
 
+// ==================== CANCELLATION REQUEST ROUTES ====================
+
+// Vote pour l'annulation du match (toggle)
+router.post('/:matchId/cancellation/vote', verifyToken, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const userId = req.user._id;
+
+    const match = await RankedMatch.findById(matchId);
+
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Vérifier que le match est en cours (ready ou in_progress)
+    if (!['ready', 'in_progress'].includes(match.status)) {
+      return res.status(400).json({ success: false, message: 'Ce match ne peut plus être annulé' });
+    }
+
+    // Vérifier que l'utilisateur est un participant du match
+    const player = match.players.find(p => 
+      p.user && p.user.toString() === userId.toString() && !p.isFake
+    );
+
+    if (!player) {
+      return res.status(403).json({ success: false, message: 'Vous n\'êtes pas un participant de ce match' });
+    }
+
+    // Initialiser la demande d'annulation si pas encore fait
+    if (!match.cancellationRequest) {
+      match.cancellationRequest = {
+        isActive: false,
+        votes: [],
+        requiredVotes: 0
+      };
+    }
+
+    // Calculer le nombre de votes requis (80% des vrais joueurs)
+    const realPlayers = match.players.filter(p => !p.isFake && p.user);
+    const requiredVotes = Math.ceil(realPlayers.length * 0.8);
+    match.cancellationRequest.requiredVotes = requiredVotes;
+
+    // Vérifier si l'utilisateur a déjà voté
+    const existingVoteIndex = match.cancellationRequest.votes.findIndex(
+      v => v.user.toString() === userId.toString()
+    );
+
+    let hasVoted;
+    if (existingVoteIndex > -1) {
+      // Retirer le vote (toggle off)
+      match.cancellationRequest.votes.splice(existingVoteIndex, 1);
+      hasVoted = false;
+    } else {
+      // Ajouter le vote (toggle on)
+      match.cancellationRequest.votes.push({
+        user: userId,
+        votedAt: new Date()
+      });
+      hasVoted = true;
+
+      // Si c'est le premier vote, enregistrer qui l'a initié
+      if (match.cancellationRequest.votes.length === 1) {
+        match.cancellationRequest.initiatedBy = userId;
+        match.cancellationRequest.initiatedAt = new Date();
+      }
+    }
+
+    // Marquer comme actif s'il y a des votes
+    match.cancellationRequest.isActive = match.cancellationRequest.votes.length > 0;
+
+    // Vérifier si on atteint les 80% requis
+    const currentVotes = match.cancellationRequest.votes.length;
+    if (currentVotes >= requiredVotes) {
+      // Annuler le match
+      match.status = 'cancelled';
+      match.cancellationRequest.cancelledAt = new Date();
+      
+      // Ajouter un message système
+      match.chat.push({
+        isSystem: true,
+        messageType: 'match_cancelled_by_players',
+        message: `Match annulé par vote des joueurs (${currentVotes}/${realPlayers.length} votes)`
+      });
+
+      console.log(`[RANKED CANCELLATION] Match ${matchId} cancelled by player vote (${currentVotes}/${requiredVotes} required)`);
+    }
+
+    await match.save();
+
+    // Repopuler pour l'événement socket
+    await match.populate([
+      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'cancellationRequest.votes.user', select: 'username' },
+      { path: 'cancellationRequest.initiatedBy', select: 'username' }
+    ]);
+
+    // Émettre via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+      io.to(`ranked-match-${matchId}`).emit('cancellationVoteUpdate', {
+        matchId,
+        currentVotes,
+        requiredVotes,
+        totalPlayers: realPlayers.length,
+        isCancelled: match.status === 'cancelled',
+        hasVoted,
+        votedBy: req.user._id,
+        mode: match.mode // Inclure le mode pour la redirection côté client
+      });
+    }
+
+    res.json({
+      success: true,
+      hasVoted,
+      currentVotes,
+      requiredVotes,
+      totalPlayers: realPlayers.length,
+      isCancelled: match.status === 'cancelled',
+      message: hasVoted 
+        ? 'Vote enregistré pour l\'annulation' 
+        : 'Vote retiré'
+    });
+  } catch (error) {
+    console.error('Cancellation vote error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Obtenir le statut de la demande d'annulation
+router.get('/:matchId/cancellation/status', verifyToken, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const userId = req.user._id;
+
+    const match = await RankedMatch.findById(matchId)
+      .populate('cancellationRequest.votes.user', 'username')
+      .populate('cancellationRequest.initiatedBy', 'username');
+
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Calculer les stats
+    const realPlayers = match.players.filter(p => !p.isFake && p.user);
+    const requiredVotes = Math.ceil(realPlayers.length * 0.8);
+    const currentVotes = match.cancellationRequest?.votes?.length || 0;
+    const hasVoted = match.cancellationRequest?.votes?.some(
+      v => v.user?._id?.toString() === userId.toString() || v.user?.toString() === userId.toString()
+    ) || false;
+
+    res.json({
+      success: true,
+      isActive: match.cancellationRequest?.isActive || false,
+      currentVotes,
+      requiredVotes,
+      totalPlayers: realPlayers.length,
+      hasVoted,
+      isCancelled: match.status === 'cancelled',
+      votes: match.cancellationRequest?.votes || [],
+      initiatedBy: match.cancellationRequest?.initiatedBy || null,
+      initiatedAt: match.cancellationRequest?.initiatedAt || null
+    });
+  } catch (error) {
+    console.error('Cancellation status error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // ==================== ADMIN/DEV ROUTES ====================
 
 // Ajouter des faux joueurs à la file d'attente (staff/admin)
@@ -816,20 +1068,103 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Annuler un match (admin/staff)
+// Annuler un match (admin/staff) - Avec remboursement des récompenses si le match était terminé
 router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res) => {
   try {
     const { matchId } = req.params;
     const { reason } = req.body;
+    const adminUser = await User.findById(req.user._id);
     
-    const match = await RankedMatch.findById(matchId);
+    const match = await RankedMatch.findById(matchId)
+      .populate('players.user', 'username');
     
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
     
-    if (match.status === 'completed' || match.status === 'cancelled') {
-      return res.status(400).json({ success: false, message: 'Ce match ne peut plus être annulé' });
+    if (match.status === 'cancelled') {
+      return res.status(400).json({ success: false, message: 'Ce match est déjà annulé' });
+    }
+    
+    console.log(`[RANKED CANCEL] ====================================`);
+    console.log(`[RANKED CANCEL] Admin ${adminUser.username} annule le match ${matchId}`);
+    console.log(`[RANKED CANCEL] Status actuel: ${match.status}, GameMode: ${match.gameMode}, Mode: ${match.mode}`);
+    
+    let rewardsRefunded = false;
+    
+    // Si le match était complété avec un gagnant, rembourser les récompenses
+    if (match.status === 'completed' && match.result?.winner) {
+      console.log(`[RANKED CANCEL] Match complété - Remboursement des récompenses...`);
+      rewardsRefunded = true;
+      
+      const winningTeam = Number(match.result.winner);
+      
+      for (const player of match.players) {
+        // Ignorer les faux joueurs
+        if (player.isFake || !player.user) continue;
+        
+        const userId = player.user._id || player.user;
+        const username = player.user.username || player.username || 'Inconnu';
+        const playerTeam = Number(player.team);
+        const isWinner = playerTeam === winningTeam;
+        
+        // Récupérer les récompenses données
+        const rewards = player.rewards || {};
+        const pointsChange = rewards.pointsChange || 0;
+        const goldEarned = rewards.goldEarned || 0;
+        const xpEarned = rewards.xpEarned || 0;
+        
+        console.log(`[RANKED CANCEL] Remboursement joueur: ${username}`);
+        console.log(`[RANKED CANCEL]   └─ Points: ${pointsChange > 0 ? '+' : ''}${pointsChange} → retrait`);
+        console.log(`[RANKED CANCEL]   └─ Gold: +${goldEarned} → retrait`);
+        console.log(`[RANKED CANCEL]   └─ XP: +${xpEarned} → retrait`);
+        console.log(`[RANKED CANCEL]   └─ ${isWinner ? 'Victoire' : 'Défaite'} → retrait`);
+        
+        // Mettre à jour le Ranking (points du ladder classé + wins/losses)
+        const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        if (ranking) {
+          // Retirer les points (mais ne pas descendre en dessous de 0)
+          ranking.points = Math.max(0, ranking.points - pointsChange);
+          
+          // Retirer la victoire ou défaite
+          if (isWinner) {
+            ranking.wins = Math.max(0, ranking.wins - 1);
+            if (ranking.currentStreak > 0) {
+              ranking.currentStreak = Math.max(0, ranking.currentStreak - 1);
+            }
+          } else {
+            ranking.losses = Math.max(0, ranking.losses - 1);
+          }
+          
+          await ranking.save();
+          console.log(`[RANKED CANCEL]   └─ Ranking mis à jour: ${ranking.points} pts, ${ranking.wins}V/${ranking.losses}D`);
+        }
+        
+        // Mettre à jour l'User (gold, XP, wins/losses par mode)
+        const user = await User.findById(userId);
+        if (user) {
+          const statsField = match.mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+          if (!user[statsField]) user[statsField] = {};
+          
+          // Retirer le gold
+          user.goldCoins = Math.max(0, (user.goldCoins || 0) - goldEarned);
+          
+          // Retirer l'XP par mode
+          user[statsField].xp = Math.max(0, (user[statsField].xp || 0) - xpEarned);
+          
+          // Retirer la victoire ou défaite des stats par mode
+          if (isWinner) {
+            user[statsField].wins = Math.max(0, (user[statsField].wins || 0) - 1);
+          } else {
+            user[statsField].losses = Math.max(0, (user[statsField].losses || 0) - 1);
+          }
+          
+          await user.save();
+          console.log(`[RANKED CANCEL]   └─ User mis à jour: ${user.goldCoins} gold, ${user[statsField].xp} XP, ${user[statsField].wins}V/${user[statsField].losses}D`);
+        }
+      }
+      
+      console.log(`[RANKED CANCEL] Remboursement terminé pour ${match.players.filter(p => !p.isFake && p.user).length} joueurs`);
     }
     
     match.status = 'cancelled';
@@ -837,6 +1172,9 @@ router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res
     match.cancelledBy = req.user._id;
     match.cancelReason = reason || 'Annulé par un administrateur';
     await match.save();
+    
+    console.log(`[RANKED CANCEL] Match annulé avec succès`);
+    console.log(`[RANKED CANCEL] ====================================`);
     
     // Notifier les joueurs
     const io = req.app.get('io');
@@ -847,7 +1185,14 @@ router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res
       });
     }
     
-    res.json({ success: true, message: 'Match annulé', match });
+    res.json({ 
+      success: true, 
+      message: rewardsRefunded 
+        ? 'Match annulé et récompenses remboursées' 
+        : 'Match annulé',
+      rewardsRefunded,
+      match 
+    });
   } catch (error) {
     console.error('Error cancelling ranked match:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });

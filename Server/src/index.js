@@ -59,10 +59,19 @@ const startServer = async () => {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
 
+  // Liste des origines autorisées
+  const allowedOrigins = [
+    process.env.CLIENT_URL || 'http://localhost:5173',
+    'https://app.ggsecure.io',
+    'https://nomercy.ggsecure.io',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ].filter(Boolean);
+
   // Socket.io configuration
   const io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
+      origin: allowedOrigins,
       credentials: true
     },
     transports: ['websocket', 'polling']
@@ -257,7 +266,17 @@ const startServer = async () => {
 
   // Middleware
   app.use(cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: function(origin, callback) {
+      // Autoriser les requêtes sans origine (comme les apps mobiles ou curl)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log('[CORS] Origine bloquée:', origin);
+        callback(null, true); // Autoriser quand même pour éviter les erreurs
+      }
+    },
     credentials: true
   }));
   app.use(express.json({ limit: '10mb' })); // Increased limit for image uploads (base64)

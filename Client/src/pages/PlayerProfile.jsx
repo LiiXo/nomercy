@@ -24,7 +24,10 @@ const PlayerProfile = () => {
   const [error, setError] = useState(null);
   const [playerData, setPlayerData] = useState(null);
   const [ranking, setRanking] = useState(null);
+  const [rankingHardcore, setRankingHardcore] = useState(null);
+  const [rankingCdl, setRankingCdl] = useState(null);
   const [squad, setSquad] = useState(null);
+  const [rankThresholds, setRankThresholds] = useState(null);
   const [copied, setCopied] = useState(false);
   const [matchHistory, setMatchHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -252,15 +255,41 @@ const PlayerProfile = () => {
         
         setPlayerData(userData.user);
         
-        // Fetch ranking for current mode
+        // Fetch rankings for BOTH modes to show the highest rank
         try {
-          const rankingResponse = await fetch(`${API_URL}/rankings/user/${userData.user.id}/${selectedMode}`);
-          const rankingData = await rankingResponse.json();
-          if (rankingData.success) {
-            setRanking(rankingData.ranking);
+          const [hardcoreRes, cdlRes] = await Promise.all([
+            fetch(`${API_URL}/rankings/user/${userData.user.id}/hardcore`),
+            fetch(`${API_URL}/rankings/user/${userData.user.id}/cdl`)
+          ]);
+          
+          const hardcoreData = await hardcoreRes.json();
+          const cdlData = await cdlRes.json();
+          
+          if (hardcoreData.success) {
+            setRankingHardcore(hardcoreData.ranking);
+          }
+          if (cdlData.success) {
+            setRankingCdl(cdlData.ranking);
+          }
+          
+          // Use the ranking for the current mode, or fallback to the one with more points
+          if (selectedMode === 'hardcore' && hardcoreData.success) {
+            setRanking(hardcoreData.ranking);
+          } else if (selectedMode === 'cdl' && cdlData.success) {
+            setRanking(cdlData.ranking);
+          } else {
+            // If current mode ranking doesn't exist, use the one with more points
+            const hcPoints = hardcoreData.success ? (hardcoreData.ranking.points || 0) : 0;
+            const cdlPoints = cdlData.success ? (cdlData.ranking.points || 0) : 0;
+            
+            if (hcPoints >= cdlPoints && hardcoreData.success) {
+              setRanking(hardcoreData.ranking);
+            } else if (cdlData.success) {
+              setRanking(cdlData.ranking);
+            }
           }
         } catch (err) {
-          console.error('Error fetching ranking:', err);
+          console.error('Error fetching rankings:', err);
         }
         
         // Fetch squad if user has one
@@ -272,6 +301,17 @@ const PlayerProfile = () => {
           }
         } catch (err) {
           console.error('Error fetching squad:', err);
+        }
+        
+        // Fetch rank thresholds from admin config
+        try {
+          const settingsResponse = await fetch(`${API_URL}/app-settings/public`);
+          const settingsData = await settingsResponse.json();
+          if (settingsData.success && settingsData.rankedSettings?.rankPointsThresholds) {
+            setRankThresholds(settingsData.rankedSettings.rankPointsThresholds);
+          }
+        } catch (err) {
+          console.error('Error fetching rank thresholds:', err);
         }
         
       } catch (err) {
@@ -407,20 +447,63 @@ const PlayerProfile = () => {
   // Get rank for ornament (use ranking.rank from DB)
   const playerRank = playerStats?.rank || 999;
 
-  // Get division based on points with enhanced styling
-  const getDivision = (points) => {
-    if (points >= 3500) return { name: 'Champion', color: 'from-yellow-400 to-amber-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '👑', hexColor: '#F1C40F', Icon: Crown, isTop: true };
-    if (points >= 3000) return { name: 'Grandmaster', color: 'from-red-500 to-rose-600', textColor: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: '🔥', hexColor: '#E74C3C', Icon: Flame, isTop: true };
-    if (points >= 2500) return { name: 'Master', color: 'from-purple-500 to-violet-600', textColor: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50', icon: '💎', hexColor: '#9B59B6', Icon: Crown, isTop: false };
-    if (points >= 2000) return { name: 'Diamond', color: 'from-cyan-400 to-blue-500', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', icon: '💠', hexColor: '#B9F2FF', Icon: Star, isTop: false };
-    if (points >= 1500) return { name: 'Platinum', color: 'from-teal-400 to-emerald-500', textColor: 'text-teal-400', bgColor: 'bg-teal-500/20', borderColor: 'border-teal-500/50', icon: '🏅', hexColor: '#00CED1', Icon: Medal, isTop: false };
-    if (points >= 1000) return { name: 'Gold', color: 'from-yellow-500 to-amber-600', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '🥇', hexColor: '#FFD700', Icon: Medal, isTop: false };
-    if (points >= 500) return { name: 'Silver', color: 'from-gray-300 to-gray-400', textColor: 'text-gray-300', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50', icon: '🥈', hexColor: '#C0C0C0', Icon: Shield, isTop: false };
-    return { name: 'Bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉', hexColor: '#CD7F32', Icon: Shield, isTop: false };
+  // Rank styles for each division
+  const RANK_STYLES = {
+    champion: { name: 'Champion', color: 'from-yellow-400 to-amber-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '👑', hexColor: '#F1C40F', Icon: Crown, isTop: true },
+    grandmaster: { name: 'Grandmaster', color: 'from-red-500 to-rose-600', textColor: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: '🔥', hexColor: '#E74C3C', Icon: Flame, isTop: true },
+    master: { name: 'Master', color: 'from-purple-500 to-violet-600', textColor: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50', icon: '💎', hexColor: '#9B59B6', Icon: Crown, isTop: false },
+    diamond: { name: 'Diamond', color: 'from-cyan-400 to-blue-500', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', icon: '💠', hexColor: '#B9F2FF', Icon: Star, isTop: false },
+    platinum: { name: 'Platinum', color: 'from-teal-400 to-emerald-500', textColor: 'text-teal-400', bgColor: 'bg-teal-500/20', borderColor: 'border-teal-500/50', icon: '🏅', hexColor: '#00CED1', Icon: Medal, isTop: false },
+    gold: { name: 'Gold', color: 'from-yellow-500 to-amber-600', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '🥇', hexColor: '#FFD700', Icon: Medal, isTop: false },
+    silver: { name: 'Silver', color: 'from-gray-300 to-gray-400', textColor: 'text-gray-300', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50', icon: '🥈', hexColor: '#C0C0C0', Icon: Shield, isTop: false },
+    bronze: { name: 'Bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉', hexColor: '#CD7F32', Icon: Shield, isTop: false }
   };
 
-  // Use ranking.points from the ranked ladder, not playerStats.points (which are global stats)
-  const division = ranking ? getDivision(ranking.points || 0) : (playerStats ? getDivision(0) : null);
+  // Get division based on points using thresholds from admin config
+  const getDivision = (points) => {
+    // Use thresholds from config, or default if not loaded
+    const thresholds = rankThresholds || {
+      bronze: { min: 0, max: 499 },
+      silver: { min: 500, max: 999 },
+      gold: { min: 1000, max: 1499 },
+      platinum: { min: 1500, max: 1999 },
+      diamond: { min: 2000, max: 2499 },
+      master: { min: 2500, max: 2999 },
+      grandmaster: { min: 3000, max: 3499 },
+      champion: { min: 3500, max: null }
+    };
+    
+    // Check ranks from highest to lowest
+    const rankOrder = ['champion', 'grandmaster', 'master', 'diamond', 'platinum', 'gold', 'silver', 'bronze'];
+    for (const rankKey of rankOrder) {
+      const threshold = thresholds[rankKey];
+      if (threshold && points >= threshold.min) {
+        return RANK_STYLES[rankKey];
+      }
+    }
+    return RANK_STYLES.bronze;
+  };
+
+  // Find the ranking with the highest points to display the best rank
+  // Simple logic: use whichever ranking has more points
+  const hcPoints = rankingHardcore?.points || 0;
+  const cdlPoints = rankingCdl?.points || 0;
+  const hcHasPlayed = rankingHardcore && (rankingHardcore.wins > 0 || rankingHardcore.losses > 0);
+  const cdlHasPlayed = rankingCdl && (rankingCdl.wins > 0 || rankingCdl.losses > 0);
+  
+  // Get the best ranking: the one with more points among those where player has played
+  let bestRanking = null;
+  if (hcHasPlayed && cdlHasPlayed) {
+    // Player has played both - use the one with more points
+    bestRanking = hcPoints >= cdlPoints ? rankingHardcore : rankingCdl;
+  } else if (hcHasPlayed) {
+    bestRanking = rankingHardcore;
+  } else if (cdlHasPlayed) {
+    bestRanking = rankingCdl;
+  }
+  
+  // Show division based on the best ranking found
+  const division = bestRanking ? getDivision(bestRanking.points || 0) : null;
 
   if (loading) {
     return (
@@ -540,6 +623,12 @@ const PlayerProfile = () => {
                     style={{ color: division.hexColor }}
                   >
                     {division.icon} {division.name}
+                  </p>
+                )}
+                {/* Show ranked points if player has played */}
+                {bestRanking && bestRanking.points > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {bestRanking.points} pts
                   </p>
                 )}
               </div>

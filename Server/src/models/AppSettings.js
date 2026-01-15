@@ -142,7 +142,8 @@ const appSettingsSchema = new mongoose.Schema({
         platinum: { min: 1500, max: 1999 },
         diamond: { min: 2000, max: 2499 },
         master: { min: 2500, max: 2999 },
-        champion: { min: 3000, max: null }
+        grandmaster: { min: 3000, max: 3499 },
+        champion: { min: 3500, max: null }
       })
     },
     

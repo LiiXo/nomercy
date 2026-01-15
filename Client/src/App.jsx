@@ -38,6 +38,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import Messages from './pages/Messages';
 import MySquad from './pages/MySquad';
 import GameModeRulesEditor from './components/GameModeRulesEditor';
+import RecentRankedMatches from './pages/RecentRankedMatches';
 
 // Loading component
 const LoadingScreen = () => (
@@ -321,6 +322,26 @@ function AppContent() {
               <ProtectedRoute requiredMode="hardcore">
                 <PageTransition>
                   <RankedMode />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/cdl/ranked/recent-matches" 
+            element={
+              <ProtectedRoute requiredMode="cdl">
+                <PageTransition>
+                  <RecentRankedMatches />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/hardcore/ranked/recent-matches" 
+            element={
+              <ProtectedRoute requiredMode="hardcore">
+                <PageTransition>
+                  <RecentRankedMatches />
                 </PageTransition>
               </ProtectedRoute>
             } 

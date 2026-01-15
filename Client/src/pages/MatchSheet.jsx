@@ -50,6 +50,16 @@ const MatchSheet = () => {
   const [myTeam, setMyTeam] = useState(null);
   const [isReferent, setIsReferent] = useState(false);
   
+  // Demande d'annulation par vote (mode classé uniquement)
+  const [cancellationVotes, setCancellationVotes] = useState({
+    currentVotes: 0,
+    requiredVotes: 0,
+    totalPlayers: 0,
+    hasVoted: false,
+    isActive: false
+  });
+  const [votingCancellation, setVotingCancellation] = useState(false);
+  
   // Rapport de combat (mode classé)
   const [showMatchReport, setShowMatchReport] = useState(false);
   const [matchReportData, setMatchReportData] = useState(null);
@@ -136,6 +146,12 @@ const MatchSheet = () => {
       cancellationAccepted: 'Annulation acceptée',
       cancellationRejected: 'Annulation refusée',
       referentWarning: '⚠️ Attention Référents : Valider un gagnant sans avoir joué le match peut entraîner de lourdes sanctions (ban temporaire ou permanent). Assurez-vous que le match a bien été joué avant de valider.',
+      voteCancellation: 'Voter pour annuler',
+      removeVote: 'Retirer mon vote',
+      cancellationVotes: 'Votes pour annuler',
+      votesProgress: 'votes sur',
+      required: 'requis',
+      matchCancelledByVote: 'Match annulé par vote des joueurs',
     },
     en: {
       back: 'Back',
@@ -210,6 +226,12 @@ const MatchSheet = () => {
       cancellationAccepted: 'Cancellation accepted',
       cancellationRejected: 'Cancellation rejected',
       referentWarning: '⚠️ Warning Referents: Validating a winner without playing the match may result in severe sanctions (temporary or permanent ban). Make sure the match has been played before validating.',
+      voteCancellation: 'Vote to cancel',
+      removeVote: 'Remove my vote',
+      cancellationVotes: 'Votes to cancel',
+      votesProgress: 'votes of',
+      required: 'required',
+      matchCancelledByVote: 'Match cancelled by player vote',
     },
     de: {
       back: 'Zurück',
@@ -284,6 +306,12 @@ const MatchSheet = () => {
       cancellationAccepted: 'Stornierung akzeptiert',
       cancellationRejected: 'Stornierung abgelehnt',
       referentWarning: '⚠️ Achtung Referenten: Das Validieren eines Gewinners ohne das Spiel gespielt zu haben, kann schwere Sanktionen nach sich ziehen (temporärer oder permanenter Bann). Stellen Sie sicher, dass das Spiel gespielt wurde, bevor Sie validieren.',
+      voteCancellation: 'Für Stornierung stimmen',
+      removeVote: 'Meine Stimme entfernen',
+      cancellationVotes: 'Stimmen für Stornierung',
+      votesProgress: 'Stimmen von',
+      required: 'erforderlich',
+      matchCancelledByVote: 'Spiel durch Spielerabstimmung abgebrochen',
     },
     it: {
       back: 'Indietro',
@@ -358,6 +386,12 @@ const MatchSheet = () => {
       cancellationAccepted: 'Annullamento accettato',
       cancellationRejected: 'Annullamento rifiutato',
       referentWarning: '⚠️ Attenzione Referenti: Convalidare un vincitore senza aver giocato la partita può comportare sanzioni severe (ban temporaneo o permanente). Assicuratevi che la partita sia stata giocata prima di convalidare.',
+      voteCancellation: 'Vota per annullare',
+      removeVote: 'Rimuovi il mio voto',
+      cancellationVotes: 'Voti per annullare',
+      votesProgress: 'voti su',
+      required: 'richiesti',
+      matchCancelledByVote: 'Partita annullata per voto dei giocatori',
     },
   }[language] || {};
 
@@ -430,6 +464,58 @@ const MatchSheet = () => {
     }
   };
 
+  // Fetch cancellation vote status (for ranked matches)
+  const fetchCancellationStatus = async () => {
+    if (!isRankedMatch || !matchId) return;
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/${matchId}/cancellation/status`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCancellationVotes({
+          currentVotes: data.currentVotes || 0,
+          requiredVotes: data.requiredVotes || 0,
+          totalPlayers: data.totalPlayers || 0,
+          hasVoted: data.hasVoted || false,
+          isActive: data.isActive || false
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching cancellation status:', err);
+    }
+  };
+
+  // Toggle cancellation vote (for ranked matches)
+  const handleToggleCancellationVote = async () => {
+    if (!isRankedMatch || votingCancellation) return;
+    setVotingCancellation(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/${matchId}/cancellation/vote`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCancellationVotes({
+          currentVotes: data.currentVotes || 0,
+          requiredVotes: data.requiredVotes || 0,
+          totalPlayers: data.totalPlayers || 0,
+          hasVoted: data.hasVoted || false,
+          isActive: data.currentVotes > 0
+        });
+        // Si le match a été annulé, rafraîchir les données
+        if (data.isCancelled) {
+          fetchMatchData(false);
+        }
+      }
+    } catch (err) {
+      console.error('Error toggling cancellation vote:', err);
+    } finally {
+      setVotingCancellation(false);
+    }
+  };
+
   // Fetch my squad (for ladder matches)
   const fetchMySquad = async () => {
     if (!isAuthenticated || isRankedMatch) return;
@@ -449,7 +535,10 @@ const MatchSheet = () => {
   useEffect(() => {
     fetchMatchData(true);
     fetchMySquad();
-  }, [matchId, isAuthenticated]);
+    if (isRankedMatch) {
+      fetchCancellationStatus();
+    }
+  }, [matchId, isAuthenticated, isRankedMatch]);
 
   // 🎯 Effet pour détecter quand le match devient complété et afficher le rapport
   useEffect(() => {
@@ -709,9 +798,10 @@ const MatchSheet = () => {
       if (data.matchId === matchId || data.matchId?.toString() === matchId) {
         console.log('[MatchSheet] ✅ Match ID matches, updating state...');
         if (data.match) {
-          // Si le match est annulé, rediriger vers la liste des matchs
+          // Si le match est annulé, rediriger vers la page ranked du bon mode
           if (data.match.status === 'cancelled') {
-            navigate('/matches');
+            const matchMode = data.match.mode || selectedMode || 'hardcore';
+            navigate(`/${matchMode}/ranked`);
             return;
           }
           
@@ -728,7 +818,9 @@ const MatchSheet = () => {
     // Écouter l'annulation du match
     const handleMatchCancelled = (data) => {
       if (data.matchId === matchId || data.matchId?.toString() === matchId) {
-        navigate('/matches');
+        // Rediriger vers la page ranked du bon mode
+        const matchMode = data.mode || selectedMode || 'hardcore';
+        navigate(`/${matchMode}/ranked`);
       }
     };
     
@@ -760,7 +852,27 @@ const MatchSheet = () => {
       
       socket.on('rankedMatchUpdate', handleRankedMatchUpdate);
       socket.on('rankedMatchMessage', handleRankedMatchMessage);
-      
+
+      // Listener pour les mises à jour de vote d'annulation
+      const handleCancellationVoteUpdate = (data) => {
+        console.log('[MatchSheet] cancellationVoteUpdate received:', data);
+        if (data.matchId === matchId || data.matchId?.toString() === matchId) {
+          setCancellationVotes({
+            currentVotes: data.currentVotes || 0,
+            requiredVotes: data.requiredVotes || 0,
+            totalPlayers: data.totalPlayers || 0,
+            hasVoted: data.votedBy?.toString() === (user?._id || user?.id)?.toString() ? data.hasVoted : cancellationVotes.hasVoted,
+            isActive: data.currentVotes > 0
+          });
+          // Si annulé, rediriger vers la page ranked du bon mode
+          if (data.isCancelled) {
+            const matchMode = data.mode || selectedMode || 'hardcore';
+            navigate(`/${matchMode}/ranked`);
+          }
+        }
+      };
+      socket.on('cancellationVoteUpdate', handleCancellationVoteUpdate);
+
       // Cleanup pour les listeners ranked
       return () => {
         socket.off('newChatMessage', handleNewChatMessage);
@@ -768,6 +880,7 @@ const MatchSheet = () => {
         socket.off('matchCancellationApproved', handleMatchCancelled);
         socket.off('rankedMatchUpdate', handleRankedMatchUpdate);
         socket.off('rankedMatchMessage', handleRankedMatchMessage);
+        socket.off('cancellationVoteUpdate', handleCancellationVoteUpdate);
       };
     }
     
@@ -1151,9 +1264,9 @@ const MatchSheet = () => {
 
       const data = await response.json();
       if (data.success) {
-        // Si l'annulation est acceptée, rediriger vers la liste des matchs
+        // Si l'annulation est acceptée, rediriger vers le dashboard du mode
         if (approved && data.match?.status === 'cancelled') {
-          navigate('/matches');
+          navigate(`/${selectedMode}`);
           return;
         }
         setMatch(data.match);
@@ -1679,6 +1792,74 @@ const MatchSheet = () => {
                     {language === 'fr' ? '❌ Annuler le match' : '❌ Cancel Match'}
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Demande d'annulation par vote - Uniquement pour les matchs classés */}
+            {isRankedMatch && isRankedParticipant && ['ready', 'in_progress'].includes(match.status) && (
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-orange-400 font-semibold text-sm flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    {t.cancellationVotes || 'Votes pour annuler'}
+                  </h3>
+                  <span className="text-xs text-gray-400">
+                    {cancellationVotes.requiredVotes > 0 && (
+                      <>80% {t.required || 'requis'}</>
+                    )}
+                  </span>
+                </div>
+                
+                {/* Barre de progression des votes */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>{cancellationVotes.currentVotes} {t.votesProgress || 'votes sur'} {cancellationVotes.totalPlayers}</span>
+                    <span>{cancellationVotes.requiredVotes} {t.required || 'requis'}</span>
+                  </div>
+                  <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${
+                        cancellationVotes.currentVotes >= cancellationVotes.requiredVotes 
+                          ? 'bg-green-500' 
+                          : 'bg-orange-500'
+                      }`}
+                      style={{ 
+                        width: `${Math.min(100, (cancellationVotes.currentVotes / Math.max(1, cancellationVotes.requiredVotes)) * 100)}%` 
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Bouton de vote */}
+                <button
+                  onClick={handleToggleCancellationVote}
+                  disabled={votingCancellation}
+                  className={`w-full py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    cancellationVotes.hasVoted
+                      ? 'bg-green-500/20 border border-green-500/40 text-green-400 hover:bg-green-500/30'
+                      : 'bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30'
+                  } disabled:opacity-50`}
+                >
+                  {votingCancellation ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : cancellationVotes.hasVoted ? (
+                    <>
+                      <Shield className="w-4 h-4" />
+                      {t.removeVote || 'Retirer mon vote'}
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle className="w-4 h-4" />
+                      {t.voteCancellation || 'Voter pour annuler'}
+                    </>
+                  )}
+                </button>
+                
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  {language === 'fr' 
+                    ? '80% des joueurs doivent voter pour annuler le match' 
+                    : '80% of players must vote to cancel the match'}
+                </p>
               </div>
             )}
 

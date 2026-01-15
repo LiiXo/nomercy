@@ -3873,15 +3873,16 @@ const AdminPanel = () => {
             Définir les points minimum et maximum pour chaque rang. Le rang Champion n'a pas de maximum.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { key: 'bronze', label: '🥉 Bronze', color: 'from-orange-700 to-orange-900' },
-              { key: 'silver', label: '🥈 Argent', color: 'from-gray-400 to-gray-600' },
-              { key: 'gold', label: '🥇 Or', color: 'from-yellow-500 to-yellow-700' },
-              { key: 'platinum', label: '💎 Platine', color: 'from-cyan-400 to-cyan-600' },
-              { key: 'diamond', label: '💠 Diamant', color: 'from-blue-400 to-blue-600' },
-              { key: 'master', label: '👑 Maître', color: 'from-purple-500 to-purple-700' },
-              { key: 'champion', label: '🏆 Champion', color: 'from-red-500 to-orange-500' },
+              { key: 'bronze', label: '🥉 Bronze', color: 'from-amber-700 to-amber-900' },
+              { key: 'silver', label: '🥈 Argent', color: 'from-slate-400 to-slate-600' },
+              { key: 'gold', label: '🥇 Or', color: 'from-yellow-500 to-amber-600' },
+              { key: 'platinum', label: '💎 Platine', color: 'from-teal-400 to-cyan-600' },
+              { key: 'diamond', label: '💠 Diamant', color: 'from-cyan-300 to-blue-500' },
+              { key: 'master', label: '👑 Maître', color: 'from-purple-500 to-pink-600' },
+              { key: 'grandmaster', label: '🔥 Grand Maître', color: 'from-red-500 to-orange-600' },
+              { key: 'champion', label: '🏆 Champion', color: 'from-yellow-400 via-orange-500 to-red-600' },
             ].map(({ key, label, color }) => {
               const thresholds = appSettings?.rankedSettings?.rankPointsThresholds || {};
               const rankData = thresholds[key] || { min: 0, max: key === 'champion' ? null : 499 };
@@ -4660,6 +4661,23 @@ const AdminPanel = () => {
                           Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
                           Mode: {match.gameMode || 'N/A'} • 
                           Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-xs">
+                          {match.startedAt && (
+                            <span className="text-green-400">
+                              🕐 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {match.completedAt && (
+                            <span className="text-blue-400">
+                              🏁 Fin: {new Date(match.completedAt).toLocaleDateString('fr-FR')} {new Date(match.completedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {match.startedAt && match.completedAt && (
+                            <span className="text-purple-400">
+                              ⏱️ Durée: {Math.round((new Date(match.completedAt) - new Date(match.startedAt)) / 60000)} min
+                            </span>
+                          )}
                         </div>
                         {match.team1Referent && (
                           <div className="text-cyan-400">

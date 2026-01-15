@@ -183,6 +183,18 @@ const rankedMatchSchema = new mongoose.Schema({
       default: Date.now
     }
   }],
+  // Demande d'annulation par les joueurs (80% des votes requis)
+  cancellationRequest: {
+    isActive: { type: Boolean, default: false },
+    votes: [{
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      votedAt: { type: Date, default: Date.now }
+    }],
+    requiredVotes: { type: Number, default: 0 }, // Calculé dynamiquement: Math.ceil(totalPlayers * 0.8)
+    initiatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    initiatedAt: Date,
+    cancelledAt: Date // Si l'annulation est validée
+  },
   // Match de test (staff uniquement, ne compte pas dans les stats)
   isTestMatch: {
     type: Boolean,

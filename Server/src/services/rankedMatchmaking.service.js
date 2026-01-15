@@ -583,6 +583,29 @@ const createMatchFromQueue = async (gameMode, mode) => {
     });
     await match.save();
     
+    // Préparer les données des joueurs pour l'animation de shuffle
+    // Inclure tous les joueurs avec leurs infos pour l'animation côté client
+    const playersForAnimation = matchPlayers.map((p, index) => {
+      // Récupérer l'avatar depuis les données populées ou les données originales
+      const populatedPlayer = match.players.find(mp => mp.username === p.username);
+      let avatar = null;
+      if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
+        avatar = `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
+      } else if (populatedPlayer?.user?.avatar) {
+        avatar = populatedPlayer.user.avatar;
+      }
+      
+      return {
+        id: p.user?.toString() || `fake-${index}`,
+        username: p.username,
+        avatar: avatar,
+        team: p.team,
+        isReferent: p.isReferent,
+        isHost: p.team === hostTeam && p.isReferent,
+        isFake: p.isFake
+      };
+    });
+    
     // Notifier tous les vrais joueurs du match
     for (const player of matchPlayers) {
       if (io && player.user) { // Ne notifier que les vrais joueurs
@@ -594,7 +617,8 @@ const createMatchFromQueue = async (gameMode, mode) => {
           teamSize,
           yourTeam: player.team,
           isReferent: player.isReferent,
-          isHost: player.team === hostTeam && player.isReferent
+          isHost: player.team === hostTeam && player.isReferent,
+          players: playersForAnimation // Inclure tous les joueurs pour l'animation
         });
       }
     }
@@ -956,6 +980,27 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     });
     await match.save();
     
+    // Préparer les données des joueurs pour l'animation de shuffle (test match)
+    const playersForAnimation = matchPlayers.map((p, index) => {
+      const populatedPlayer = match.players.find(mp => mp.username === p.username);
+      let avatar = null;
+      if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
+        avatar = `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
+      } else if (populatedPlayer?.user?.avatar) {
+        avatar = populatedPlayer.user.avatar;
+      }
+      
+      return {
+        id: p.user?.toString() || `fake-${index}`,
+        username: p.username,
+        avatar: avatar,
+        team: p.team,
+        isReferent: p.isReferent,
+        isHost: p.team === hostTeam && p.isReferent,
+        isFake: p.isFake
+      };
+    });
+    
     // Notifier le staff du match trouvé
     if (io) {
       io.to(`user-${userId}`).emit('rankedMatchFound', {
@@ -967,7 +1012,8 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         yourTeam: staffTeam,
         isReferent: true,
         isHost: true,
-        isTestMatch: true
+        isTestMatch: true,
+        players: playersForAnimation // Inclure tous les joueurs pour l'animation
       });
     }
     

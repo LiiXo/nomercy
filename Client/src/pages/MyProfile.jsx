@@ -43,12 +43,21 @@ const MyProfile = () => {
   
   // Ranking state from DB
   const [ranking, setRanking] = useState(null);
+  const [rankingHardcore, setRankingHardcore] = useState(null);
+  const [rankingCdl, setRankingCdl] = useState(null);
   const [loadingRanking, setLoadingRanking] = useState(true);
+  const [rankThresholds, setRankThresholds] = useState(null);
 
-  // Account deletion state
+  // Account deletion state (kept for admin/future use)
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [loadingDeletion, setLoadingDeletion] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+
+  // Reset stats state
+  const [showResetStatsModal, setShowResetStatsModal] = useState(false);
+  const [loadingResetStats, setLoadingResetStats] = useState(false);
+  const [resetStatsError, setResetStatsError] = useState('');
+  const RESET_STATS_COST = 2000;
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
@@ -103,12 +112,42 @@ const MyProfile = () => {
   const fetchRanking = async () => {
     setLoadingRanking(true);
     try {
-      const response = await fetch(`${API_URL}/rankings/me/${selectedMode}`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setRanking(data.ranking);
+      // Fetch rankings for BOTH modes and thresholds in parallel
+      const [hardcoreRes, cdlRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/rankings/me/hardcore`, { credentials: 'include' }),
+        fetch(`${API_URL}/rankings/me/cdl`, { credentials: 'include' }),
+        fetch(`${API_URL}/app-settings/public`)
+      ]);
+      
+      const hardcoreData = await hardcoreRes.json();
+      const cdlData = await cdlRes.json();
+      const settingsData = await settingsRes.json();
+      
+      if (hardcoreData.success) {
+        setRankingHardcore(hardcoreData.ranking);
+      }
+      if (cdlData.success) {
+        setRankingCdl(cdlData.ranking);
+      }
+      if (settingsData.success && settingsData.rankedSettings?.rankPointsThresholds) {
+        setRankThresholds(settingsData.rankedSettings.rankPointsThresholds);
+      }
+      
+      // Use the ranking for the current mode, or fallback to the one with more points
+      if (selectedMode === 'hardcore' && hardcoreData.success) {
+        setRanking(hardcoreData.ranking);
+      } else if (selectedMode === 'cdl' && cdlData.success) {
+        setRanking(cdlData.ranking);
+      } else {
+        // If current mode ranking doesn't exist, use the one with more points
+        const hcPoints = hardcoreData.success ? (hardcoreData.ranking.points || 0) : 0;
+        const cdlPoints = cdlData.success ? (cdlData.ranking.points || 0) : 0;
+        
+        if (hcPoints >= cdlPoints && hardcoreData.success) {
+          setRanking(hardcoreData.ranking);
+        } else if (cdlData.success) {
+          setRanking(cdlData.ranking);
+        }
       }
     } catch (err) {
       console.error('Error fetching ranking:', err);
@@ -137,6 +176,34 @@ const MyProfile = () => {
       setDeleteError(texts[language]?.errorOccurred || 'Une erreur est survenue');
     } finally {
       setLoadingDeletion(false);
+    }
+  };
+
+  const handleResetStats = async () => {
+    setLoadingResetStats(true);
+    setResetStatsError('');
+    try {
+      const response = await fetch(`${API_URL}/users/reset-my-stats`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setShowResetStatsModal(false);
+        setSuccess(texts[language]?.statsResetSuccess || 'Vos statistiques ont été réinitialisées !');
+        // Refresh user data
+        await refreshUser();
+        // Refresh ranking data
+        await fetchRanking();
+        setTimeout(() => setSuccess(''), 5000);
+      } else {
+        setResetStatsError(data.message);
+      }
+    } catch (err) {
+      console.error('Error resetting stats:', err);
+      setResetStatsError(texts[language]?.errorOccurred || 'Une erreur est survenue');
+    } finally {
+      setLoadingResetStats(false);
     }
   };
 
@@ -394,15 +461,40 @@ const MyProfile = () => {
     return icons[category] || Package;
   };
 
+  // Rank styles for each division
+  const RANK_STYLES = {
+    champion: { name: 'Champion', color: 'text-yellow-400', icon: Zap },
+    grandmaster: { name: 'Grandmaster', color: 'text-red-400', icon: Crown },
+    master: { name: 'Master', color: 'text-purple-400', icon: Trophy },
+    diamond: { name: 'Diamond', color: 'text-blue-400', icon: Star },
+    platinum: { name: 'Platinum', color: 'text-teal-400', icon: Medal },
+    gold: { name: 'Gold', color: 'text-yellow-400', icon: Medal },
+    silver: { name: 'Silver', color: 'text-gray-300', icon: Shield },
+    bronze: { name: 'Bronze', color: 'text-amber-600', icon: Shield }
+  };
+
   const getDivisionFromPoints = (points) => {
-    if (points >= 3500) return { name: 'Champion', color: 'text-yellow-400', icon: Zap };
-    if (points >= 3000) return { name: 'Grandmaster', color: 'text-red-400', icon: Crown };
-    if (points >= 2500) return { name: 'Master', color: 'text-purple-400', icon: Trophy };
-    if (points >= 2000) return { name: 'Diamond', color: 'text-blue-400', icon: Star };
-    if (points >= 1500) return { name: 'Platinum', color: 'text-teal-400', icon: Medal };
-    if (points >= 1000) return { name: 'Gold', color: 'text-yellow-400', icon: Medal };
-    if (points >= 500) return { name: 'Silver', color: 'text-gray-300', icon: Shield };
-    return { name: 'Bronze', color: 'text-amber-600', icon: Shield };
+    // Use thresholds from config, or default if not loaded
+    const thresholds = rankThresholds || {
+      bronze: { min: 0, max: 499 },
+      silver: { min: 500, max: 999 },
+      gold: { min: 1000, max: 1499 },
+      platinum: { min: 1500, max: 1999 },
+      diamond: { min: 2000, max: 2499 },
+      master: { min: 2500, max: 2999 },
+      grandmaster: { min: 3000, max: 3499 },
+      champion: { min: 3500, max: null }
+    };
+    
+    // Check ranks from highest to lowest
+    const rankOrder = ['champion', 'grandmaster', 'master', 'diamond', 'platinum', 'gold', 'silver', 'bronze'];
+    for (const rankKey of rankOrder) {
+      const threshold = thresholds[rankKey];
+      if (threshold && points >= threshold.min) {
+        return RANK_STYLES[rankKey];
+      }
+    }
+    return RANK_STYLES.bronze;
   };
 
   const getWinRate = () => {
@@ -504,7 +596,20 @@ const MyProfile = () => {
       avatarDeleted: 'Avatar supprimé, retour à Discord !',
       avatarTooLarge: 'L\'avatar doit faire moins de 10MB',
       avatarInvalidType: 'Seuls les fichiers PNG, JPEG, JPG et GIF sont autorisés',
-      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB',
+      resetStats: 'Réinitialiser mes stats',
+      resetStatsTitle: 'Réinitialiser vos statistiques',
+      resetStatsDescription: 'Cette action va réinitialiser toutes vos statistiques de jeu.',
+      resetStatsWillReset: 'Ce qui sera remis à zéro :',
+      resetStatsVictories: 'Victoires et défaites',
+      resetStatsMatches: 'Historique des matchs (Ladder et Classé)',
+      resetStatsRankedPoints: 'Points et rang en mode classé',
+      resetStatsKD: 'Statistiques de performance',
+      resetStatsCost: 'Coût de la réinitialisation',
+      resetStatsConfirm: 'Confirmer la réinitialisation',
+      resetStatsNotEnoughGold: 'Gold insuffisant',
+      statsResetSuccess: 'Vos statistiques ont été réinitialisées !',
+      goldRequired: 'gold requis'
     },
     en: {
       back: 'Back',
@@ -591,7 +696,20 @@ const MyProfile = () => {
       avatarDeleted: 'Avatar deleted, reverted to Discord!',
       avatarTooLarge: 'Avatar must be less than 10MB',
       avatarInvalidType: 'Only PNG, JPEG, JPG and GIF files are allowed',
-      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB',
+      resetStats: 'Reset my stats',
+      resetStatsTitle: 'Reset your statistics',
+      resetStatsDescription: 'This action will reset all your game statistics.',
+      resetStatsWillReset: 'What will be reset:',
+      resetStatsVictories: 'Victories and defeats',
+      resetStatsMatches: 'Match history (Ladder and Ranked)',
+      resetStatsRankedPoints: 'Ranked mode points and rank',
+      resetStatsKD: 'Performance statistics',
+      resetStatsCost: 'Reset cost',
+      resetStatsConfirm: 'Confirm reset',
+      resetStatsNotEnoughGold: 'Not enough gold',
+      statsResetSuccess: 'Your statistics have been reset!',
+      goldRequired: 'gold required'
     },
     de: {
       back: 'Zurück',
@@ -678,7 +796,20 @@ const MyProfile = () => {
       avatarDeleted: 'Avatar gelöscht, zurück zu Discord!',
       avatarTooLarge: 'Avatar muss kleiner als 10MB sein',
       avatarInvalidType: 'Nur PNG, JPEG, JPG und GIF Dateien sind erlaubt',
-      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB',
+      resetStats: 'Statistiken zurücksetzen',
+      resetStatsTitle: 'Statistiken zurücksetzen',
+      resetStatsDescription: 'Diese Aktion setzt alle Ihre Spielstatistiken zurück.',
+      resetStatsWillReset: 'Was zurückgesetzt wird:',
+      resetStatsVictories: 'Siege und Niederlagen',
+      resetStatsMatches: 'Spielverlauf (Ladder und Ranked)',
+      resetStatsRankedPoints: 'Ranked-Punkte und Rang',
+      resetStatsKD: 'Leistungsstatistiken',
+      resetStatsCost: 'Kosten für das Zurücksetzen',
+      resetStatsConfirm: 'Zurücksetzen bestätigen',
+      resetStatsNotEnoughGold: 'Nicht genug Gold',
+      statsResetSuccess: 'Ihre Statistiken wurden zurückgesetzt!',
+      goldRequired: 'Gold erforderlich'
     },
     it: {
       back: 'Indietro',
@@ -765,7 +896,20 @@ const MyProfile = () => {
       avatarDeleted: 'Avatar eliminato, tornato a Discord!',
       avatarTooLarge: 'L\'avatar deve essere inferiore a 10MB',
       avatarInvalidType: 'Sono consentiti solo file PNG, JPEG, JPG e GIF',
-      avatarInfo: 'PNG, JPEG, GIF - Max 10MB'
+      avatarInfo: 'PNG, JPEG, GIF - Max 10MB',
+      resetStats: 'Reset statistiche',
+      resetStatsTitle: 'Reset delle statistiche',
+      resetStatsDescription: 'Questa azione resetterà tutte le tue statistiche di gioco.',
+      resetStatsWillReset: 'Cosa verrà resettato:',
+      resetStatsVictories: 'Vittorie e sconfitte',
+      resetStatsMatches: 'Storico partite (Ladder e Classificate)',
+      resetStatsRankedPoints: 'Punti e rango classificato',
+      resetStatsKD: 'Statistiche delle prestazioni',
+      resetStatsCost: 'Costo del reset',
+      resetStatsConfirm: 'Conferma reset',
+      resetStatsNotEnoughGold: 'Gold insufficiente',
+      statsResetSuccess: 'Le tue statistiche sono state resettate!',
+      goldRequired: 'gold richiesti'
     }
   };
 
@@ -773,7 +917,26 @@ const MyProfile = () => {
 
   if (!user) return null;
 
-  const division = ranking ? getDivisionFromPoints(ranking.points) : null;
+  // Find the ranking with the highest points to display the best rank
+  // Simple logic: use whichever ranking has more points
+  const hcPoints = rankingHardcore?.points || 0;
+  const cdlPoints = rankingCdl?.points || 0;
+  const hcHasPlayed = rankingHardcore && (rankingHardcore.wins > 0 || rankingHardcore.losses > 0);
+  const cdlHasPlayed = rankingCdl && (rankingCdl.wins > 0 || rankingCdl.losses > 0);
+  
+  // Get the best ranking: the one with more points among those where player has played
+  let bestRanking = null;
+  if (hcHasPlayed && cdlHasPlayed) {
+    // Player has played both - use the one with more points
+    bestRanking = hcPoints >= cdlPoints ? rankingHardcore : rankingCdl;
+  } else if (hcHasPlayed) {
+    bestRanking = rankingHardcore;
+  } else if (cdlHasPlayed) {
+    bestRanking = rankingCdl;
+  }
+  
+  // Show division based on the best ranking found
+  const division = bestRanking ? getDivisionFromPoints(bestRanking.points || 0) : null;
   const DivisionIcon = division?.icon || Shield;
 
   return (
@@ -1219,27 +1382,52 @@ const MyProfile = () => {
           </div>
           )}
 
-          {/* Danger Zone - Account Deletion */}
-          <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-red-500/30 p-4 sm:p-6 mt-4 sm:mt-6">
+          {/* Reset Stats Section */}
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-orange-500/30 p-4 sm:p-6 mt-4 sm:mt-6`}>
             <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
-              <AlertCircle className="w-4 sm:w-5 h-4 sm:h-5 text-red-400" />
-              <span>{t.dangerZone}</span>
+              <Target className="w-4 sm:w-5 h-4 sm:h-5 text-orange-400" />
+              <span>{t.resetStats}</span>
             </h2>
 
             <div className="space-y-3 sm:space-y-4">
-              <p className="text-gray-400 text-xs sm:text-sm">{t.deleteAccountWarning}</p>
+              <p className="text-gray-400 text-xs sm:text-sm">{t.resetStatsDescription}</p>
+              
+              {/* Cost display */}
+              <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg border border-white/10">
+                <span className="text-gray-300 text-sm">{t.resetStatsCost}</span>
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-400" />
+                  <span className="text-yellow-400 font-bold">{RESET_STATS_COST}</span>
+                </div>
+              </div>
+              
+              {/* Your gold balance */}
+              <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg border border-white/10">
+                <span className="text-gray-300 text-sm">{t.gold}</span>
+                <div className="flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-400" />
+                  <span className={`font-bold ${(user?.goldCoins || 0) >= RESET_STATS_COST ? 'text-green-400' : 'text-red-400'}`}>
+                    {user?.goldCoins || 0}
+                  </span>
+                </div>
+              </div>
+              
               <button
-                onClick={() => setShowDeleteModal(true)}
-                disabled={user.isBanned}
-                className="w-full py-2.5 sm:py-3 px-3 sm:px-4 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-medium rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
-                title={user.isBanned ? t.cannotDeleteBanned : ''}
+                onClick={() => setShowResetStatsModal(true)}
+                disabled={(user?.goldCoins || 0) < RESET_STATS_COST}
+                className={`w-full py-2.5 sm:py-3 px-3 sm:px-4 ${
+                  (user?.goldCoins || 0) >= RESET_STATS_COST
+                    ? 'bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/30 text-orange-400'
+                    : 'bg-gray-500/20 border-gray-500/30 text-gray-500 cursor-not-allowed'
+                } border font-medium rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base`}
               >
-                <Trash2 className="w-4 sm:w-5 h-4 sm:h-5" />
-                {t.deleteAccount}
+                <Target className="w-4 sm:w-5 h-4 sm:h-5" />
+                {(user?.goldCoins || 0) >= RESET_STATS_COST ? t.resetStats : t.resetStatsNotEnoughGold}
               </button>
-              {user.isBanned && (
-                <p className="text-xs text-red-400 text-center">
-                  {t.cannotDeleteBanned}
+              
+              {(user?.goldCoins || 0) < RESET_STATS_COST && (
+                <p className="text-xs text-orange-400 text-center">
+                  {RESET_STATS_COST - (user?.goldCoins || 0)} {t.goldRequired}
                 </p>
               )}
             </div>
@@ -1247,7 +1435,7 @@ const MyProfile = () => {
         </div>
       </div>
 
-      {/* Delete Account Modal */}
+      {/* Delete Account Modal - Hidden but kept for potential future use */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
           <div className="bg-dark-900 border border-red-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full shadow-2xl">
@@ -1282,6 +1470,78 @@ const MyProfile = () => {
                   <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
                 ) : (
                   t.confirmDelete
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Stats Modal */}
+      {showResetStatsModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-dark-900 border border-orange-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full shadow-2xl">
+            <div className="text-center mb-4 sm:mb-6">
+              <div className="w-12 sm:w-16 h-12 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-full bg-orange-500/20 flex items-center justify-center">
+                <Target className="w-6 sm:w-8 h-6 sm:h-8 text-orange-400" />
+              </div>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">{t.resetStatsTitle}</h3>
+              <p className="text-gray-400 text-xs sm:text-sm mb-3 sm:mb-4">{t.resetStatsDescription}</p>
+              
+              {/* What will be reset */}
+              <div className="text-left bg-dark-800/50 rounded-lg p-3 mb-4">
+                <p className="text-orange-400 text-sm font-medium mb-2">{t.resetStatsWillReset}</p>
+                <ul className="space-y-1.5 text-xs sm:text-sm text-gray-300">
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                    {t.resetStatsVictories}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                    {t.resetStatsMatches}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                    {t.resetStatsRankedPoints}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                    {t.resetStatsKD}
+                  </li>
+                </ul>
+              </div>
+              
+              {/* Cost */}
+              <div className="flex items-center justify-center gap-2 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+                <span className="text-gray-300 text-sm">{t.resetStatsCost}:</span>
+                <Coins className="w-4 h-4 text-yellow-400" />
+                <span className="text-yellow-400 font-bold">{RESET_STATS_COST}</span>
+              </div>
+              
+              {resetStatsError && (
+                <p className="text-red-400 text-xs sm:text-sm mt-3 p-2 bg-red-500/10 rounded">{resetStatsError}</p>
+              )}
+            </div>
+            
+            <div className="flex gap-2 sm:gap-3">
+              <button
+                onClick={() => {
+                  setShowResetStatsModal(false);
+                  setResetStatsError('');
+                }}
+                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-800 hover:bg-gray-700 text-white rounded-lg sm:rounded-xl transition-colors font-medium text-sm sm:text-base"
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={handleResetStats}
+                disabled={loadingResetStats}
+                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg sm:rounded-xl transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base"
+              >
+                {loadingResetStats ? (
+                  <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
+                ) : (
+                  t.resetStatsConfirm
                 )}
               </button>
             </div>

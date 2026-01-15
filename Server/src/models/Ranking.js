@@ -52,7 +52,7 @@ const rankingSchema = new mongoose.Schema({
   // Division/Tier
   division: {
     type: String,
-    enum: ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'elite'],
+    enum: ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'],
     default: 'bronze'
   },
   
@@ -98,12 +98,13 @@ rankingSchema.virtual('totalMatches').get(function() {
   return this.wins + this.losses;
 });
 
-// Method to calculate division based on points
+// Method to calculate division based on points (aligned with frontend RankedMode.jsx thresholds)
 rankingSchema.methods.updateDivision = function() {
-  if (this.points >= 5000) this.division = 'elite';
-  else if (this.points >= 4000) this.division = 'master';
-  else if (this.points >= 3000) this.division = 'diamond';
-  else if (this.points >= 2000) this.division = 'platinum';
+  if (this.points >= 3500) this.division = 'champion';
+  else if (this.points >= 3000) this.division = 'grandmaster';
+  else if (this.points >= 2500) this.division = 'master';
+  else if (this.points >= 2000) this.division = 'diamond';
+  else if (this.points >= 1500) this.division = 'platinum';
   else if (this.points >= 1000) this.division = 'gold';
   else if (this.points >= 500) this.division = 'silver';
   else this.division = 'bronze';
