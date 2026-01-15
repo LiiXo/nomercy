@@ -124,6 +124,16 @@ export const DataProvider = ({ children }) => {
     return parisHour >= startHour && parisHour < endHour;
   }, [appSettings, currentMinute]);
   
+  // Check if hardcore mode is enabled
+  const isHardcoreModeEnabled = useMemo(() => {
+    return appSettings?.features?.hardcoreMode?.enabled !== false;
+  }, [appSettings]);
+  
+  // Check if CDL mode is enabled
+  const isCdlModeEnabled = useMemo(() => {
+    return appSettings?.features?.cdlMode?.enabled !== false;
+  }, [appSettings]);
+  
   // Get gold coins for a ladder type
   const getGoldCoinsForLadder = useCallback((ladderId) => {
     if (ladderId === 'squad-team') {
@@ -145,6 +155,8 @@ export const DataProvider = ({ children }) => {
     
     // Computed values
     isDuoTrioOpen,
+    isHardcoreModeEnabled,
+    isCdlModeEnabled,
   }), [
     appSettings, 
     appSettingsLoading, 
@@ -152,7 +164,9 @@ export const DataProvider = ({ children }) => {
     ladderRewards, 
     fetchLadderRewards, 
     getGoldCoinsForLadder,
-    isDuoTrioOpen
+    isDuoTrioOpen,
+    isHardcoreModeEnabled,
+    isCdlModeEnabled
   ]);
   
   return (

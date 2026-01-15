@@ -34,7 +34,9 @@ export const SocketProvider = ({ children }) => {
   const socketRef = useRef(null);
   const [isConnected, setIsConnected] = useState(false);
   const [totalOnlineUsers, setTotalOnlineUsers] = useState(0);
+  const [modeOnlineUsers, setModeOnlineUsers] = useState({ hardcore: 0, cdl: 0 });
   const joinedRoomsRef = useRef(new Set());
+  const currentModeRef = useRef(null);
   const eventListenersRef = useRef(new Map());
 
   // Get user ID (handle both 'id' and '_id' formats from API)
@@ -71,6 +73,11 @@ export const SocketProvider = ({ children }) => {
           socket.emit('joinRankedMatch', room.replace('ranked-match-', ''));
         }
       });
+      
+      // Re-join mode room after reconnection
+      if (currentModeRef.current) {
+        socket.emit('joinMode', currentModeRef.current);
+      }
     });
 
     socket.on('disconnect', (reason) => {
@@ -84,6 +91,10 @@ export const SocketProvider = ({ children }) => {
 
     socket.on('totalOnlineUsers', (count) => {
       setTotalOnlineUsers(count);
+    });
+
+    socket.on('modeOnlineUsers', ({ mode, count }) => {
+      setModeOnlineUsers(prev => ({ ...prev, [mode]: count }));
     });
 
     return () => {
@@ -194,6 +205,32 @@ export const SocketProvider = ({ children }) => {
     }
   }, []);
 
+  // Join a mode room (for tracking mode-specific online users)
+  const joinMode = useCallback((mode) => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) return;
+    
+    if (mode === 'hardcore' || mode === 'cdl') {
+      console.log('[Socket] Joining mode:', mode);
+      socket.emit('joinMode', mode);
+      currentModeRef.current = mode;
+    }
+  }, [isConnected]);
+
+  // Leave a mode room
+  const leaveMode = useCallback((mode) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+    
+    if (mode === 'hardcore' || mode === 'cdl') {
+      console.log('[Socket] Leaving mode:', mode);
+      socket.emit('leaveMode', mode);
+      if (currentModeRef.current === mode) {
+        currentModeRef.current = null;
+      }
+    }
+  }, []);
+
   // Subscribe to an event (with automatic cleanup tracking)
   const on = useCallback((event, callback) => {
     const socket = socketRef.current;
@@ -242,12 +279,15 @@ export const SocketProvider = ({ children }) => {
     socket: socketRef.current,
     isConnected,
     totalOnlineUsers,
+    modeOnlineUsers,
     joinPage,
     leavePage,
     joinMatch,
     leaveMatch,
     joinRankedMatch,
     leaveRankedMatch,
+    joinMode,
+    leaveMode,
     on,
     off,
     emit,

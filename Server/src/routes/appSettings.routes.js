@@ -52,7 +52,7 @@ router.get('/admin', verifyToken, requireStaff, async (req, res) => {
 // Update app settings (admin/staff)
 router.put('/admin', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { features, globalAlerts, maintenance, banner, staffAdminAccess } = req.body;
+    const { features, globalAlerts, maintenance, banner, staffAdminAccess, rankedSettings, ladderSettings } = req.body;
     
     let settings = await AppSettings.findOne();
     if (!settings) {
@@ -79,6 +79,51 @@ router.put('/admin', verifyToken, requireStaff, async (req, res) => {
     if (staffAdminAccess) {
       settings.staffAdminAccess = { ...settings.staffAdminAccess, ...staffAdminAccess };
       settings.markModified('staffAdminAccess');
+    }
+    
+    // Handle rankedSettings updates (bestOf, rankPointsThresholds, etc.)
+    if (rankedSettings) {
+      if (!settings.rankedSettings) {
+        settings.rankedSettings = {};
+      }
+      
+      // Update bestOf format (BO1 or BO3)
+      if (typeof rankedSettings.bestOf === 'number') {
+        settings.rankedSettings.bestOf = rankedSettings.bestOf;
+      }
+      
+      // Update rank points thresholds
+      if (rankedSettings.rankPointsThresholds) {
+        settings.rankedSettings.rankPointsThresholds = {
+          ...settings.rankedSettings.rankPointsThresholds,
+          ...rankedSettings.rankPointsThresholds
+        };
+      }
+      
+      // Update game mode specific settings
+      const gameModes = ['searchAndDestroy', 'teamDeathmatch', 'domination', 'captureTheFlag', 'killConfirmed'];
+      for (const mode of gameModes) {
+        if (rankedSettings[mode]) {
+          if (!settings.rankedSettings[mode]) {
+            settings.rankedSettings[mode] = {};
+          }
+          settings.rankedSettings[mode] = {
+            ...settings.rankedSettings[mode],
+            ...rankedSettings[mode]
+          };
+        }
+      }
+      
+      settings.markModified('rankedSettings');
+    }
+    
+    // Handle ladderSettings updates
+    if (ladderSettings) {
+      if (!settings.ladderSettings) {
+        settings.ladderSettings = {};
+      }
+      settings.ladderSettings = { ...settings.ladderSettings, ...ladderSettings };
+      settings.markModified('ladderSettings');
     }
     
     await settings.save();

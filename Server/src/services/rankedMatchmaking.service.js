@@ -492,7 +492,12 @@ const createMatchFromQueue = async (gameMode, mode) => {
     // Tirer au sort l'équipe hôte
     const hostTeam = Math.random() < 0.5 ? 1 : 2;
     
-    // Sélectionner 3 maps aléatoires pour le BO3 selon le nombre de joueurs
+    // Récupérer le format BO1 ou BO3 depuis les paramètres
+    const settings = await AppSettings.getSettings();
+    const bestOf = settings?.rankedSettings?.bestOf || 3; // Par défaut BO3
+    const mapCount = bestOf === 1 ? 1 : 3;
+    
+    // Sélectionner les maps selon le format (BO1 = 1 map, BO3 = 3 maps)
     // 3v3 et 4v4 → ladder duo-trio
     // 5v5 → ladder squad-team
     const ladderType = teamSize === 5 ? 'squad-team' : 'duo-trio';
@@ -502,15 +507,15 @@ const createMatchFromQueue = async (gameMode, mode) => {
     });
     
     // Si pas assez de maps dans ce ladder, prendre toutes les maps actives
-    const availableMaps = maps.length >= 3 ? maps : await GameMap.find({ isActive: true });
-    const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, 3).map((map, index) => ({
+    const availableMaps = maps.length >= mapCount ? maps : await GameMap.find({ isActive: true });
+    const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, mapCount).map((map, index) => ({
       name: map.name,
       image: map.image || null,
       order: index + 1,
       winner: null
     }));
     
-    console.log(`[Ranked Matchmaking] Selected maps for match:`, selectedMaps);
+    console.log(`[Ranked Matchmaking] Selected ${mapCount} maps for match (BO${bestOf}):`, selectedMaps);
     
     // Créer les données des joueurs pour le match
     const matchPlayers = [
@@ -873,15 +878,20 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const staffTeam = team1HasStaff ? 1 : 2;
     const hostTeam = staffTeam; // Le staff est toujours hôte pour les tests
     
-    // Sélectionner 3 maps aléatoires pour le BO3
+    // Récupérer le format BO1 ou BO3 depuis les paramètres
+    const settings = await AppSettings.getSettings();
+    const bestOf = settings?.rankedSettings?.bestOf || 3; // Par défaut BO3
+    const mapCount = bestOf === 1 ? 1 : 3;
+    
+    // Sélectionner les maps selon le format
     const ladderType = teamSize === 5 ? 'squad-team' : 'duo-trio';
     const maps = await GameMap.find({ 
       isActive: true,
       ladders: ladderType
     });
     
-    const availableMaps = maps.length >= 3 ? maps : await GameMap.find({ isActive: true });
-    const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, 3).map((map, index) => ({
+    const availableMaps = maps.length >= mapCount ? maps : await GameMap.find({ isActive: true });
+    const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, mapCount).map((map, index) => ({
       name: map.name,
       image: map.image || null,
       order: index + 1,

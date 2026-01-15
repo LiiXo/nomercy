@@ -52,7 +52,7 @@ const ReadyCountdown = ({ createdAt, onExpire }) => {
 const HardcoreDashboard = () => {
   const { language, t } = useLanguage();
   const { isAuthenticated, user } = useAuth();
-  const { on, off, joinPage, leavePage, totalOnlineUsers } = useSocket();
+  const { on, off, joinPage, leavePage, modeOnlineUsers, joinMode, leaveMode } = useSocket();
   const { 
     appSettings, 
     ladderRewards, 
@@ -576,8 +576,9 @@ const HardcoreDashboard = () => {
 
   // Socket.io events for real-time match updates
   useEffect(() => {
-    // Join the page room
+    // Join the page room and mode room
     joinPage('hardcore-dashboard');
+    joinMode('hardcore');
 
     // Handle match created events
     const handleMatchCreated = (data) => {
@@ -675,13 +676,14 @@ const HardcoreDashboard = () => {
 
     return () => {
       leavePage('hardcore-dashboard');
+      leaveMode('hardcore');
       unsubCreated();
       unsubAccepted();
       unsubCancelled();
       unsubNewSquadApproval();
       unsubNewSquadResponse();
     };
-  }, [on, joinPage, leavePage, isAuthenticated, language]);
+  }, [on, joinPage, leavePage, joinMode, leaveMode, isAuthenticated, language]);
 
   // Match functions
   const handleOpenPostRoster = (e, ladderId, gameMode) => {
@@ -1458,14 +1460,12 @@ const HardcoreDashboard = () => {
             {/* Content */}
             <div className="relative z-10 px-6 py-8">
               <div className="flex items-center gap-5">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-neon-red blur-2xl opacity-40" />
-                  <div className="relative w-16 h-16 bg-gradient-to-br from-neon-red to-neon-orange rounded-2xl flex items-center justify-center shadow-neon-red">
-                    <Skull className="w-8 h-8 text-white" />
-                  </div>
-                </div>
+                <img 
+                  src="/logo_hc.png" 
+                  alt="Hardcore" 
+                  className="h-16 md:h-20 object-contain drop-shadow-2xl"
+                />
                 <div>
-                  <h1 className="text-4xl md:text-5xl font-display text-white mb-1">HARDCORE</h1>
                   <p className="text-gray-400">{t('hardcoreDashboardDesc')}</p>
                 </div>
               </div>
@@ -1601,7 +1601,7 @@ const HardcoreDashboard = () => {
               <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full glass">
                 <div className="w-2 h-2 bg-neon-green rounded-full animate-pulse" />
                 <Users className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300 text-sm font-medium">{totalOnlineUsers}</span>
+                <span className="text-gray-300 text-sm font-medium">{modeOnlineUsers.hardcore || 0}</span>
               </div>
             </div>
 

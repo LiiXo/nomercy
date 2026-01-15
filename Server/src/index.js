@@ -72,11 +72,24 @@ const startServer = async () => {
   const pageViewers = new Map();
   // Track which pages each socket has joined (socket.rooms is empty on disconnect)
   const socketPages = new Map();
+  
+  // Track users by mode (hardcore vs cdl)
+  const modeUsers = new Map(); // mode -> Set of socketIds
+  modeUsers.set('hardcore', new Set());
+  modeUsers.set('cdl', new Set());
+  // Track which mode each socket is in
+  const socketMode = new Map(); // socketId -> mode
 
   // Helper function to broadcast total online users count
   const broadcastTotalOnlineUsers = () => {
     const totalOnline = io.engine.clientsCount;
     io.emit('totalOnlineUsers', totalOnline);
+  };
+  
+  // Helper function to broadcast mode-specific online users count
+  const broadcastModeOnlineUsers = (mode) => {
+    const count = modeUsers.get(mode)?.size || 0;
+    io.to(`mode-${mode}`).emit('modeOnlineUsers', { mode, count });
   };
 
   // Track user socket connections for direct messaging
@@ -138,6 +151,38 @@ const startServer = async () => {
       io.to(page).emit('viewerCount', count);
     });
 
+    // Join a mode room (hardcore or cdl) to track online users per mode
+    socket.on('joinMode', (mode) => {
+      if (mode === 'hardcore' || mode === 'cdl') {
+        // Leave previous mode if any
+        const previousMode = socketMode.get(socket.id);
+        if (previousMode && previousMode !== mode) {
+          socket.leave(`mode-${previousMode}`);
+          modeUsers.get(previousMode)?.delete(socket.id);
+          broadcastModeOnlineUsers(previousMode);
+        }
+        
+        // Join new mode
+        socket.join(`mode-${mode}`);
+        modeUsers.get(mode)?.add(socket.id);
+        socketMode.set(socket.id, mode);
+        broadcastModeOnlineUsers(mode);
+        
+        // Send current count to the joining socket
+        const count = modeUsers.get(mode)?.size || 0;
+        socket.emit('modeOnlineUsers', { mode, count });
+      }
+    });
+
+    socket.on('leaveMode', (mode) => {
+      if (mode === 'hardcore' || mode === 'cdl') {
+        socket.leave(`mode-${mode}`);
+        modeUsers.get(mode)?.delete(socket.id);
+        socketMode.delete(socket.id);
+        broadcastModeOnlineUsers(mode);
+      }
+    });
+
     socket.on('joinRankedMatch', (matchId) => {
       socket.join(`ranked-match-${matchId}`);
     });
@@ -168,6 +213,14 @@ const startServer = async () => {
           io.to(page).emit('viewerCount', count);
         });
         socketPages.delete(socket.id);
+      }
+      
+      // Clean up mode tracking
+      const mode = socketMode.get(socket.id);
+      if (mode) {
+        modeUsers.get(mode)?.delete(socket.id);
+        socketMode.delete(socket.id);
+        broadcastModeOnlineUsers(mode);
       }
       
       // Clean up user socket tracking

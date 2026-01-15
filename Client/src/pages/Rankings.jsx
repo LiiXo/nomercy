@@ -796,9 +796,11 @@ const Rankings = () => {
             
             <div className="relative z-10 px-6 sm:px-10 py-8 sm:py-12">
               <div className="flex items-center gap-4 mb-4">
-                <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg ${colors.glow}`}>
-                  <Trophy className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
-                </div>
+                <img 
+                  src={isHardcore ? '/logo_hc.png' : '/logo_cdl.png'} 
+                  alt={isHardcore ? 'Hardcore' : 'CDL'} 
+                  className="h-14 sm:h-20 object-contain drop-shadow-2xl"
+                />
                 <div>
                   <p className={`text-xs uppercase tracking-[0.3em] ${colors.text} font-semibold`}>{t('currentGame')}</p>
                   <h1 className="text-2xl sm:text-4xl font-bold text-white">{t('rankings')}</h1>
@@ -995,17 +997,17 @@ const Rankings = () => {
 
           {/* Leaderboards Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chill */}
+            {/* Chill - Hardcore: 2v2/3v3/4v4, CDL: 2v2/3v3 */}
             {renderLeaderboard(
-              { id: 'duo-trio', name: txt.duoTrio, teamSizes: ['2V2', '3V3', '4V4'] },
+              { id: 'duo-trio', name: txt.duoTrio, teamSizes: isHardcore ? ['2V2', '3V3', '4V4'] : ['2V2', '3V3'] },
               duoTrioLeaderboard,
               loadingDuoTrio,
               myDuoTrioRank
             )}
 
-            {/* Compétitif */}
+            {/* Compétitif - Hardcore: 5v5, CDL: 4v4 */}
             {renderLeaderboard(
-              { id: 'squad-team', name: txt.squadTeam, teamSizes: ['5v5'] },
+              { id: 'squad-team', name: txt.squadTeam, teamSizes: isHardcore ? ['5v5'] : ['4v4'] },
               squadTeamLeaderboard,
               loadingSquadTeam,
               mySquadTeamRank

@@ -13,23 +13,54 @@ import {
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
-// Rank data avec couleurs et icônes
-const RANKS = [
-  { name: 'Bronze', min: 0, max: 499, color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, tier: 'IV-I' },
-  { name: 'Silver', min: 500, max: 999, color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, tier: 'IV-I' },
-  { name: 'Gold', min: 1000, max: 1499, color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, tier: 'IV-I' },
-  { name: 'Platinum', min: 1500, max: 1999, color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, tier: 'IV-I' },
-  { name: 'Diamond', min: 2000, max: 2499, color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, tier: 'IV-I' },
-  { name: 'Master', min: 2500, max: 2999, color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, tier: 'III-I' },
-  { name: 'Grandmaster', min: 3000, max: 3499, color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, tier: 'II-I' },
-  { name: 'Champion', min: 3500, max: 99999, color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, tier: 'Top 100' },
-];
+// Default rank data avec couleurs et icônes (sera mis à jour avec les seuils de config)
+const DEFAULT_RANK_THRESHOLDS = {
+  bronze: { min: 0, max: 499 },
+  silver: { min: 500, max: 999 },
+  gold: { min: 1000, max: 1499 },
+  platinum: { min: 1500, max: 1999 },
+  diamond: { min: 2000, max: 2499 },
+  master: { min: 2500, max: 2999 },
+  grandmaster: { min: 3000, max: 3499 },
+  champion: { min: 3500, max: null }
+};
+
+// Rank styling data (constante - ne change pas)
+const RANK_STYLES = {
+  bronze: { name: 'Bronze', color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, tier: 'IV-I' },
+  silver: { name: 'Silver', color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, tier: 'IV-I' },
+  gold: { name: 'Gold', color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, tier: 'IV-I' },
+  platinum: { name: 'Platinum', color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, tier: 'IV-I' },
+  diamond: { name: 'Diamond', color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, tier: 'IV-I' },
+  master: { name: 'Master', color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, tier: 'III-I' },
+  grandmaster: { name: 'Grandmaster', color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, tier: 'II-I' },
+  champion: { name: 'Champion', color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, tier: 'Top 100' }
+};
+
+// Helper to build RANKS array from thresholds
+const buildRanksFromThresholds = (thresholds) => {
+  const rankOrder = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'];
+  return rankOrder.map(key => {
+    const threshold = thresholds[key] || DEFAULT_RANK_THRESHOLDS[key];
+    const style = RANK_STYLES[key];
+    return {
+      key,
+      name: style.name,
+      min: threshold.min ?? 0,
+      max: threshold.max ?? 99999,
+      color: style.color,
+      gradient: style.gradient,
+      icon: style.icon,
+      tier: style.tier
+    };
+  });
+};
 
 const RankedMode = () => {
   const { language } = useLanguage();
   const { selectedMode } = useMode();
   const { user, isAuthenticated } = useAuth();
-  const { on, isConnected, joinPage, leavePage, emit } = useSocket();
+  const { on, isConnected, joinPage, leavePage, emit, modeOnlineUsers, joinMode, leaveMode } = useSocket();
   const navigate = useNavigate();
   
   // Player stats
@@ -57,8 +88,7 @@ const RankedMode = () => {
   const [ggsecureConnected, setGgsecureConnected] = useState(null);
   const [activeMatch, setActiveMatch] = useState(null);
   
-  // Page viewers count
-  const [pageViewers, setPageViewers] = useState(0);
+  // Note: Using totalOnlineUsers from SocketContext for global online count
   
   // Active matches stats
   const [activeMatchesStats, setActiveMatchesStats] = useState({ totalMatches: 0, stats: [] });
@@ -83,6 +113,9 @@ const RankedMode = () => {
   const [rewardsConfig, setRewardsConfig] = useState(null);
   const [loadingRewards, setLoadingRewards] = useState(true);
   
+  // Dynamic ranks from config
+  const [ranks, setRanks] = useState(() => buildRanksFromThresholds(DEFAULT_RANK_THRESHOLDS));
+  
   // Matchmaking enabled/disabled
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
   
@@ -94,6 +127,16 @@ const RankedMode = () => {
 
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
+  
+  // Update default game mode when switching between hardcore/cdl
+  useEffect(() => {
+    if (isHardcore) {
+      setSelectedGameMode('Search & Destroy');
+    } else {
+      // CDL defaults to Hardpoint
+      setSelectedGameMode('Hardpoint');
+    }
+  }, [selectedMode, isHardcore]);
   
   // Rank animation effect
   useEffect(() => {
@@ -109,6 +152,7 @@ const RankedMode = () => {
     try {
       // Map game mode to rules slug
       const gameModeSlug = selectedGameMode === 'Search & Destroy' ? 'snd' 
+        : selectedGameMode === 'Hardpoint' ? 'hardpoint'
         : selectedGameMode === 'Team Deathmatch' ? 'tdm' 
         : selectedGameMode === 'Duel' ? 'duel' 
         : 'snd';
@@ -169,9 +213,23 @@ const RankedMode = () => {
     }
   };
 
-  // Get rank from points
+  // Fetch rank thresholds from config
+  const fetchRankThresholds = async () => {
+    try {
+      const response = await fetch(`${API_URL}/app-settings/public`);
+      const data = await response.json();
+      if (data.success && data.rankedSettings?.rankPointsThresholds) {
+        const thresholds = data.rankedSettings.rankPointsThresholds;
+        setRanks(buildRanksFromThresholds(thresholds));
+      }
+    } catch (err) {
+      console.error('Error fetching rank thresholds:', err);
+    }
+  };
+
+  // Get rank from points (using dynamic ranks)
   const getRankFromPoints = (points) => {
-    return RANKS.find(r => points >= r.min && points <= r.max) || RANKS[0];
+    return ranks.find(r => points >= r.min && points <= r.max) || ranks[0];
   };
 
   // Fetch player ranking
@@ -409,22 +467,17 @@ const RankedMode = () => {
   // Check if user is staff or admin
   const isStaffOrAdmin = user?.roles?.includes('staff') || user?.roles?.includes('admin');
 
-  // Page viewers tracking with socket
+  // Page tracking for socket (optional, for analytics)
   useEffect(() => {
     if (!isConnected) return;
     
     const pageName = `ranked-mode-${selectedMode}`;
     joinPage(pageName);
     
-    const unsubViewers = on('viewerCount', (count) => {
-      setPageViewers(count);
-    });
-    
     return () => {
       leavePage(pageName);
-      unsubViewers();
     };
-  }, [isConnected, selectedMode, joinPage, leavePage, on]);
+  }, [isConnected, selectedMode, joinPage, leavePage]);
   
   // Search animation effects
   useEffect(() => {
@@ -509,6 +562,7 @@ const RankedMode = () => {
     fetchRewardsConfig();
     fetchActiveMatchesStats();
     fetchMatchmakingStatus();
+    fetchRankThresholds(); // Fetch dynamic rank thresholds from config
     if (isAuthenticated) {
       checkActiveMatch();
       fetchQueueStatus();
@@ -520,7 +574,19 @@ const RankedMode = () => {
     return () => clearInterval(statsInterval);
   }, [isAuthenticated, selectedMode, selectedGameMode]);
 
-  const playerRank = myRanking ? getRankFromPoints(myRanking.points) : RANKS[0];
+  // Join mode room for mode-specific online users tracking
+  useEffect(() => {
+    if (selectedMode) {
+      joinMode(selectedMode);
+    }
+    return () => {
+      if (selectedMode) {
+        leaveMode(selectedMode);
+      }
+    };
+  }, [selectedMode, joinMode, leaveMode]);
+
+  const playerRank = myRanking ? getRankFromPoints(myRanking.points) : ranks[0];
   const PlayerRankIcon = playerRank.icon;
 
   // Translations - 4 languages
@@ -537,6 +603,7 @@ const RankedMode = () => {
       playFirst: 'Joue ta première partie !',
       gameMode: 'Mode de jeu',
       searchDestroy: 'Recherche & Destruction',
+      hardpoint: 'Points Stratégiques',
       teamDeathmatch: 'Mêlée générale',
       duel: 'Duel',
       available: 'Disponible',
@@ -555,7 +622,7 @@ const RankedMode = () => {
       ranks: 'Les rangs',
       soloMode: 'Mode solo uniquement',
       dynamicFormat: 'Format automatique (4v4 → 5v5)',
-      playersOnPage: 'joueurs sur cette page',
+      playersOnline: 'joueurs en ligne',
       activeMatches: 'match(s) en cours',
       addFakePlayers: 'Ajouter des joueurs test',
       startTestMatch: 'Lancer un match de test',
@@ -584,6 +651,7 @@ const RankedMode = () => {
       playFirst: 'Play your first match!',
       gameMode: 'Game Mode',
       searchDestroy: 'Search & Destroy',
+      hardpoint: 'Hardpoint',
       teamDeathmatch: 'Team Deathmatch',
       duel: 'Duel',
       available: 'Available',
@@ -602,7 +670,7 @@ const RankedMode = () => {
       ranks: 'Ranks',
       soloMode: 'Solo mode only',
       dynamicFormat: 'Automatic format (4v4 → 5v5)',
-      playersOnPage: 'players on this page',
+      playersOnline: 'players online',
       activeMatches: 'active match(es)',
       addFakePlayers: 'Add test players',
       startTestMatch: 'Start test match',
@@ -631,6 +699,7 @@ const RankedMode = () => {
       playFirst: 'Spiele dein erstes Match!',
       gameMode: 'Spielmodus',
       searchDestroy: 'Suchen & Zerstören',
+      hardpoint: 'Hardpoint',
       teamDeathmatch: 'Team-Deathmatch',
       duel: 'Duell',
       available: 'Verfügbar',
@@ -649,7 +718,7 @@ const RankedMode = () => {
       ranks: 'Ränge',
       soloMode: 'Nur Solomodus',
       dynamicFormat: 'Automatisches Format (4v4 → 5v5)',
-      playersOnPage: 'Spieler auf dieser Seite',
+      playersOnline: 'Spieler online',
       activeMatches: 'aktive(s) Match(es)',
       addFakePlayers: 'Testspieler hinzufügen',
       startTestMatch: 'Testmatch starten',
@@ -678,6 +747,7 @@ const RankedMode = () => {
       playFirst: 'Gioca la tua prima partita!',
       gameMode: 'Modalità di gioco',
       searchDestroy: 'Cerca e Distruggi',
+      hardpoint: 'Hardpoint',
       teamDeathmatch: 'Deathmatch a squadre',
       duel: 'Duello',
       available: 'Disponibile',
@@ -696,7 +766,7 @@ const RankedMode = () => {
       ranks: 'Gradi',
       soloMode: 'Solo modalità singola',
       dynamicFormat: 'Formato automatico (4v4 → 5v5)',
-      playersOnPage: 'giocatori su questa pagina',
+      playersOnline: 'giocatori online',
       activeMatches: 'partita/e in corso',
       addFakePlayers: 'Aggiungi giocatori test',
       startTestMatch: 'Avvia partita di test',
@@ -731,13 +801,12 @@ const RankedMode = () => {
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           {/* Header */}
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-3 mb-4">
-              <div className={`p-3 rounded-2xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'} shadow-2xl`}>
-                <Trophy className="w-8 h-8 text-white" />
-              </div>
-              <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight">
-                {t.title}
-              </h1>
+            <div className="inline-flex items-center justify-center mb-4">
+              <img 
+                src={isHardcore ? '/logo_hc.png' : '/logo_cdl.png'} 
+                alt={isHardcore ? 'Hardcore' : 'CDL'} 
+                className="h-20 md:h-28 object-contain drop-shadow-2xl"
+              />
             </div>
             <p className="text-gray-400 text-lg max-w-xl mx-auto">{t.subtitle}</p>
           </div>
@@ -829,9 +898,9 @@ const RankedMode = () => {
                     
                     {/* Progress Bar to Next Rank */}
                     {(() => {
-                      const currentRankIndex = RANKS.findIndex(r => myRanking.points >= r.min && myRanking.points <= r.max);
-                      const currentRank = RANKS[currentRankIndex] || RANKS[0];
-                      const nextRank = RANKS[currentRankIndex + 1];
+                      const currentRankIndex = ranks.findIndex(r => myRanking.points >= r.min && myRanking.points <= r.max);
+                      const currentRank = ranks[currentRankIndex] || ranks[0];
+                      const nextRank = ranks[currentRankIndex + 1];
                       
                       if (!nextRank) {
                         // Already at max rank (Champion)
@@ -897,7 +966,7 @@ const RankedMode = () => {
                     </>
                   ) : (
                     <div className="text-center py-8">
-                      <div className={`w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${RANKS[0].gradient} p-1`}>
+                      <div className={`w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${ranks[0].gradient} p-1`}>
                         <div className="w-full h-full rounded-xl bg-dark-900/50 flex items-center justify-center">
                           <Shield className="w-10 h-10 text-white/50" />
                         </div>
@@ -916,67 +985,126 @@ const RankedMode = () => {
                   {t.gameMode}
                 </h3>
                 
-                <div className="grid grid-cols-3 gap-3">
-                  {/* Search & Destroy - Available */}
-                  <button
-                    onClick={() => setSelectedGameMode('Search & Destroy')}
-                    className={`relative p-4 rounded-2xl border-2 transition-all ${
-                      selectedGameMode === 'Search & Destroy'
-                        ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
-                        : 'border-white/10 bg-dark-800/30 hover:border-white/20'
-                    }`}
-                  >
-                    <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
-                      selectedGameMode === 'Search & Destroy'
-                        ? `bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`
-                        : 'bg-dark-700'
-                    }`}>
-                      <Crosshair className="w-6 h-6 text-white" />
-                    </div>
-                    <p className="text-white font-semibold text-sm">{t.searchDestroy}</p>
-                    <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                      selectedGameMode === 'Search & Destroy'
-                        ? `bg-green-500/20 text-green-400`
-                        : 'bg-green-500/10 text-green-400/70'
-                    }`}>
-                      {t.available}
-                    </span>
-                  </button>
+                {/* Different game modes for Hardcore vs CDL */}
+                {isHardcore ? (
+                  // HARDCORE: S&D, TDM (soon), Duel (soon)
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Search & Destroy - Available */}
+                    <button
+                      onClick={() => setSelectedGameMode('Search & Destroy')}
+                      className={`relative p-4 rounded-2xl border-2 transition-all ${
+                        selectedGameMode === 'Search & Destroy'
+                          ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
+                          : 'border-white/10 bg-dark-800/30 hover:border-white/20'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                        selectedGameMode === 'Search & Destroy'
+                          ? `bg-gradient-to-br from-red-500 to-orange-600`
+                          : 'bg-dark-700'
+                      }`}>
+                        <Crosshair className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-white font-semibold text-sm">{t.searchDestroy}</p>
+                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        selectedGameMode === 'Search & Destroy'
+                          ? `bg-green-500/20 text-green-400`
+                          : 'bg-green-500/10 text-green-400/70'
+                      }`}>
+                        {t.available}
+                      </span>
+                    </button>
 
-                  {/* Mêlée générale - Indisponible */}
-                  <button
-                    disabled
-                    className="relative p-4 rounded-2xl border-2 transition-all border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50"
-                  >
-                    <div className="absolute top-2 right-2">
-                      <Lock className="w-4 h-4 text-gray-500" />
-                    </div>
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center bg-dark-700/50">
-                      <Swords className="w-6 h-6 text-gray-500" />
-                    </div>
-                    <p className="text-gray-500 font-semibold text-sm">{t.teamDeathmatch}</p>
-                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-500/10 text-gray-500">
-                      {t.comingSoon}
-                    </span>
-                  </button>
+                    {/* Mêlée générale - Indisponible */}
+                    <button
+                      disabled
+                      className="relative p-4 rounded-2xl border-2 transition-all border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50"
+                    >
+                      <div className="absolute top-2 right-2">
+                        <Lock className="w-4 h-4 text-gray-500" />
+                      </div>
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center bg-dark-700/50">
+                        <Swords className="w-6 h-6 text-gray-500" />
+                      </div>
+                      <p className="text-gray-500 font-semibold text-sm">{t.teamDeathmatch}</p>
+                      <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-500/10 text-gray-500">
+                        {t.comingSoon}
+                      </span>
+                    </button>
 
-                  {/* Duel - Indisponible */}
-                  <button
-                    disabled
-                    className="relative p-4 rounded-2xl border-2 transition-all border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50"
-                  >
-                    <div className="absolute top-2 right-2">
-                      <Lock className="w-4 h-4 text-gray-500" />
-                    </div>
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center bg-dark-700/50">
-                      <Target className="w-6 h-6 text-gray-500" />
-                    </div>
-                    <p className="text-gray-500 font-semibold text-sm">{t.duel}</p>
-                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-500/10 text-gray-500">
-                      {t.comingSoon}
-                    </span>
-                  </button>
-                </div>
+                    {/* Duel - Indisponible */}
+                    <button
+                      disabled
+                      className="relative p-4 rounded-2xl border-2 transition-all border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50"
+                    >
+                      <div className="absolute top-2 right-2">
+                        <Lock className="w-4 h-4 text-gray-500" />
+                      </div>
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center bg-dark-700/50">
+                        <Target className="w-6 h-6 text-gray-500" />
+                      </div>
+                      <p className="text-gray-500 font-semibold text-sm">{t.duel}</p>
+                      <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-gray-500/10 text-gray-500">
+                        {t.comingSoon}
+                      </span>
+                    </button>
+                  </div>
+                ) : (
+                  // CDL: Hardpoint & S&D only (format 4v4)
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Hardpoint - Available */}
+                    <button
+                      onClick={() => setSelectedGameMode('Hardpoint')}
+                      className={`relative p-4 rounded-2xl border-2 transition-all ${
+                        selectedGameMode === 'Hardpoint'
+                          ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
+                          : 'border-white/10 bg-dark-800/30 hover:border-white/20'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                        selectedGameMode === 'Hardpoint'
+                          ? `bg-gradient-to-br from-cyan-400 to-blue-600`
+                          : 'bg-dark-700'
+                      }`}>
+                        <Target className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-white font-semibold text-sm">{t.hardpoint}</p>
+                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        selectedGameMode === 'Hardpoint'
+                          ? `bg-green-500/20 text-green-400`
+                          : 'bg-green-500/10 text-green-400/70'
+                      }`}>
+                        {t.available}
+                      </span>
+                    </button>
+
+                    {/* Search & Destroy - Available */}
+                    <button
+                      onClick={() => setSelectedGameMode('Search & Destroy')}
+                      className={`relative p-4 rounded-2xl border-2 transition-all ${
+                        selectedGameMode === 'Search & Destroy'
+                          ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
+                          : 'border-white/10 bg-dark-800/30 hover:border-white/20'
+                      }`}
+                    >
+                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                        selectedGameMode === 'Search & Destroy'
+                          ? `bg-gradient-to-br from-cyan-400 to-blue-600`
+                          : 'bg-dark-700'
+                      }`}>
+                        <Crosshair className="w-6 h-6 text-white" />
+                      </div>
+                      <p className="text-white font-semibold text-sm">{t.searchDestroy}</p>
+                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        selectedGameMode === 'Search & Destroy'
+                          ? `bg-green-500/20 text-green-400`
+                          : 'bg-green-500/10 text-green-400/70'
+                      }`}>
+                        {t.available}
+                      </span>
+                    </button>
+                  </div>
+                )}
                 
                 {/* Récompenses du mode */}
                 <div className="mt-4 p-4 rounded-xl bg-dark-900/50 border border-white/5">
@@ -1057,11 +1185,12 @@ const RankedMode = () => {
                       <Swords className={`w-5 h-5 text-${accent}-500`} />
                       {t.findMatch}
                     </h3>
-                    {/* Page viewers counter */}
+                    {/* Online players counter (global) */}
                     <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dark-700/50 border border-white/10">
-                      <Eye className={`w-4 h-4 text-${accent}-400`} />
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                      <Users className={`w-4 h-4 text-${accent}-400`} />
                       <span className="text-sm text-gray-400">
-                        <span className={`font-semibold text-${accent}-400`}>{pageViewers}</span> {t.playersOnPage}
+                        <span className={`font-semibold text-${accent}-400`}>{modeOnlineUsers[selectedMode] || 0}</span> {t.playersOnline}
                       </span>
                     </div>
                   </div>
@@ -1255,17 +1384,19 @@ const RankedMode = () => {
                       <div className="flex items-center gap-4 p-4 rounded-2xl bg-dark-800/50 border border-white/5">
                         <div className={`p-3 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
                           {selectedGameMode === 'Search & Destroy' && <Crosshair className="w-6 h-6 text-white" />}
+                          {selectedGameMode === 'Hardpoint' && <Target className="w-6 h-6 text-white" />}
                           {selectedGameMode === 'Team Deathmatch' && <Swords className="w-6 h-6 text-white" />}
                           {selectedGameMode === 'Duel' && <Target className="w-6 h-6 text-white" />}
                         </div>
                         <div>
                           <p className="text-white font-semibold">
                             {selectedGameMode === 'Search & Destroy' ? t.searchDestroy : 
+                             selectedGameMode === 'Hardpoint' ? t.hardpoint :
                              selectedGameMode === 'Team Deathmatch' ? t.teamDeathmatch : 
                              t.duel}
                           </p>
                           <p className="text-gray-500 text-sm">
-                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : selectedGameMode === 'Search & Destroy' ? '4v4 → 5v5' : '4v4'}
+                            {t.soloMode} • {selectedGameMode === 'Duel' ? '1v1' : isHardcore ? '4v4 → 5v5' : '4v4'}
                           </p>
                         </div>
                       </div>
@@ -1411,8 +1542,8 @@ const RankedMode = () => {
                 <div className="absolute left-10 top-16 bottom-6 w-0.5 bg-gradient-to-b from-yellow-400 via-purple-500 to-amber-700 opacity-30" />
                 
                 <div className="space-y-2 relative z-10">
-                  {/* Reverse RANKS to show Champion at top, Bronze at bottom */}
-                  {[...RANKS].reverse().map((rank, index) => {
+                  {/* Reverse ranks to show Champion at top, Bronze at bottom */}
+                  {[...ranks].reverse().map((rank, index) => {
                     const Icon = rank.icon;
                     const isCurrentRank = myRanking && myRanking.points >= rank.min && myRanking.points <= rank.max;
                     const animationDelay = index * 0.1;
@@ -1725,6 +1856,7 @@ const RankedMode = () => {
                 </div>
                 {language === 'fr' ? 'Règles - ' : 'Rules - '}
                 {selectedGameMode === 'Search & Destroy' ? t.searchDestroy : 
+                 selectedGameMode === 'Hardpoint' ? t.hardpoint :
                  selectedGameMode === 'Team Deathmatch' ? t.teamDeathmatch : 
                  t.duel}
               </h3>

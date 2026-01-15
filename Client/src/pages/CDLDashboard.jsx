@@ -52,7 +52,7 @@ const ReadyCountdown = ({ createdAt, onExpire }) => {
 const CDLDashboard = () => {
   const { language, t } = useLanguage();
   const { isAuthenticated, user } = useAuth();
-  const { on, off, joinPage, leavePage, totalOnlineUsers } = useSocket();
+  const { on, off, joinPage, leavePage, modeOnlineUsers, joinMode, leaveMode } = useSocket();
   const { 
     appSettings, 
     ladderRewards, 
@@ -576,8 +576,9 @@ const CDLDashboard = () => {
 
   // Socket.io events for real-time match updates
   useEffect(() => {
-    // Join the page room
+    // Join the page room and mode room
     joinPage('cdl-dashboard');
+    joinMode('cdl');
 
     // Handle match created events
     const handleMatchCreated = (data) => {
@@ -675,13 +676,14 @@ const CDLDashboard = () => {
 
     return () => {
       leavePage('cdl-dashboard');
+      leaveMode('cdl');
       unsubCreated();
       unsubAccepted();
       unsubCancelled();
       unsubNewSquadApproval();
       unsubNewSquadResponse();
     };
-  }, [on, joinPage, leavePage, isAuthenticated, language]);
+  }, [on, joinPage, leavePage, joinMode, leaveMode, isAuthenticated, language]);
 
   // Match functions
   const handleOpenPostRoster = (e, ladderId, gameMode) => {
@@ -1014,7 +1016,16 @@ const CDLDashboard = () => {
     }
   };
 
-  const getGameModesForLadder = (ladderId) => ['Hardpoint', 'Search & Destroy', 'Control'];
+  // CDL specific game modes by ladder
+  // Chill (duo-trio): S&D only
+  // Competitive (squad-team): Hardpoint, S&D
+  const getGameModesForLadder = (ladderId) => {
+    if (ladderId === 'duo-trio') {
+      return ['Search & Destroy'];
+    }
+    // squad-team
+    return ['Hardpoint', 'Search & Destroy'];
+  };
   const isRegisteredToLadder = (ladderId) => mySquad?.registeredLadders?.some(l => l.ladderId === ladderId);
 
   // Use isDuoTrioOpen from DataContext
@@ -1458,14 +1469,12 @@ const CDLDashboard = () => {
             {/* Content */}
             <div className="relative z-10 px-6 py-8">
               <div className="flex items-center gap-5">
-                <div className="relative">
-                  <div className="absolute inset-0 bg-cyan-500 blur-2xl opacity-40" />
-                  <div className="relative w-16 h-16 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-2xl flex items-center justify-center shadow-cyan-500/40">
-                    <Shield className="w-8 h-8 text-white" />
-                  </div>
-                </div>
+                <img 
+                  src="/logo_cdl.png" 
+                  alt="CDL" 
+                  className="h-16 md:h-20 object-contain drop-shadow-2xl"
+                />
                 <div>
-                  <h1 className="text-4xl md:text-5xl font-display text-white mb-1">CDL</h1>
                   <p className="text-gray-400">{t('cdlDashboardDesc')}</p>
                 </div>
               </div>
@@ -1601,7 +1610,7 @@ const CDLDashboard = () => {
               <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-full glass">
                 <div className="w-2 h-2 bg-neon-green rounded-full animate-pulse" />
                 <Users className="w-4 h-4 text-gray-400" />
-                <span className="text-gray-300 text-sm font-medium">{totalOnlineUsers}</span>
+                <span className="text-gray-300 text-sm font-medium">{modeOnlineUsers.cdl || 0}</span>
               </div>
             </div>
 
@@ -1649,7 +1658,8 @@ const CDLDashboard = () => {
                         onClick={() => {
                           if (showPostMatch === 'duo-trio') setShowPostMatch(null);
                           else {
-                            setMatchForm({ ladder: 'duo-trio', gameMode: 'Hardpoint', teamSize: 2, mapType: 'free' });
+                            // CDL Chill: S&D only, 2v2 or 3v3
+                            setMatchForm({ ladder: 'duo-trio', gameMode: 'Search & Destroy', teamSize: 2, mapType: 'free' });
                             setShowPostMatch('duo-trio');
                           }
                         }}
@@ -1713,8 +1723,9 @@ const CDLDashboard = () => {
                     <div className="space-y-2">
                       <label className="block text-xs font-medium text-gray-400 uppercase tracking-wider">Format</label>
                       {showPostMatch === 'duo-trio' ? (
+                        // CDL Chill: 2v2 and 3v3 only
                         <div className="flex gap-2">
-                          {[2, 3, 4].map(size => (
+                          {[2, 3].map(size => (
                             <button
                               key={size}
                               type="button"
@@ -1728,6 +1739,7 @@ const CDLDashboard = () => {
                           ))}
                         </div>
                       ) : (
+                        // CDL Competitive: 4v4 only
                         <div className="py-3 px-4 rounded-xl bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 font-bold text-sm text-center">4v4</div>
                       )}
                     </div>

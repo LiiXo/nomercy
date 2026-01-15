@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { Skull, Shield, ArrowRight, Zap, Users, Trophy, ChevronDown, Flame, Target, Crosshair } from 'lucide-react';
+import { useData } from '../DataContext';
+import { Skull, Shield, ArrowRight, Zap, Users, Trophy, ChevronDown, Flame, Target, Crosshair, Lock } from 'lucide-react';
 import { useBackgroundAudio } from '../AudioProvider';
 
 const languages = [
@@ -18,15 +19,20 @@ const ModeSelection = () => {
   const { t, language, setLanguage } = useLanguage();
   const { selectMode } = useMode();
   const { isStaff } = useAuth();
+  const { isHardcoreModeEnabled, isCdlModeEnabled, appSettingsLoading } = useData();
   const [languageMenuOpen, setLanguageMenuOpen] = useState(false);
   const [hoveredMode, setHoveredMode] = useState(null);
   const { requestPlay } = useBackgroundAudio();
 
   const currentLanguage = languages.find(lang => lang.code === language);
-  const canAccessCDL = isStaff();
+  // CDL accessible si staff OU si le mode est activé
+  const canAccessCDL = isStaff() || isCdlModeEnabled;
+  // Hardcore accessible uniquement si le mode est activé
+  const canAccessHardcore = isHardcoreModeEnabled;
 
   const handleSelectMode = (mode) => {
     if (mode === 'cdl' && !canAccessCDL) return;
+    if (mode === 'hardcore' && !canAccessHardcore) return;
     selectMode(mode);
     navigate(`/${mode}`);
   };
@@ -161,24 +167,35 @@ const ModeSelection = () => {
           <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
             {/* Hardcore Mode */}
             <div
-              onClick={() => handleSelectMode('hardcore')}
+              onClick={() => canAccessHardcore && handleSelectMode('hardcore')}
               onMouseEnter={() => setHoveredMode('hardcore')}
               onMouseLeave={() => setHoveredMode(null)}
-              className="group relative glass-card rounded-3xl p-8 cursor-pointer overflow-hidden card-hover"
-              style={{ border: '2px solid rgba(255, 45, 85, 0.3)' }}
+              className={`group relative glass-card rounded-3xl p-8 overflow-hidden ${
+                canAccessHardcore
+                  ? 'cursor-pointer card-hover'
+                  : 'cursor-not-allowed opacity-60'
+              }`}
+              style={{ border: `2px solid rgba(255, 45, 85, ${canAccessHardcore ? '0.3' : '0.2'})` }}
             >
-              <div className="absolute inset-0 bg-gradient-to-br from-neon-red/10 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500" />
-              <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-neon-red/30 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-all duration-500" />
+              <div className={`absolute inset-0 bg-gradient-to-br from-neon-red/10 to-transparent ${canAccessHardcore ? 'opacity-0 group-hover:opacity-100' : ''} transition-all duration-500`} />
+              <div className={`absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-neon-red/30 to-transparent rounded-bl-full ${canAccessHardcore ? 'opacity-0 group-hover:opacity-100' : 'opacity-0'} transition-all duration-500`} />
               
               <div className="relative z-10">
                 {/* Icon */}
                 <div className="flex items-center justify-between mb-8">
-                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-neon-red to-neon-orange flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-neon-red">
+                  <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br from-neon-red to-neon-orange flex items-center justify-center ${canAccessHardcore ? 'group-hover:scale-110 group-hover:rotate-3' : ''} transition-all duration-500 shadow-neon-red`}>
                     <Skull className="w-10 h-10 text-white" />
                   </div>
-                  <div className="px-4 py-2 rounded-full bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-bold">
-                    {language === 'fr' ? 'DISPONIBLE' : language === 'de' ? 'VERFÜGBAR' : language === 'it' ? 'DISPONIBILE' : 'AVAILABLE'}
-                  </div>
+                  {canAccessHardcore ? (
+                    <div className="px-4 py-2 rounded-full bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-bold">
+                      {language === 'fr' ? 'DISPONIBLE' : language === 'de' ? 'VERFÜGBAR' : language === 'it' ? 'DISPONIBILE' : 'AVAILABLE'}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-2 rounded-full bg-red-500/20 border border-red-500/30 text-red-400 text-sm font-bold flex items-center gap-2">
+                      <Lock className="w-4 h-4" />
+                      {language === 'fr' ? 'FERMÉ' : language === 'de' ? 'GESCHLOSSEN' : language === 'it' ? 'CHIUSO' : 'CLOSED'}
+                    </div>
+                  )}
                 </div>
 
                 {/* Title */}
@@ -208,10 +225,16 @@ const ModeSelection = () => {
                 </div>
 
                 {/* Button */}
-                <button className="w-full py-4 bg-gradient-to-r from-neon-red to-neon-orange rounded-xl text-white font-bold text-lg flex items-center justify-center gap-3 group-hover:shadow-neon-red-lg transition-all duration-500 hover:scale-[1.02]">
-                  <span>{getText('play')}</span>
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </button>
+                {canAccessHardcore ? (
+                  <button className="w-full py-4 bg-gradient-to-r from-neon-red to-neon-orange rounded-xl text-white font-bold text-lg flex items-center justify-center gap-3 group-hover:shadow-neon-red-lg transition-all duration-500 hover:scale-[1.02]">
+                    <span>{getText('play')}</span>
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                ) : (
+                  <div className="w-full py-4 bg-white/5 border border-white/10 rounded-xl text-gray-500 font-bold text-lg text-center">
+                    {language === 'fr' ? 'MODE FERMÉ' : language === 'de' ? 'MODUS GESCHLOSSEN' : language === 'it' ? 'MODALITÀ CHIUSA' : 'MODE CLOSED'}
+                  </div>
+                )}
               </div>
             </div>
 
