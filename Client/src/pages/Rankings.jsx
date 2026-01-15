@@ -304,7 +304,18 @@ const Rankings = () => {
         });
         const data = await response.json();
         if (data.success && data.squad) {
-          setMySquad(data.squad);
+          // Filter squad by current mode - only show if mode matches or squad is 'both'
+          const squadMode = data.squad.mode;
+          const currentMode = isHardcore ? 'hardcore' : 'cdl';
+          const isCompatibleMode = squadMode === 'both' || squadMode === currentMode;
+          
+          if (isCompatibleMode) {
+            setMySquad(data.squad);
+          } else {
+            setMySquad(null);
+          }
+        } else {
+          setMySquad(null);
         }
       } catch (err) {
         console.error('Error fetching squad:', err);
@@ -314,14 +325,15 @@ const Rankings = () => {
     };
 
     fetchMySquad();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, selectedMode]);
 
   // Fetch leaderboard for a specific ladder
   const fetchLeaderboard = async (ladderId, showLoading = true) => {
+    const mode = isHardcore ? 'hardcore' : 'cdl';
     if (ladderId === 'duo-trio') {
       if (showLoading) setLoadingDuoTrio(true);
       try {
-        const response = await fetch(`${API_URL}/squads/ladder/duo-trio/leaderboard?limit=20`);
+        const response = await fetch(`${API_URL}/squads/ladder/duo-trio/leaderboard?limit=20&mode=${mode}`);
         const data = await response.json();
         if (data.success) {
           setDuoTrioLeaderboard(data.squads);
@@ -334,7 +346,7 @@ const Rankings = () => {
     } else if (ladderId === 'squad-team') {
       if (showLoading) setLoadingSquadTeam(true);
       try {
-        const response = await fetch(`${API_URL}/squads/ladder/squad-team/leaderboard?limit=20`);
+        const response = await fetch(`${API_URL}/squads/ladder/squad-team/leaderboard?limit=20&mode=${mode}`);
         const data = await response.json();
         if (data.success) {
           setSquadTeamLeaderboard(data.squads);
@@ -355,11 +367,11 @@ const Rankings = () => {
     ]);
   };
 
-  // Initial fetch
+  // Initial fetch and refetch when mode changes
   useEffect(() => {
     fetchAllLeaderboards();
     fetchPreviousSeasonWinners();
-  }, []);
+  }, [selectedMode]);
 
   // Fetch previous season winners
   const fetchPreviousSeasonWinners = async () => {

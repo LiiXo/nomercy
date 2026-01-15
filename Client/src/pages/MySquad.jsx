@@ -329,10 +329,19 @@ const MySquad = () => {
         });
         const data = await response.json();
         
-        if (data.success) {
-          setSquad(data.squad);
+        if (data.success && data.squad) {
+          // Filter squad by current mode - only show if mode matches or squad is 'both'
+          const squadMode = data.squad.mode;
+          const isCompatibleMode = squadMode === 'both' || squadMode === selectedMode;
+          
+          if (isCompatibleMode) {
+            setSquad(data.squad);
+          } else {
+            // Squad exists but is not for this mode
+            setSquad(null);
+          }
         } else {
-          setError(data.message || t.error);
+          setSquad(null);
         }
       } catch (err) {
         console.error('Error fetching squad:', err);
@@ -343,7 +352,7 @@ const MySquad = () => {
     };
 
     fetchSquad();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, selectedMode]);
 
   // Create squad
   const handleCreateSquad = async (e) => {

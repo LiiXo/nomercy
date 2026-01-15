@@ -7,7 +7,7 @@ import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   ArrowLeft, Trophy, Medal, Shield, Users, Calendar, Crown, Loader2, 
   AlertCircle, TrendingUp, Target, UserPlus, Lock, Check, X, Send, Award,
-  Swords, Clock, Play, Star
+  Swords, Clock, Play, Star, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -43,6 +43,10 @@ const SquadProfile = () => {
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [showMatchDetails, setShowMatchDetails] = useState(false);
+  const [matchHistoryPage, setMatchHistoryPage] = useState(1);
+  const [matchHistoryTotalPages, setMatchHistoryTotalPages] = useState(1);
+  const [matchHistoryTotal, setMatchHistoryTotal] = useState(0);
+  const MATCHES_PER_PAGE = 20;
 
   // Traductions
   const texts = {
@@ -94,6 +98,11 @@ const SquadProfile = () => {
       },
       deletedTeam: 'Équipe supprimée',
       deletedPlayer: 'Joueur supprimé',
+      page: 'Page',
+      of: 'sur',
+      previous: 'Précédent',
+      next: 'Suivant',
+      totalMatches: 'matchs au total',
     },
     en: {
       back: 'Back',
@@ -143,6 +152,11 @@ const SquadProfile = () => {
       },
       deletedTeam: 'Deleted team',
       deletedPlayer: 'Deleted player',
+      page: 'Page',
+      of: 'of',
+      previous: 'Previous',
+      next: 'Next',
+      totalMatches: 'total matches',
     },
     de: {
       back: 'Zurück',
@@ -192,6 +206,11 @@ const SquadProfile = () => {
       },
       deletedTeam: 'Gelöschtes Team',
       deletedPlayer: 'Gelöschter Spieler',
+      page: 'Seite',
+      of: 'von',
+      previous: 'Zurück',
+      next: 'Weiter',
+      totalMatches: 'Spiele insgesamt',
     },
     it: {
       back: 'Indietro',
@@ -241,6 +260,11 @@ const SquadProfile = () => {
       },
       deletedTeam: 'Squadra eliminata',
       deletedPlayer: 'Giocatore eliminato',
+      page: 'Pagina',
+      of: 'di',
+      previous: 'Precedente',
+      next: 'Successivo',
+      totalMatches: 'partite totali',
     },
   };
   const t = texts[language] || texts.en;
@@ -316,10 +340,12 @@ const SquadProfile = () => {
       if (!squadId) return;
       setLoadingHistory(true);
       try {
-        const response = await fetch(`${API_URL}/matches/history/${squadId}?limit=10`);
+        const response = await fetch(`${API_URL}/matches/history/${squadId}?limit=${MATCHES_PER_PAGE}&page=${matchHistoryPage}`);
         const data = await response.json();
         if (data.success) {
           setMatchHistory(data.matches);
+          setMatchHistoryTotalPages(data.pagination?.pages || 1);
+          setMatchHistoryTotal(data.pagination?.total || data.matches.length);
         }
       } catch (err) {
         console.error('Error fetching match history:', err);
@@ -328,7 +354,7 @@ const SquadProfile = () => {
       }
     };
     fetchMatchHistory();
-  }, [squadId]);
+  }, [squadId, matchHistoryPage]);
 
   // Calculate win rate
   const getWinRate = () => {
@@ -869,6 +895,107 @@ const SquadProfile = () => {
               <div className="text-center py-8">
                 <Swords className="w-12 h-12 text-gray-600 mx-auto mb-3" />
                 <p className="text-gray-500">{t.noMatches}</p>
+              </div>
+            )}
+            
+            {/* Pagination */}
+            {matchHistoryTotal > 0 && matchHistoryTotalPages > 1 && (
+              <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-white/10">
+                <div className="text-sm text-gray-500">
+                  {matchHistoryTotal} {t.totalMatches}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMatchHistoryPage(prev => Math.max(1, prev - 1))}
+                    disabled={matchHistoryPage === 1 || loadingHistory}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      matchHistoryPage === 1 
+                        ? 'bg-dark-800/50 text-gray-500' 
+                        : `bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30`
+                    }`}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="hidden sm:inline">{t.previous}</span>
+                  </button>
+                  
+                  <div className="flex items-center gap-1">
+                    {/* Show page numbers */}
+                    {(() => {
+                      const pages = [];
+                      const start = Math.max(1, matchHistoryPage - 2);
+                      const end = Math.min(matchHistoryTotalPages, matchHistoryPage + 2);
+                      
+                      if (start > 1) {
+                        pages.push(
+                          <button
+                            key={1}
+                            onClick={() => setMatchHistoryPage(1)}
+                            className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
+                              matchHistoryPage === 1 
+                                ? `bg-${accentColor}-500 text-white` 
+                                : 'bg-dark-800/50 text-gray-400 hover:bg-dark-700/50'
+                            }`}
+                          >
+                            1
+                          </button>
+                        );
+                        if (start > 2) {
+                          pages.push(<span key="dots1" className="text-gray-500 px-1">...</span>);
+                        }
+                      }
+                      
+                      for (let i = start; i <= end; i++) {
+                        pages.push(
+                          <button
+                            key={i}
+                            onClick={() => setMatchHistoryPage(i)}
+                            className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
+                              matchHistoryPage === i 
+                                ? `bg-${accentColor}-500 text-white` 
+                                : 'bg-dark-800/50 text-gray-400 hover:bg-dark-700/50'
+                            }`}
+                          >
+                            {i}
+                          </button>
+                        );
+                      }
+                      
+                      if (end < matchHistoryTotalPages) {
+                        if (end < matchHistoryTotalPages - 1) {
+                          pages.push(<span key="dots2" className="text-gray-500 px-1">...</span>);
+                        }
+                        pages.push(
+                          <button
+                            key={matchHistoryTotalPages}
+                            onClick={() => setMatchHistoryPage(matchHistoryTotalPages)}
+                            className={`w-8 h-8 rounded-lg text-sm font-medium transition-all ${
+                              matchHistoryPage === matchHistoryTotalPages 
+                                ? `bg-${accentColor}-500 text-white` 
+                                : 'bg-dark-800/50 text-gray-400 hover:bg-dark-700/50'
+                            }`}
+                          >
+                            {matchHistoryTotalPages}
+                          </button>
+                        );
+                      }
+                      
+                      return pages;
+                    })()}
+                  </div>
+                  
+                  <button
+                    onClick={() => setMatchHistoryPage(prev => Math.min(matchHistoryTotalPages, prev + 1))}
+                    disabled={matchHistoryPage === matchHistoryTotalPages || loadingHistory}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      matchHistoryPage === matchHistoryTotalPages 
+                        ? 'bg-dark-800/50 text-gray-500' 
+                        : `bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30`
+                    }`}
+                  >
+                    <span className="hidden sm:inline">{t.next}</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

@@ -3772,6 +3772,209 @@ const AdminPanel = () => {
           </div>
         </div>
 
+        {/* BO1/BO3 Format Toggle */}
+        <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Swords className="w-5 h-5 text-purple-400" />
+            🗺️ Format de Match (Mode Classé)
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Définir le nombre de maps générées pour la feuille de match en mode classé.
+          </p>
+          
+          <div className="flex gap-4">
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_URL}/app-settings/admin`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                      rankedSettings: {
+                        ...appSettings?.rankedSettings,
+                        bestOf: 1
+                      }
+                    })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess('Format mis à jour: BO1 (1 map)');
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur lors de la mise à jour');
+                }
+              }}
+              className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all ${
+                appSettings?.rankedSettings?.bestOf === 1 
+                  ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'bg-dark-800 text-gray-400 hover:bg-dark-700 border border-white/10'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-2xl">🗺️</span>
+                <span>BO1</span>
+                <span className="text-xs font-normal opacity-70">1 map</span>
+              </div>
+            </button>
+            
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_URL}/app-settings/admin`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                      rankedSettings: {
+                        ...appSettings?.rankedSettings,
+                        bestOf: 3
+                      }
+                    })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess('Format mis à jour: BO3 (3 maps)');
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur lors de la mise à jour');
+                }
+              }}
+              className={`flex-1 py-4 px-6 rounded-xl font-bold text-lg transition-all ${
+                appSettings?.rankedSettings?.bestOf !== 1 
+                  ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30' 
+                  : 'bg-dark-800 text-gray-400 hover:bg-dark-700 border border-white/10'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-2xl">🗺️🗺️🗺️</span>
+                <span>BO3</span>
+                <span className="text-xs font-normal opacity-70">3 maps</span>
+              </div>
+            </button>
+          </div>
+          
+          <div className="mt-4 bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+            <p className="text-purple-400 text-sm">
+              <strong>Format actuel:</strong> {appSettings?.rankedSettings?.bestOf === 1 ? 'BO1 (1 map par match)' : 'BO3 (3 maps par match)'}
+            </p>
+          </div>
+        </div>
+
+        {/* Rank Points Thresholds */}
+        <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-purple-400" />
+            🏆 Seuils de Points par Rang (Mode Classé)
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Définir les points minimum et maximum pour chaque rang. Le rang Champion n'a pas de maximum.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { key: 'bronze', label: '🥉 Bronze', color: 'from-orange-700 to-orange-900' },
+              { key: 'silver', label: '🥈 Argent', color: 'from-gray-400 to-gray-600' },
+              { key: 'gold', label: '🥇 Or', color: 'from-yellow-500 to-yellow-700' },
+              { key: 'platinum', label: '💎 Platine', color: 'from-cyan-400 to-cyan-600' },
+              { key: 'diamond', label: '💠 Diamant', color: 'from-blue-400 to-blue-600' },
+              { key: 'master', label: '👑 Maître', color: 'from-purple-500 to-purple-700' },
+              { key: 'champion', label: '🏆 Champion', color: 'from-red-500 to-orange-500' },
+            ].map(({ key, label, color }) => {
+              const thresholds = appSettings?.rankedSettings?.rankPointsThresholds || {};
+              const rankData = thresholds[key] || { min: 0, max: key === 'champion' ? null : 499 };
+              
+              return (
+                <div key={key} className={`bg-gradient-to-br ${color} rounded-xl p-4`}>
+                  <h4 className="text-white font-bold mb-3">{label}</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-white/80 text-xs block mb-1">Min</label>
+                      <input
+                        type="number"
+                        value={rankData.min || 0}
+                        onChange={async (e) => {
+                          const newVal = parseInt(e.target.value) || 0;
+                          try {
+                            const response = await fetch(`${API_URL}/app-settings/admin`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              credentials: 'include',
+                              body: JSON.stringify({
+                                rankedSettings: {
+                                  ...appSettings?.rankedSettings,
+                                  rankPointsThresholds: {
+                                    ...thresholds,
+                                    [key]: { ...rankData, min: newVal }
+                                  }
+                                }
+                              })
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                              fetchAppSettings();
+                            }
+                          } catch (err) {
+                            setError('Erreur');
+                          }
+                        }}
+                        className="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white text-sm font-bold focus:border-white/40 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-white/80 text-xs block mb-1">Max</label>
+                      {key === 'champion' ? (
+                        <div className="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white/60 text-sm text-center">
+                          ∞
+                        </div>
+                      ) : (
+                        <input
+                          type="number"
+                          value={rankData.max || 0}
+                          onChange={async (e) => {
+                            const newVal = parseInt(e.target.value) || 0;
+                            try {
+                              const response = await fetch(`${API_URL}/app-settings/admin`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify({
+                                  rankedSettings: {
+                                    ...appSettings?.rankedSettings,
+                                    rankPointsThresholds: {
+                                      ...thresholds,
+                                      [key]: { ...rankData, max: newVal }
+                                    }
+                                  }
+                                })
+                              });
+                              const data = await response.json();
+                              if (data.success) {
+                                fetchAppSettings();
+                              }
+                            } catch (err) {
+                              setError('Erreur');
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white text-sm font-bold focus:border-white/40 focus:outline-none"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="mt-4 bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+            <p className="text-purple-400 text-sm">
+              💡 Les joueurs montent ou descendent de rang automatiquement en fonction de leurs points.
+            </p>
+          </div>
+        </div>
+
         {/* Ranked Match Rewards */}
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">

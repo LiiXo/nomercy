@@ -426,6 +426,16 @@
     100% { transform: translateX(100%); }
   }
 
+  @keyframes text-shimmer {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+  }
+
+  .animate-text-shimmer {
+    background-size: 200% 100%;
+    animation: text-shimmer 3s linear infinite;
+  }
+
   @keyframes scanLine {
     0%, 100% { transform: translateY(-50%) scaleX(0); opacity: 0; }
     50% { transform: translateY(-50%) scaleX(1); opacity: 1; }
@@ -654,6 +664,7 @@
     z-index: -1;
   }
 }
+
 
 
 

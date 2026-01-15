@@ -570,6 +570,7 @@ const RankedMode = () => {
       ready4v4: '4v4 prêt, en attente du 5v5...',
       creatingMatch: 'Création du match...',
       topPlayers: 'Meilleurs joueurs',
+      mandatoryMatchWarning: '⚠️ En lançant un match classé, vous vous engagez à le jouer. Ne pas jouer un match après l\'avoir lancé peut entraîner des sanctions si cela se reproduit plusieurs fois.',
     },
     en: {
       title: 'Ranked Mode',
@@ -616,6 +617,7 @@ const RankedMode = () => {
       ready4v4: '4v4 ready, waiting for 5v5...',
       creatingMatch: 'Creating match...',
       topPlayers: 'Top Players',
+      mandatoryMatchWarning: '⚠️ By starting a ranked match, you commit to playing it. Not playing a match after starting it may result in sanctions if repeated multiple times.',
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -662,6 +664,7 @@ const RankedMode = () => {
       ready4v4: '4v4 bereit, warte auf 5v5...',
       creatingMatch: 'Match wird erstellt...',
       topPlayers: 'Top-Spieler',
+      mandatoryMatchWarning: '⚠️ Mit dem Starten eines Ranglistenspiels verpflichten Sie sich, es zu spielen. Wenn Sie ein Spiel nach dem Starten nicht spielen, kann dies bei mehrfacher Wiederholung zu Sanktionen führen.',
     },
     it: {
       title: 'Modalità Classificata',
@@ -708,6 +711,7 @@ const RankedMode = () => {
       ready4v4: '4v4 pronto, in attesa del 5v5...',
       creatingMatch: 'Creazione partita...',
       topPlayers: 'Migliori giocatori',
+      mandatoryMatchWarning: '⚠️ Avviando una partita classificata, ti impegni a giocarla. Non giocare una partita dopo averla avviata può comportare sanzioni se ripetuto più volte.',
     }
   };
   
@@ -1336,6 +1340,16 @@ const RankedMode = () => {
                         </div>
                       )}
 
+                      {/* Mandatory Match Warning */}
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-500/20 via-red-500/20 to-orange-500/20 border border-orange-500/30 mb-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                          <p className="text-orange-300 text-sm font-medium leading-relaxed">
+                            {t.mandatoryMatchWarning}
+                          </p>
+                        </div>
+                      </div>
+
                       {/* Find Match Button */}
                       <button
                         onClick={joinQueue}
@@ -1556,7 +1570,17 @@ const RankedMode = () => {
                       
                       {/* Name & Rank */}
                       <div className="flex-1 min-w-0 text-left">
-                        <p className="text-white font-medium truncate">{player.user?.username || 'Unknown'}</p>
+                        <p className={`font-medium truncate ${
+                          position === 1 
+                            ? 'text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-amber-500 via-yellow-400 to-yellow-200 font-bold text-base animate-text-shimmer' 
+                            : position === 2 
+                              ? 'text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-slate-300 via-white to-gray-200 font-bold animate-text-shimmer' 
+                              : position === 3 
+                                ? 'text-transparent bg-clip-text bg-gradient-to-r from-orange-300 via-amber-400 to-orange-500 via-amber-400 to-orange-300 font-bold animate-text-shimmer' 
+                                : 'text-white'
+                        }`}>
+                          {position === 1 && '👑 '}{player.user?.username || 'Unknown'}
+                        </p>
                         <div className="flex items-center gap-2">
                           <div className={`w-4 h-4 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
                             <RankIcon className="w-2.5 h-2.5 text-white" />

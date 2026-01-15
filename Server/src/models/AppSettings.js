@@ -129,6 +129,23 @@ const appSettingsSchema = new mongoose.Schema({
   
   // Ranked mode settings
   rankedSettings: {
+    // Format de match: BO1 = 1 map, BO3 = 3 maps
+    bestOf: { type: Number, enum: [1, 3], default: 3 },
+    
+    // Points à gagner/perdre par rang (pour passer au rang supérieur/inférieur)
+    rankPointsThresholds: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({
+        bronze: { min: 0, max: 499 },
+        silver: { min: 500, max: 999 },
+        gold: { min: 1000, max: 1499 },
+        platinum: { min: 1500, max: 1999 },
+        diamond: { min: 2000, max: 2499 },
+        master: { min: 2500, max: 2999 },
+        champion: { min: 3000, max: null }
+      })
+    },
+    
     // Configuration par mode de jeu
     searchAndDestroy: {
       enabled: { type: Boolean, default: true },

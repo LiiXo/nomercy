@@ -1431,12 +1431,23 @@ router.post('/:squadId/unregister-ladder', verifyToken, async (req, res) => {
 router.get('/ladder/:ladderId/leaderboard', async (req, res) => {
   try {
     const { ladderId } = req.params;
-    const { limit = 100, page = 1 } = req.query;
+    const { limit = 100, page = 1, mode } = req.query;
 
-    const squads = await Squad.find({
+    // Build query with mode filtering
+    const query = {
       'registeredLadders.ladderId': ladderId,
       isDeleted: false // Exclude deleted squads
-    })
+    };
+    
+    // Filter by mode if provided - only show squads that match the mode or are 'both'
+    if (mode && ['hardcore', 'cdl'].includes(mode)) {
+      query.$or = [
+        { mode: mode },
+        { mode: 'both' }
+      ];
+    }
+
+    const squads = await Squad.find(query)
       .populate({
         path: 'leader',
         select: 'username avatarUrl discordAvatar discordId isBanned isDeleted',
@@ -1447,7 +1458,7 @@ router.get('/ladder/:ladderId/leaderboard', async (req, res) => {
         select: 'username avatarUrl discordAvatar discordId isDeleted',
         match: { isDeleted: { $ne: true } } // Exclude deleted members
       })
-      .select('name tag color logo members registeredLadders');
+      .select('name tag color logo members registeredLadders mode');
 
     // Filter out squads with banned/deleted leaders
     const validSquads = squads.filter(s => s.leader !== null);

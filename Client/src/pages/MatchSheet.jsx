@@ -135,6 +135,7 @@ const MatchSheet = () => {
       rejectCancellation: 'Refuser l\'annulation',
       cancellationAccepted: 'Annulation acceptée',
       cancellationRejected: 'Annulation refusée',
+      referentWarning: '⚠️ Attention Référents : Valider un gagnant sans avoir joué le match peut entraîner de lourdes sanctions (ban temporaire ou permanent). Assurez-vous que le match a bien été joué avant de valider.',
     },
     en: {
       back: 'Back',
@@ -208,6 +209,7 @@ const MatchSheet = () => {
       rejectCancellation: 'Reject cancellation',
       cancellationAccepted: 'Cancellation accepted',
       cancellationRejected: 'Cancellation rejected',
+      referentWarning: '⚠️ Warning Referents: Validating a winner without playing the match may result in severe sanctions (temporary or permanent ban). Make sure the match has been played before validating.',
     },
     de: {
       back: 'Zurück',
@@ -281,6 +283,7 @@ const MatchSheet = () => {
       rejectCancellation: 'Stornierung ablehnen',
       cancellationAccepted: 'Stornierung akzeptiert',
       cancellationRejected: 'Stornierung abgelehnt',
+      referentWarning: '⚠️ Achtung Referenten: Das Validieren eines Gewinners ohne das Spiel gespielt zu haben, kann schwere Sanktionen nach sich ziehen (temporärer oder permanenter Bann). Stellen Sie sicher, dass das Spiel gespielt wurde, bevor Sie validieren.',
     },
     it: {
       back: 'Indietro',
@@ -354,6 +357,7 @@ const MatchSheet = () => {
       rejectCancellation: 'Rifiuta annullamento',
       cancellationAccepted: 'Annullamento accettato',
       cancellationRejected: 'Annullamento rifiutato',
+      referentWarning: '⚠️ Attenzione Referenti: Convalidare un vincitore senza aver giocato la partita può comportare sanzioni severe (ban temporaneo o permanente). Assicuratevi che la partita sia stata giocata prima di convalidare.',
     },
   }[language] || {};
 
@@ -1967,6 +1971,20 @@ const MatchSheet = () => {
                 </form>
               )}
             </div>
+
+            {/* Warning for referents in ranked matches */}
+            {isRankedMatch && ['accepted', 'in_progress', 'ready'].includes(match.status) && (
+              <div className="bg-gradient-to-r from-red-500/20 via-orange-500/20 to-red-500/20 border-2 border-red-500/40 rounded-xl p-4 mb-4 animate-pulse">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-red-500/20 rounded-lg flex-shrink-0">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-red-400 font-bold text-sm">{t.referentWarning}</p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Rosters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
