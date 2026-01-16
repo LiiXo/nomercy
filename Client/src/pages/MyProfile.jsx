@@ -610,9 +610,9 @@ const MyProfile = () => {
       resetStatsNotEnoughGold: 'Gold insuffisant',
       statsResetSuccess: 'Vos statistiques ont été réinitialisées !',
       goldRequired: 'gold requis',
-      resetStatsAlreadyUsed: 'Réinitialisation déjà utilisée',
-      resetStatsAlreadyUsedDesc: 'Vous avez déjà utilisé votre réinitialisation de statistiques unique.',
-      oneTimeOnly: '(Usage unique)'
+      resetStatsFree: 'GRATUIT',
+      resetStatsFirstFree: 'Première réinitialisation gratuite !',
+      resetStatsCount: 'Réinitialisations effectuées'
     },
     en: {
       back: 'Back',
@@ -713,9 +713,9 @@ const MyProfile = () => {
       resetStatsNotEnoughGold: 'Not enough gold',
       statsResetSuccess: 'Your statistics have been reset!',
       goldRequired: 'gold required',
-      resetStatsAlreadyUsed: 'Reset already used',
-      resetStatsAlreadyUsedDesc: 'You have already used your one-time stats reset.',
-      oneTimeOnly: '(One-time only)'
+      resetStatsFree: 'FREE',
+      resetStatsFirstFree: 'First reset is free!',
+      resetStatsCount: 'Resets performed'
     },
     de: {
       back: 'Zurück',
@@ -816,9 +816,9 @@ const MyProfile = () => {
       resetStatsNotEnoughGold: 'Nicht genug Gold',
       statsResetSuccess: 'Ihre Statistiken wurden zurückgesetzt!',
       goldRequired: 'Gold erforderlich',
-      resetStatsAlreadyUsed: 'Zurücksetzen bereits verwendet',
-      resetStatsAlreadyUsedDesc: 'Sie haben Ihr einmaliges Zurücksetzen der Statistiken bereits verwendet.',
-      oneTimeOnly: '(Nur einmal)'
+      resetStatsFree: 'KOSTENLOS',
+      resetStatsFirstFree: 'Erstes Zurücksetzen ist kostenlos!',
+      resetStatsCount: 'Durchgeführte Zurücksetzungen'
     },
     it: {
       back: 'Indietro',
@@ -919,9 +919,9 @@ const MyProfile = () => {
       resetStatsNotEnoughGold: 'Gold insufficiente',
       statsResetSuccess: 'Le tue statistiche sono state resettate!',
       goldRequired: 'gold richiesti',
-      resetStatsAlreadyUsed: 'Reset già utilizzato',
-      resetStatsAlreadyUsedDesc: 'Hai già utilizzato il tuo reset delle statistiche una tantum.',
-      oneTimeOnly: '(Una sola volta)'
+      resetStatsFree: 'GRATIS',
+      resetStatsFirstFree: 'Primo reset gratuito!',
+      resetStatsCount: 'Reset effettuati'
     }
   };
 
@@ -1395,41 +1395,44 @@ const MyProfile = () => {
           )}
 
           {/* Reset Stats Section */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border ${user?.hasUsedStatsReset ? 'border-gray-500/30' : 'border-orange-500/30'} p-4 sm:p-6 mt-4 sm:mt-6`}>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-orange-500/30 p-4 sm:p-6 mt-4 sm:mt-6`}>
             <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
-              <Target className={`w-4 sm:w-5 h-4 sm:h-5 ${user?.hasUsedStatsReset ? 'text-gray-400' : 'text-orange-400'}`} />
+              <Target className={`w-4 sm:w-5 h-4 sm:h-5 text-orange-400`} />
               <span>{t.resetStats}</span>
-              <span className="text-xs text-gray-500 font-normal">{t.oneTimeOnly}</span>
+              {(user?.statsResetCount || 0) > 0 && (
+                <span className="text-xs text-gray-500 font-normal">({t.resetStatsCount}: {user?.statsResetCount || 0})</span>
+              )}
             </h2>
 
-            {user?.hasUsedStatsReset ? (
-              /* Already used state */
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-center gap-3 p-4 bg-gray-500/10 rounded-lg border border-gray-500/30">
-                  <div className="w-10 h-10 rounded-full bg-gray-500/20 flex items-center justify-center flex-shrink-0">
-                    <Check className="w-5 h-5 text-gray-400" />
-                  </div>
-                  <div>
-                    <p className="text-gray-300 font-medium text-sm">{t.resetStatsAlreadyUsed}</p>
-                    <p className="text-gray-500 text-xs">{t.resetStatsAlreadyUsedDesc}</p>
-                  </div>
+            {/* Available state - always available */}
+            <div className="space-y-3 sm:space-y-4">
+              <p className="text-gray-400 text-xs sm:text-sm">{t.resetStatsDescription}</p>
+              
+              {/* First reset free notice */}
+              {(user?.statsResetCount || 0) === 0 && (
+                <div className="flex items-center gap-2 p-3 bg-green-500/10 rounded-lg border border-green-500/30">
+                  <Gift className="w-4 h-4 text-green-400 flex-shrink-0" />
+                  <span className="text-green-400 text-sm font-medium">{t.resetStatsFirstFree}</span>
+                </div>
+              )}
+              
+              {/* Cost display */}
+              <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg border border-white/10">
+                <span className="text-gray-300 text-sm">{t.resetStatsCost}</span>
+                <div className="flex items-center gap-2">
+                  {(user?.statsResetCount || 0) === 0 ? (
+                    <span className="text-green-400 font-bold">{t.resetStatsFree}</span>
+                  ) : (
+                    <>
+                      <Coins className="w-4 h-4 text-yellow-400" />
+                      <span className="text-yellow-400 font-bold">{RESET_STATS_COST}</span>
+                    </>
+                  )}
                 </div>
               </div>
-            ) : (
-              /* Available state */
-              <div className="space-y-3 sm:space-y-4">
-                <p className="text-gray-400 text-xs sm:text-sm">{t.resetStatsDescription}</p>
-                
-                {/* Cost display */}
-                <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg border border-white/10">
-                  <span className="text-gray-300 text-sm">{t.resetStatsCost}</span>
-                  <div className="flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-yellow-400" />
-                    <span className="text-yellow-400 font-bold">{RESET_STATS_COST}</span>
-                  </div>
-                </div>
-                
-                {/* Your gold balance */}
+              
+              {/* Your gold balance (only show if not first reset) */}
+              {(user?.statsResetCount || 0) > 0 && (
                 <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg border border-white/10">
                   <span className="text-gray-300 text-sm">{t.gold}</span>
                   <div className="flex items-center gap-2">
@@ -1439,27 +1442,31 @@ const MyProfile = () => {
                     </span>
                   </div>
                 </div>
-                
-                <button
-                  onClick={() => setShowResetStatsModal(true)}
-                  disabled={(user?.goldCoins || 0) < RESET_STATS_COST}
-                  className={`w-full py-2.5 sm:py-3 px-3 sm:px-4 ${
-                    (user?.goldCoins || 0) >= RESET_STATS_COST
-                      ? 'bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/30 text-orange-400'
-                      : 'bg-gray-500/20 border-gray-500/30 text-gray-500 cursor-not-allowed'
-                  } border font-medium rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base`}
-                >
-                  <Target className="w-4 sm:w-5 h-4 sm:h-5" />
-                  {(user?.goldCoins || 0) >= RESET_STATS_COST ? t.resetStats : t.resetStatsNotEnoughGold}
-                </button>
-                
-                {(user?.goldCoins || 0) < RESET_STATS_COST && (
-                  <p className="text-xs text-orange-400 text-center">
-                    {RESET_STATS_COST - (user?.goldCoins || 0)} {t.goldRequired}
-                  </p>
-                )}
-              </div>
-            )}
+              )}
+              
+              <button
+                onClick={() => setShowResetStatsModal(true)}
+                disabled={(user?.statsResetCount || 0) > 0 && (user?.goldCoins || 0) < RESET_STATS_COST}
+                className={`w-full py-2.5 sm:py-3 px-3 sm:px-4 ${
+                  (user?.statsResetCount || 0) === 0 || (user?.goldCoins || 0) >= RESET_STATS_COST
+                    ? 'bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/30 text-orange-400'
+                    : 'bg-gray-500/20 border-gray-500/30 text-gray-500 cursor-not-allowed'
+                } border font-medium rounded-lg sm:rounded-xl transition-all flex items-center justify-center gap-2 text-sm sm:text-base`}
+              >
+                <Target className="w-4 sm:w-5 h-4 sm:h-5" />
+                {(user?.statsResetCount || 0) === 0 
+                  ? t.resetStats 
+                  : (user?.goldCoins || 0) >= RESET_STATS_COST 
+                    ? t.resetStats 
+                    : t.resetStatsNotEnoughGold}
+              </button>
+              
+              {(user?.statsResetCount || 0) > 0 && (user?.goldCoins || 0) < RESET_STATS_COST && (
+                <p className="text-xs text-orange-400 text-center">
+                  {RESET_STATS_COST - (user?.goldCoins || 0)} {t.goldRequired}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1541,11 +1548,18 @@ const MyProfile = () => {
               </div>
               
               {/* Cost */}
-              <div className="flex items-center justify-center gap-2 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
-                <span className="text-gray-300 text-sm">{t.resetStatsCost}:</span>
-                <Coins className="w-4 h-4 text-yellow-400" />
-                <span className="text-yellow-400 font-bold">{RESET_STATS_COST}</span>
-              </div>
+              {(user?.statsResetCount || 0) === 0 ? (
+                <div className="flex items-center justify-center gap-2 p-3 bg-green-500/10 rounded-lg border border-green-500/30">
+                  <Gift className="w-4 h-4 text-green-400" />
+                  <span className="text-green-400 font-bold">{t.resetStatsFree}</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+                  <span className="text-gray-300 text-sm">{t.resetStatsCost}:</span>
+                  <Coins className="w-4 h-4 text-yellow-400" />
+                  <span className="text-yellow-400 font-bold">{RESET_STATS_COST}</span>
+                </div>
+              )}
               
               {resetStatsError && (
                 <p className="text-red-400 text-xs sm:text-sm mt-3 p-2 bg-red-500/10 rounded">{resetStatsError}</p>

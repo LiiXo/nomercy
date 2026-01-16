@@ -127,12 +127,12 @@ const appSettingsSchema = new mongoose.Schema({
     }
   },
   
-  // Ranked mode settings
+  // Ranked mode settings (récompenses configurées dans Config.rankedMatchRewards)
   rankedSettings: {
     // Format de match: BO1 = 1 map, BO3 = 3 maps
     bestOf: { type: Number, enum: [1, 3], default: 3 },
     
-    // Points à gagner/perdre par rang (pour passer au rang supérieur/inférieur)
+    // Seuils de points par rang
     rankPointsThresholds: {
       type: mongoose.Schema.Types.Mixed,
       default: () => ({
@@ -160,75 +160,6 @@ const appSettingsSchema = new mongoose.Schema({
         grandmaster: -25,
         champion: -30
       })
-    },
-    
-    // Configuration par mode de jeu
-    searchAndDestroy: {
-      enabled: { type: Boolean, default: true },
-      // Récompenses en victoire/défaite
-      rewards: {
-        pointsWin: { type: Number, default: 25 },    // Points gagnés en victoire
-        pointsLose: { type: Number, default: -15 },  // Points perdus en défaite
-        goldWin: { type: Number, default: 50 },      // Gold gagné en victoire
-        goldLoss: { type: Number, default: 10 }      // Gold de consolation en défaite
-      },
-      // Configuration du matchmaking
-      matchmaking: {
-        minPlayers: { type: Number, default: 6 },    // Minimum pour 3v3
-        maxPlayers: { type: Number, default: 10 },   // Maximum pour 5v5
-        waitTimer: { type: Number, default: 120 }    // Timer d'attente en secondes (2 min)
-      }
-    },
-    // Hardpoint / Point Stratégique - principalement pour CDL
-    hardpoint: {
-      enabled: { type: Boolean, default: true },
-      rewards: {
-        pointsWin: { type: Number, default: 25 },
-        pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 },
-        goldLoss: { type: Number, default: 10 }
-      },
-      matchmaking: {
-        minPlayers: { type: Number, default: 8 },    // 4v4 only
-        maxPlayers: { type: Number, default: 8 },    // 4v4 only
-        waitTimer: { type: Number, default: 120 }
-      }
-    },
-    teamDeathmatch: {
-      enabled: { type: Boolean, default: false },
-      rewards: {
-        pointsWin: { type: Number, default: 25 },
-        pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 },
-        goldLoss: { type: Number, default: 10 }
-      }
-    },
-    domination: {
-      enabled: { type: Boolean, default: false },
-      rewards: {
-        pointsWin: { type: Number, default: 25 },
-        pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 },
-        goldLoss: { type: Number, default: 10 }
-      }
-    },
-    captureTheFlag: {
-      enabled: { type: Boolean, default: false },
-      rewards: {
-        pointsWin: { type: Number, default: 25 },
-        pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 },
-        goldLoss: { type: Number, default: 10 }
-      }
-    },
-    killConfirmed: {
-      enabled: { type: Boolean, default: false },
-      rewards: {
-        pointsWin: { type: Number, default: 25 },
-        pointsLose: { type: Number, default: -15 },
-        goldWin: { type: Number, default: 50 },
-        goldLoss: { type: Number, default: 10 }
-      }
     }
   }
 }, {

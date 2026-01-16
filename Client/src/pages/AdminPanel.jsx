@@ -10,7 +10,7 @@ import AdminSquads from '../components/admin/AdminSquads';
 import AdminApplication from '../components/admin/AdminApplication';
 import { 
   ArrowLeft, Shield, Package, Users, BarChart3, Plus, Edit2, Trash2, 
-  Save, X, Loader2, Search, ChevronDown, Eye, EyeOff, Coins, TrendingUp,
+  Save, X, Loader2, Search, ChevronDown, Eye, EyeOff, Coins, TrendingUp, TrendingDown,
   ShoppingBag, Crown, Star, Zap, Gift, Award, Image, Ban, UserCheck,
   Trophy, Medal, Target, RefreshCw, Megaphone, Bell, AlertTriangle,
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
@@ -2489,176 +2489,6 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        {/* Ranked Settings */}
-        <div className="bg-dark-800/50 border border-cyan-500/30 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
-            <Trophy className="w-5 h-5 text-cyan-400" />
-            Paramètres Mode Classé
-          </h3>
-          
-          {/* Search & Destroy */}
-          <div className="bg-dark-900/50 rounded-lg p-4 mb-4">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <Skull className="w-5 h-5 text-cyan-400" />
-                <div>
-                  <h4 className="text-white font-medium">Search & Destroy</h4>
-                  <p className="text-gray-500 text-xs">Mode solo classé - 3v3, 4v4 ou 5v5</p>
-                </div>
-              </div>
-              <button
-                onClick={async () => {
-                  const newEnabled = !appSettings?.rankedSettings?.searchAndDestroy?.enabled;
-                  try {
-                    const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      credentials: 'include',
-                      body: JSON.stringify({ 
-                        searchAndDestroy: { enabled: newEnabled }
-                      })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                      setSuccess(newEnabled ? 'Mode activé' : 'Mode désactivé');
-                      fetchAppSettings();
-                    } else {
-                      setError(data.message || 'Erreur');
-                    }
-                  } catch (err) {
-                    setError('Erreur lors de la modification');
-                  }
-                }}
-                className={`relative w-12 h-6 rounded-full transition-colors ${
-                  appSettings?.rankedSettings?.searchAndDestroy?.enabled !== false ? 'bg-cyan-500' : 'bg-dark-700'
-                }`}
-              >
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                  appSettings?.rankedSettings?.searchAndDestroy?.enabled !== false ? 'translate-x-6' : ''
-                }`} />
-              </button>
-            </div>
-            
-            {/* Rewards Configuration */}
-            <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10">
-              <div>
-                <label className="text-gray-400 text-sm block mb-2">Points victoire</label>
-                <input
-                  type="number"
-                  value={appSettings?.rankedSettings?.searchAndDestroy?.rewards?.pointsWin || 25}
-                  onChange={async (e) => {
-                    try {
-                      const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ 
-                          searchAndDestroy: { rewards: { pointsWin: parseInt(e.target.value) || 25 } }
-                        })
-                      });
-                      const data = await response.json();
-                      if (data.success) fetchAppSettings();
-                    } catch (err) {
-                      setError('Erreur');
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
-                />
-              </div>
-              <div>
-                <label className="text-gray-400 text-sm block mb-2">Points défaite</label>
-                <input
-                  type="number"
-                  value={appSettings?.rankedSettings?.searchAndDestroy?.rewards?.pointsLose || -15}
-                  onChange={async (e) => {
-                    try {
-                      const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ 
-                          searchAndDestroy: { rewards: { pointsLose: parseInt(e.target.value) || -15 } }
-                        })
-                      });
-                      const data = await response.json();
-                      if (data.success) fetchAppSettings();
-                    } catch (err) {
-                      setError('Erreur');
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
-                />
-              </div>
-              <div>
-                <label className="text-gray-400 text-sm block mb-2">Gold victoire</label>
-                <input
-                  type="number"
-                  value={appSettings?.rankedSettings?.searchAndDestroy?.rewards?.goldWin || 50}
-                  onChange={async (e) => {
-                    try {
-                      const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({ 
-                          searchAndDestroy: { rewards: { goldWin: parseInt(e.target.value) || 50 } }
-                        })
-                      });
-                      const data = await response.json();
-                      if (data.success) fetchAppSettings();
-                    } catch (err) {
-                      setError('Erreur');
-                    }
-                  }}
-                  className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
-                />
-              </div>
-            </div>
-            
-            {/* Matchmaking Timer */}
-            <div className="mt-4 pt-4 border-t border-white/10">
-              <label className="text-gray-400 text-sm block mb-2">Timer d'attente (secondes)</label>
-              <input
-                type="number"
-                min="30"
-                max="300"
-                value={appSettings?.rankedSettings?.searchAndDestroy?.matchmaking?.waitTimer || 120}
-                onChange={async (e) => {
-                  try {
-                    const response = await fetch(`${API_URL}/app-settings/admin/ranked-settings`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      credentials: 'include',
-                      body: JSON.stringify({ 
-                        searchAndDestroy: { matchmaking: { waitTimer: parseInt(e.target.value) || 120 } }
-                      })
-                    });
-                    const data = await response.json();
-                    if (data.success) fetchAppSettings();
-                  } catch (err) {
-                    setError('Erreur');
-                  }
-                }}
-                className="w-32 px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500/50"
-              />
-              <p className="text-gray-500 text-xs mt-1">Temps d'attente pour plus de joueurs quand 6 sont en file</p>
-            </div>
-          </div>
-          
-          {/* Other modes - Coming Soon */}
-          <div className="grid grid-cols-2 gap-4">
-            {['Mêlée générale', 'Duel'].map((mode) => (
-              <div key={mode} className="bg-dark-900/50 rounded-lg p-4 opacity-50">
-                <div className="flex items-center gap-3">
-                  <Lock className="w-4 h-4 text-gray-500" />
-                  <span className="text-gray-400">{mode}</span>
-                  <span className="px-2 py-0.5 text-xs bg-gray-700/50 rounded text-gray-500">À venir</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Global Alerts */}
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
@@ -3788,48 +3618,6 @@ const AdminPanel = () => {
           </div>
         </div>
 
-        {/* Ranked Matchmaking Toggle */}
-        <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Power className="w-5 h-5 text-purple-400" />
-                🎮 Matchmaking Mode Classé
-              </h3>
-              <p className="text-gray-400 text-sm mt-1">
-                Activer ou désactiver la recherche de match en mode classé pour tous les joueurs.
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                const newConfig = { ...editedConfig };
-                newConfig.rankedMatchmakingEnabled = !newConfig.rankedMatchmakingEnabled;
-                setEditedConfig(newConfig);
-              }}
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-                editedConfig?.rankedMatchmakingEnabled !== false ? 'bg-green-500' : 'bg-gray-600'
-              }`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                  editedConfig?.rankedMatchmakingEnabled !== false ? 'translate-x-7' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-          <div className={`mt-3 px-3 py-2 rounded-lg ${
-            editedConfig?.rankedMatchmakingEnabled !== false 
-              ? 'bg-green-500/20 border border-green-500/30' 
-              : 'bg-red-500/20 border border-red-500/30'
-          }`}>
-            <span className={`text-sm font-medium ${
-              editedConfig?.rankedMatchmakingEnabled !== false ? 'text-green-400' : 'text-red-400'
-            }`}>
-              {editedConfig?.rankedMatchmakingEnabled !== false ? '✅ Matchmaking activé' : '❌ Matchmaking désactivé'}
-            </span>
-          </div>
-        </div>
-
         {/* BO1/BO3 Format Toggle */}
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -4053,7 +3841,7 @@ const AdminPanel = () => {
                 </h4>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {Object.keys(editedConfig.rankedMatchRewards[mode]).map((gameMode) => (
+                  {Object.keys(editedConfig.rankedMatchRewards[mode]).filter(gm => ['Duel', 'Team Deathmatch', 'Search & Destroy'].includes(gm)).map((gameMode) => (
                     <div key={gameMode} className="bg-dark-800/80 backdrop-blur-sm rounded-xl p-5 border border-white/10 hover:border-white/20 transition-all">
                       <p className="text-white font-semibold mb-4 text-base border-b border-white/20 pb-3 flex items-center gap-2">
                         <span className="text-lg">🎮</span>
@@ -4188,6 +3976,56 @@ const AdminPanel = () => {
               <li><strong className="text-white">Gold</strong> : Monnaie du jeu donnée aux gagnants et perdants (consolation)</li>
               <li><strong className="text-white">Perdants</strong> : Reçoivent uniquement le gold de consolation (pas d'XP)</li>
             </ul>
+          </div>
+        </div>
+
+        {/* Points Lost Per Rank */}
+        <div className="bg-gradient-to-br from-red-500/10 to-orange-500/10 border border-red-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <TrendingDown className="w-5 h-5 text-red-400" />
+            Points Perdus par Rang (Défaite)
+          </h3>
+          <p className="text-gray-400 text-sm mb-6">
+            Les joueurs perdent des points différents selon leur rang actuel. Plus le rang est élevé, plus ils perdent de points en cas de défaite.
+          </p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { key: 'bronze', label: 'Bronze', color: 'text-amber-600' },
+              { key: 'silver', label: 'Silver', color: 'text-gray-300' },
+              { key: 'gold', label: 'Gold', color: 'text-yellow-400' },
+              { key: 'platinum', label: 'Platinum', color: 'text-cyan-300' },
+              { key: 'diamond', label: 'Diamond', color: 'text-blue-400' },
+              { key: 'master', label: 'Master', color: 'text-purple-400' },
+              { key: 'grandmaster', label: 'Grandmaster', color: 'text-red-400' },
+              { key: 'champion', label: 'Champion', color: 'text-amber-400' }
+            ].map(({ key, label, color }) => (
+              <div key={key} className="bg-dark-800/80 rounded-lg p-4 border border-white/10">
+                <label className={`text-sm font-semibold block mb-2 ${color}`}>{label}</label>
+                <input
+                  type="number"
+                  value={editedConfig.rankedPointsLossPerRank?.[key] ?? -10}
+                  onChange={(e) => {
+                    const newConfig = { ...editedConfig };
+                    if (!newConfig.rankedPointsLossPerRank) {
+                      newConfig.rankedPointsLossPerRank = {
+                        bronze: -10, silver: -12, gold: -15, platinum: -18,
+                        diamond: -20, master: -22, grandmaster: -25, champion: -30
+                      };
+                    }
+                    newConfig.rankedPointsLossPerRank[key] = parseInt(e.target.value) || 0;
+                    setEditedConfig(newConfig);
+                  }}
+                  className="w-full px-3 py-2 bg-dark-900 border border-red-500/40 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none text-center"
+                />
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-4 bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+            <p className="text-red-400 text-sm">
+              💡 Entrez des valeurs négatives (ex: -10, -15, -20). Ces points sont soustraits du total du joueur en cas de défaite.
+            </p>
           </div>
         </div>
 
@@ -5218,12 +5056,12 @@ const AdminPanel = () => {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">XP (Expérience)</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">XP (Expérience) - appliqué aux deux modes</label>
                 <div className="relative">
                   <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-purple-400" />
                   <input
                     type="number"
-                    value={formData.stats?.xp || 0}
+                    value={formData.statsHardcore?.xp || formData.stats?.xp || 0}
                     onChange={(e) => setFormData({ 
                       ...formData, 
                       stats: { 
@@ -5235,6 +5073,7 @@ const AdminPanel = () => {
                     min={0}
                   />
                 </div>
+                <p className="text-gray-500 text-xs mt-1">L'XP détermine la position dans le classement Top Players</p>
               </div>
             </div>
             

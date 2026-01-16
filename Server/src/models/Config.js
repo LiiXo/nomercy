@@ -63,6 +63,7 @@ const configSchema = new mongoose.Schema({
   },
   
   // Récompenses pour le mode classé - utilise Mixed pour les clés dynamiques avec espaces
+  // Modes disponibles: Duel, Team Deathmatch (Mêlée Générale), Search & Destroy (Recherche et Destruction)
   rankedMatchRewards: {
     type: mongoose.Schema.Types.Mixed,
     default: () => ({
@@ -71,7 +72,7 @@ const configSchema = new mongoose.Schema({
           pointsWin: 20, 
           pointsLoss: -10, 
           coinsWin: 50, 
-          coinsLoss: 15, // Consolation pour les perdants
+          coinsLoss: 15,
           xpWinMin: 700, 
           xpWinMax: 800 
         },
@@ -80,14 +81,6 @@ const configSchema = new mongoose.Schema({
           pointsLoss: -12, 
           coinsWin: 60, 
           coinsLoss: 20, 
-          xpWinMin: 700, 
-          xpWinMax: 800 
-        },
-        Domination: { 
-          pointsWin: 35, 
-          pointsLoss: -18, 
-          coinsWin: 80, 
-          coinsLoss: 25, 
           xpWinMin: 700, 
           xpWinMax: 800 
         },
@@ -117,14 +110,6 @@ const configSchema = new mongoose.Schema({
           xpWinMin: 700, 
           xpWinMax: 800 
         },
-        Domination: { 
-          pointsWin: 40, 
-          pointsLoss: -20, 
-          coinsWin: 90, 
-          coinsLoss: 30, 
-          xpWinMin: 700, 
-          xpWinMax: 800 
-        },
         'Search & Destroy': { 
           pointsWin: 40, 
           pointsLoss: -20, 
@@ -137,6 +122,21 @@ const configSchema = new mongoose.Schema({
     })
   },
   
+  // Points perdus en défaite selon le rang du joueur (plus haut rang = plus de points perdus)
+  rankedPointsLossPerRank: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      bronze: -10,
+      silver: -12,
+      gold: -15,
+      platinum: -18,
+      diamond: -20,
+      master: -22,
+      grandmaster: -25,
+      champion: -30
+    })
+  },
+  
   // Maps pour le mode classé (tirage aléatoire) - 1 map par partie
   rankedMaps: {
     type: mongoose.Schema.Types.Mixed,
@@ -146,9 +146,6 @@ const configSchema = new mongoose.Schema({
       ],
       'Team Deathmatch': [
         'Shipment', 'Rust', 'Nuketown', 'Shoot House', 'Das Haus', 'Firing Range', 'Dome'
-      ],
-      Domination: [
-        'Highrise', 'Terminal', 'Raid', 'Standoff', 'Slums', 'Invasion', 'Karachi'
       ],
       'Search & Destroy': [
         'Highrise', 'Terminal', 'Raid', 'Standoff', 'Invasion', 'Karachi', 'Skidrow'
@@ -167,8 +164,7 @@ const configSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     default: () => ({
       Duel: '• Mode 1v1\n• Respectez votre adversaire\n• Pas de camping excessif',
-      'Team Deathmatch': '• Mode FFA\n• Tous contre tous\n• Premier à atteindre le score limite',
-      Domination: '• Mode par équipes\n• Capturez et tenez les points\n• Communication requise',
+      'Team Deathmatch': '• Mode Mêlée Générale\n• Tous contre tous\n• Premier à atteindre le score limite',
       'Search & Destroy': '• Mode par équipes\n• Pas de respawn\n• Attaque/Défense alternée'
     })
   },

@@ -33,9 +33,10 @@ async function distributeRankedRewards(match) {
     const rewards = await getRankedMatchRewards(match.gameMode, match.mode);
     const { pointsWin, pointsLoss, coinsWin, coinsLoss, xpWinMin, xpWinMax } = rewards;
     
-    // Récupérer la configuration des points perdus par rang
-    const appSettings = await AppSettings.getSettings();
-    const pointsLossPerRank = appSettings?.rankedSettings?.pointsLossPerRank || {
+    // Récupérer la configuration des points perdus par rang depuis Config
+    const Config = (await import('../models/Config.js')).default;
+    const config = await Config.getOrCreate();
+    const pointsLossPerRank = config?.rankedPointsLossPerRank || {
       bronze: -10,
       silver: -12,
       gold: -15,

@@ -5,20 +5,17 @@ let cacheTimestamp = null;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Default values for ranked match rewards
+// Modes disponibles: Duel, Team Deathmatch (Mêlée Générale), Search & Destroy (Recherche et Destruction)
 const DEFAULT_RANKED_REWARDS = {
   hardcore: {
     'Duel': { pointsWin: 20, pointsLoss: -10, coinsWin: 50, coinsLoss: 10, xpWinMin: 700, xpWinMax: 800 },
     'Team Deathmatch': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, coinsLoss: 12, xpWinMin: 700, xpWinMax: 800 },
-    'Domination': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 16, xpWinMin: 700, xpWinMax: 800 },
-    'Search & Destroy': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 16, xpWinMin: 700, xpWinMax: 800 },
-    'Hardpoint': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 16, xpWinMin: 700, xpWinMax: 800 }
+    'Search & Destroy': { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 16, xpWinMin: 700, xpWinMax: 800 }
   },
   cdl: {
     'Duel': { pointsWin: 25, pointsLoss: -12, coinsWin: 60, coinsLoss: 12, xpWinMin: 700, xpWinMax: 800 },
     'Team Deathmatch': { pointsWin: 30, pointsLoss: -15, coinsWin: 75, coinsLoss: 15, xpWinMin: 700, xpWinMax: 800 },
-    'Domination': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, coinsLoss: 18, xpWinMin: 700, xpWinMax: 800 },
-    'Search & Destroy': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, coinsLoss: 18, xpWinMin: 700, xpWinMax: 800 },
-    'Hardpoint': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, coinsLoss: 18, xpWinMin: 700, xpWinMax: 800 }
+    'Search & Destroy': { pointsWin: 40, pointsLoss: -20, coinsWin: 90, coinsLoss: 18, xpWinMin: 700, xpWinMax: 800 }
   }
 };
 

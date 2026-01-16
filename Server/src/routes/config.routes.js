@@ -36,6 +36,12 @@ router.put('/admin', verifyToken, requireAdmin, async (req, res) => {
       }
     });
     
+    // Mark Mixed type fields as modified (Mongoose doesn't detect changes automatically)
+    if (updates.rankedMatchRewards) config.markModified('rankedMatchRewards');
+    if (updates.rankedPointsLossPerRank) config.markModified('rankedPointsLossPerRank');
+    if (updates.rankedMaps) config.markModified('rankedMaps');
+    if (updates.rankedRules) config.markModified('rankedRules');
+    
     await config.save();
     
     // Clear the config cache so new values are used immediately

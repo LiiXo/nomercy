@@ -71,6 +71,7 @@ router.get('/me', verifyToken, (req, res) => {
       isProfileComplete: req.user.isProfileComplete,
       goldCoins: req.user.goldCoins,
       stats: req.user.stats,
+      statsResetCount: req.user.statsResetCount || 0,
       createdAt: req.user.createdAt
     }
   });
@@ -119,6 +120,7 @@ router.get('/status', async (req, res) => {
         isProfileComplete: user.isProfileComplete,
         goldCoins: user.goldCoins,
         stats: user.stats,
+        statsResetCount: user.statsResetCount || 0,
         isBanned: user.isBanned,
         banReason: user.banReason,
         banExpiresAt: user.banExpiresAt,

@@ -987,23 +987,17 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
   }
 });
 
-// Reset own stats (costs 2000 gold) - ONE TIME ONLY
+// Reset own stats - first one is FREE, then costs 2000 gold each
 router.post('/reset-my-stats', verifyToken, async (req, res) => {
   try {
     const userId = req.user._id;
     const RESET_COST = 2000;
+    const resetCount = req.user.statsResetCount || 0;
+    const isFirstReset = resetCount === 0;
+    const actualCost = isFirstReset ? 0 : RESET_COST;
 
-    // Check if user has already used their one-time stats reset
-    if (req.user.hasUsedStatsReset) {
-      return res.status(400).json({
-        success: false,
-        message: 'Vous avez déjà utilisé votre réinitialisation de statistiques unique.',
-        alreadyUsed: true
-      });
-    }
-
-    // Check if user has enough gold
-    if (req.user.goldCoins < RESET_COST) {
+    // Check if user has enough gold (only if not first reset)
+    if (!isFirstReset && req.user.goldCoins < RESET_COST) {
       return res.status(400).json({
         success: false,
         message: `Vous avez besoin de ${RESET_COST} gold pour réinitialiser vos stats. Vous avez ${req.user.goldCoins} gold.`
@@ -1038,39 +1032,48 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
       });
     }
 
-    // Deduct gold
-    req.user.goldCoins -= RESET_COST;
+    // Deduct gold (only if not first reset)
+    if (!isFirstReset) {
+      req.user.goldCoins -= RESET_COST;
+    }
 
-    // Reset stats
+    // Reset stats (preserve XP - it represents overall player experience/ranking)
+    const currentXp = req.user.stats?.xp || 0;
+    const currentHardcoreXp = req.user.statsHardcore?.xp || 0;
+    const currentCdlXp = req.user.statsCdl?.xp || 0;
+    
     req.user.stats = {
       wins: 0,
       losses: 0,
       points: 0,
+      xp: currentXp, // Preserve XP
       rank: null
     };
     
-    // Reset hardcore stats if they exist
+    // Reset hardcore stats if they exist (preserve XP)
     if (req.user.statsHardcore) {
       req.user.statsHardcore = {
         wins: 0,
         losses: 0,
         points: 0,
+        xp: currentHardcoreXp, // Preserve XP
         rank: null
       };
     }
     
-    // Reset CDL stats if they exist
+    // Reset CDL stats if they exist (preserve XP)
     if (req.user.statsCdl) {
       req.user.statsCdl = {
         wins: 0,
         losses: 0,
         points: 0,
+        xp: currentCdlXp, // Preserve XP
         rank: null
       };
     }
 
-    // Mark stats reset as used (one-time only)
-    req.user.hasUsedStatsReset = true;
+    // Increment stats reset count
+    req.user.statsResetCount = (req.user.statsResetCount || 0) + 1;
 
     await req.user.save();
 
@@ -1118,13 +1121,16 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
       { $pull: { players: { user: userId } } }
     );
 
-    console.log(`[RESET STATS] User ${req.user.username} (${userId}) reset their stats. Cost: ${RESET_COST} gold. Ladder matches: ${ladderMatchCount}, Ranked matches: ${rankedMatchCount}`);
+    console.log(`[RESET STATS] User ${req.user.username} (${userId}) reset their stats (reset #${req.user.statsResetCount}). Cost: ${actualCost} gold. Ladder matches: ${ladderMatchCount}, Ranked matches: ${rankedMatchCount}`);
 
     res.json({
       success: true,
-      message: 'Vos statistiques ont été réinitialisées avec succès.',
-      goldSpent: RESET_COST,
+      message: isFirstReset 
+        ? 'Vos statistiques ont été réinitialisées gratuitement !' 
+        : 'Vos statistiques ont été réinitialisées avec succès.',
+      goldSpent: actualCost,
       newGoldBalance: req.user.goldCoins,
+      resetCount: req.user.statsResetCount,
       matchesCleared: {
         ladder: ladderMatchCount,
         ranked: rankedMatchCount
@@ -1713,13 +1719,29 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
     if (activisionId !== undefined) user.activisionId = activisionId;
     if (bio !== undefined) user.bio = bio;
     
-    // Update stats including XP
+    // Update stats including XP (update both mode-specific and legacy stats)
     if (stats !== undefined) {
+      // Update legacy stats field
       if (stats.xp !== undefined) user.stats.xp = stats.xp;
       if (stats.points !== undefined) user.stats.points = stats.points;
       if (stats.wins !== undefined) user.stats.wins = stats.wins;
       if (stats.losses !== undefined) user.stats.losses = stats.losses;
       if (stats.rank !== undefined) user.stats.rank = stats.rank;
+      
+      // Also update mode-specific stats (these are actually used by the app)
+      if (stats.xp !== undefined) {
+        user.statsHardcore.xp = stats.xp;
+        user.statsCdl.xp = stats.xp;
+      }
+      if (stats.points !== undefined) {
+        user.statsHardcore.points = stats.points;
+        user.statsCdl.points = stats.points;
+      }
+      
+      // Mark nested objects as modified for Mongoose
+      user.markModified('stats');
+      user.markModified('statsHardcore');
+      user.markModified('statsCdl');
     }
 
     await user.save();
