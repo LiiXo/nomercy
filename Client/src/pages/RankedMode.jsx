@@ -18,13 +18,8 @@ let audioContext = null;
 let audioBuffer = null;
 let audioLoaded = false;
 
-// URL du son - essayer plusieurs chemins
-const SOUND_URLS = [
-  '/sound.mp3',
-  './sound.mp3',
-  'https://nomercy.ggsecure.io/sound.mp3',
-  `${window.location.origin}/sound.mp3`
-];
+// URL du son - hébergé sur le serveur API
+const SOUND_URL = 'https://api-nomercy.ggsecure.io/public/sounds/sound.mp3';
 
 const initAudioContext = async () => {
   if (audioContext && audioBuffer) return;
@@ -36,46 +31,38 @@ const initAudioContext = async () => {
       console.log('[Audio] AudioContext créé');
     }
     
-    // Charger le fichier audio - essayer plusieurs URLs
+    // Charger le fichier audio depuis l'API
     if (!audioBuffer) {
-      console.log('[Audio] Origin:', window.location.origin);
-      console.log('[Audio] Href:', window.location.href);
+      console.log('[Audio] Chargement depuis:', SOUND_URL);
       
-      for (const url of SOUND_URLS) {
-        try {
-          console.log('[Audio] Essai de:', url);
-          const response = await fetch(url);
-          console.log('[Audio] Réponse:', response.status);
-          
-          if (response.ok) {
-            const arrayBuffer = await response.arrayBuffer();
-            console.log('[Audio] Taille:', arrayBuffer.byteLength, 'bytes');
-            
-            if (arrayBuffer.byteLength > 0) {
-              audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-              audioLoaded = true;
-              console.log('[Audio] ✓ Audio chargé depuis:', url);
-              return;
-            }
-          }
-        } catch (err) {
-          console.log('[Audio] Échec pour', url, ':', err.message);
+      const response = await fetch(SOUND_URL);
+      console.log('[Audio] Réponse:', response.status);
+      
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        console.log('[Audio] Taille:', arrayBuffer.byteLength, 'bytes');
+        
+        if (arrayBuffer.byteLength > 0) {
+          audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+          audioLoaded = true;
+          console.log('[Audio] ✓ Audio chargé!');
         }
+      } else {
+        console.error('[Audio] ✗ Fichier non trouvé:', response.status);
       }
-      
-      console.error('[Audio] ✗ Aucune URL valide trouvée');
     }
   } catch (err) {
     console.error('[Audio] Erreur initialisation:', err);
   }
 };
 
+let currentAudioSource = null;
+
 const playMatchFoundSound = () => {
   console.log('[Audio] Tentative de lecture...', { hasContext: !!audioContext, hasBuffer: !!audioBuffer, loaded: audioLoaded });
   
   if (!audioContext || !audioBuffer) {
     console.warn('[Audio] Audio non prêt, tentative de lecture avec fallback...');
-    // Fallback: essayer avec un simple bip
     playFallbackBeep();
     return;
   }
@@ -86,6 +73,13 @@ const playMatchFoundSound = () => {
   }
   
   try {
+    // Arrêter le son précédent si en cours (arrêt immédiat pour le nouveau son)
+    if (currentAudioSource) {
+      try { currentAudioSource.stop(); } catch (e) {}
+      currentAudioSource = null;
+      currentGainNode = null;
+    }
+    
     const source = audioContext.createBufferSource();
     const gainNode = audioContext.createGain();
     
@@ -94,11 +88,54 @@ const playMatchFoundSound = () => {
     gainNode.connect(audioContext.destination);
     gainNode.gain.value = 0.5;
     
+    currentAudioSource = source;
+    currentGainNode = gainNode;
     source.start(0);
     console.log('[Audio] Lecture en cours!');
+    
+    // Nettoyer la référence quand le son est terminé
+    source.onended = () => {
+      currentAudioSource = null;
+      currentGainNode = null;
+    };
   } catch (err) {
     console.warn('[Audio] Erreur lecture:', err);
     playFallbackBeep();
+  }
+};
+
+let currentGainNode = null;
+
+const stopMatchFoundSound = (fadeOutDuration = 1.5) => {
+  if (currentAudioSource && currentGainNode && audioContext) {
+    try {
+      // Fade out progressif
+      const currentTime = audioContext.currentTime;
+      currentGainNode.gain.setValueAtTime(currentGainNode.gain.value, currentTime);
+      currentGainNode.gain.linearRampToValueAtTime(0, currentTime + fadeOutDuration);
+      
+      // Arrêter complètement après le fade out
+      setTimeout(() => {
+        if (currentAudioSource) {
+          try {
+            currentAudioSource.stop();
+          } catch (err) {
+            // Ignorer si déjà arrêté
+          }
+          currentAudioSource = null;
+          currentGainNode = null;
+        }
+      }, fadeOutDuration * 1000);
+      
+      console.log('[Audio] Fade out en cours...');
+    } catch (err) {
+      // Fallback: arrêt direct
+      try {
+        currentAudioSource.stop();
+      } catch (e) {}
+      currentAudioSource = null;
+      currentGainNode = null;
+    }
   }
 };
 
@@ -237,8 +274,6 @@ const RankedMode = () => {
   const [shuffleCountdown, setShuffleCountdown] = useState(10);
   
   // Rewards from config
-  const [rewardsConfig, setRewardsConfig] = useState(null);
-  const [loadingRewards, setLoadingRewards] = useState(true);
   
   // Dynamic ranks from config
   const [ranks, setRanks] = useState(() => buildRanksFromThresholds(DEFAULT_RANK_THRESHOLDS));
@@ -292,22 +327,6 @@ const RankedMode = () => {
       console.error('Error fetching rules:', err);
     } finally {
       setLoadingRules(false);
-    }
-  };
-
-  // Fetch rewards config for the selected mode and game mode
-  const fetchRewardsConfig = async () => {
-    setLoadingRewards(true);
-    try {
-      const response = await fetch(`${API_URL}/config/rewards/ranked?mode=${selectedMode}&gameMode=${encodeURIComponent(selectedGameMode)}`);
-      const data = await response.json();
-      if (data.success && data.rewards) {
-        setRewardsConfig(data.rewards);
-      }
-    } catch (err) {
-      console.error('Error fetching rewards config:', err);
-    } finally {
-      setLoadingRewards(false);
     }
   };
 
@@ -655,6 +674,23 @@ const RankedMode = () => {
         setTimerActive(false);
         setTimerEndTime(null);
         setCurrentFormat(null);
+        setMatchmakingError(language === 'fr' 
+          ? 'Match lancé sans vous (nombre impair). Veuillez relancer une recherche.'
+          : 'Match started without you (odd number). Please search again.');
+        setTimeout(() => setMatchmakingError(null), 5000);
+      }
+      if (data.type === 'timeout') {
+        // Le joueur a été retiré de la file après 5 minutes sans match
+        setInQueue(false);
+        setQueueSize(0);
+        setQueuePosition(null);
+        setTimerActive(false);
+        setTimerEndTime(null);
+        setCurrentFormat(null);
+        setMatchmakingError(language === 'fr'
+          ? 'Vous avez été retiré de la file d\'attente après 5 minutes sans match trouvé.'
+          : 'You have been removed from the queue after 5 minutes without finding a match.');
+        setTimeout(() => setMatchmakingError(null), 5000);
       }
     });
     const unsubMatch = on('rankedMatchFound', (data) => {
@@ -672,6 +708,7 @@ const RankedMode = () => {
         setShowShuffleAnimation(true);
       } else {
         // No player data, navigate directly
+        stopMatchFoundSound();
         navigate(`/ranked/match/${data.matchId}`);
       }
     });
@@ -743,6 +780,7 @@ const RankedMode = () => {
     // Phase 3: Countdown 10 seconds then navigate
     if (shufflePhase === 3) {
       if (shuffleCountdown <= 0) {
+        stopMatchFoundSound(); // Arrêter le son avant la navigation
         setShowShuffleAnimation(false);
         navigate(`/ranked/match/${shuffleMatchData.matchId}`);
         return;
@@ -769,7 +807,6 @@ const RankedMode = () => {
   // Initial load
   useEffect(() => {
     fetchMyRanking();
-    fetchRewardsConfig();
     fetchActiveMatchesStats();
     fetchMatchmakingStatus();
     fetchRankThresholds(); // Fetch dynamic rank thresholds from config
@@ -1056,27 +1093,27 @@ const RankedMode = () => {
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJIMjR2LTJoMTJ6bTAtNHYySDI0di0yaDEyem0wLTR2Mkg0djJIMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30"></div>
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="relative z-10 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12">
           {/* Header */}
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center justify-center mb-4">
+          <div className="text-center mb-6 sm:mb-12">
+            <div className="inline-flex items-center justify-center mb-2 sm:mb-4">
               <img 
                 src={isHardcore ? '/logo_hc.png' : '/logo_cdl.png'} 
                 alt={isHardcore ? 'Hardcore' : 'CDL'} 
-                className="h-20 md:h-28 object-contain drop-shadow-2xl"
+                className="h-14 sm:h-20 md:h-28 object-contain drop-shadow-2xl"
               />
             </div>
-            <p className="text-gray-400 text-lg max-w-xl mx-auto">{t.subtitle}</p>
+            <p className="text-gray-400 text-sm sm:text-lg max-w-xl mx-auto px-4">{t.subtitle}</p>
           </div>
 
           {/* Main Grid */}
-          <div className="grid lg:grid-cols-3 gap-8 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8 mb-4 sm:mb-8">
             {/* Left Column - Player Card & Matchmaking */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               
               {/* Player Rank Card */}
               {isAuthenticated && (
-                <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-dark-800/80 to-dark-900/80 backdrop-blur-xl border border-white/10 p-6">
+                <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-dark-800/80 to-dark-900/80 backdrop-blur-xl border border-white/10 p-4 sm:p-6">
                   <div className="absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-white/5 to-transparent rounded-bl-full"></div>
                   
                   {loadingRanking ? (
@@ -1103,10 +1140,10 @@ const RankedMode = () => {
                             animation: 'spin 4s linear infinite'
                           }}
                         ></div>
-                        <div className={`relative w-28 h-28 rounded-2xl bg-gradient-to-br ${playerRank.gradient} p-1 shadow-2xl transform transition-transform group-hover:scale-105`}>
-                          <div className="w-full h-full rounded-xl bg-dark-900/50 flex items-center justify-center backdrop-blur-sm">
+                        <div className={`relative w-20 h-20 sm:w-28 sm:h-28 rounded-xl sm:rounded-2xl bg-gradient-to-br ${playerRank.gradient} p-1 shadow-2xl transform transition-transform group-hover:scale-105`}>
+                          <div className="w-full h-full rounded-lg sm:rounded-xl bg-dark-900/50 flex items-center justify-center backdrop-blur-sm">
                             <PlayerRankIcon 
-                              className="w-12 h-12 text-white drop-shadow-lg" 
+                              className="w-8 h-8 sm:w-12 sm:h-12 text-white drop-shadow-lg" 
                               style={{ 
                                 filter: `drop-shadow(0 0 8px ${playerRank.color}80)`,
                                 animation: 'pulse 2s ease-in-out infinite'
@@ -1128,28 +1165,28 @@ const RankedMode = () => {
 
                       {/* Rank Info */}
                       <div className="flex-1 text-center md:text-left">
-                        <p className="text-gray-500 text-sm uppercase tracking-wider">{t.yourRank}</p>
-                        <h2 className="text-3xl font-black text-white mb-1" style={{ color: playerRank.color }}>{playerRank.name}</h2>
-                        <p className="text-gray-400">#{myRanking.rank} • <span className={`text-${accent}-400 font-semibold`}>{myRanking.points} pts</span></p>
+                        <p className="text-gray-500 text-xs sm:text-sm uppercase tracking-wider">{t.yourRank}</p>
+                        <h2 className="text-2xl sm:text-3xl font-black text-white mb-1" style={{ color: playerRank.color }}>{playerRank.name}</h2>
+                        <p className="text-gray-400 text-sm sm:text-base">#{myRanking.rank} • <span className={`text-${accent}-400 font-semibold`}>{myRanking.points} pts</span></p>
                       </div>
 
                       {/* Stats Grid */}
-                      <div className="grid grid-cols-3 gap-4 min-w-[240px]">
-                        <div className="text-center p-3 rounded-xl bg-dark-800/50">
-                          <p className="text-2xl font-bold text-green-400">{myRanking.wins}</p>
-                          <p className="text-xs text-gray-500 uppercase">{t.wins}</p>
+                      <div className="grid grid-cols-3 gap-2 sm:gap-4 w-full md:w-auto md:min-w-[240px]">
+                        <div className="text-center p-2 sm:p-3 rounded-lg sm:rounded-xl bg-dark-800/50">
+                          <p className="text-lg sm:text-2xl font-bold text-green-400">{myRanking.wins}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase">{t.wins}</p>
                         </div>
-                        <div className="text-center p-3 rounded-xl bg-dark-800/50">
-                          <p className="text-2xl font-bold text-red-400">{myRanking.losses}</p>
-                          <p className="text-xs text-gray-500 uppercase">{t.losses}</p>
+                        <div className="text-center p-2 sm:p-3 rounded-lg sm:rounded-xl bg-dark-800/50">
+                          <p className="text-lg sm:text-2xl font-bold text-red-400">{myRanking.losses}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase">{t.losses}</p>
                         </div>
-                        <div className="text-center p-3 rounded-xl bg-dark-800/50">
-                          <p className="text-2xl font-bold text-yellow-400">
+                        <div className="text-center p-2 sm:p-3 rounded-lg sm:rounded-xl bg-dark-800/50">
+                          <p className="text-lg sm:text-2xl font-bold text-yellow-400">
                             {myRanking.wins + myRanking.losses > 0 
                               ? Math.round((myRanking.wins / (myRanking.wins + myRanking.losses)) * 100) 
                               : 0}%
                           </p>
-                          <p className="text-xs text-gray-500 uppercase">{t.winRate}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase">{t.winRate}</p>
                         </div>
                       </div>
                     </div>
@@ -1237,7 +1274,7 @@ const RankedMode = () => {
               )}
 
               {/* Game Mode Selection */}
-              <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
+              <div className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-6">
                 <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                   <Target className={`w-5 h-5 text-${accent}-500`} />
                   {t.gameMode}
@@ -1309,25 +1346,25 @@ const RankedMode = () => {
                   </div>
                 ) : (
                   // CDL: Hardpoint & S&D only (format 4v4)
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     {/* Hardpoint - Available */}
                     <button
                       onClick={() => setSelectedGameMode('Hardpoint')}
-                      className={`relative p-4 rounded-2xl border-2 transition-all ${
+                      className={`relative p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all ${
                         selectedGameMode === 'Hardpoint'
                           ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
                           : 'border-white/10 bg-dark-800/30 hover:border-white/20'
                       }`}
                     >
-                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 rounded-lg sm:rounded-xl flex items-center justify-center ${
                         selectedGameMode === 'Hardpoint'
                           ? `bg-gradient-to-br from-cyan-400 to-blue-600`
                           : 'bg-dark-700'
                       }`}>
-                        <Target className="w-6 h-6 text-white" />
+                        <Target className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                       </div>
-                      <p className="text-white font-semibold text-sm">{t.hardpoint}</p>
-                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      <p className="text-white font-semibold text-xs sm:text-sm">{t.hardpoint}</p>
+                      <span className={`inline-block mt-1 sm:mt-2 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase ${
                         selectedGameMode === 'Hardpoint'
                           ? `bg-green-500/20 text-green-400`
                           : 'bg-green-500/10 text-green-400/70'
@@ -1339,21 +1376,21 @@ const RankedMode = () => {
                     {/* Search & Destroy - Available */}
                     <button
                       onClick={() => setSelectedGameMode('Search & Destroy')}
-                      className={`relative p-4 rounded-2xl border-2 transition-all ${
+                      className={`relative p-3 sm:p-4 rounded-xl sm:rounded-2xl border-2 transition-all ${
                         selectedGameMode === 'Search & Destroy'
                           ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
                           : 'border-white/10 bg-dark-800/30 hover:border-white/20'
                       }`}
                     >
-                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 rounded-lg sm:rounded-xl flex items-center justify-center ${
                         selectedGameMode === 'Search & Destroy'
                           ? `bg-gradient-to-br from-cyan-400 to-blue-600`
                           : 'bg-dark-700'
                       }`}>
-                        <Crosshair className="w-6 h-6 text-white" />
+                        <Crosshair className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                       </div>
-                      <p className="text-white font-semibold text-sm">{t.searchDestroy}</p>
-                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                      <p className="text-white font-semibold text-xs sm:text-sm">{t.searchDestroy}</p>
+                      <span className={`inline-block mt-1 sm:mt-2 px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase ${
                         selectedGameMode === 'Search & Destroy'
                           ? `bg-green-500/20 text-green-400`
                           : 'bg-green-500/10 text-green-400/70'
@@ -1363,62 +1400,6 @@ const RankedMode = () => {
                     </button>
                   </div>
                 )}
-                
-                {/* Récompenses du mode */}
-                <div className="mt-4 p-4 rounded-xl bg-dark-900/50 border border-white/5">
-                  <h4 className="text-sm font-semibold text-gray-400 mb-3">
-                    {language === 'fr' ? 'Récompenses' : 'Rewards'}
-                  </h4>
-                  {loadingRewards ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className={`w-5 h-5 text-${accent}-500 animate-spin`} />
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Victoire */}
-                      <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                        <p className="text-xs text-green-400 font-medium mb-2">
-                          {language === 'fr' ? '🏆 Victoire' : '🏆 Victory'}
-                        </p>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
-                            <span className="text-xs text-gray-300">+{rewardsConfig?.pointsWin || 25} {language === 'fr' ? 'points' : 'points'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Coins className="w-3.5 h-3.5 text-yellow-400" />
-                            <span className="text-xs text-gray-300">+{rewardsConfig?.coinsWin || 50} gold</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                            <span className="text-xs text-gray-300">+{rewardsConfig?.xpWinMin || 350}-{rewardsConfig?.xpWinMax || 550} XP</span>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Défaite */}
-                      <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                        <p className="text-xs text-red-400 font-medium mb-2">
-                          {language === 'fr' ? '💔 Défaite' : '💔 Defeat'}
-                        </p>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="w-3.5 h-3.5 text-purple-400 rotate-180" />
-                            <span className="text-xs text-gray-300">{rewardsConfig?.pointsLoss || -15} {language === 'fr' ? 'points' : 'points'}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Coins className="w-3.5 h-3.5 text-orange-400" />
-                            <span className="text-xs text-gray-300">+{rewardsConfig?.coinsLoss || 10} gold</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Zap className="w-3.5 h-3.5 text-gray-500" />
-                            <span className="text-xs text-gray-500">0 XP</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
                 
                 {/* Bouton Règles du mode */}
                 <button
@@ -1448,7 +1429,7 @@ const RankedMode = () => {
 
               {/* Matchmaking Section */}
               {isAuthenticated && (
-                <div ref={matchmakingRef} className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6">
+                <div ref={matchmakingRef} className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
                       <Swords className={`w-5 h-5 text-${accent}-500`} />
@@ -1529,7 +1510,7 @@ const RankedMode = () => {
                   {inQueue ? (
                     <div className="space-y-4">
                       {/* Dynamic searching animation header */}
-                      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-dark-900 to-dark-800 border border-white/10 p-6">
+                      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-br from-dark-900 to-dark-800 border border-white/10 p-4 sm:p-6">
                         {/* Radar animation background */}
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className={`absolute w-32 h-32 rounded-full border-2 ${isHardcore ? 'border-red-500/20' : 'border-cyan-500/20'} animate-ping`} style={{ animationDuration: '2s' }} />
@@ -1558,11 +1539,11 @@ const RankedMode = () => {
                           </div>
                           
                           {/* Animated player icons */}
-                          <div className="flex justify-center gap-2 mb-4">
-                            {[...Array(10)].map((_, i) => (
+                          <div className="flex justify-center flex-wrap gap-1.5 sm:gap-2 mb-4">
+                            {[...Array(isHardcore ? 10 : 8)].map((_, i) => (
                               <div 
                                 key={i}
-                                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                                className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
                                   i < queueSize 
                                     ? `${isHardcore ? 'bg-red-500' : 'bg-cyan-500'} scale-100 shadow-lg ${isHardcore ? 'shadow-red-500/30' : 'shadow-cyan-500/30'}` 
                                     : 'bg-dark-700 scale-90 opacity-50'
@@ -1572,33 +1553,33 @@ const RankedMode = () => {
                                   animation: i < queueSize ? 'bounce 1s ease-in-out infinite' : 'none'
                                 }}
                               >
-                                <Users className={`w-4 h-4 ${i < queueSize ? 'text-white' : 'text-gray-600'}`} />
+                                <Users className={`w-3 h-3 sm:w-4 sm:h-4 ${i < queueSize ? 'text-white' : 'text-gray-600'}`} />
                               </div>
                             ))}
                           </div>
                           
-                          <p className={`text-3xl font-black ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
-                            {queueSize}<span className="text-gray-500 text-xl">/10</span>
+                          <p className={`text-2xl sm:text-3xl font-black ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
+                            {queueSize}<span className="text-gray-500 text-lg sm:text-xl">/{isHardcore ? 10 : 8}</span>
                           </p>
-                          <p className="text-gray-500 text-sm">{t.playersInQueue}</p>
+                          <p className="text-gray-500 text-xs sm:text-sm">{t.playersInQueue}</p>
                         </div>
                       </div>
                       
                       {/* Queue Stats - more compact */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className={`text-center p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30`}>
-                          <Target className="w-5 h-5 text-purple-400 mx-auto mb-2" />
-                          <p className="text-xl font-bold text-white">#{queuePosition || '?'}</p>
-                          <p className="text-xs text-gray-500">Position</p>
+                      <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                        <div className={`text-center p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30`}>
+                          <Target className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400 mx-auto mb-1 sm:mb-2" />
+                          <p className="text-lg sm:text-xl font-bold text-white">#{queuePosition || '?'}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500">Position</p>
                         </div>
-                        <div className={`text-center p-4 rounded-2xl bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/30`}>
-                          <Clock className={`w-5 h-5 text-green-400 mx-auto mb-2 ${timerActive ? 'animate-pulse' : ''}`} />
-                          <p className="text-xl font-bold text-white">
+                        <div className={`text-center p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-gradient-to-br from-green-500/20 to-green-600/10 border border-green-500/30`}>
+                          <Clock className={`w-4 h-4 sm:w-5 sm:h-5 text-green-400 mx-auto mb-1 sm:mb-2 ${timerActive ? 'animate-pulse' : ''}`} />
+                          <p className="text-lg sm:text-xl font-bold text-white">
                             {timerActive && timeRemaining !== null
                               ? `${Math.floor(timeRemaining / 60)}:${String(timeRemaining % 60).padStart(2, '0')}`
                               : '--:--'}
                           </p>
-                          <p className="text-xs text-gray-500">{timerActive ? t.matchIn : t.waitingMore}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500">{timerActive ? t.matchIn : t.waitingMore}</p>
                         </div>
                       </div>
 
@@ -1607,16 +1588,18 @@ const RankedMode = () => {
                         <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
                           <div 
                             className={`h-full bg-gradient-to-r ${isHardcore ? 'from-red-500 to-orange-500' : 'from-cyan-400 to-blue-500'} transition-all duration-500 relative`}
-                            style={{ width: `${(queueSize / 10) * 100}%` }}
+                            style={{ width: `${(queueSize / (isHardcore ? 10 : 8)) * 100}%` }}
                           >
                             {/* Shimmer effect */}
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
                           </div>
                         </div>
-                        {/* Milestone markers - 4v4 at 80%, 5v5 at 100% */}
-                        <div className="absolute top-0 left-0 w-full h-3 flex items-center">
-                          <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
-                        </div>
+                        {/* Milestone markers - 4v4 at 80% for Hardcore (8/10), 100% for CDL (8/8) */}
+                        {isHardcore && (
+                          <div className="absolute top-0 left-0 w-full h-3 flex items-center">
+                            <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
+                          </div>
+                        )}
                       </div>
 
                       {/* Staff/Admin: Add fake players button */}
@@ -1774,7 +1757,7 @@ const RankedMode = () => {
 
               {/* Login Prompt */}
               {!isAuthenticated && (
-                <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-8 text-center">
+                <div className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-8 text-center">
                   <Swords className={`w-16 h-16 text-${accent}-500/50 mx-auto mb-4`} />
                   <h3 className="text-xl font-bold text-white mb-2">{t.loginToPlay}</h3>
                   <p className="text-gray-500">{t.loginRequired}</p>
@@ -1785,7 +1768,7 @@ const RankedMode = () => {
             {/* Right Column - Ranks & Leaderboard */}
             <div className="space-y-6">
               {/* Ranks Overview - Animated Ladder */}
-              <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-6 relative overflow-hidden">
+              <div className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-6 relative overflow-hidden">
                 {/* Background glow effect */}
                 <div 
                   className="absolute inset-0 opacity-30 pointer-events-none"
@@ -2117,7 +2100,7 @@ const RankedMode = () => {
       {/* Rules Modal */}
       {showRulesModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className={`bg-dark-900 rounded-2xl border border-${accent}-500/30 p-6 md:p-8 max-w-5xl w-full max-h-[85vh] overflow-y-auto shadow-2xl`}>
+          <div className={`bg-dark-900 rounded-xl sm:rounded-2xl border border-${accent}-500/30 p-4 sm:p-6 md:p-8 max-w-5xl w-full max-h-[90vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl mx-2 sm:mx-0`}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-white flex items-center gap-3">
                 <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>

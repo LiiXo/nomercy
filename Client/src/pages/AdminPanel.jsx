@@ -65,6 +65,9 @@ const AdminPanel = () => {
   const [matchesSubTab, setMatchesSubTab] = useState('ladder'); // 'ladder' or 'ranked'
   const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
   
+  // Maps tab filter
+  const [mapModeFilter, setMapModeFilter] = useState('all'); // 'all', 'hardcore', 'cdl'
+  
   // Mobile menu state
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   
@@ -3075,10 +3078,16 @@ const AdminPanel = () => {
   };
 
   const renderMaps = () => {
+    // Filter maps by mode
+    const filteredMaps = maps.filter(map => {
+      if (mapModeFilter === 'all') return true;
+      return map.mode === mapModeFilter || map.mode === 'both';
+    });
+    
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <h2 className="text-2xl font-bold text-white">Gestion des Cartes</h2>
           <button
             onClick={() => openCreateModal('map')}
@@ -3088,26 +3097,75 @@ const AdminPanel = () => {
             Nouvelle Carte
               </button>
             </div>
+        
+        {/* Mode Filter Tabs */}
+        <div className="flex gap-2 p-1 bg-dark-800/50 rounded-xl w-fit">
+          <button
+            onClick={() => setMapModeFilter('all')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              mapModeFilter === 'all' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Toutes ({maps.length})
+          </button>
+          <button
+            onClick={() => setMapModeFilter('hardcore')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              mapModeFilter === 'hardcore' ? 'bg-orange-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Hardcore ({maps.filter(m => m.mode === 'hardcore' || m.mode === 'both').length})
+          </button>
+          <button
+            onClick={() => setMapModeFilter('cdl')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              mapModeFilter === 'cdl' ? 'bg-cyan-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            CDL ({maps.filter(m => m.mode === 'cdl' || m.mode === 'both').length})
+          </button>
+        </div>
 
         {/* Maps Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {maps.length === 0 ? (
+          {filteredMaps.length === 0 ? (
             <div className="col-span-full text-center text-gray-400 py-8">
               Aucune carte trouvée
                   </div>
           ) : (
-            maps.map((map) => (
+            filteredMaps.map((map) => (
               <div
                 key={map._id}
                 className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-all"
               >
                 {map.image && (
-                  <div className="h-32 bg-dark-900 flex items-center justify-center overflow-hidden">
+                  <div className="h-32 bg-dark-900 flex items-center justify-center overflow-hidden relative">
                     <img src={map.image} alt={map.name} className="w-full h-full object-cover" />
+                    {/* Mode badge overlay */}
+                    <div className="absolute top-2 right-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        map.mode === 'hardcore' ? 'bg-orange-500 text-white' :
+                        map.mode === 'cdl' ? 'bg-cyan-500 text-white' :
+                        'bg-purple-500 text-white'
+                      }`}>
+                        {map.mode === 'both' ? 'HC/CDL' : map.mode?.toUpperCase()}
+                      </span>
+                    </div>
                   </div>
                 )}
                 <div className="p-4">
-<h3 className="text-white font-bold mb-2">{map.name}</h3>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-white font-bold">{map.name}</h3>
+                    {!map.image && (
+                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                        map.mode === 'hardcore' ? 'bg-orange-500 text-white' :
+                        map.mode === 'cdl' ? 'bg-cyan-500 text-white' :
+                        'bg-purple-500 text-white'
+                      }`}>
+                        {map.mode === 'both' ? 'HC/CDL' : map.mode?.toUpperCase() || 'BOTH'}
+                      </span>
+                    )}
+                  </div>
                   <div className="space-y-2 mb-3">
                     <div className="flex flex-col gap-1">
                       <span className="text-gray-400 text-xs">Ladders / Modes</span>
@@ -5869,6 +5927,37 @@ const AdminPanel = () => {
                 className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                 placeholder="https://..."
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Mode (Hardcore / CDL)</label>
+              <div className="flex gap-3">
+                {[
+                  { value: 'both', label: 'Les deux', color: 'purple' },
+                  { value: 'hardcore', label: 'Hardcore', color: 'orange' },
+                  { value: 'cdl', label: 'CDL', color: 'cyan' }
+                ].map((modeOption) => (
+                  <button
+                    key={modeOption.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, mode: modeOption.value })}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
+                      (formData.mode || 'both') === modeOption.value
+                        ? `bg-${modeOption.color}-500 text-white border-${modeOption.color}-500`
+                        : 'bg-dark-800 text-gray-400 border-white/10 hover:border-white/20'
+                    }`}
+                    style={
+                      (formData.mode || 'both') === modeOption.value
+                        ? { backgroundColor: modeOption.color === 'purple' ? '#a855f7' : modeOption.color === 'orange' ? '#f97316' : '#06b6d4' }
+                        : {}
+                    }
+                  >
+                    {modeOption.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-gray-500 text-xs mt-2">
+                Choisissez si cette map est disponible en mode Hardcore, CDL, ou les deux.
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Ladders</label>

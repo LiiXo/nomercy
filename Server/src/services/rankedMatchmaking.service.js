@@ -29,11 +29,17 @@ const PLAYER_THRESHOLDS = [
 // Timer de 120 secondes (2 minutes) pour lancer le match
 const MATCHMAKING_TIMER_SECONDS = 120;
 
+// Timeout de 5 minutes (300 secondes) - joueurs retirés de la file s'ils n'ont pas trouvé de match
+const QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
+
 // Timers actifs pour chaque file d'attente
 const queueTimers = {};
 
 // Socket.io instance (set from index.js)
 let io = null;
+
+// Cleanup interval reference
+let cleanupInterval = null;
 
 /**
  * Initialise le service avec Socket.io
@@ -41,6 +47,60 @@ let io = null;
 export const initMatchmaking = (socketIo) => {
   io = socketIo;
   console.log('[Ranked Matchmaking] Service initialized');
+  
+  // Start the queue cleanup interval (runs every 30 seconds)
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+  }
+  cleanupInterval = setInterval(cleanupTimedOutPlayers, 30000);
+  console.log('[Ranked Matchmaking] Queue timeout cleanup started (5 min timeout, 30s interval)');
+};
+
+/**
+ * Nettoie les joueurs qui ont dépassé le timeout de 5 minutes dans la file
+ */
+const cleanupTimedOutPlayers = () => {
+  const now = Date.now();
+  
+  for (const key in queues) {
+    const queue = queues[key];
+    const timedOutPlayers = [];
+    
+    // Find players who have been in queue for more than 5 minutes
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const player = queue[i];
+      const timeInQueue = now - new Date(player.joinedAt).getTime();
+      
+      if (timeInQueue >= QUEUE_TIMEOUT_MS) {
+        timedOutPlayers.push(player);
+        queue.splice(i, 1);
+        console.log(`[Ranked Matchmaking] Player ${player.username} timed out from queue (${Math.round(timeInQueue / 1000)}s)`);
+      }
+    }
+    
+    // Notify timed out players
+    for (const player of timedOutPlayers) {
+      if (io) {
+        io.to(`user-${player.userId}`).emit('rankedQueueUpdate', {
+          type: 'timeout',
+          message: 'Vous avez été retiré de la file d\'attente après 5 minutes sans match trouvé.',
+          queueSize: 0,
+          position: null
+        });
+      }
+    }
+    
+    // If players were removed, update remaining players
+    if (timedOutPlayers.length > 0 && queue.length > 0) {
+      const [gameMode, mode] = key.split('_');
+      broadcastQueueUpdate(gameMode, mode);
+      
+      // Cancel timer if we dropped below minimum players
+      if (queue.length < 4) {
+        cancelMatchmakingTimer(gameMode, mode);
+      }
+    }
+  }
 };
 
 /**
@@ -151,16 +211,25 @@ export const joinQueue = async (userId, gameMode, mode) => {
         enabled: true,
         rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
         matchmaking: { minPlayers: 8, maxPlayers: 10, waitTimer: 120 }
+      },
+      hardpoint: {
+        enabled: true,
+        rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
+        matchmaking: { minPlayers: 8, maxPlayers: 8, waitTimer: 120 }
       }
     };
     
     const rankedSettings = settings.rankedSettings || defaultSettings;
     const gameModeKey = gameMode.replace(/\s+/g, '').replace('&', 'And').toLowerCase();
-    const gameModeSettings = rankedSettings[
-      gameModeKey === 'searchanddestroy' ? 'searchAndDestroy' : gameModeKey
-    ] || (gameModeKey === 'searchanddestroy' ? defaultSettings.searchAndDestroy : null);
     
-    // Pour S&D, on autorise par défaut si pas de config
+    // Map game mode names to settings keys
+    let settingsKey = gameModeKey;
+    if (gameModeKey === 'searchanddestroy') settingsKey = 'searchAndDestroy';
+    else if (gameModeKey === 'hardpoint') settingsKey = 'hardpoint';
+    
+    const gameModeSettings = rankedSettings[settingsKey] || defaultSettings[settingsKey] || null;
+    
+    // Pour S&D et Hardpoint, on autorise par défaut si pas de config
     if (!gameModeSettings) {
       return { success: false, message: 'Ce mode de jeu n\'est pas disponible actuellement.' };
     }
@@ -322,24 +391,31 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
 /**
  * Vérifie si on peut démarrer le matchmaking (timer de 2 min)
  * Logique: À 8 joueurs, on lance un timer de 2 min pour un 4v4
- * Si 10 joueurs, match immédiat en 5v5
+ * Si 10 joueurs, match immédiat en 5v5 (sauf CDL qui est toujours 4v4)
  */
 const checkMatchmakingStart = async (gameMode, mode) => {
   const queue = getQueue(gameMode, mode);
   const timerKey = getQueueKey(gameMode, mode);
   
-  // Si 10 joueurs ou plus, match immédiat en 5v5
-  if (queue.length >= 10) {
-    console.log(`[Ranked Matchmaking] 10 players reached for ${gameMode} ${mode}, creating 5v5 match now`);
+  // CDL mode: toujours 4v4 (8 joueurs), jamais 5v5
+  const isCDL = mode === 'cdl';
+  const maxPlayers = isCDL ? 8 : 10;
+  
+  // Si on a atteint le max de joueurs, match immédiat
+  if (queue.length >= maxPlayers) {
+    console.log(`[Ranked Matchmaking] ${maxPlayers} players reached for ${gameMode} ${mode}, creating ${isCDL ? '4v4' : '5v5'} match now`);
     cancelMatchmakingTimer(gameMode, mode);
     createMatchFromQueue(gameMode, mode);
     return;
   }
   
   // Trouver le format optimal pour le nombre actuel de joueurs
-  const optimalFormat = getOptimalFormat(queue.length);
+  // Pour CDL, le format optimal est toujours 4v4 si on a 8+ joueurs
+  const optimalFormat = isCDL 
+    ? (queue.length >= 8 ? { players: 8, format: '4v4', teamSize: 4 } : null)
+    : getOptimalFormat(queue.length);
   
-  // Si on a assez de joueurs pour au moins un format (4+)
+  // Si on a assez de joueurs pour au moins un format (8 pour 4v4)
   if (optimalFormat && !queueTimers[timerKey]) {
     const endTime = Date.now() + (MATCHMAKING_TIMER_SECONDS * 1000);
     
@@ -402,24 +478,32 @@ const createMatchFromQueue = async (gameMode, mode) => {
     console.log(`[Ranked Matchmaking] Ejecting ${ejected.username} (odd number of players)`);
   }
   
+  // CDL mode: toujours 4v4 (8 joueurs max)
+  const isCDL = mode === 'cdl';
+  const maxPlayers = isCDL ? 8 : 10;
+  
   // Maintenant on a un nombre pair, trouver le format optimal
-  const optimalFormat = getOptimalFormat(playerCount);
+  // Pour CDL, forcer 4v4
+  const optimalFormat = isCDL 
+    ? { players: 8, format: '4v4', teamSize: 4 }
+    : getOptimalFormat(playerCount);
+    
   if (!optimalFormat) {
     console.log(`[Ranked Matchmaking] No valid format for ${playerCount} players`);
     return;
   }
   
-  // Si on a plus de joueurs que le format max (10), on prend les 10 premiers
-  if (playerCount > 10) {
-    const excess = sortedQueue.splice(10);
+  // Si on a plus de joueurs que le format max, on prend les premiers (8 pour CDL, 10 pour Hardcore)
+  if (playerCount > maxPlayers) {
+    const excess = sortedQueue.splice(maxPlayers);
     ejectedPlayers.push(...excess);
-    playerCount = 10;
-    console.log(`[Ranked Matchmaking] Capping to 10 players, ${excess.length} players stay in queue`);
+    playerCount = maxPlayers;
+    console.log(`[Ranked Matchmaking] Capping to ${maxPlayers} players${isCDL ? ' (CDL 4v4)' : ''}, ${excess.length} players stay in queue`);
   }
   
   const playersForMatch = sortedQueue.slice(0, playerCount);
-  const format = getOptimalFormat(playerCount).format;
-  const teamSize = playerCount / 2;
+  const format = isCDL ? '4v4' : getOptimalFormat(playerCount).format;
+  const teamSize = isCDL ? 4 : playerCount / 2;
   
   // Retirer les joueurs du match ET les joueurs éjectés de la file
   const playerIdsForMatch = playersForMatch.map(p => p.userId.toString());
@@ -498,16 +582,48 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const mapCount = bestOf === 1 ? 1 : 3;
     
     // Sélectionner les maps selon le format (BO1 = 1 map, BO3 = 3 maps)
-    // 3v3 et 4v4 → ladder duo-trio
-    // 5v5 → ladder squad-team
-    const ladderType = teamSize === 5 ? 'squad-team' : 'duo-trio';
-    const maps = await GameMap.find({ 
+    // Pour ranked, on utilise le ladder 'ranked' et on filtre par mode (hardcore/cdl) et gameMode
+    let maps = await GameMap.find({ 
       isActive: true,
-      ladders: ladderType
+      ladders: 'ranked',
+      // Filter by mode (hardcore/cdl) - include 'both' maps as well
+      mode: { $in: [mode, 'both'] },
+      // Filter by game mode if specified
+      ...(gameMode ? { gameModes: gameMode } : {})
     });
     
-    // Si pas assez de maps dans ce ladder, prendre toutes les maps actives
-    const availableMaps = maps.length >= mapCount ? maps : await GameMap.find({ isActive: true });
+    console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'}`);
+    
+    // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
+    if (maps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Not enough ranked maps (${maps.length}/${mapCount}), falling back to squad-team maps`);
+      maps = await GameMap.find({ 
+        isActive: true,
+        ladders: { $in: ['ranked', 'squad-team'] },
+        mode: { $in: [mode, 'both'] },
+        ...(gameMode ? { gameModes: gameMode } : {})
+      });
+      console.log(`[Ranked Matchmaking] Found ${maps.length} maps with fallback (ranked + squad-team)`);
+    }
+    
+    // Si toujours pas assez, prendre toutes les maps actives avec le bon gameMode (sans filtrer par mode)
+    let availableMaps = maps;
+    if (maps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Still not enough maps, falling back to all active maps with gameMode (no mode filter)`);
+      availableMaps = await GameMap.find({ 
+        isActive: true,
+        ...(gameMode ? { gameModes: gameMode } : {})
+      });
+      console.log(`[Ranked Matchmaking] Found ${availableMaps.length} maps with second fallback (gameMode only)`);
+    }
+    
+    // Dernier recours : toutes les maps actives
+    if (availableMaps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Last resort: all active maps`);
+      availableMaps = await GameMap.find({ isActive: true });
+      console.log(`[Ranked Matchmaking] Found ${availableMaps.length} active maps total`);
+    }
+    
     const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, mapCount).map((map, index) => ({
       name: map.name,
       image: map.image || null,
@@ -907,14 +1023,46 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const bestOf = settings?.rankedSettings?.bestOf || 3; // Par défaut BO3
     const mapCount = bestOf === 1 ? 1 : 3;
     
-    // Sélectionner les maps selon le format
-    const ladderType = teamSize === 5 ? 'squad-team' : 'duo-trio';
-    const maps = await GameMap.find({ 
+    // Sélectionner les maps selon le format - pour ranked, utiliser le ladder 'ranked' et filtrer par mode
+    let mapsTest = await GameMap.find({ 
       isActive: true,
-      ladders: ladderType
+      ladders: 'ranked',
+      mode: { $in: [mode, 'both'] },
+      ...(gameMode ? { gameModes: gameMode } : {})
     });
     
-    const availableMaps = maps.length >= mapCount ? maps : await GameMap.find({ isActive: true });
+    console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode || 'any'}`);
+    
+    // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
+    if (mapsTest.length < mapCount) {
+      console.log(`[Ranked Matchmaking Test] Not enough ranked maps (${mapsTest.length}/${mapCount}), falling back to squad-team maps`);
+      mapsTest = await GameMap.find({ 
+        isActive: true,
+        ladders: { $in: ['ranked', 'squad-team'] },
+        mode: { $in: [mode, 'both'] },
+        ...(gameMode ? { gameModes: gameMode } : {})
+      });
+      console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps with fallback (ranked + squad-team)`);
+    }
+    
+    // Si toujours pas assez, prendre toutes les maps actives avec le bon gameMode (sans filtrer par mode)
+    let availableMaps = mapsTest;
+    if (mapsTest.length < mapCount) {
+      console.log(`[Ranked Matchmaking Test] Still not enough maps, falling back to all active maps with gameMode (no mode filter)`);
+      availableMaps = await GameMap.find({ 
+        isActive: true,
+        ...(gameMode ? { gameModes: gameMode } : {})
+      });
+      console.log(`[Ranked Matchmaking Test] Found ${availableMaps.length} maps with second fallback (gameMode only)`);
+    }
+    
+    // Dernier recours : toutes les maps actives
+    if (availableMaps.length < mapCount) {
+      console.log(`[Ranked Matchmaking Test] Last resort: all active maps`);
+      availableMaps = await GameMap.find({ isActive: true });
+      console.log(`[Ranked Matchmaking Test] Found ${availableMaps.length} active maps total`);
+    }
+    
     const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, mapCount).map((map, index) => ({
       name: map.name,
       image: map.image || null,

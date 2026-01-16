@@ -10,6 +10,12 @@ const mapSchema = new mongoose.Schema({
     type: String, // URL de l'image de la map
     default: null
   },
+  // Mode principal (hardcore, cdl, ou both)
+  mode: {
+    type: String,
+    enum: ['hardcore', 'cdl', 'both'],
+    default: 'both'
+  },
   // Ladders où cette map est disponible
   ladders: [{
     type: String,

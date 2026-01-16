@@ -920,6 +920,9 @@ router.post('/', verifyToken, async (req, res) => {
       }));
     }
     
+    // Handle Variant mode for CDL competitive
+    const isVariantMode = gameMode === 'Variant' && mode === 'cdl' && ladderId === 'squad-team';
+    
     const match = new Match({
       challenger: squad._id,
       // Sauvegarder les infos de l'escouade pour l'historique (même si l'escouade est supprimée plus tard)
@@ -938,7 +941,9 @@ router.post('/', verifyToken, async (req, res) => {
       scheduledAt: matchDate,
       description: description || '',
       createdBy: user._id,
-      challengerRoster: enrichedRoster
+      challengerRoster: enrichedRoster,
+      isVariant: isVariantMode,
+      variantGameModes: isVariantMode ? (req.body.variantGameModes || ['Hardpoint', 'Search & Destroy', 'Control']) : undefined
     });
 
     await match.save();
@@ -1247,12 +1252,16 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     // Si le match est en mode random, piocher 3 maps aléatoires depuis la DB
     if (match.mapType === 'random') {
       try {
-        // Récupérer les maps disponibles pour ce ladder et mode de jeu
+        // Récupérer les maps disponibles pour ce ladder, mode de jeu ET mode (hardcore/cdl)
         const availableMaps = await Map.find({
           isActive: true,
           ladders: match.ladderId,
-          gameModes: match.gameMode
+          gameModes: match.gameMode,
+          // Filter by mode (hardcore, cdl) - include 'both' maps as well
+          mode: { $in: [match.mode, 'both'] }
         });
+
+        console.log(`[RANDOM MAPS] Found ${availableMaps.length} maps for ${match.mode} ${match.ladderId} ${match.gameMode}`);
 
         if (availableMaps.length >= 3) {
           // Mélanger et prendre 3 maps
@@ -1264,11 +1273,14 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
           }));
         } else if (availableMaps.length > 0) {
           // S'il y a moins de 3 maps, prendre toutes celles disponibles
+          console.log(`[RANDOM MAPS] Warning: Only ${availableMaps.length} maps available for ${match.mode} ${match.ladderId}`);
           match.randomMaps = availableMaps.map((map, index) => ({
             name: map.name,
             image: map.image,
             order: index + 1
           }));
+        } else {
+          console.log(`[RANDOM MAPS] No maps found for ${match.mode} ${match.ladderId} ${match.gameMode}`);
         }
       } catch (mapError) {
         console.error('Error fetching random maps:', mapError);

@@ -700,17 +700,21 @@ const CDLDashboard = () => {
     if (!mySquad) return false;
     setPostingMatch(true);
     try {
+      const actualGameMode = gameMode || matchForm.gameMode;
+      const isVariantMode = actualGameMode === 'Variant';
       const response = await fetch(`${API_URL}/matches`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           ladderId,
-          gameMode: gameMode || matchForm.gameMode,
+          gameMode: actualGameMode,
           teamSize: matchForm.teamSize,
           isReady: true,
           mapType: matchForm.mapType,
-          roster: roster
+          roster: roster,
+          isVariant: isVariantMode,
+          variantGameModes: isVariantMode ? ['Hardpoint', 'Search & Destroy', 'Control'] : undefined
         })
       });
       const data = await response.json();
@@ -1018,13 +1022,13 @@ const CDLDashboard = () => {
 
   // CDL specific game modes by ladder
   // Chill (duo-trio): S&D only
-  // Competitive (squad-team): Hardpoint, S&D
+  // Competitive (squad-team): Point Stratégique, Recherche et Destruction, Variant
   const getGameModesForLadder = (ladderId) => {
     if (ladderId === 'duo-trio') {
       return ['Search & Destroy'];
     }
-    // squad-team
-    return ['Hardpoint', 'Search & Destroy'];
+    // squad-team - CDL competitive with Variant option
+    return ['Hardpoint', 'Search & Destroy', 'Variant'];
   };
   const isRegisteredToLadder = (ladderId) => mySquad?.registeredLadders?.some(l => l.ladderId === ladderId);
 

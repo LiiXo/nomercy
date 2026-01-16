@@ -147,6 +147,21 @@ const appSettingsSchema = new mongoose.Schema({
       })
     },
     
+    // Points perdus en défaite selon le rang du joueur (négatifs)
+    pointsLossPerRank: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({
+        bronze: -10,
+        silver: -12,
+        gold: -15,
+        platinum: -18,
+        diamond: -20,
+        master: -22,
+        grandmaster: -25,
+        champion: -30
+      })
+    },
+    
     // Configuration par mode de jeu
     searchAndDestroy: {
       enabled: { type: Boolean, default: true },
@@ -162,6 +177,21 @@ const appSettingsSchema = new mongoose.Schema({
         minPlayers: { type: Number, default: 6 },    // Minimum pour 3v3
         maxPlayers: { type: Number, default: 10 },   // Maximum pour 5v5
         waitTimer: { type: Number, default: 120 }    // Timer d'attente en secondes (2 min)
+      }
+    },
+    // Hardpoint / Point Stratégique - principalement pour CDL
+    hardpoint: {
+      enabled: { type: Boolean, default: true },
+      rewards: {
+        pointsWin: { type: Number, default: 25 },
+        pointsLose: { type: Number, default: -15 },
+        goldWin: { type: Number, default: 50 },
+        goldLoss: { type: Number, default: 10 }
+      },
+      matchmaking: {
+        minPlayers: { type: Number, default: 8 },    // 4v4 only
+        maxPlayers: { type: Number, default: 8 },    // 4v4 only
+        waitTimer: { type: Number, default: 120 }
       }
     },
     teamDeathmatch: {

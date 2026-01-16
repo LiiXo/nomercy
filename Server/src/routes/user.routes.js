@@ -987,11 +987,20 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
   }
 });
 
-// Reset own stats (costs 2000 gold)
+// Reset own stats (costs 2000 gold) - ONE TIME ONLY
 router.post('/reset-my-stats', verifyToken, async (req, res) => {
   try {
     const userId = req.user._id;
     const RESET_COST = 2000;
+
+    // Check if user has already used their one-time stats reset
+    if (req.user.hasUsedStatsReset) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous avez déjà utilisé votre réinitialisation de statistiques unique.',
+        alreadyUsed: true
+      });
+    }
 
     // Check if user has enough gold
     if (req.user.goldCoins < RESET_COST) {
@@ -1059,6 +1068,9 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
         rank: null
       };
     }
+
+    // Mark stats reset as used (one-time only)
+    req.user.hasUsedStatsReset = true;
 
     await req.user.save();
 

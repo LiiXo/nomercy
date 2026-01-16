@@ -152,6 +152,12 @@ const userSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+
+  // Stats reset - user can only reset stats once (costs 2000 gold)
+  hasUsedStatsReset: {
+    type: Boolean,
+    default: false
+  },
   
 }, {
   timestamps: true

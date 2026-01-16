@@ -1,5 +1,6 @@
 import express from 'express';
 import AppSettings from '../models/AppSettings.js';
+import Ranking from '../models/Ranking.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -27,6 +28,16 @@ router.get('/public', async (req, res) => {
           enabled: true,
           rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
           matchmaking: { minPlayers: 6, maxPlayers: 10, waitTimer: 120 }
+        },
+        pointsLossPerRank: {
+          bronze: -10,
+          silver: -12,
+          gold: -15,
+          platinum: -18,
+          diamond: -20,
+          master: -22,
+          grandmaster: -25,
+          champion: -30
         }
       }
     });
@@ -97,6 +108,14 @@ router.put('/admin', verifyToken, requireStaff, async (req, res) => {
         settings.rankedSettings.rankPointsThresholds = {
           ...settings.rankedSettings.rankPointsThresholds,
           ...rankedSettings.rankPointsThresholds
+        };
+      }
+      
+      // Update points loss per rank
+      if (rankedSettings.pointsLossPerRank) {
+        settings.rankedSettings.pointsLossPerRank = {
+          ...settings.rankedSettings.pointsLossPerRank,
+          ...rankedSettings.pointsLossPerRank
         };
       }
       
@@ -305,7 +324,7 @@ router.patch('/admin/ladder-settings', verifyToken, requireAdmin, async (req, re
 // Update ranked settings (admin only)
 router.patch('/admin/ranked-settings', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { searchAndDestroy, teamDeathmatch, domination, captureTheFlag, killConfirmed } = req.body;
+    const { searchAndDestroy, hardpoint, teamDeathmatch, domination, captureTheFlag, killConfirmed } = req.body;
     
     let settings = await AppSettings.findOne();
     if (!settings) {
@@ -365,6 +384,48 @@ router.patch('/admin/ranked-settings', verifyToken, requireAdmin, async (req, re
       }
     }
     
+    // Update Hardpoint settings (for CDL ranked)
+    if (hardpoint) {
+      if (!settings.rankedSettings.hardpoint) {
+        settings.rankedSettings.hardpoint = {
+          enabled: true,
+          rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50, goldLoss: 10 },
+          matchmaking: { minPlayers: 8, maxPlayers: 8, waitTimer: 120 }
+        };
+      }
+      
+      if (typeof hardpoint.enabled === 'boolean') {
+        settings.rankedSettings.hardpoint.enabled = hardpoint.enabled;
+      }
+      
+      if (hardpoint.rewards) {
+        if (!settings.rankedSettings.hardpoint.rewards) {
+          settings.rankedSettings.hardpoint.rewards = { pointsWin: 25, pointsLose: -15, goldWin: 50, goldLoss: 10 };
+        }
+        if (typeof hardpoint.rewards.pointsWin === 'number') {
+          settings.rankedSettings.hardpoint.rewards.pointsWin = hardpoint.rewards.pointsWin;
+        }
+        if (typeof hardpoint.rewards.pointsLose === 'number') {
+          settings.rankedSettings.hardpoint.rewards.pointsLose = hardpoint.rewards.pointsLose;
+        }
+        if (typeof hardpoint.rewards.goldWin === 'number') {
+          settings.rankedSettings.hardpoint.rewards.goldWin = hardpoint.rewards.goldWin;
+        }
+        if (typeof hardpoint.rewards.goldLoss === 'number') {
+          settings.rankedSettings.hardpoint.rewards.goldLoss = hardpoint.rewards.goldLoss;
+        }
+      }
+      
+      if (hardpoint.matchmaking) {
+        if (!settings.rankedSettings.hardpoint.matchmaking) {
+          settings.rankedSettings.hardpoint.matchmaking = { minPlayers: 8, maxPlayers: 8, waitTimer: 120 };
+        }
+        if (typeof hardpoint.matchmaking.waitTimer === 'number') {
+          settings.rankedSettings.hardpoint.matchmaking.waitTimer = hardpoint.matchmaking.waitTimer;
+        }
+      }
+    }
+    
     // Update other modes (future)
     const modes = [
       { key: 'teamDeathmatch', data: teamDeathmatch },
@@ -403,6 +464,50 @@ router.patch('/admin/ranked-settings', verifyToken, requireAdmin, async (req, re
     });
   } catch (error) {
     console.error('Error updating ranked settings:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reset ranked leaderboard for a specific mode (admin only)
+router.post('/admin/reset-ranked-leaderboard/:mode', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { mode } = req.params;
+    
+    // Validate mode
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Mode invalide. Utilisez "hardcore" ou "cdl".' 
+      });
+    }
+    
+    // Reset all rankings for this mode
+    const result = await Ranking.updateMany(
+      { mode: mode },
+      { 
+        $set: { 
+          points: 0, 
+          wins: 0, 
+          losses: 0,
+          kills: 0,
+          deaths: 0,
+          currentStreak: 0,
+          bestStreak: 0,
+          rank: 0,
+          division: 'bronze'
+        } 
+      }
+    );
+    
+    console.log(`[ADMIN] Ranked leaderboard reset for mode "${mode}" by ${req.user.username}. ${result.modifiedCount} rankings reset.`);
+    
+    res.json({ 
+      success: true, 
+      message: `Classement ${mode === 'hardcore' ? 'Hardcore' : 'CDL'} réinitialisé avec succès.`,
+      resetCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Error resetting ranked leaderboard:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

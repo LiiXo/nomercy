@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import RankedMatch from '../models/RankedMatch.js';
 import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
+import AppSettings from '../models/AppSettings.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
 import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
@@ -32,6 +33,19 @@ async function distributeRankedRewards(match) {
     const rewards = await getRankedMatchRewards(match.gameMode, match.mode);
     const { pointsWin, pointsLoss, coinsWin, coinsLoss, xpWinMin, xpWinMax } = rewards;
     
+    // Récupérer la configuration des points perdus par rang
+    const appSettings = await AppSettings.getSettings();
+    const pointsLossPerRank = appSettings?.rankedSettings?.pointsLossPerRank || {
+      bronze: -10,
+      silver: -12,
+      gold: -15,
+      platinum: -18,
+      diamond: -20,
+      master: -22,
+      grandmaster: -25,
+      champion: -30
+    };
+    
     // S'assurer que winningTeam est un Number pour les comparaisons
     const winningTeam = Number(match.result.winner);
     const losingTeam = winningTeam === 1 ? 2 : 1;
@@ -40,7 +54,8 @@ async function distributeRankedRewards(match) {
     console.log(`[RANKED REWARDS] Match ${match._id} - Winner: Team ${winningTeam}`);
     console.log(`[RANKED REWARDS] Mode: ${match.mode} | GameMode: ${match.gameMode}`);
     console.log(`[RANKED REWARDS] Config - Gagnants: ${pointsWin}pts ladder, ${coinsWin} gold, ${xpWinMin}-${xpWinMax} XP`);
-    console.log(`[RANKED REWARDS] Config - Perdants: ${pointsLoss}pts ladder, ${coinsLoss} gold (consolation), 0 XP`);
+    console.log(`[RANKED REWARDS] Config - Perdants: Points par rang, ${coinsLoss} gold (consolation), 0 XP`);
+    console.log(`[RANKED REWARDS] Points perdus par rang:`, pointsLossPerRank);
     console.log(`[RANKED REWARDS] Total players in match: ${match.players.length}`);
     console.log(`[RANKED REWARDS] ====================================`);
     
@@ -91,19 +106,40 @@ async function distributeRankedRewards(match) {
           continue;
         }
         
+        // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
+        let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        
         // ========== CALCULER LES RÉCOMPENSES ==========
         
-        // Points pour le ladder classé (Ranking - avec rangs Bronze/Silver/Gold etc.)
-        const rankedPointsChange = isWinner ? pointsWin : pointsLoss;
+        // Déterminer le rang actuel du joueur pour calculer les points perdus
+        let playerDivision = 'bronze';
+        if (ranking) {
+          const points = ranking.points || 0;
+          if (points >= 3500) playerDivision = 'champion';
+          else if (points >= 3000) playerDivision = 'grandmaster';
+          else if (points >= 2500) playerDivision = 'master';
+          else if (points >= 2000) playerDivision = 'diamond';
+          else if (points >= 1500) playerDivision = 'platinum';
+          else if (points >= 1000) playerDivision = 'gold';
+          else if (points >= 500) playerDivision = 'silver';
+          else playerDivision = 'bronze';
+        }
+        
+        // Points pour le ladder classé - utiliser les points par rang pour les perdants
+        let rankedPointsChange;
+        if (isWinner) {
+          rankedPointsChange = pointsWin;
+        } else {
+          // Utiliser les points perdus configurés pour le rang du joueur
+          rankedPointsChange = pointsLossPerRank[playerDivision] ?? pointsLoss;
+          console.log(`[RANKED REWARDS] Player ${i}: Using per-rank loss for ${playerDivision}: ${rankedPointsChange} pts`);
+        }
         
         // Gold (monnaie du jeu)
         const goldChange = isWinner ? coinsWin : coinsLoss;
         
         // XP pour le classement Top Player (expérience générale)
         const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
-        
-        // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
-        let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
         if (!ranking) {
           console.log(`[RANKED REWARDS] Player ${i}: Creating new ranking entry for ${user.username}`);
           ranking = new Ranking({ 

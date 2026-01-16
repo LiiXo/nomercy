@@ -1579,9 +1579,28 @@ const MatchSheet = () => {
               <div className="space-y-2">
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">
                   <span className="text-gray-500 text-sm">{t.gameMode}</span>
-                  <span className={`px-2 py-0.5 bg-${accentColor}-500/20 rounded text-${accentColor}-400 text-xs font-medium`}>
-                    {match.gameMode}
-                  </span>
+                  {match.isVariant && match.mode === 'cdl' ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`px-2 py-0.5 bg-${accentColor}-500/20 rounded text-${accentColor}-400 text-xs font-medium`}>
+                        Variant
+                      </span>
+                      <div className="flex flex-wrap gap-1 justify-end">
+                        <span className="px-1.5 py-0.5 bg-cyan-500/10 rounded text-cyan-400 text-[10px]">
+                          {language === 'fr' ? 'Points Stratégiques' : 'Hardpoint'}
+                        </span>
+                        <span className="px-1.5 py-0.5 bg-purple-500/10 rounded text-purple-400 text-[10px]">
+                          {language === 'fr' ? 'Recherche et Destruction' : 'Search & Destroy'}
+                        </span>
+                        <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-orange-400 text-[10px]">
+                          {language === 'fr' ? 'Surcharge' : 'Control'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <span className={`px-2 py-0.5 bg-${accentColor}-500/20 rounded text-${accentColor}-400 text-xs font-medium`}>
+                      {match.gameMode}
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">

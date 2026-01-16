@@ -43,7 +43,17 @@ const matchSchema = new mongoose.Schema({
   gameMode: {
     type: String,
     required: true,
-    enum: ['Search & Destroy', 'Domination', 'Kill Confirmed', 'CTF']
+    enum: ['Search & Destroy', 'Domination', 'Kill Confirmed', 'CTF', 'Hardpoint', 'Variant']
+  },
+  // Flag pour mode Variant (CDL compétitif uniquement)
+  isVariant: {
+    type: Boolean,
+    default: false
+  },
+  // Modes de jeu pour Variant (affichés dans l'ordre sur la feuille de match)
+  variantGameModes: {
+    type: [String],
+    default: ['Hardpoint', 'Search & Destroy', 'Control']
   },
   // Taille de l'équipe (2, 3, 4 ou 5)
   teamSize: {

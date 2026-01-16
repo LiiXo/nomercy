@@ -7,12 +7,14 @@ const router = express.Router();
 // Obtenir toutes les maps (public)
 router.get('/', async (req, res) => {
   try {
-    const { ladder, gameMode, activeOnly = 'true' } = req.query;
+    const { ladder, gameMode, mode, activeOnly = 'true' } = req.query;
     
     const query = {};
     if (activeOnly === 'true') query.isActive = true;
     if (ladder) query.ladders = ladder;
     if (gameMode) query.gameModes = gameMode;
+    // Filter by mode (hardcore, cdl) - include 'both' maps as well
+    if (mode) query.mode = { $in: [mode, 'both'] };
     
     const maps = await Map.find(query).sort({ name: 1 });
     res.json({ success: true, maps });
@@ -26,13 +28,15 @@ router.get('/', async (req, res) => {
 router.get('/random/:ladderId', async (req, res) => {
   try {
     const { ladderId } = req.params;
-    const { gameMode } = req.query;
+    const { gameMode, mode } = req.query;
     
     const query = { 
       isActive: true, 
       ladders: ladderId 
     };
     if (gameMode) query.gameModes = gameMode;
+    // Filter by mode (hardcore, cdl) - include 'both' maps as well
+    if (mode) query.mode = { $in: [mode, 'both'] };
     
     // Récupérer toutes les maps éligibles
     const allMaps = await Map.find(query);
@@ -40,7 +44,7 @@ router.get('/random/:ladderId', async (req, res) => {
     if (allMaps.length < 3) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Pas assez de maps disponibles (minimum 3 requises)' 
+        message: `Pas assez de maps disponibles pour ${mode || 'ce mode'} (minimum 3 requises, ${allMaps.length} trouvées)` 
       });
     }
     
@@ -58,7 +62,7 @@ router.get('/random/:ladderId', async (req, res) => {
 // Obtenir les maps pour le mode classé (ranked)
 router.get('/ranked', async (req, res) => {
   try {
-    const { gameMode, format } = req.query;
+    const { gameMode, format, mode } = req.query;
     
     const query = { 
       isActive: true, 
@@ -67,6 +71,8 @@ router.get('/ranked', async (req, res) => {
     if (gameMode) query.gameModes = gameMode;
     // Filtrer par format (4v4 ou 5v5)
     if (format) query.rankedFormats = format;
+    // Filter by mode (hardcore, cdl) - include 'both' maps as well
+    if (mode) query.mode = { $in: [mode, 'both'] };
     
     const maps = await Map.find(query).sort({ name: 1 });
     res.json({ success: true, maps });
@@ -147,14 +153,14 @@ router.delete('/:mapId', verifyToken, requireStaff, async (req, res) => {
 // Admin/Staff: Seed default maps
 router.post('/seed', verifyToken, requireStaff, async (req, res) => {
   try {
-    // Maps disponibles en Squad/Team uniquement
+    // Maps disponibles en Squad/Team uniquement (+ ranked)
     const squadTeamOnly = ['Retrieval'];
     
     // Maps disponibles en Duo/Trio uniquement
     const duoTrioOnly = ['Blackheart', 'Flagship', 'Hijacked', 'Nuketown'];
     
-    // Maps disponibles dans les deux ladders
-    const bothLadders = [
+    // Maps disponibles dans tous les ladders (duo-trio, squad-team, ranked)
+    const allLadders = [
       'Colossus', 'Cortex', 'Den', 'Exposure', 'Express', 
       'Homestead', 'Imprint', 'Raid', 'Scar', 'Standoff', 
       'The Forge', 'Toshin', 'Utopia'
@@ -162,11 +168,12 @@ router.post('/seed', verifyToken, requireStaff, async (req, res) => {
     
     const defaultMaps = [];
     
-    // Maps Squad/Team uniquement
+    // Maps Squad/Team + Ranked
     for (const name of squadTeamOnly) {
       defaultMaps.push({
         name,
-        ladders: ['squad-team'],
+        mode: 'both',
+        ladders: ['squad-team', 'ranked'],
         gameModes: ['Search & Destroy', 'Domination']
       });
     }
@@ -175,30 +182,48 @@ router.post('/seed', verifyToken, requireStaff, async (req, res) => {
     for (const name of duoTrioOnly) {
       defaultMaps.push({
         name,
+        mode: 'both',
         ladders: ['duo-trio'],
         gameModes: ['Search & Destroy', 'Domination']
       });
     }
     
-    // Maps dans les deux ladders
-    for (const name of bothLadders) {
+    // Maps dans tous les ladders (duo-trio, squad-team, ranked)
+    for (const name of allLadders) {
       defaultMaps.push({
         name,
-        ladders: ['duo-trio', 'squad-team'],
+        mode: 'both',
+        ladders: ['duo-trio', 'squad-team', 'ranked'],
         gameModes: ['Search & Destroy', 'Domination']
       });
     }
     
     let created = 0;
+    let updated = 0;
     for (const mapData of defaultMaps) {
       const exists = await Map.findOne({ name: mapData.name });
       if (!exists) {
         await Map.create(mapData);
         created++;
+      } else {
+        // Mettre à jour les maps existantes pour ajouter 'ranked' si manquant
+        let needsUpdate = false;
+        if (!exists.ladders.includes('ranked') && mapData.ladders.includes('ranked')) {
+          exists.ladders.push('ranked');
+          needsUpdate = true;
+        }
+        if (!exists.mode) {
+          exists.mode = 'both';
+          needsUpdate = true;
+        }
+        if (needsUpdate) {
+          await exists.save();
+          updated++;
+        }
       }
     }
     
-    res.json({ success: true, message: `${created} maps créées` });
+    res.json({ success: true, message: `${created} maps créées, ${updated} maps mises à jour` });
   } catch (error) {
     console.error('Seed maps error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -221,7 +246,7 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
 // Create map (admin)
 router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     if (!name) {
       return res.status(400).json({ success: false, message: 'Nom requis' });
@@ -230,6 +255,7 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
     const map = new Map({
       name,
       image: image || '',
+      mode: mode || 'both',
       ladders: ladders || [],
       gameModes: gameModes || [],
       rankedFormats: rankedFormats || [],
