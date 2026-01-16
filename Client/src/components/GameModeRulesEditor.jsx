@@ -37,19 +37,23 @@ const getLocationLabels = (lang) => {
   return translations[lang] || translations.en;
 };
 
-// Sub-types based on location
-const getSubTypeLabels = (lang) => {
+// Sub-types based on location and mode
+// Hardcore ranked: Duel, TDM (Mêlée Générale), S&D (Recherche et Destruction)
+// CDL ranked: Hardpoint (Points Stratégiques) only
+const getSubTypeLabels = (lang, mode = 'hardcore') => {
   const translations = {
     fr: {
       rankings: [
         { value: 'duo-trio', label: '👥 Chill', sublabel: 'Ladder Chill' },
         { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Ladder Compétitif' }
       ],
-      ranked: [
+      ranked_hardcore: [
         { value: 'duel', label: '⚔️ Duel 1v1', sublabel: 'Mode Duel' },
         { value: 'tdm', label: '💀 Mêlée Générale', sublabel: 'Team Deathmatch' },
-        { value: 'domination', label: '🏴 Domination', sublabel: 'Mode Domination' },
         { value: 'snd', label: '💣 Recherche & Destruction', sublabel: 'Search and Destroy' }
+      ],
+      ranked_cdl: [
+        { value: 'hardpoint', label: '📍 Points Stratégiques', sublabel: 'Hardpoint' }
       ]
     },
     en: {
@@ -57,11 +61,13 @@ const getSubTypeLabels = (lang) => {
         { value: 'duo-trio', label: '👥 Chill', sublabel: 'Chill Ladder' },
         { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Compétitif Ladder' }
       ],
-      ranked: [
+      ranked_hardcore: [
         { value: 'duel', label: '⚔️ Duel 1v1', sublabel: 'Duel Mode' },
         { value: 'tdm', label: '💀 Team Deathmatch', sublabel: 'Team Deathmatch' },
-        { value: 'domination', label: '🏴 Domination', sublabel: 'Domination Mode' },
         { value: 'snd', label: '💣 Search & Destroy', sublabel: 'Search and Destroy' }
+      ],
+      ranked_cdl: [
+        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint Mode' }
       ]
     },
     it: {
@@ -69,11 +75,13 @@ const getSubTypeLabels = (lang) => {
         { value: 'duo-trio', label: '👥 Chill', sublabel: 'Classifica Chill' },
         { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Classifica Compétitif' }
       ],
-      ranked: [
+      ranked_hardcore: [
         { value: 'duel', label: '⚔️ Duello 1v1', sublabel: 'Modalità Duello' },
         { value: 'tdm', label: '💀 Mischia Generale', sublabel: 'Team Deathmatch' },
-        { value: 'domination', label: '🏴 Dominazione', sublabel: 'Modalità Dominazione' },
         { value: 'snd', label: '💣 Cerca e Distruggi', sublabel: 'Cerca e Distruggi' }
+      ],
+      ranked_cdl: [
+        { value: 'hardpoint', label: '📍 Punti Strategici', sublabel: 'Hardpoint' }
       ]
     },
     de: {
@@ -81,15 +89,22 @@ const getSubTypeLabels = (lang) => {
         { value: 'duo-trio', label: '👥 Chill', sublabel: 'Chill-Rangliste' },
         { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Compétitif-Rangliste' }
       ],
-      ranked: [
+      ranked_hardcore: [
         { value: 'duel', label: '⚔️ Duell 1v1', sublabel: 'Duell-Modus' },
         { value: 'tdm', label: '💀 Team Deathmatch', sublabel: 'Team Deathmatch' },
-        { value: 'domination', label: '🏴 Herrschaft', sublabel: 'Herrschafts-Modus' },
         { value: 'snd', label: '💣 Suchen & Zerstören', sublabel: 'Suchen & Zerstören' }
+      ],
+      ranked_cdl: [
+        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint-Modus' }
       ]
     }
   };
-  return translations[lang] || translations.en;
+  const t = translations[lang] || translations.en;
+  // Return the appropriate list based on location and mode
+  return {
+    rankings: t.rankings,
+    ranked: mode === 'cdl' ? t.ranked_cdl : t.ranked_hardcore
+  };
 };
 
 const LANGUAGES = [
@@ -292,14 +307,19 @@ const GameModeRulesEditor = () => {
     fetchRules();
   }, [selectedMode, selectedLocation, selectedSubType]);
   
-  // Reset subType when location changes
+  // Reset subType when location or mode changes
   useEffect(() => {
     if (selectedLocation === 'rankings') {
       setSelectedSubType('duo-trio');
     } else {
-      setSelectedSubType('duel');
+      // For ranked, set default based on mode
+      if (selectedMode === 'cdl') {
+        setSelectedSubType('hardpoint');
+      } else {
+        setSelectedSubType('duel');
+      }
     }
-  }, [selectedLocation]);
+  }, [selectedLocation, selectedMode]);
 
   // Update editor content when language changes
   useEffect(() => {
@@ -530,8 +550,8 @@ const GameModeRulesEditor = () => {
           <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-3">
             {selectedLocation === 'rankings' ? t('subTypeTitleRankings') : t('subTypeTitleRanked')}
           </h3>
-          <div className={`grid grid-cols-1 sm:grid-cols-2 ${selectedLocation === 'ranked' ? 'lg:grid-cols-4' : ''} gap-2 sm:gap-3`}>
-            {getSubTypeLabels(language)[selectedLocation].map(sub => (
+          <div className={`grid grid-cols-1 sm:grid-cols-2 ${selectedLocation === 'ranked' && selectedMode === 'hardcore' ? 'lg:grid-cols-3' : ''} gap-2 sm:gap-3`}>
+            {getSubTypeLabels(language, selectedMode)[selectedLocation].map(sub => (
               <button
                 key={sub.value}
                 onClick={() => setSelectedSubType(sub.value)}
