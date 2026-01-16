@@ -1091,37 +1091,21 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
     );
 
     // Count matches that will be affected (for logging)
-    const ladderMatchCount = await Match.countDocuments({
-      $or: [
-        { 'challengerRoster.user': userId },
-        { 'opponentRoster.user': userId }
-      ],
-      status: 'completed'
-    });
+    const ladderMatchCount = req.user.matchHistory?.length || 0;
 
     const rankedMatchCount = await RankedMatch.countDocuments({
       'players.user': userId,
       status: 'completed'
     });
 
-    // Remove user from completed matches in ladder (remove from rosters, don't delete matches)
-    await Match.updateMany(
-      { 'challengerRoster.user': userId, status: 'completed' },
-      { $pull: { challengerRoster: { user: userId } } }
-    );
-    
-    await Match.updateMany(
-      { 'opponentRoster.user': userId, status: 'completed' },
-      { $pull: { opponentRoster: { user: userId } } }
+    // Clear user's personal match history (this only affects what THEY see)
+    // We do NOT remove them from match rosters - other players should still see them in their history
+    await User.updateOne(
+      { _id: userId },
+      { $set: { matchHistory: [] } }
     );
 
-    // Remove user from ranked match history (remove from players array)
-    await RankedMatch.updateMany(
-      { 'players.user': userId, status: 'completed' },
-      { $pull: { players: { user: userId } } }
-    );
-
-    console.log(`[RESET STATS] User ${req.user.username} (${userId}) reset their stats (reset #${req.user.statsResetCount}). Cost: ${actualCost} gold. Ladder matches: ${ladderMatchCount}, Ranked matches: ${rankedMatchCount}`);
+    console.log(`[RESET STATS] User ${req.user.username} (${userId}) reset their stats (reset #${req.user.statsResetCount}). Cost: ${actualCost} gold. Cleared personal matchHistory: ${ladderMatchCount} entries. Ranked matches played: ${rankedMatchCount}`);
 
     res.json({
       success: true,
@@ -1701,7 +1685,7 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
 // Admin: Update user
 router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { username, goldCoins, roles, platform, activisionId, bio, stats, rankedPoints, rankedStats } = req.body;
+    const { username, goldCoins, roles, platform, activisionId, bio, stats, rankedPoints, rankedStats, ladderStats } = req.body;
     
     const user = await User.findById(req.params.userId);
     if (!user) {
@@ -1742,6 +1726,45 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
       user.markModified('stats');
       user.markModified('statsHardcore');
       user.markModified('statsCdl');
+    }
+    
+    // Update ladder stats (wins/losses/xp per mode) - this is separate from ranked stats
+    if (ladderStats !== undefined) {
+      // Update Hardcore ladder stats
+      if (ladderStats.hardcore !== undefined) {
+        if (ladderStats.hardcore.xp !== undefined) {
+          user.statsHardcore.xp = ladderStats.hardcore.xp;
+        }
+        if (ladderStats.hardcore.wins !== undefined) {
+          user.statsHardcore.wins = ladderStats.hardcore.wins;
+        }
+        if (ladderStats.hardcore.losses !== undefined) {
+          user.statsHardcore.losses = ladderStats.hardcore.losses;
+        }
+        if (ladderStats.hardcore.points !== undefined) {
+          user.statsHardcore.points = ladderStats.hardcore.points;
+        }
+      }
+      
+      // Update CDL ladder stats
+      if (ladderStats.cdl !== undefined) {
+        if (ladderStats.cdl.xp !== undefined) {
+          user.statsCdl.xp = ladderStats.cdl.xp;
+        }
+        if (ladderStats.cdl.wins !== undefined) {
+          user.statsCdl.wins = ladderStats.cdl.wins;
+        }
+        if (ladderStats.cdl.losses !== undefined) {
+          user.statsCdl.losses = ladderStats.cdl.losses;
+        }
+        if (ladderStats.cdl.points !== undefined) {
+          user.statsCdl.points = ladderStats.cdl.points;
+        }
+      }
+      
+      user.markModified('statsHardcore');
+      user.markModified('statsCdl');
+      console.log(`[ADMIN] Updated ladder stats for user ${user.username}: HC ${user.statsHardcore.xp}XP/${user.statsHardcore.wins}W/${user.statsHardcore.losses}L, CDL ${user.statsCdl.xp}XP/${user.statsCdl.wins}W/${user.statsCdl.losses}L`);
     }
 
     await user.save();
@@ -1886,6 +1909,105 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
     });
   } catch (error) {
     console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
+// Admin: Get user match history (both ladder and ranked)
+router.get('/admin/:userId/matches', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { type = 'all' } = req.query; // 'all', 'ladder', 'ranked'
+    
+    const mongoose = (await import('mongoose')).default;
+    const playerObjectId = new mongoose.Types.ObjectId(userId);
+    
+    const result = {
+      ladder: [],
+      ranked: []
+    };
+    
+    // Get ladder matches
+    if (type === 'all' || type === 'ladder') {
+      const ladderMatches = await Match.find({
+        $or: [
+          { 'challengerRoster.user': playerObjectId },
+          { 'opponentRoster.user': playerObjectId }
+        ]
+      })
+        .populate('challenger', 'name tag color')
+        .populate('opponent', 'name tag color')
+        .populate('result.winner', 'name tag')
+        .populate('challengerRoster.user', 'username')
+        .populate('opponentRoster.user', 'username')
+        .sort({ createdAt: -1 })
+        .limit(100);
+      
+      result.ladder = ladderMatches.map(match => {
+        // Determine if player was in challenger or opponent
+        const isInChallenger = match.challengerRoster.some(r => r.user?._id?.toString() === userId);
+        const playerSquad = isInChallenger ? match.challenger : match.opponent;
+        const isWinner = match.result?.winner?._id?.toString() === playerSquad?._id?.toString();
+        
+        return {
+          _id: match._id,
+          type: 'ladder',
+          status: match.status,
+          mode: match.mode,
+          ladderId: match.ladderId,
+          playerSquad: playerSquad?.name || 'Équipe supprimée',
+          opponent: isInChallenger ? match.opponent?.name : match.challenger?.name,
+          isWinner: match.status === 'completed' ? isWinner : null,
+          createdAt: match.createdAt,
+          completedAt: match.result?.confirmedAt
+        };
+      });
+    }
+    
+    // Get ranked matches
+    if (type === 'all' || type === 'ranked') {
+      const RankedMatch = (await import('../models/RankedMatch.js')).default;
+      const rankedMatches = await RankedMatch.find({
+        'players.user': playerObjectId
+      })
+        .populate('players.user', 'username')
+        .sort({ createdAt: -1 })
+        .limit(100);
+      
+      result.ranked = rankedMatches.map(match => {
+        const player = match.players.find(p => p.user?._id?.toString() === userId);
+        const winningTeam = match.result?.winner;
+        const isWinner = match.status === 'completed' && player?.team === winningTeam;
+        
+        return {
+          _id: match._id,
+          type: 'ranked',
+          status: match.status,
+          mode: match.mode,
+          gameMode: match.gameMode,
+          teamSize: match.teamSize,
+          team: player?.team,
+          isWinner: match.status === 'completed' ? isWinner : null,
+          createdAt: match.createdAt,
+          completedAt: match.completedAt
+        };
+      });
+    }
+    
+    res.json({
+      success: true,
+      matches: result,
+      counts: {
+        ladder: result.ladder.length,
+        ranked: result.ranked.length,
+        total: result.ladder.length + result.ranked.length
+      }
+    });
+  } catch (error) {
+    console.error('Get user matches error:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'

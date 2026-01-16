@@ -3073,22 +3073,140 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Delete match (admin/staff)
+// Delete match (admin/staff) - with stats rollback
 router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const match = await Match.findById(req.params.matchId);
+    const match = await Match.findById(req.params.matchId)
+      .populate('challenger', 'name')
+      .populate('opponent', 'name')
+      .populate('challengerRoster.user', 'username')
+      .populate('opponentRoster.user', 'username');
+    
     if (!match) {
       return res.status(404).json({
         success: false,
         message: 'Match non trouvé'
       });
     }
+    
+    const adminUser = await User.findById(req.user._id);
+    console.log(`[LADDER DELETE] ====================================`);
+    console.log(`[LADDER DELETE] Admin ${adminUser?.username} supprime le match ${req.params.matchId}`);
+    console.log(`[LADDER DELETE] Status: ${match.status}, Mode: ${match.mode}, Ladder: ${match.ladderId}`);
 
+    // Si le match est complété, on doit rembourser les stats
+    if (match.status === 'completed' && match.result?.winner) {
+      const winnerId = match.result.winner.toString();
+      const isWinnerChallenger = match.challenger?._id?.toString() === winnerId;
+      
+      // Determine stats field based on mode
+      const statsField = match.mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+      
+      console.log(`[LADDER DELETE] Match complété - Remboursement des stats (${statsField})...`);
+      console.log(`[LADDER DELETE] Winner: ${isWinnerChallenger ? 'Challenger' : 'Opponent'}`);
+      
+      // Rollback stats for challenger roster
+      for (const rosterEntry of match.challengerRoster) {
+        if (!rosterEntry.user) continue;
+        const userId = rosterEntry.user._id || rosterEntry.user;
+        const user = await User.findById(userId);
+        if (!user) continue;
+        
+        const isWinner = isWinnerChallenger;
+        const oldWins = user[statsField].wins;
+        const oldLosses = user[statsField].losses;
+        
+        if (isWinner) {
+          user[statsField].wins = Math.max(0, user[statsField].wins - 1);
+        } else {
+          user[statsField].losses = Math.max(0, user[statsField].losses - 1);
+        }
+        
+        // Remove from matchHistory if present
+        user.matchHistory = user.matchHistory.filter(
+          mh => mh.match?.toString() !== req.params.matchId
+        );
+        
+        user.markModified(statsField);
+        user.markModified('matchHistory');
+        await user.save();
+        
+        console.log(`[LADDER DELETE] Challenger ${user.username}: ${isWinner ? 'win' : 'loss'} removed, was ${oldWins}W/${oldLosses}L, now ${user[statsField].wins}W/${user[statsField].losses}L`);
+      }
+      
+      // Rollback stats for opponent roster
+      for (const rosterEntry of match.opponentRoster) {
+        if (!rosterEntry.user) continue;
+        const userId = rosterEntry.user._id || rosterEntry.user;
+        const user = await User.findById(userId);
+        if (!user) continue;
+        
+        const isWinner = !isWinnerChallenger;
+        const oldWins = user[statsField].wins;
+        const oldLosses = user[statsField].losses;
+        
+        if (isWinner) {
+          user[statsField].wins = Math.max(0, user[statsField].wins - 1);
+        } else {
+          user[statsField].losses = Math.max(0, user[statsField].losses - 1);
+        }
+        
+        // Remove from matchHistory if present
+        user.matchHistory = user.matchHistory.filter(
+          mh => mh.match?.toString() !== req.params.matchId
+        );
+        
+        user.markModified(statsField);
+        user.markModified('matchHistory');
+        await user.save();
+        
+        console.log(`[LADDER DELETE] Opponent ${user.username}: ${isWinner ? 'win' : 'loss'} removed, was ${oldWins}W/${oldLosses}L, now ${user[statsField].wins}W/${user[statsField].losses}L`);
+      }
+      
+      // Rollback squad stats if applicable
+      const Squad = (await import('../models/Squad.js')).default;
+      
+      if (match.challenger) {
+        const challengerSquad = await Squad.findById(match.challenger._id || match.challenger);
+        if (challengerSquad) {
+          if (isWinnerChallenger) {
+            challengerSquad.stats.totalWins = Math.max(0, challengerSquad.stats.totalWins - 1);
+          } else {
+            challengerSquad.stats.totalLosses = Math.max(0, challengerSquad.stats.totalLosses - 1);
+          }
+          await challengerSquad.save();
+          console.log(`[LADDER DELETE] Challenger squad ${challengerSquad.name}: stats updated`);
+        }
+      }
+      
+      if (match.opponent) {
+        const opponentSquad = await Squad.findById(match.opponent._id || match.opponent);
+        if (opponentSquad) {
+          if (!isWinnerChallenger) {
+            opponentSquad.stats.totalWins = Math.max(0, opponentSquad.stats.totalWins - 1);
+          } else {
+            opponentSquad.stats.totalLosses = Math.max(0, opponentSquad.stats.totalLosses - 1);
+          }
+          await opponentSquad.save();
+          console.log(`[LADDER DELETE] Opponent squad ${opponentSquad.name}: stats updated`);
+        }
+      }
+      
+      console.log(`[LADDER DELETE] Remboursement terminé`);
+    } else {
+      console.log(`[LADDER DELETE] Match non complété - Pas de remboursement nécessaire`);
+    }
+    
     await Match.findByIdAndDelete(req.params.matchId);
+    
+    console.log(`[LADDER DELETE] Match supprimé avec succès`);
+    console.log(`[LADDER DELETE] ====================================`);
 
     res.json({
       success: true,
-      message: 'Match supprimé'
+      message: match.status === 'completed' 
+        ? 'Match supprimé et stats remboursées' 
+        : 'Match supprimé'
     });
   } catch (error) {
     console.error('Delete match error:', error);

@@ -278,6 +278,9 @@ const RankedMode = () => {
   // Dynamic ranks from config
   const [ranks, setRanks] = useState(() => buildRanksFromThresholds(DEFAULT_RANK_THRESHOLDS));
   
+  // Points loss per rank from config
+  const [pointsLossPerRank, setPointsLossPerRank] = useState(null);
+  
   // Matchmaking enabled/disabled
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
   
@@ -359,14 +362,22 @@ const RankedMode = () => {
     }
   };
 
-  // Fetch rank thresholds from config
+  // Fetch rank thresholds and points loss per rank from config
   const fetchRankThresholds = async () => {
     try {
-      const response = await fetch(`${API_URL}/app-settings/public`);
-      const data = await response.json();
-      if (data.success && data.rankedSettings?.rankPointsThresholds) {
-        const thresholds = data.rankedSettings.rankPointsThresholds;
+      // Fetch app settings for rank thresholds
+      const appSettingsRes = await fetch(`${API_URL}/app-settings/public`);
+      const appSettingsData = await appSettingsRes.json();
+      if (appSettingsData.success && appSettingsData.rankedSettings?.rankPointsThresholds) {
+        const thresholds = appSettingsData.rankedSettings.rankPointsThresholds;
         setRanks(buildRanksFromThresholds(thresholds));
+      }
+      
+      // Fetch main config for points loss per rank (configured in admin panel)
+      const configRes = await fetch(`${API_URL}/config`);
+      const configData = await configRes.json();
+      if (configData.success && configData.config?.rankedPointsLossPerRank) {
+        setPointsLossPerRank(configData.config.rankedPointsLossPerRank);
       }
     } catch (err) {
       console.error('Error fetching rank thresholds:', err);
@@ -1915,6 +1926,44 @@ const RankedMode = () => {
             </div>
           </div>
 
+          {/* Points Loss Per Rank Info */}
+          {pointsLossPerRank && (
+            <div className={`rounded-2xl bg-dark-800/50 backdrop-blur-xl border ${isHardcore ? 'border-red-500/20' : 'border-cyan-500/20'} overflow-hidden mb-6`}>
+              <div className={`px-4 py-3 bg-gradient-to-r ${isHardcore ? 'from-red-500/10 to-orange-500/5' : 'from-cyan-500/10 to-blue-500/5'} border-b border-white/10`}>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <AlertTriangle className={`w-4 h-4 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
+                  {language === 'fr' ? 'Points perdus en cas de défaite (par rang)' : 'Points lost on defeat (by rank)'}
+                </h4>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                  {['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'].map((rankKey) => {
+                    const style = RANK_STYLES[rankKey];
+                    const RankIcon = style.icon;
+                    const loss = pointsLossPerRank[rankKey] || 0;
+                    return (
+                      <div 
+                        key={rankKey}
+                        className="flex flex-col items-center p-2 rounded-xl bg-dark-900/50 border border-white/5"
+                      >
+                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${style.gradient} flex items-center justify-center mb-1`}>
+                          <RankIcon className="w-4 h-4 text-white" />
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-medium truncate">{style.name}</span>
+                        <span className="text-sm font-bold text-red-400">{loss}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-3 text-center">
+                  {language === 'fr' 
+                    ? 'Plus votre rang est élevé, plus vous perdez de points en cas de défaite.' 
+                    : 'The higher your rank, the more points you lose on defeat.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Classement Mode Classé */}
           <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 overflow-hidden">
             {/* Header */}
@@ -2248,7 +2297,7 @@ const RankedMode = () => {
                   }`}>
                     <div className="flex items-center gap-2 mb-4">
                       <div className="w-3 h-3 rounded-full bg-cyan-400"></div>
-                      <h3 className="text-xl font-bold text-cyan-400">Team A</h3>
+                      <h3 className="text-xl font-bold text-cyan-400">{language === 'fr' ? 'Équipe 1' : 'Team 1'}</h3>
                     </div>
                     <div className="space-y-3">
                       {shuffleMatchData.players
@@ -2297,7 +2346,7 @@ const RankedMode = () => {
                       : 'bg-gray-800/50 border-gray-600/30'
                   }`}>
                     <div className="flex items-center gap-2 mb-4 justify-end">
-                      <h3 className="text-xl font-bold text-orange-400">Team B</h3>
+                      <h3 className="text-xl font-bold text-orange-400">{language === 'fr' ? 'Équipe 2' : 'Team 2'}</h3>
                       <div className="w-3 h-3 rounded-full bg-orange-400"></div>
                     </div>
                     <div className="space-y-3">

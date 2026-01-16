@@ -80,6 +80,12 @@ const AdminPanel = () => {
   const [resetStatsConfirm, setResetStatsConfirm] = useState(null);
   const [resettingStats, setResettingStats] = useState(false);
   
+  // User match history management states
+  const [userMatches, setUserMatches] = useState({ ladder: [], ranked: [] });
+  const [loadingUserMatches, setLoadingUserMatches] = useState(false);
+  const [showUserMatchHistory, setShowUserMatchHistory] = useState(false);
+  const [deletingMatchId, setDeletingMatchId] = useState(null);
+  
   // System reset states
   const [confirmText, setConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -782,6 +788,65 @@ const AdminPanel = () => {
       setError(err.message || 'Erreur lors de la mise à jour');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Fetch user's match history for admin management
+  const fetchUserMatches = async (userId) => {
+    setLoadingUserMatches(true);
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${userId}/matches`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserMatches(data.matches);
+      } else {
+        setError(data.message || 'Erreur lors du chargement des matchs');
+      }
+    } catch (err) {
+      console.error('Error fetching user matches:', err);
+      setError('Erreur lors du chargement des matchs');
+    } finally {
+      setLoadingUserMatches(false);
+    }
+  };
+
+  // Delete a specific match from user's history
+  const handleDeleteUserMatch = async (matchId, matchType) => {
+    if (!window.confirm('Supprimer ce match ? Les stats des joueurs seront remboursées.')) {
+      return;
+    }
+    
+    setDeletingMatchId(matchId);
+    try {
+      const endpoint = matchType === 'ranked' 
+        ? `/ranked-matches/admin/${matchId}`
+        : `/matches/admin/${matchId}`;
+      
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message || 'Match supprimé avec succès');
+        // Refresh user matches
+        if (editingItem?._id) {
+          fetchUserMatches(editingItem._id);
+        }
+        // Also refresh the main data
+        loadTabData();
+      } else {
+        setError(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      console.error('Error deleting match:', err);
+      setError('Erreur lors de la suppression du match');
+    } finally {
+      setDeletingMatchId(null);
     }
   };
 
@@ -5041,39 +5106,194 @@ const AdminPanel = () => {
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Gold Coins</label>
-                <div className="relative">
-                  <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-yellow-400" />
-                  <input
-                    type="number"
-                    value={formData.goldCoins || 500}
-                    onChange={(e) => setFormData({ ...formData, goldCoins: parseInt(e.target.value) })}
-                    className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    min={0}
-                  />
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Gold Coins</label>
+              <div className="relative">
+                <Coins className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-yellow-400" />
+                <input
+                  type="number"
+                  value={formData.goldCoins || 500}
+                  onChange={(e) => setFormData({ ...formData, goldCoins: parseInt(e.target.value) })}
+                  className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  min={0}
+                />
+              </div>
+            </div>
+            
+            {/* Ladder Stats (Match Ladder - Escouade vs Escouade) */}
+            <div className="border-t border-white/10 pt-4 mt-4">
+              <h4 className="text-sm font-medium text-orange-400 mb-3 flex items-center gap-2">
+                <Swords className="w-4 h-4" />
+                Stats Ladder (Matchs Escouade) + XP Top Players
+              </h4>
+              <p className="text-gray-500 text-xs mb-3">
+                XP pour le classement Top Players + victoires/défaites du mode Ladder
+              </p>
+              
+              {/* Ladder Hardcore */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-orange-400 mb-2">🔥 Mode Hardcore</label>
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-purple-400 mb-1">⭐ XP Top Player</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.hardcore?.xp ?? formData.statsHardcore?.xp ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          hardcore: {
+                            ...formData.ladderStats?.hardcore,
+                            xp: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-purple-500/30 rounded-lg text-purple-400 text-sm font-semibold focus:border-purple-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">Points</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.hardcore?.points ?? formData.statsHardcore?.points ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          hardcore: {
+                            ...formData.ladderStats?.hardcore,
+                            points: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-orange-500/30 rounded-lg text-orange-400 text-sm font-semibold focus:border-orange-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-green-500 mb-1">✅ Victoires</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.hardcore?.wins ?? formData.statsHardcore?.wins ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          hardcore: {
+                            ...formData.ladderStats?.hardcore,
+                            wins: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-green-500/30 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-red-500 mb-1">❌ Défaites</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.hardcore?.losses ?? formData.statsHardcore?.losses ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          hardcore: {
+                            ...formData.ladderStats?.hardcore,
+                            losses: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-red-500/30 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
                 </div>
               </div>
+              
+              {/* Ladder CDL */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">XP (Expérience) - appliqué aux deux modes</label>
-                <div className="relative">
-                  <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-purple-400" />
-                  <input
-                    type="number"
-                    value={formData.statsHardcore?.xp || formData.stats?.xp || 0}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      stats: { 
-                        ...formData.stats, 
-                        xp: parseInt(e.target.value) || 0 
-                      } 
-                    })}
-                    className="w-full pl-10 pr-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                    min={0}
-                  />
+                <label className="block text-xs font-medium text-cyan-400 mb-2">🎮 Mode CDL</label>
+                <div className="grid grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-medium text-purple-400 mb-1">⭐ XP Top Player</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.cdl?.xp ?? formData.statsCdl?.xp ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          cdl: {
+                            ...formData.ladderStats?.cdl,
+                            xp: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-purple-500/30 rounded-lg text-purple-400 text-sm font-semibold focus:border-purple-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-gray-500 mb-1">Points</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.cdl?.points ?? formData.statsCdl?.points ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          cdl: {
+                            ...formData.ladderStats?.cdl,
+                            points: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/30 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-green-500 mb-1">✅ Victoires</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.cdl?.wins ?? formData.statsCdl?.wins ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          cdl: {
+                            ...formData.ladderStats?.cdl,
+                            wins: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-green-500/30 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-medium text-red-500 mb-1">❌ Défaites</label>
+                    <input
+                      type="number"
+                      value={formData.ladderStats?.cdl?.losses ?? formData.statsCdl?.losses ?? 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        ladderStats: { 
+                          ...formData.ladderStats, 
+                          cdl: {
+                            ...formData.ladderStats?.cdl,
+                            losses: parseInt(e.target.value) || 0
+                          }
+                        } 
+                      })}
+                      className="w-full px-3 py-2 bg-dark-900 border border-red-500/30 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none"
+                      min={0}
+                    />
+                  </div>
                 </div>
-                <p className="text-gray-500 text-xs mt-1">L'XP détermine la position dans le classement Top Players</p>
               </div>
             </div>
             
@@ -5081,15 +5301,15 @@ const AdminPanel = () => {
             <div className="border-t border-white/10 pt-4 mt-4">
               <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
                 <Trophy className="w-4 h-4" />
-                Points Mode Classé (Ranked Ladder)
+                Stats Mode Classé (Ranked)
               </h4>
               <p className="text-gray-500 text-xs mb-3">
-                Ces points déterminent le rang du joueur en mode classé (Bronze, Silver, Gold, etc.)
+                Points et stats du mode classé (détermine le rang Bronze, Silver, Gold, etc.)
               </p>
               {/* Points */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Points Hardcore</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Points Ranked Hardcore</label>
                   <input
                     type="number"
                     value={formData.rankedPoints?.hardcore || 0}
@@ -5105,7 +5325,7 @@ const AdminPanel = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Points CDL</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Points Ranked CDL</label>
                   <input
                     type="number"
                     value={formData.rankedPoints?.cdl || 0}
@@ -5125,7 +5345,7 @@ const AdminPanel = () => {
               {/* Wins/Losses Hardcore */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-medium text-green-400 mb-1">✅ Victoires Hardcore</label>
+                  <label className="block text-xs font-medium text-green-400 mb-1">✅ Victoires Ranked HC</label>
                   <input
                     type="number"
                     value={formData.rankedStats?.hardcore?.wins || 0}
@@ -5144,7 +5364,7 @@ const AdminPanel = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-red-400 mb-1">❌ Défaites Hardcore</label>
+                  <label className="block text-xs font-medium text-red-400 mb-1">❌ Défaites Ranked HC</label>
                   <input
                     type="number"
                     value={formData.rankedStats?.hardcore?.losses || 0}
@@ -5167,7 +5387,7 @@ const AdminPanel = () => {
               {/* Wins/Losses CDL */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-green-400 mb-1">✅ Victoires CDL</label>
+                  <label className="block text-xs font-medium text-green-400 mb-1">✅ Victoires Ranked CDL</label>
                   <input
                     type="number"
                     value={formData.rankedStats?.cdl?.wins || 0}
@@ -5186,7 +5406,7 @@ const AdminPanel = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-red-400 mb-1">❌ Défaites CDL</label>
+                  <label className="block text-xs font-medium text-red-400 mb-1">❌ Défaites Ranked CDL</label>
                   <input
                     type="number"
                     value={formData.rankedStats?.cdl?.losses || 0}
@@ -5230,6 +5450,181 @@ const AdminPanel = () => {
                 ))}
               </div>
             </div>
+            
+            {/* Match History Management Section */}
+            {editingItem && (
+              <div className="border-t border-white/10 pt-4 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-blue-400 flex items-center gap-2">
+                    <Swords className="w-4 h-4" />
+                    Historique des Matchs
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!showUserMatchHistory) {
+                        fetchUserMatches(editingItem._id);
+                      }
+                      setShowUserMatchHistory(!showUserMatchHistory);
+                    }}
+                    className="px-3 py-1.5 text-xs bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors flex items-center gap-1"
+                  >
+                    {showUserMatchHistory ? (
+                      <>
+                        <EyeOff className="w-3 h-3" />
+                        Masquer
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3 h-3" />
+                        Voir/Gérer
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                {showUserMatchHistory && (
+                  <div className="bg-dark-900/50 rounded-lg border border-white/5 p-3">
+                    {loadingUserMatches ? (
+                      <div className="flex justify-center py-4">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-400" />
+                      </div>
+                    ) : (
+                      <>
+                        {/* Ladder Matches */}
+                        <div className="mb-4">
+                          <h5 className="text-xs font-medium text-orange-400 mb-2 flex items-center gap-1">
+                            <Shield className="w-3 h-3" />
+                            Matchs Ladder ({userMatches.ladder.length})
+                          </h5>
+                          {userMatches.ladder.length === 0 ? (
+                            <p className="text-gray-500 text-xs">Aucun match ladder</p>
+                          ) : (
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                              {userMatches.ladder.map((match) => (
+                                <div 
+                                  key={match._id} 
+                                  className={`flex items-center justify-between gap-2 p-2 rounded-lg text-xs ${
+                                    match.status === 'completed'
+                                      ? match.isWinner
+                                        ? 'bg-green-500/10 border border-green-500/20'
+                                        : 'bg-red-500/10 border border-red-500/20'
+                                      : 'bg-gray-500/10 border border-gray-500/20'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      match.status === 'completed'
+                                        ? match.isWinner ? 'bg-green-500/30 text-green-300' : 'bg-red-500/30 text-red-300'
+                                        : 'bg-gray-500/30 text-gray-300'
+                                    }`}>
+                                      {match.status === 'completed' ? (match.isWinner ? 'V' : 'D') : match.status.charAt(0).toUpperCase()}
+                                    </span>
+                                    <span className="text-gray-300 truncate">
+                                      {match.playerSquad} vs {match.opponent || '?'}
+                                    </span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                      match.mode === 'cdl' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-orange-500/20 text-orange-400'
+                                    }`}>
+                                      {match.mode?.toUpperCase()}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-gray-500 text-[10px]">
+                                      {new Date(match.createdAt).toLocaleDateString('fr-FR')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteUserMatch(match._id, 'ladder')}
+                                      disabled={deletingMatchId === match._id}
+                                      className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors disabled:opacity-50"
+                                      title="Supprimer ce match"
+                                    >
+                                      {deletingMatchId === match._id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Ranked Matches */}
+                        <div>
+                          <h5 className="text-xs font-medium text-purple-400 mb-2 flex items-center gap-1">
+                            <Trophy className="w-3 h-3" />
+                            Matchs Ranked ({userMatches.ranked.length})
+                          </h5>
+                          {userMatches.ranked.length === 0 ? (
+                            <p className="text-gray-500 text-xs">Aucun match ranked</p>
+                          ) : (
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                              {userMatches.ranked.map((match) => (
+                                <div 
+                                  key={match._id}
+                                  className={`flex items-center justify-between gap-2 p-2 rounded-lg text-xs ${
+                                    match.status === 'completed'
+                                      ? match.isWinner
+                                        ? 'bg-green-500/10 border border-green-500/20'
+                                        : 'bg-red-500/10 border border-red-500/20'
+                                      : 'bg-gray-500/10 border border-gray-500/20'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      match.status === 'completed'
+                                        ? match.isWinner ? 'bg-green-500/30 text-green-300' : 'bg-red-500/30 text-red-300'
+                                        : 'bg-gray-500/30 text-gray-300'
+                                    }`}>
+                                      {match.status === 'completed' ? (match.isWinner ? 'V' : 'D') : match.status.charAt(0).toUpperCase()}
+                                    </span>
+                                    <span className="text-gray-300">
+                                      {match.teamSize}v{match.teamSize} {match.gameMode}
+                                    </span>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                                      match.mode === 'cdl' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-orange-500/20 text-orange-400'
+                                    }`}>
+                                      {match.mode?.toUpperCase()}
+                                    </span>
+                                    <span className="text-gray-500">Team {match.team}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-gray-500 text-[10px]">
+                                      {new Date(match.createdAt).toLocaleDateString('fr-FR')}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteUserMatch(match._id, 'ranked')}
+                                      disabled={deletingMatchId === match._id}
+                                      className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors disabled:opacity-50"
+                                      title="Supprimer ce match"
+                                    >
+                                      {deletingMatchId === match._id ? (
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        
+                        <p className="text-gray-500 text-[10px] mt-3 italic">
+                          ⚠️ La suppression d'un match complété rembourse automatiquement les stats des joueurs
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         );
 
