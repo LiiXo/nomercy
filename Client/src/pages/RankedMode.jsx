@@ -1103,6 +1103,27 @@ const RankedMode = () => {
                 className="h-14 sm:h-20 md:h-28 object-contain drop-shadow-2xl"
               />
             </div>
+            
+            {/* Season Badge */}
+            <div className="mb-4 sm:mb-6">
+              <div className={`inline-flex items-center gap-3 px-6 sm:px-8 py-3 sm:py-4 rounded-2xl bg-gradient-to-r ${isHardcore ? 'from-red-500/20 via-orange-500/10 to-red-500/20 border-red-500/30' : 'from-cyan-500/20 via-blue-500/10 to-cyan-500/20 border-cyan-500/30'} border backdrop-blur-xl shadow-2xl`}>
+                <div className={`relative`}>
+                  <Trophy className={`w-6 h-6 sm:w-8 sm:h-8 ${isHardcore ? 'text-orange-400' : 'text-cyan-400'}`} />
+                  <Sparkles className={`absolute -top-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 ${isHardcore ? 'text-yellow-400' : 'text-cyan-300'} animate-pulse`} />
+                </div>
+                <div className="flex flex-col items-start">
+                  <span 
+                    className={`text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r ${isHardcore ? 'from-orange-400 via-yellow-200 via-white to-red-400' : 'from-cyan-400 via-white via-cyan-200 to-blue-400'} bg-clip-text text-transparent animate-text-shimmer`}
+                  >
+                    SAISON 1
+                  </span>
+                  <span className={`text-[10px] sm:text-xs uppercase tracking-widest ${isHardcore ? 'text-orange-400/70' : 'text-cyan-400/70'} font-semibold`}>
+                    {language === 'fr' ? 'En cours' : language === 'en' ? 'In Progress' : language === 'it' ? 'In Corso' : 'Läuft'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
             <p className="text-gray-400 text-sm sm:text-lg max-w-xl mx-auto px-4">{t.subtitle}</p>
           </div>
 
