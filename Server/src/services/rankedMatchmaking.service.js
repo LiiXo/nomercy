@@ -29,8 +29,8 @@ const PLAYER_THRESHOLDS = [
 // Timer de 120 secondes (2 minutes) pour lancer le match
 const MATCHMAKING_TIMER_SECONDS = 120;
 
-// Timeout de 5 minutes (300 secondes) - joueurs retirés de la file s'ils n'ont pas trouvé de match
-const QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
+// Timeout de 15 minutes (900 secondes) - joueurs retirés de la file s'ils n'ont pas trouvé de match
+const QUEUE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
 
 // Timers actifs pour chaque file d'attente
 const queueTimers = {};
@@ -53,11 +53,11 @@ export const initMatchmaking = (socketIo) => {
     clearInterval(cleanupInterval);
   }
   cleanupInterval = setInterval(cleanupTimedOutPlayers, 30000);
-  console.log('[Ranked Matchmaking] Queue timeout cleanup started (5 min timeout, 30s interval)');
+  console.log('[Ranked Matchmaking] Queue timeout cleanup started (15 min timeout, 30s interval)');
 };
 
 /**
- * Nettoie les joueurs qui ont dépassé le timeout de 5 minutes dans la file
+ * Nettoie les joueurs qui ont dépassé le timeout de 15 minutes dans la file
  */
 const cleanupTimedOutPlayers = () => {
   const now = Date.now();
@@ -66,7 +66,7 @@ const cleanupTimedOutPlayers = () => {
     const queue = queues[key];
     const timedOutPlayers = [];
     
-    // Find players who have been in queue for more than 5 minutes
+    // Find players who have been in queue for more than 15 minutes
     for (let i = queue.length - 1; i >= 0; i--) {
       const player = queue[i];
       const timeInQueue = now - new Date(player.joinedAt).getTime();
@@ -83,7 +83,7 @@ const cleanupTimedOutPlayers = () => {
       if (io) {
         io.to(`user-${player.userId}`).emit('rankedQueueUpdate', {
           type: 'timeout',
-          message: 'Vous avez été retiré de la file d\'attente après 5 minutes sans match trouvé.',
+          message: 'Vous avez été retiré de la file d\'attente après 15 minutes sans match trouvé.',
           queueSize: 0,
           position: null
         });
@@ -633,6 +633,29 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     console.log(`[Ranked Matchmaking] Selected ${mapCount} maps for match (BO${bestOf}):`, selectedMaps);
     
+    // Sélectionner 3 maps pour le vote (différentes des maps du match si possible)
+    let mapsForVote = availableMaps
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3)
+      .map(map => ({
+        name: map.name,
+        image: map.image || null,
+        votes: 0,
+        votedBy: []
+      }));
+    
+    // Si pas de maps disponibles, créer des maps par défaut
+    if (mapsForVote.length === 0) {
+      console.log(`[Ranked Matchmaking] No maps found, using default maps`);
+      mapsForVote = [
+        { name: 'Raid', image: null, votes: 0, votedBy: [] },
+        { name: 'Standoff', image: null, votes: 0, votedBy: [] },
+        { name: 'Highrise', image: null, votes: 0, votedBy: [] }
+      ];
+    }
+    
+    console.log(`[Ranked Matchmaking] Maps for vote:`, mapsForVote.map(m => m.name));
+    
     // Créer les données des joueurs pour le match
     const matchPlayers = [
       ...team1Players.map(p => {
@@ -676,8 +699,9 @@ const createMatchFromQueue = async (gameMode, mode) => {
       team1Referent: team1ReferentId,
       team2Referent: team2ReferentId,
       hostTeam,
-      status: 'ready',
+      status: 'pending', // En attente du vote de map
       maps: selectedMaps,
+      mapVoteOptions: mapsForVote,
       matchmakingStartedAt: new Date()
     });
     
@@ -734,10 +758,14 @@ const createMatchFromQueue = async (gameMode, mode) => {
           yourTeam: player.team,
           isReferent: player.isReferent,
           isHost: player.team === hostTeam && player.isReferent,
-          players: playersForAnimation // Inclure tous les joueurs pour l'animation
+          players: playersForAnimation, // Inclure tous les joueurs pour l'animation
+          mapVoteOptions: mapsForVote.map(m => ({ name: m.name, image: m.image, votes: 0 })) // Maps pour le vote
         });
       }
     }
+    
+    // Démarrer le timer de vote de map (15 secondes)
+    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
     
     // Mettre à jour le statut de la file pour les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
@@ -1070,6 +1098,29 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       winner: null
     }));
     
+    // Sélectionner 3 maps pour le vote (test match)
+    let mapsForVoteTest = availableMaps
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3)
+      .map(map => ({
+        name: map.name,
+        image: map.image || null,
+        votes: 0,
+        votedBy: []
+      }));
+    
+    // Si pas de maps disponibles, créer des maps par défaut
+    if (mapsForVoteTest.length === 0) {
+      console.log(`[Ranked Matchmaking Test] No maps found, using default maps`);
+      mapsForVoteTest = [
+        { name: 'Raid', image: null, votes: 0, votedBy: [] },
+        { name: 'Standoff', image: null, votes: 0, votedBy: [] },
+        { name: 'Highrise', image: null, votes: 0, votedBy: [] }
+      ];
+    }
+    
+    console.log(`[Ranked Matchmaking Test] Maps for vote:`, mapsForVoteTest.map(m => m.name));
+    
     // Créer les données des joueurs pour le match
     const matchPlayers = [
       ...team1Players.map(p => ({
@@ -1107,8 +1158,9 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       team1Referent: team1ReferentId,
       team2Referent: team2ReferentId,
       hostTeam,
-      status: 'ready',
+      status: 'pending', // En attente du vote de map
       maps: selectedMaps,
+      mapVoteOptions: mapsForVoteTest,
       matchmakingStartedAt: new Date(),
       isTestMatch: true // Flag pour identifier un match de test
     });
@@ -1161,9 +1213,13 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         isReferent: true,
         isHost: true,
         isTestMatch: true,
-        players: playersForAnimation // Inclure tous les joueurs pour l'animation
+        players: playersForAnimation, // Inclure tous les joueurs pour l'animation
+        mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 })) // Maps pour le vote
       });
     }
+    
+    // Démarrer le timer de vote de map (15 secondes) pour le test match
+    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
     
     return {
       success: true,
@@ -1178,6 +1234,165 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
   }
 };
 
+// Stockage des timers de vote de map
+const mapVoteTimers = {};
+
+/**
+ * Timer pour le vote de map
+ * Animation côté client: ~12 secondes (shuffle 2s + distributing 1.5s + teams ready 1.5s + countdown 5s + transition delays)
+ * + 15 secondes de vote = 27 secondes total + 3s de marge = 30s
+ */
+const MAP_VOTE_TOTAL_TIME = 30000; // 30 secondes total (animation + vote + marge)
+
+const startMapVoteTimer = (matchId, players) => {
+  const matchIdStr = matchId.toString();
+  
+  // Annuler un timer existant si présent
+  if (mapVoteTimers[matchIdStr]) {
+    clearTimeout(mapVoteTimers[matchIdStr]);
+  }
+  
+  console.log(`[Ranked Matchmaking] Starting map vote timer for match ${matchIdStr} (${MAP_VOTE_TOTAL_TIME/1000}s)`);
+  
+  mapVoteTimers[matchIdStr] = setTimeout(async () => {
+    console.log(`[Ranked Matchmaking] Map vote timer expired for match ${matchIdStr}, finalizing...`);
+    await finalizeMapVote(matchId);
+    delete mapVoteTimers[matchIdStr];
+  }, MAP_VOTE_TOTAL_TIME);
+};
+
+/**
+ * Finalise le vote de map et sélectionne la map gagnante
+ */
+const finalizeMapVote = async (matchId) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match || match.selectedMap?.name) {
+      console.log(`[Ranked Matchmaking] Map vote already finalized or match not found: ${matchId}`);
+      return;
+    }
+    
+    // Trouver la map avec le plus de votes
+    let winningMap = match.mapVoteOptions[0]; // Par défaut, première map
+    let maxVotes = 0;
+    
+    for (const mapOption of match.mapVoteOptions) {
+      if (mapOption.votes > maxVotes) {
+        maxVotes = mapOption.votes;
+        winningMap = mapOption;
+      }
+    }
+    
+    // Si égalité ou pas de votes, choisir aléatoirement
+    const mapsWithMaxVotes = match.mapVoteOptions.filter(m => m.votes === maxVotes);
+    if (mapsWithMaxVotes.length > 1 || maxVotes === 0) {
+      const randomIndex = Math.floor(Math.random() * (mapsWithMaxVotes.length > 0 ? mapsWithMaxVotes.length : match.mapVoteOptions.length));
+      winningMap = mapsWithMaxVotes.length > 0 ? mapsWithMaxVotes[randomIndex] : match.mapVoteOptions[randomIndex];
+    }
+    
+    // Mettre à jour le match avec la map sélectionnée
+    match.selectedMap = {
+      name: winningMap.name,
+      image: winningMap.image,
+      votes: winningMap.votes
+    };
+    match.status = 'ready';
+    await match.save();
+    
+    console.log(`[Ranked Matchmaking] Map vote finalized for match ${matchId}: ${winningMap.name} (${winningMap.votes} votes)`);
+    
+    // Notifier tous les joueurs de la map sélectionnée
+    if (io) {
+      for (const player of match.players) {
+        if (player.user) {
+          io.to(`user-${player.user}`).emit('mapSelected', {
+            matchId: match._id,
+            selectedMap: {
+              name: winningMap.name,
+              image: winningMap.image,
+              votes: winningMap.votes
+            }
+          });
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error(`[Ranked Matchmaking] Error finalizing map vote for ${matchId}:`, error);
+  }
+};
+
+/**
+ * Gère un vote de map d'un joueur
+ */
+export const handleMapVote = async (userId, matchId, mapIndex) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match) {
+      return { success: false, message: 'Match non trouvé.' };
+    }
+    
+    // Vérifier que le joueur fait partie du match
+    const player = match.players.find(p => p.user?.toString() === userId.toString());
+    if (!player) {
+      return { success: false, message: 'Vous ne faites pas partie de ce match.' };
+    }
+    
+    // Vérifier que l'index de map est valide
+    if (mapIndex < 0 || mapIndex >= match.mapVoteOptions.length) {
+      return { success: false, message: 'Index de map invalide.' };
+    }
+    
+    // Vérifier si le vote est encore ouvert (pas de map sélectionnée)
+    if (match.selectedMap?.name) {
+      return { success: false, message: 'Le vote est terminé.' };
+    }
+    
+    // Vérifier si le joueur a déjà voté
+    const hasVoted = match.mapVoteOptions.some(m => m.votedBy.includes(userId));
+    if (hasVoted) {
+      // Retirer le vote précédent
+      for (const mapOption of match.mapVoteOptions) {
+        const voteIndex = mapOption.votedBy.indexOf(userId);
+        if (voteIndex !== -1) {
+          mapOption.votedBy.splice(voteIndex, 1);
+          mapOption.votes = Math.max(0, mapOption.votes - 1);
+          break;
+        }
+      }
+    }
+    
+    // Ajouter le vote
+    match.mapVoteOptions[mapIndex].votedBy.push(userId);
+    match.mapVoteOptions[mapIndex].votes += 1;
+    await match.save();
+    
+    console.log(`[Ranked Matchmaking] Player ${userId} voted for map ${match.mapVoteOptions[mapIndex].name} in match ${matchId}`);
+    
+    // Notifier tous les joueurs de la mise à jour des votes
+    if (io) {
+      for (const p of match.players) {
+        if (p.user) {
+          io.to(`user-${p.user}`).emit('mapVoteUpdate', {
+            matchId: match._id,
+            mapVoteOptions: match.mapVoteOptions.map(m => ({
+              name: m.name,
+              image: m.image,
+              votes: m.votes
+            }))
+          });
+        }
+      }
+    }
+    
+    return { success: true, message: 'Vote enregistré.' };
+    
+  } catch (error) {
+    console.error('[Ranked Matchmaking] Error handling map vote:', error);
+    return { success: false, message: 'Erreur lors du vote.' };
+  }
+};
+
 export default {
   initMatchmaking,
   joinQueue,
@@ -1187,6 +1402,7 @@ export default {
   forceCreateMatch,
   addFakePlayers,
   removeFakePlayers,
-  startStaffTestMatch
+  startStaffTestMatch,
+  handleMapVote
 };
 

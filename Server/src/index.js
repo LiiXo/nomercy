@@ -44,7 +44,7 @@ const startServer = async () => {
   const { scheduleMonthlyLadderReset } = await import('./services/monthlyReset.service.js');
   
   // Import ranked matchmaking service
-  const { initMatchmaking } = await import('./services/rankedMatchmaking.service.js');
+  const { initMatchmaking, handleMapVote } = await import('./services/rankedMatchmaking.service.js');
   
   // Import GGSecure monitoring service
   const { initGGSecureMonitoring, startGGSecureMonitoring } = await import('./services/ggsecureMonitoring.service.js');
@@ -198,6 +198,16 @@ const startServer = async () => {
 
     socket.on('leaveRankedMatch', (matchId) => {
       socket.leave(`ranked-match-${matchId}`);
+    });
+
+    // Map vote for ranked matches
+    socket.on('mapVote', async ({ matchId, mapIndex }) => {
+      if (socket.userId && matchId !== undefined && mapIndex !== undefined) {
+        const result = await handleMapVote(socket.userId, matchId, mapIndex);
+        if (!result.success) {
+          socket.emit('mapVoteError', { message: result.message });
+        }
+      }
     });
 
     // Ladder match rooms

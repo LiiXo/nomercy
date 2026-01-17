@@ -775,7 +775,7 @@ const PlayerProfile = () => {
               </div>
             ) : matchHistory.length > 0 ? (
               <>
-                <div className="space-y-3">
+                <div className="space-y-3 overflow-y-auto max-h-[50vh] sm:max-h-none">
                   {getPaginatedLadderMatches().map((match) => {
                     // Get playerSquadId handling both string IDs and populated objects
                     const playerSquadId = match.playerSquad?._id || match.playerSquad;
@@ -849,13 +849,13 @@ const PlayerProfile = () => {
                           
                           {/* Bottom row: Date + Button */}
                           <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
-                            {/* Date */}
+                            {/* Date + Heure */}
                             <div className="flex items-center gap-1.5 text-gray-500 text-xs sm:text-sm">
                               <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               <span>
                                 {new Date(match.createdAt).toLocaleDateString(
                                   language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                                  { day: 'numeric', month: 'short' }
+                                  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
                                 )}
                               </span>
                             </div>
@@ -940,7 +940,7 @@ const PlayerProfile = () => {
               </div>
             ) : rankedMatchHistory.length > 0 ? (
               <>
-                <div className="space-y-3">
+                <div className="space-y-3 overflow-y-auto max-h-[50vh] sm:max-h-none">
                   {getPaginatedRankedMatches().map((match) => (
                     <div 
                       key={match._id}
@@ -978,13 +978,13 @@ const PlayerProfile = () => {
                         
                         {/* Right: Date + View Details */}
                         <div className="flex items-center gap-3">
-                          {/* Date */}
+                          {/* Date + Heure */}
                           <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
                             <Clock className="w-3.5 h-3.5" />
                             <span>
                               {new Date(match.completedAt || match.createdAt).toLocaleDateString(
                                 language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                                { day: 'numeric', month: 'short', year: 'numeric' }
+                                { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
                               )}
                             </span>
                           </div>
@@ -1003,13 +1003,13 @@ const PlayerProfile = () => {
                         </div>
                       </div>
                       
-                      {/* Mobile: Date on second row */}
+                      {/* Mobile: Date + Heure on second row */}
                       <div className="sm:hidden flex items-center gap-1.5 text-gray-500 text-xs mt-2">
                         <Clock className="w-3 h-3" />
                         <span>
                           {new Date(match.completedAt || match.createdAt).toLocaleDateString(
                             language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                            { day: 'numeric', month: 'short', year: 'numeric' }
+                            { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
                           )}
                         </span>
                       </div>

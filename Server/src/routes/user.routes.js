@@ -991,7 +991,7 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
 router.post('/reset-my-stats', verifyToken, async (req, res) => {
   try {
     const userId = req.user._id;
-    const RESET_COST = 2000;
+    const RESET_COST = 5000;
     const resetCount = req.user.statsResetCount || 0;
     const isFirstReset = resetCount === 0;
     const actualCost = isFirstReset ? 0 : RESET_COST;

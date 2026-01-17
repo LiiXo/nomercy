@@ -494,7 +494,8 @@ router.get('/:matchId', verifyToken, async (req, res) => {
       .populate('chat.user', 'username roles')
       .populate('dispute.reportedBy', 'username')
       .populate('dispute.resolvedBy', 'username')
-      .populate('dispute.evidence.uploadedBy', 'username');
+      .populate('dispute.evidence.uploadedBy', 'username')
+      .populate('result.playerVotes.user', 'username');
 
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
@@ -622,7 +623,8 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
   }
 });
 
-// Signaler le résultat d'un match classé (référent uniquement)
+// Signaler le résultat d'un match classé (tous les joueurs peuvent voter)
+// Requiert 60% des joueurs pour valider le même gagnant
 router.post('/:matchId/result', verifyToken, async (req, res) => {
   try {
     const { matchId } = req.params;
@@ -636,6 +638,10 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     }
 
     const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+    
     const match = await RankedMatch.findById(matchId);
 
     if (!match) {
@@ -646,36 +652,59 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Ce match ne peut plus être modifié' });
     }
 
-    // Vérifier si l'utilisateur est un référent
-    const isTeam1Referent = match.team1Referent?.toString() === user._id.toString();
-    const isTeam2Referent = match.team2Referent?.toString() === user._id.toString();
-
-    if (!isTeam1Referent && !isTeam2Referent) {
-      return res.status(403).json({ success: false, message: 'Seul un référent peut signaler le résultat' });
+    // Vérifier si l'utilisateur fait partie du match ou est staff (pour les matchs de test)
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const playerInMatch = match.players.find(p => p.user && p.user.toString() === user._id.toString());
+    
+    if (!playerInMatch && !isStaff) {
+      return res.status(403).json({ success: false, message: 'Vous ne faites pas partie de ce match' });
     }
 
-    // Enregistrer le rapport de cette équipe
-    const myTeam = isTeam1Referent ? 1 : 2;
-    if (isTeam1Referent) {
-      match.result.team1Report = { winner, reportedAt: new Date() };
+    // Pour les matchs de test ou si staff, permettre le vote même si pas directement dans le match
+    const isTestMatch = match.isTestMatch === true;
+
+    // Initialiser playerVotes si non existant
+    if (!match.result.playerVotes) {
+      match.result.playerVotes = [];
+    }
+
+    // Vérifier si le joueur a déjà voté
+    const existingVoteIndex = match.result.playerVotes.findIndex(
+      v => v.user && v.user.toString() === user._id.toString()
+    );
+
+    if (existingVoteIndex !== -1) {
+      // Mettre à jour le vote existant
+      match.result.playerVotes[existingVoteIndex].winner = winner;
+      match.result.playerVotes[existingVoteIndex].votedAt = new Date();
+      console.log(`[RANKED] Player ${user.username} changed vote to Team ${winner}`);
     } else {
-      match.result.team2Report = { winner, reportedAt: new Date() };
+      // Ajouter un nouveau vote
+      match.result.playerVotes.push({
+        user: user._id,
+        winner,
+        votedAt: new Date()
+      });
+      console.log(`[RANKED] Player ${user.username} voted for Team ${winner}`);
     }
 
-    // En mode classé, un seul référent peut valider le gagnant (pas besoin de confirmation)
-    const team1Report = match.result.team1Report;
-    const team2Report = match.result.team2Report;
+    // Calculer les votes
+    const totalPlayers = match.players.length;
+    const votesForTeam1 = match.result.playerVotes.filter(v => v.winner === 1).length;
+    const votesForTeam2 = match.result.playerVotes.filter(v => v.winner === 2).length;
+    const totalVotes = match.result.playerVotes.length;
+    
+    // Seuil de 60%
+    const threshold = Math.ceil(totalPlayers * 0.6);
+    
+    console.log(`[RANKED] Votes: Team1=${votesForTeam1}, Team2=${votesForTeam2}, Total=${totalVotes}/${totalPlayers}, Threshold=${threshold}`);
 
     let resultMessage = '';
-    let waitingForOther = false;
+    let matchCompleted = false;
 
-    // Un seul référent suffit pour valider le résultat
-    if (team1Report?.winner || team2Report?.winner) {
-      // Prendre le premier rapport disponible comme résultat final
-      // S'assurer que c'est un Number pour les comparaisons cohérentes
-      const reportedWinner = Number(team1Report?.winner || team2Report?.winner);
-      
-      match.result.winner = reportedWinner;
+    // Vérifier si 60% des joueurs ont voté pour le même gagnant
+    if (votesForTeam1 >= threshold) {
+      match.result.winner = 1;
       match.result.confirmed = true;
       match.result.confirmedAt = new Date();
       match.status = 'completed';
@@ -684,10 +713,28 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       // Attribuer les récompenses aux joueurs
       await distributeRankedRewards(match);
       
-      console.log('[RANKED] ✅ Match completed by single referent validation');
-      console.log('[RANKED] Winner: Team', match.result.winner);
-      console.log('[RANKED] Validated by: Team', myTeam);
-      resultMessage = 'Match validé ! Résultat enregistré.';
+      console.log('[RANKED] ✅ Match completed with 60%+ consensus for Team 1');
+      console.log(`[RANKED] Votes for Team 1: ${votesForTeam1}/${totalPlayers} (${Math.round(votesForTeam1/totalPlayers*100)}%)`);
+      resultMessage = `Match validé ! L'équipe 1 gagne avec ${votesForTeam1}/${totalPlayers} votes (${Math.round(votesForTeam1/totalPlayers*100)}%)`;
+      matchCompleted = true;
+    } else if (votesForTeam2 >= threshold) {
+      match.result.winner = 2;
+      match.result.confirmed = true;
+      match.result.confirmedAt = new Date();
+      match.status = 'completed';
+      match.completedAt = new Date();
+
+      // Attribuer les récompenses aux joueurs
+      await distributeRankedRewards(match);
+      
+      console.log('[RANKED] ✅ Match completed with 60%+ consensus for Team 2');
+      console.log(`[RANKED] Votes for Team 2: ${votesForTeam2}/${totalPlayers} (${Math.round(votesForTeam2/totalPlayers*100)}%)`);
+      resultMessage = `Match validé ! L'équipe 2 gagne avec ${votesForTeam2}/${totalPlayers} votes (${Math.round(votesForTeam2/totalPlayers*100)}%)`;
+      matchCompleted = true;
+    } else {
+      // Pas encore de consensus
+      resultMessage = `Vote enregistré. Équipe 1: ${votesForTeam1} votes, Équipe 2: ${votesForTeam2} votes. Il faut ${threshold} votes (60%) pour valider.`;
+      console.log(`[RANKED] No consensus yet. Need ${threshold} votes for 60%`);
     }
 
     await match.save();
@@ -697,13 +744,14 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
       { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
       { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'chat.user', select: 'username roles' }
+      { path: 'chat.user', select: 'username roles' },
+      { path: 'result.playerVotes.user', select: 'username' }
     ]);
 
     console.log('[RANKED] 🚀 Emitting rankedMatchUpdate...');
     console.log('[RANKED] Match status:', match.status);
-    console.log('[RANKED] Result winner:', match.result?.winner, '(type:', typeof match.result?.winner, ')');
-    if (match.status === 'completed') {
+    if (matchCompleted) {
+      console.log('[RANKED] Result winner:', match.result?.winner);
       console.log('[RANKED] All players rewards:');
       match.players.forEach((p, i) => {
         console.log(`[RANKED]   Player ${i}: team=${p.team}, rewards=`, p.rewards);
@@ -721,12 +769,19 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       success: true, 
       match, 
       message: resultMessage,
-      waitingForOther,
-      myReport: { team: myTeam, winner }
+      voteStats: {
+        votesForTeam1,
+        votesForTeam2,
+        totalVotes,
+        totalPlayers,
+        threshold,
+        yourVote: winner
+      }
     });
   } catch (error) {
     console.error('Report ranked match result error:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ success: false, message: 'Erreur serveur', error: error.message });
   }
 });
 

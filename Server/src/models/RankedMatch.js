@@ -98,6 +98,19 @@ const rankedMatchSchema = new mongoose.Schema({
     order: Number, // 1, 2, 3
     winner: { type: Number, enum: [1, 2], default: null } // Équipe gagnante de cette map
   }],
+  // Map sélectionnée par vote des joueurs
+  selectedMap: {
+    name: String,
+    image: String,
+    votes: { type: Number, default: 0 }
+  },
+  // Maps proposées pour le vote (3 maps)
+  mapVoteOptions: [{
+    name: String,
+    image: String,
+    votes: { type: Number, default: 0 },
+    votedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  }],
   // Bracket de rang pour le matchmaking (optionnel, peut être mixte)
   rankBracket: {
     type: String,
@@ -114,7 +127,13 @@ const rankedMatchSchema = new mongoose.Schema({
     isForfeit: { type: Boolean, default: false },
     forfeitReason: String,
     forfeitTeam: { type: Number, enum: [1, 2], default: null },
-    // Déclaration du résultat par les référents
+    // Votes des joueurs pour le gagnant (nouveau système)
+    playerVotes: [{
+      user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      winner: { type: Number, enum: [1, 2] },
+      votedAt: { type: Date, default: Date.now }
+    }],
+    // Déclaration du résultat par les référents (ancien système - gardé pour compatibilité)
     team1Report: {
       winner: { type: Number, enum: [1, 2], default: null },
       reportedAt: Date
@@ -123,7 +142,7 @@ const rankedMatchSchema = new mongoose.Schema({
       winner: { type: Number, enum: [1, 2], default: null },
       reportedAt: Date
     },
-    // Résultat confirmé (quand les 2 référents sont d'accord)
+    // Résultat confirmé (quand 60% des joueurs sont d'accord)
     confirmed: { type: Boolean, default: false },
     confirmedAt: Date
   },

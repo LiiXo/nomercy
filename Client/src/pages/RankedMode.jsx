@@ -8,7 +8,7 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -269,9 +269,16 @@ const RankedMode = () => {
   // Shuffle animation state
   const [showShuffleAnimation, setShowShuffleAnimation] = useState(false);
   const [shuffleMatchData, setShuffleMatchData] = useState(null);
-  const [shufflePhase, setShufflePhase] = useState(0); // 0: mixing, 1: distributing, 2: complete, 3: countdown
+  const [shufflePhase, setShufflePhase] = useState(0); // 0: mixing, 1: distributing, 2: complete, 3: countdown, 4: map vote
   const [shuffledPlayers, setShuffledPlayers] = useState([]);
   const [shuffleCountdown, setShuffleCountdown] = useState(10);
+  
+  // Map vote state
+  const [mapVoteOptions, setMapVoteOptions] = useState([]);
+  const [mapVoteCountdown, setMapVoteCountdown] = useState(15);
+  const [selectedMapIndex, setSelectedMapIndex] = useState(null);
+  const [selectedMap, setSelectedMap] = useState(null);
+  const mapVoteOptionsRef = useRef([]);
   
   // Rewards from config
   
@@ -699,8 +706,8 @@ const RankedMode = () => {
         setTimerEndTime(null);
         setCurrentFormat(null);
         setMatchmakingError(language === 'fr'
-          ? 'Vous avez été retiré de la file d\'attente après 5 minutes sans match trouvé.'
-          : 'You have been removed from the queue after 5 minutes without finding a match.');
+          ? 'Vous avez été retiré de la file d\'attente après 15 minutes sans match trouvé.'
+          : 'You have been removed from the queue after 15 minutes without finding a match.');
         setTimeout(() => setMatchmakingError(null), 5000);
       }
     });
@@ -710,6 +717,16 @@ const RankedMode = () => {
       
       // Jouer le son quand le match est trouvé
       playMatchFoundSound();
+      
+      // Store map vote options
+      if (data.mapVoteOptions) {
+        setMapVoteOptions(data.mapVoteOptions);
+        mapVoteOptionsRef.current = data.mapVoteOptions;
+        setMapVoteCountdown(15);
+        setSelectedMapIndex(null);
+        setSelectedMap(null);
+        console.log('[RankedMode] Map vote options stored:', data.mapVoteOptions);
+      }
       
       // Show shuffle animation before navigating
       if (data.players && data.players.length > 0) {
@@ -723,7 +740,30 @@ const RankedMode = () => {
         navigate(`/ranked/match/${data.matchId}`);
       }
     });
-    return () => { unsubQueue(); unsubMatch(); };
+    
+    // Listen for map vote updates
+    const unsubMapVote = on('mapVoteUpdate', (data) => {
+      console.log('[RankedMode] Map vote update:', data);
+      if (data.mapVoteOptions) {
+        setMapVoteOptions(data.mapVoteOptions);
+      }
+    });
+    
+    // Listen for final map selection
+    const unsubMapSelected = on('mapSelected', (data) => {
+      console.log('[RankedMode] Map selected:', data);
+      if (data.selectedMap) {
+        setSelectedMap(data.selectedMap);
+        // Navigate to match sheet after a short delay
+        setTimeout(() => {
+          stopMatchFoundSound();
+          setShowShuffleAnimation(false);
+          navigate(`/ranked/match/${data.matchId}`);
+        }, 2000);
+      }
+    });
+    
+    return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); };
   }, [isAuthenticated, isConnected, on, navigate]);
 
   // Timer countdown
@@ -782,18 +822,28 @@ const RankedMode = () => {
     // Phase 2: Show final teams, then start countdown
     if (shufflePhase === 2) {
       const timer = setTimeout(() => {
-        setShuffleCountdown(10);
+        setShuffleCountdown(5);
         setShufflePhase(3);
       }, 1500);
       return () => clearTimeout(timer);
     }
 
-    // Phase 3: Countdown 10 seconds then navigate
+    // Phase 3: Countdown 5 seconds then go to map vote
     if (shufflePhase === 3) {
       if (shuffleCountdown <= 0) {
-        stopMatchFoundSound(); // Arrêter le son avant la navigation
-        setShowShuffleAnimation(false);
-        navigate(`/ranked/match/${shuffleMatchData.matchId}`);
+        // Transition to map vote phase if maps available (use ref for latest value)
+        console.log('[RankedMode] Phase 3 complete, checking maps:', mapVoteOptionsRef.current);
+        if (mapVoteOptionsRef.current.length > 0) {
+          setMapVoteCountdown(15);
+          setShufflePhase(4);
+          console.log('[RankedMode] Transitioning to phase 4 (map vote)');
+        } else {
+          // No maps, navigate directly
+          console.log('[RankedMode] No maps available, navigating to match sheet');
+          stopMatchFoundSound();
+          setShowShuffleAnimation(false);
+          navigate(`/ranked/match/${shuffleMatchData.matchId}`);
+        }
         return;
       }
       const timer = setTimeout(() => {
@@ -801,7 +851,33 @@ const RankedMode = () => {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [showShuffleAnimation, shuffleMatchData, shufflePhase, shuffleCountdown, navigate]);
+    
+    // Phase 4: Map vote (15 seconds)
+    if (shufflePhase === 4) {
+      // If map is already selected (from server), wait for navigation via mapSelected event
+      if (selectedMap) {
+        return;
+      }
+      
+      if (mapVoteCountdown <= 0) {
+        // Time's up - server will handle final selection
+        return;
+      }
+      const timer = setTimeout(() => {
+        setMapVoteCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showShuffleAnimation, shuffleMatchData, shufflePhase, shuffleCountdown, mapVoteOptions, mapVoteCountdown, selectedMap, navigate]);
+
+  // Handle map vote
+  const handleMapVote = (mapIndex) => {
+    if (shuffleMatchData?.matchId && mapIndex !== selectedMapIndex) {
+      setSelectedMapIndex(mapIndex);
+      emit('mapVote', { matchId: shuffleMatchData.matchId, mapIndex });
+      console.log('[RankedMode] Voted for map:', mapVoteOptions[mapIndex]?.name);
+    }
+  };
 
   // Fetch leaderboard when page changes
   useEffect(() => {
@@ -2240,22 +2316,24 @@ const RankedMode = () => {
 
       {/* Shuffle Animation Modal */}
       {showShuffleAnimation && shuffleMatchData && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60]">
-          <div className="w-full max-w-4xl mx-4">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60] p-2 sm:p-4 overflow-y-auto">
+          <div className="w-full max-w-4xl mx-2 sm:mx-4 my-auto">
             {/* Title */}
-            <div className="text-center mb-8">
-              <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r ${isHardcore ? 'from-red-500/20 to-orange-500/20 border-red-500/50' : 'from-cyan-500/20 to-blue-500/20 border-cyan-500/50'} border mb-4`}>
-                <Swords className={`w-6 h-6 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${shufflePhase === 0 ? 'animate-pulse' : ''}`} />
-                <span className="text-2xl font-bold text-white">
+            <div className="text-center mb-4 sm:mb-8">
+              <div className={`inline-flex items-center gap-2 sm:gap-3 px-3 sm:px-6 py-2 sm:py-3 rounded-full bg-gradient-to-r ${isHardcore ? 'from-red-500/20 to-orange-500/20 border-red-500/50' : 'from-cyan-500/20 to-blue-500/20 border-cyan-500/50'} border mb-2 sm:mb-4`}>
+                <Swords className={`w-4 sm:w-6 h-4 sm:h-6 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${shufflePhase === 0 ? 'animate-pulse' : ''}`} />
+                <span className="text-lg sm:text-2xl font-bold text-white">
                   {t.matchFound || 'Match trouvé !'}
                 </span>
-                <Swords className={`w-6 h-6 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${shufflePhase === 0 ? 'animate-pulse' : ''}`} />
+                <Swords className={`w-4 sm:w-6 h-4 sm:h-6 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${shufflePhase === 0 ? 'animate-pulse' : ''}`} />
               </div>
-              <p className={`text-lg ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
+              <p className={`text-sm sm:text-lg ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
                 {shufflePhase === 0 && (t.shufflingPlayers || 'Mélange des joueurs...')}
                 {shufflePhase === 1 && (t.distributingTeams || 'Répartition dans les équipes...')}
                 {shufflePhase === 2 && (t.teamsReady || 'Équipes prêtes !')}
                 {shufflePhase === 3 && (t.getReady || 'Préparez-vous !')}
+                {shufflePhase === 4 && !selectedMap && (language === 'fr' ? 'Votez pour la map !' : 'Vote for the map!')}
+                {shufflePhase === 4 && selectedMap && (language === 'fr' ? `Map sélectionnée: ${selectedMap.name}` : `Selected map: ${selectedMap.name}`)}
               </p>
             </div>
 
@@ -2263,16 +2341,16 @@ const RankedMode = () => {
             <div className="relative">
               {/* Phase 0: Shuffling - All players in center */}
               {shufflePhase === 0 && (
-                <div className="flex flex-wrap justify-center gap-4 animate-pulse">
+                <div className="flex flex-wrap justify-center gap-2 sm:gap-4 animate-pulse">
                   {shuffledPlayers.map((player, index) => (
                     <div
                       key={player.id || index}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-800/80 border border-gray-600/50 transform transition-all duration-300`}
+                      className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl bg-gray-800/80 border border-gray-600/50 transform transition-all duration-300`}
                       style={{
-                        transform: `translateX(${Math.sin(index * 0.8) * 20}px) translateY(${Math.cos(index * 0.8) * 10}px)`,
+                        transform: `translateX(${Math.sin(index * 0.8) * 10}px) translateY(${Math.cos(index * 0.8) * 5}px)`,
                       }}
                     >
-                      <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-700">
+                      <div className="w-6 sm:w-8 h-6 sm:h-8 rounded-full overflow-hidden bg-gray-700">
                         <img
                           src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
                           alt=""
@@ -2280,7 +2358,7 @@ const RankedMode = () => {
                           onError={(e) => { e.target.src = `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`; }}
                         />
                       </div>
-                      <span className="text-white font-medium">{player.username || `Joueur ${index + 1}`}</span>
+                      <span className="text-white font-medium text-xs sm:text-base truncate max-w-[80px] sm:max-w-none">{player.username || `Joueur ${index + 1}`}</span>
                     </div>
                   ))}
                 </div>
@@ -2288,29 +2366,29 @@ const RankedMode = () => {
 
               {/* Phase 1, 2 & 3: Teams Split */}
               {(shufflePhase === 1 || shufflePhase === 2 || shufflePhase === 3) && (
-                <div className="grid grid-cols-2 gap-8">
+                <div className="grid grid-cols-2 gap-2 sm:gap-8">
                   {/* Team A */}
-                  <div className={`p-6 rounded-2xl border-2 transition-all duration-500 ${
+                  <div className={`p-2 sm:p-6 rounded-xl sm:rounded-2xl border-2 transition-all duration-500 ${
                     (shufflePhase === 2 || shufflePhase === 3)
                       ? 'bg-cyan-500/10 border-cyan-500/50'
                       : 'bg-gray-800/50 border-gray-600/30'
                   }`}>
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className="w-3 h-3 rounded-full bg-cyan-400"></div>
-                      <h3 className="text-xl font-bold text-cyan-400">{language === 'fr' ? 'Équipe 1' : 'Team 1'}</h3>
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4">
+                      <div className="w-2 sm:w-3 h-2 sm:h-3 rounded-full bg-cyan-400"></div>
+                      <h3 className="text-sm sm:text-xl font-bold text-cyan-400">{language === 'fr' ? 'Équipe 1' : 'Team 1'}</h3>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-1.5 sm:space-y-3">
                       {shuffleMatchData.players
                         ?.filter(p => p.team === 1 || p.team === 'A')
                         .map((player, index) => (
                           <div
                             key={player.id || index}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/50 border border-cyan-500/20 transform transition-all duration-500 ${
+                            className={`flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-1.5 sm:py-3 rounded-lg sm:rounded-xl bg-gray-900/50 border border-cyan-500/20 transform transition-all duration-500 ${
                               (shufflePhase === 2 || shufflePhase === 3) ? 'translate-x-0 opacity-100' : '-translate-x-8 opacity-0'
                             }`}
                             style={{ transitionDelay: `${index * 100}ms` }}
                           >
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-cyan-500/50">
+                            <div className="w-7 sm:w-10 h-7 sm:h-10 rounded-full overflow-hidden bg-gray-700 border sm:border-2 border-cyan-500/50 flex-shrink-0">
                               <img
                                 src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
                                 alt=""
@@ -2318,10 +2396,12 @@ const RankedMode = () => {
                                 onError={(e) => { e.target.src = `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`; }}
                               />
                             </div>
-                            <div>
-                              <span className="text-white font-semibold">{player.username || `Joueur ${index + 1}`}</span>
-                              {player.isHost && <span className="ml-2 text-yellow-400 text-xs">(Host)</span>}
-                              {player.isReferent && <span className="ml-2 text-purple-400 text-xs">(Réf.)</span>}
+                            <div className="min-w-0 flex-1">
+                              <span className="text-white font-semibold text-xs sm:text-base truncate block">{player.username || `Joueur ${index + 1}`}</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {player.isHost && <span className="text-yellow-400 text-[10px] sm:text-xs">(Host)</span>}
+                                {player.isReferent && <span className="text-purple-400 text-[10px] sm:text-xs">(Réf.)</span>}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -2330,7 +2410,7 @@ const RankedMode = () => {
 
                   {/* VS Divider */}
                   <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center font-bold text-xl ${
+                    <div className={`w-10 sm:w-16 h-10 sm:h-16 rounded-full flex items-center justify-center font-bold text-sm sm:text-xl ${
                       isHardcore 
                         ? 'bg-gradient-to-br from-red-500 to-orange-600' 
                         : 'bg-gradient-to-br from-cyan-400 to-blue-600'
@@ -2340,27 +2420,27 @@ const RankedMode = () => {
                   </div>
 
                   {/* Team B */}
-                  <div className={`p-6 rounded-2xl border-2 transition-all duration-500 ${
+                  <div className={`p-2 sm:p-6 rounded-xl sm:rounded-2xl border-2 transition-all duration-500 ${
                     (shufflePhase === 2 || shufflePhase === 3)
                       ? 'bg-orange-500/10 border-orange-500/50'
                       : 'bg-gray-800/50 border-gray-600/30'
                   }`}>
-                    <div className="flex items-center gap-2 mb-4 justify-end">
-                      <h3 className="text-xl font-bold text-orange-400">{language === 'fr' ? 'Équipe 2' : 'Team 2'}</h3>
-                      <div className="w-3 h-3 rounded-full bg-orange-400"></div>
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-4 justify-end">
+                      <h3 className="text-sm sm:text-xl font-bold text-orange-400">{language === 'fr' ? 'Équipe 2' : 'Team 2'}</h3>
+                      <div className="w-2 sm:w-3 h-2 sm:h-3 rounded-full bg-orange-400"></div>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-1.5 sm:space-y-3">
                       {shuffleMatchData.players
                         ?.filter(p => p.team === 2 || p.team === 'B')
                         .map((player, index) => (
                           <div
                             key={player.id || index}
-                            className={`flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-900/50 border border-orange-500/20 transform transition-all duration-500 ${
+                            className={`flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-1.5 sm:py-3 rounded-lg sm:rounded-xl bg-gray-900/50 border border-orange-500/20 transform transition-all duration-500 ${
                               (shufflePhase === 2 || shufflePhase === 3) ? 'translate-x-0 opacity-100' : 'translate-x-8 opacity-0'
                             }`}
                             style={{ transitionDelay: `${index * 100}ms` }}
                           >
-                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-orange-500/50">
+                            <div className="w-7 sm:w-10 h-7 sm:h-10 rounded-full overflow-hidden bg-gray-700 border sm:border-2 border-orange-500/50 flex-shrink-0">
                               <img
                                 src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
                                 alt=""
@@ -2368,10 +2448,12 @@ const RankedMode = () => {
                                 onError={(e) => { e.target.src = `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`; }}
                               />
                             </div>
-                            <div>
-                              <span className="text-white font-semibold">{player.username || `Joueur ${index + 1}`}</span>
-                              {player.isHost && <span className="ml-2 text-yellow-400 text-xs">(Host)</span>}
-                              {player.isReferent && <span className="ml-2 text-purple-400 text-xs">(Réf.)</span>}
+                            <div className="min-w-0 flex-1">
+                              <span className="text-white font-semibold text-xs sm:text-base truncate block">{player.username || `Joueur ${index + 1}`}</span>
+                              <div className="flex gap-1 flex-wrap">
+                                {player.isHost && <span className="text-yellow-400 text-[10px] sm:text-xs">(Host)</span>}
+                                {player.isReferent && <span className="text-purple-400 text-[10px] sm:text-xs">(Réf.)</span>}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -2383,22 +2465,113 @@ const RankedMode = () => {
 
             {/* Redirect indicator / Countdown */}
             {(shufflePhase === 2 || shufflePhase === 3) && (
-              <div className="text-center mt-8">
+              <div className="text-center mt-4 sm:mt-8">
                 {shufflePhase === 3 ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className={`w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold border-4 ${
+                  <div className="flex flex-col items-center gap-2 sm:gap-4">
+                    <div className={`w-16 sm:w-24 h-16 sm:h-24 rounded-full flex items-center justify-center text-2xl sm:text-4xl font-bold border-4 ${
                       isHardcore 
                         ? 'bg-red-500/20 border-red-500 text-red-400' 
                         : 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
                     } animate-pulse`}>
                       {shuffleCountdown}
                     </div>
-                    <span className="text-gray-400">{t.redirectingIn || 'Redirection dans...'}</span>
+                    <span className="text-gray-400 text-sm sm:text-base">{language === 'fr' ? 'Choix des maps dans...' : 'Map selection in...'}</span>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center gap-2 text-gray-400">
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                  <div className="flex items-center justify-center gap-2 text-gray-400 text-sm sm:text-base">
+                    <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
                     <span>{t.teamsReady || 'Équipes prêtes !'}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* Phase 4: Map Vote */}
+            {shufflePhase === 4 && (
+              <div className="mt-4 sm:mt-8">
+                {/* Timer */}
+                <div className="flex justify-center mb-4 sm:mb-6">
+                  <div className={`w-14 sm:w-20 h-14 sm:h-20 rounded-full flex items-center justify-center text-2xl sm:text-3xl font-bold border-4 ${
+                    isHardcore 
+                      ? 'bg-red-500/20 border-red-500 text-red-400' 
+                      : 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                  } ${mapVoteCountdown <= 5 ? 'animate-pulse' : ''}`}>
+                    {mapVoteCountdown}
+                  </div>
+                </div>
+                
+                {/* Selected Map Result */}
+                {selectedMap ? (
+                  <div className="text-center">
+                    <div className={`inline-block p-4 sm:p-6 rounded-xl sm:rounded-2xl border-2 ${
+                      isHardcore ? 'border-red-500 bg-red-500/10' : 'border-cyan-500 bg-cyan-500/10'
+                    }`}>
+                      {selectedMap.image && (
+                        <img 
+                          src={selectedMap.image} 
+                          alt={selectedMap.name}
+                          className="w-32 sm:w-48 h-20 sm:h-32 object-cover rounded-lg mx-auto mb-2 sm:mb-4"
+                        />
+                      )}
+                      <p className="text-xl sm:text-2xl font-bold text-white">{selectedMap.name}</p>
+                      <p className="text-gray-400 mt-1 sm:mt-2 text-sm sm:text-base">
+                        {selectedMap.votes} {language === 'fr' ? 'vote(s)' : 'vote(s)'}
+                      </p>
+                    </div>
+                    <p className={`mt-3 sm:mt-4 text-sm sm:text-base ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
+                      {language === 'fr' ? 'Redirection vers la feuille de match...' : 'Redirecting to match sheet...'}
+                    </p>
+                  </div>
+                ) : (
+                  /* Map Vote Options */
+                  <div className="grid grid-cols-3 gap-2 sm:gap-4 max-w-3xl mx-auto px-1">
+                    {mapVoteOptions.map((map, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleMapVote(index)}
+                        className={`relative p-2 sm:p-4 rounded-lg sm:rounded-xl border-2 transition-all duration-300 hover:scale-105 ${
+                          selectedMapIndex === index
+                            ? isHardcore 
+                              ? 'border-red-500 bg-red-500/20 ring-2 ring-red-500/50' 
+                              : 'border-cyan-500 bg-cyan-500/20 ring-2 ring-cyan-500/50'
+                            : 'border-gray-600 bg-gray-800/50 hover:border-gray-500'
+                        }`}
+                      >
+                        {/* Map Image */}
+                        {map.image ? (
+                          <img 
+                            src={map.image} 
+                            alt={map.name}
+                            className="w-full h-16 sm:h-24 object-cover rounded-md sm:rounded-lg mb-2 sm:mb-3"
+                          />
+                        ) : (
+                          <div className="w-full h-16 sm:h-24 bg-gray-700 rounded-md sm:rounded-lg mb-2 sm:mb-3 flex items-center justify-center">
+                            <Map className="w-5 sm:w-8 h-5 sm:h-8 text-gray-500" />
+                          </div>
+                        )}
+                        
+                        {/* Map Name */}
+                        <p className="text-white font-semibold text-center text-xs sm:text-base truncate">{map.name}</p>
+                        
+                        {/* Vote Count */}
+                        <div className={`mt-1 sm:mt-2 text-center text-xs sm:text-sm ${
+                          map.votes > 0 
+                            ? isHardcore ? 'text-red-400' : 'text-cyan-400'
+                            : 'text-gray-500'
+                        }`}>
+                          {map.votes} {language === 'fr' ? 'vote(s)' : 'vote(s)'}
+                        </div>
+                        
+                        {/* Selected indicator */}
+                        {selectedMapIndex === index && (
+                          <div className={`absolute top-1 sm:top-2 right-1 sm:right-2 w-5 sm:w-6 h-5 sm:h-6 rounded-full flex items-center justify-center ${
+                            isHardcore ? 'bg-red-500' : 'bg-cyan-500'
+                          }`}>
+                            <span className="text-white text-[10px] sm:text-xs">✓</span>
+                          </div>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

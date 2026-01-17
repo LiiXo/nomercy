@@ -124,7 +124,7 @@ const MatchSheet = () => {
       team: 'Équipe',
       noRoster: 'Aucun roster défini',
       onlyLeaderCanValidate: 'Seul le leader ou un officier peut valider',
-      onlyReferentCanValidate: 'Seul le référent peut valider',
+      onlyReferentCanValidate: 'Tous les joueurs peuvent voter pour le gagnant',
       warningMessage: '⚠️ Rappel : Tout débordement ou comportement inacceptable peuvent entraîner des sanctions sévères.',
       voiceChannelRequired: '🎙️ Salon vocal recommandé',
       voiceChannelMessage: 'Tous les joueurs d\'une même équipe peuvent rejoindre un salon vocal sur le serveur Discord NoMercy. Ce n\'est pas obligatoire mais fortement recommandé.',
@@ -145,13 +145,20 @@ const MatchSheet = () => {
       rejectCancellation: 'Refuser l\'annulation',
       cancellationAccepted: 'Annulation acceptée',
       cancellationRejected: 'Annulation refusée',
-      referentWarning: '⚠️ Attention Référents : Valider un gagnant sans avoir joué le match peut entraîner de lourdes sanctions (ban temporaire ou permanent). Assurez-vous que le match a bien été joué avant de valider.',
+      referentWarning: '⚠️ Attention : Valider un gagnant sans avoir joué le match peut entraîner de lourdes sanctions (ban temporaire ou permanent). Assurez-vous que le match a bien été joué avant de voter.',
       voteCancellation: 'Voter pour annuler',
       removeVote: 'Retirer mon vote',
       cancellationVotes: 'Votes pour annuler',
       votesProgress: 'votes sur',
       required: 'requis',
       matchCancelledByVote: 'Match annulé par vote des joueurs',
+      winnerVoteProgress: 'Votes pour le gagnant',
+      voteForWinner: 'Voter pour le gagnant',
+      yourVote: 'Votre vote',
+      changeVote: 'Changer mon vote',
+      noVoteYet: 'Pas encore voté',
+      waitingFor60Percent: '60% des joueurs doivent voter pour le même gagnant',
+      voteRecorded: 'Vote enregistré',
     },
     en: {
       back: 'Back',
@@ -204,7 +211,7 @@ const MatchSheet = () => {
       team: 'Team',
       noRoster: 'No roster defined',
       onlyLeaderCanValidate: 'Only the leader or an officer can validate',
-      onlyReferentCanValidate: 'Only the referent can validate',
+      onlyReferentCanValidate: 'All players can vote for the winner',
       warningMessage: '⚠️ Warning: Any misconduct or unacceptable behavior may result in severe penalties.',
       voiceChannelRequired: '🎙️ Voice channel recommended',
       voiceChannelMessage: 'All players on the same team can join a voice channel on the NoMercy Discord server. This is not mandatory but strongly recommended.',
@@ -232,6 +239,13 @@ const MatchSheet = () => {
       votesProgress: 'votes of',
       required: 'required',
       matchCancelledByVote: 'Match cancelled by player vote',
+      winnerVoteProgress: 'Votes for winner',
+      voteForWinner: 'Vote for winner',
+      yourVote: 'Your vote',
+      changeVote: 'Change my vote',
+      noVoteYet: 'Not voted yet',
+      waitingFor60Percent: '60% of players must vote for the same winner',
+      voteRecorded: 'Vote recorded',
     },
     de: {
       back: 'Zurück',
@@ -284,7 +298,7 @@ const MatchSheet = () => {
       team: 'Team',
       noRoster: 'Kein Roster definiert',
       onlyLeaderCanValidate: 'Nur der Leader oder ein Offizier kann bestätigen',
-      onlyReferentCanValidate: 'Nur der Referent kann bestätigen',
+      onlyReferentCanValidate: 'Alle Spieler können für den Gewinner stimmen',
       warningMessage: '⚠️ Warnung: Jedes Fehlverhalten oder inakzeptables Verhalten kann zu schweren Strafen führen.',
       voiceChannelRequired: '🎙️ Sprachkanal empfohlen',
       voiceChannelMessage: 'Alle Spieler im selben Team können einem Sprachkanal auf dem NoMercy Discord-Server beitreten. Dies ist nicht verpflichtend, aber sehr empfohlen.',
@@ -312,6 +326,13 @@ const MatchSheet = () => {
       votesProgress: 'Stimmen von',
       required: 'erforderlich',
       matchCancelledByVote: 'Spiel durch Spielerabstimmung abgebrochen',
+      winnerVoteProgress: 'Stimmen für Gewinner',
+      voteForWinner: 'Für Gewinner stimmen',
+      yourVote: 'Ihre Stimme',
+      changeVote: 'Stimme ändern',
+      noVoteYet: 'Noch nicht abgestimmt',
+      waitingFor60Percent: '60% der Spieler müssen für denselben Gewinner stimmen',
+      voteRecorded: 'Stimme aufgezeichnet',
     },
     it: {
       back: 'Indietro',
@@ -364,7 +385,7 @@ const MatchSheet = () => {
       team: 'Squadra',
       noRoster: 'Nessun roster definito',
       onlyLeaderCanValidate: 'Solo il leader o un ufficiale può confermare',
-      onlyReferentCanValidate: 'Solo il referente può confermare',
+      onlyReferentCanValidate: 'Tutti i giocatori possono votare per il vincitore',
       warningMessage: '⚠️ Avviso: Qualsiasi comportamento scorretto o inaccettabile può comportare sanzioni severe.',
       voiceChannelRequired: '🎙️ Canale vocale consigliato',
       voiceChannelMessage: 'Tutti i giocatori della stessa squadra possono unirsi a un canale vocale sul server Discord NoMercy. Questo non è obbligatorio ma fortemente consigliato.',
@@ -392,6 +413,13 @@ const MatchSheet = () => {
       votesProgress: 'voti su',
       required: 'richiesti',
       matchCancelledByVote: 'Partita annullata per voto dei giocatori',
+      winnerVoteProgress: 'Voti per il vincitore',
+      voteForWinner: 'Vota per il vincitore',
+      yourVote: 'Il tuo voto',
+      changeVote: 'Cambia voto',
+      noVoteYet: 'Non hai ancora votato',
+      waitingFor60Percent: 'Il 60% dei giocatori deve votare per lo stesso vincitore',
+      voteRecorded: 'Voto registrato',
     },
   }[language] || {};
 
@@ -1138,10 +1166,11 @@ const MatchSheet = () => {
     return member?.role === 'officer';
   };
 
-  // Submit match result
+  // Submit match result (vote for winner in ranked mode)
   const handleSubmitResult = async (winner) => {
     if (isRankedMatch) {
-      if (!isReferent && !isStaff) return;
+      // En mode classé, tous les participants peuvent voter
+      if (!isRankedParticipant && !isStaff) return;
     } else {
       if (!canManageMatch()) return;
     }
@@ -1172,9 +1201,18 @@ const MatchSheet = () => {
         setMatch(data.match);
         setShowResultModal(false);
         
-        // Afficher un message si on attend l'autre équipe
-        if (data.waitingForOther) {
-          // Ajouter un message système dans le chat
+        // Afficher un message de confirmation du vote (mode classé)
+        if (isRankedMatch && data.message) {
+          const systemMessage = {
+            _id: `vote-report-${Date.now()}`,
+            isSystem: true,
+            message: data.message,
+            createdAt: new Date(),
+            user: { username: 'SYSTEM' }
+          };
+          setMessages(prev => [...prev, systemMessage]);
+        } else if (data.waitingForOther) {
+          // Afficher un message si on attend l'autre équipe (mode ladder)
           const systemMessage = {
             _id: `result-report-${Date.now()}`,
             isSystem: true,
@@ -1324,12 +1362,35 @@ const MatchSheet = () => {
     return statusMap[status] || statusMap.pending;
   };
 
-  // Check who can validate (leader/officer for ladder, referent for ranked)
+  // Check who can validate (leader/officer for ladder, all participants for ranked)
   const canValidateResult = () => {
     if (isRankedMatch) {
-      return isReferent;
+      // En mode classé, tous les participants peuvent voter
+      return isRankedParticipant;
     }
     return canManageMatch();
+  };
+  
+  // Helper pour calculer les stats de vote pour le gagnant
+  const getWinnerVoteStats = () => {
+    if (!isRankedMatch || !match.result?.playerVotes) {
+      return { votesForTeam1: 0, votesForTeam2: 0, totalPlayers: 0, threshold: 0, hasVoted: false, myVote: null };
+    }
+    const totalPlayers = match.players?.length || 0;
+    const playerVotes = match.result.playerVotes || [];
+    const votesForTeam1 = playerVotes.filter(v => v.winner === 1).length;
+    const votesForTeam2 = playerVotes.filter(v => v.winner === 2).length;
+    const threshold = Math.ceil(totalPlayers * 0.6);
+    const userId = (user?._id || user?.id)?.toString();
+    const myVoteObj = playerVotes.find(v => (v.user?._id || v.user)?.toString() === userId);
+    return {
+      votesForTeam1,
+      votesForTeam2,
+      totalPlayers,
+      threshold,
+      hasVoted: !!myVoteObj,
+      myVote: myVoteObj?.winner || null
+    };
   };
 
   if (loading) {
@@ -1614,6 +1675,30 @@ const MatchSheet = () => {
                   </span>
                 </div>
                 
+                {/* Selected Map (ranked mode) */}
+                {isRankedMatch && match.selectedMap?.name && (
+                  <div className="py-2 border-b border-white/5">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-gray-500 text-sm flex items-center gap-1.5">
+                        <Map className="w-3.5 h-3.5" />
+                        {language === 'fr' ? 'Map' : 'Map'}
+                      </span>
+                      <span className={`px-2 py-0.5 bg-${accentColor}-500/20 rounded text-${accentColor}-400 text-xs font-bold`}>
+                        {match.selectedMap.name}
+                      </span>
+                    </div>
+                    {match.selectedMap.image && (
+                      <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
+                        <img 
+                          src={match.selectedMap.image} 
+                          alt={match.selectedMap.name}
+                          className="w-full h-24 object-cover"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 {!isRankedMatch && (
                   <div className="flex justify-between items-center py-1.5 border-b border-white/5">
                     <span className="text-gray-500 text-sm">{t.ladder}</span>
@@ -1762,6 +1847,64 @@ const MatchSheet = () => {
               </div>
             )}
 
+            {/* Vote Progress for Winner - Ranked matches only */}
+            {isRankedMatch && ['ready', 'in_progress'].includes(match.status) && match.result?.playerVotes?.length > 0 && (
+              <div className="bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-cyan-500/20 p-4">
+                <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-cyan-400" />
+                  {t.winnerVoteProgress || 'Votes pour le gagnant'}
+                </h3>
+                
+                {/* Vote bars */}
+                <div className="space-y-2 mb-3">
+                  {/* Team 1 votes */}
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-blue-400">{t.team} 1</span>
+                      <span className="text-gray-400">{getWinnerVoteStats().votesForTeam1} {language === 'fr' ? 'vote(s)' : 'vote(s)'}</span>
+                    </div>
+                    <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-300"
+                        style={{ width: `${(getWinnerVoteStats().votesForTeam1 / Math.max(1, getWinnerVoteStats().threshold)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Team 2 votes */}
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-purple-400">{t.team} 2</span>
+                      <span className="text-gray-400">{getWinnerVoteStats().votesForTeam2} {language === 'fr' ? 'vote(s)' : 'vote(s)'}</span>
+                    </div>
+                    <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-purple-500 transition-all duration-300"
+                        style={{ width: `${(getWinnerVoteStats().votesForTeam2 / Math.max(1, getWinnerVoteStats().threshold)) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Threshold info */}
+                <div className="text-xs text-center text-gray-400 mb-3">
+                  {language === 'fr' 
+                    ? `${getWinnerVoteStats().threshold} votes requis sur ${getWinnerVoteStats().totalPlayers} joueurs (60%)`
+                    : `${getWinnerVoteStats().threshold} votes required out of ${getWinnerVoteStats().totalPlayers} players (60%)`
+                  }
+                </div>
+                
+                {/* Current user vote status */}
+                {getWinnerVoteStats().hasVoted && (
+                  <div className="text-center text-xs py-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <span className="text-green-400">
+                      ✓ {t.yourVote || 'Votre vote'}: {t.team} {getWinnerVoteStats().myVote}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Actions - Sélectionner gagnant */}
             {isParticipant && canValidateResult() && ['accepted', 'in_progress', 'ready'].includes(match.status) && (
               <button
@@ -1769,7 +1912,7 @@ const MatchSheet = () => {
                 className={`w-full py-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white text-sm font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2`}
               >
                 <Trophy className="w-4 h-4" />
-                {t.selectWinner}
+                {getWinnerVoteStats().hasVoted ? (t.changeVote || 'Changer mon vote') : (t.voteForWinner || t.selectWinner)}
               </button>
             )}
             
@@ -2382,30 +2525,55 @@ const MatchSheet = () => {
           <div className={`bg-dark-900 rounded-2xl border border-${accentColor}-500/30 p-6 max-w-md w-full shadow-2xl`}>
             <h3 className="text-xl font-bold text-white mb-6 text-center flex items-center justify-center gap-2">
               <Trophy className="w-6 h-6 text-yellow-400" />
-              {t.selectWinner}
+              {isRankedMatch 
+                ? (getWinnerVoteStats().hasVoted ? (t.changeVote || 'Changer mon vote') : (t.voteForWinner || 'Voter pour le gagnant'))
+                : t.selectWinner
+              }
             </h3>
             
-            {/* Info rapports existants (mode classé) */}
-            {isRankedMatch && (match.result?.team1Report || match.result?.team2Report) && (
+            {/* Info votes existants (mode classé - nouveau système) */}
+            {isRankedMatch && match.result?.playerVotes?.length > 0 && (
               <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                <p className="text-cyan-400 text-sm font-medium mb-2">📋 Rapports enregistrés :</p>
-                <div className="space-y-1 text-xs">
-                  {match.result?.team1Report && (
-                    <p className="text-gray-300">
-                      • Équipe 1 : <span className="text-green-400">Équipe {match.result.team1Report.winner} gagnante</span>
-                    </p>
-                  )}
-                  {match.result?.team2Report && (
-                    <p className="text-gray-300">
-                      • Équipe 2 : <span className="text-green-400">Équipe {match.result.team2Report.winner} gagnante</span>
-                    </p>
-                  )}
-                  {(!match.result?.team1Report || !match.result?.team2Report) && (
-                    <p className="text-orange-400 text-xs mt-2">
-                      ⏳ En attente du rapport de l'équipe {!match.result?.team1Report ? '1' : '2'}
-                    </p>
-                  )}
+                <p className="text-cyan-400 text-sm font-medium mb-2">📊 {language === 'fr' ? 'Votes en cours' : 'Current votes'}:</p>
+                <div className="space-y-2">
+                  {/* Team 1 votes */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-400 text-sm">{t.team} 1</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-2 bg-dark-700 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 transition-all"
+                          style={{ width: `${(getWinnerVoteStats().votesForTeam1 / Math.max(1, getWinnerVoteStats().threshold)) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-gray-400 text-xs">{getWinnerVoteStats().votesForTeam1} vote(s)</span>
+                    </div>
+                  </div>
+                  {/* Team 2 votes */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-purple-400 text-sm">{t.team} 2</span>
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-2 bg-dark-700 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-purple-500 transition-all"
+                          style={{ width: `${(getWinnerVoteStats().votesForTeam2 / Math.max(1, getWinnerVoteStats().threshold)) * 100}%` }}
+                        />
+                      </div>
+                      <span className="text-gray-400 text-xs">{getWinnerVoteStats().votesForTeam2} vote(s)</span>
+                    </div>
+                  </div>
                 </div>
+                <p className="text-gray-400 text-xs mt-2 text-center">
+                  {language === 'fr' 
+                    ? `${getWinnerVoteStats().threshold} votes requis sur ${getWinnerVoteStats().totalPlayers} joueurs`
+                    : `${getWinnerVoteStats().threshold} votes required out of ${getWinnerVoteStats().totalPlayers} players`
+                  }
+                </p>
+                {getWinnerVoteStats().hasVoted && (
+                  <p className="text-green-400 text-xs mt-1 text-center">
+                    ✓ {t.yourVote || 'Votre vote'}: {t.team} {getWinnerVoteStats().myVote}
+                  </p>
+                )}
               </div>
             )}
             

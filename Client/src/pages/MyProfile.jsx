@@ -57,7 +57,7 @@ const MyProfile = () => {
   const [showResetStatsModal, setShowResetStatsModal] = useState(false);
   const [loadingResetStats, setLoadingResetStats] = useState(false);
   const [resetStatsError, setResetStatsError] = useState('');
-  const RESET_STATS_COST = 2000;
+  const RESET_STATS_COST = 5000;
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
