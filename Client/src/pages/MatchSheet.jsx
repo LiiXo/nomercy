@@ -84,6 +84,7 @@ const MatchSheet = () => {
       mapSelection: 'Sélection de map',
       mapFree: 'Libre',
       mapRandom: 'Aléatoire',
+      mapVoted: 'Votée',
       status: 'Statut',
       startedAt: 'Début du match',
       chat: 'Chat du match',
@@ -171,6 +172,7 @@ const MatchSheet = () => {
       mapSelection: 'Map Selection',
       mapFree: 'Free',
       mapRandom: 'Random',
+      mapVoted: 'Voted',
       status: 'Status',
       startedAt: 'Match started',
       chat: 'Match Chat',
@@ -258,6 +260,7 @@ const MatchSheet = () => {
       mapSelection: 'Kartenauswahl',
       mapFree: 'Frei',
       mapRandom: 'Zufällig',
+      mapVoted: 'Abgestimmt',
       status: 'Status',
       startedAt: 'Spielbeginn',
       chat: 'Match Chat',
@@ -345,6 +348,7 @@ const MatchSheet = () => {
       mapSelection: 'Selezione mappa',
       mapFree: 'Libera',
       mapRandom: 'Casuale',
+      mapVoted: 'Votata',
       status: 'Stato',
       startedAt: 'Inizio partita',
       chat: 'Chat partita',
@@ -1667,11 +1671,15 @@ const MatchSheet = () => {
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">
                   <span className="text-gray-500 text-sm">{t.mapSelection}</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                    isRankedMatch || match.mapType === 'random'
-                      ? 'bg-purple-500/20 text-purple-400'
-                      : 'bg-cyan-500/20 text-cyan-400'
+                    isRankedMatch && match.selectedMap?.name
+                      ? 'bg-green-500/20 text-green-400'
+                      : isRankedMatch || match.mapType === 'random'
+                        ? 'bg-purple-500/20 text-purple-400'
+                        : 'bg-cyan-500/20 text-cyan-400'
                   }`}>
-                    {isRankedMatch ? t.mapRandom : (match.mapType === 'random' ? t.mapRandom : t.mapFree)}
+                    {isRankedMatch 
+                      ? (match.selectedMap?.name ? t.mapVoted : t.mapRandom) 
+                      : (match.mapType === 'random' ? t.mapRandom : t.mapFree)}
                   </span>
                 </div>
                 
@@ -1775,8 +1783,8 @@ const MatchSheet = () => {
               </div>
             )}
 
-            {/* Maps tirées au sort */}
-            {((match.maps && match.maps.length > 0) || (match.randomMaps && match.randomMaps.length > 0)) && (
+            {/* Maps tirées au sort - Ne pas afficher si une map a été votée en ranked */}
+            {((match.maps && match.maps.length > 0) || (match.randomMaps && match.randomMaps.length > 0)) && !(isRankedMatch && match.selectedMap?.name) && (
               <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 p-4 sm:p-5`}>
                 <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
                   <Shuffle className={`w-4 h-4 text-${accentColor}-400`} />

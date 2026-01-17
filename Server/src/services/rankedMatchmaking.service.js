@@ -583,20 +583,19 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     // Sélectionner les maps selon le format (BO1 = 1 map, BO3 = 3 maps)
     // Pour ranked, on utilise le ladder 'ranked' et on filtre par mode (hardcore/cdl) et gameMode
+    // Même logique que le mode test pour assurer la cohérence
     let maps = await GameMap.find({ 
       isActive: true,
       ladders: 'ranked',
-      // Filter by mode (hardcore/cdl) - include 'both' maps as well
       mode: { $in: [mode, 'both'] },
-      // Filter by game mode if specified
       ...(gameMode ? { gameModes: gameMode } : {})
     });
     
     console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'}`);
     
     // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
-    if (maps.length < mapCount) {
-      console.log(`[Ranked Matchmaking] Not enough ranked maps (${maps.length}/${mapCount}), falling back to squad-team maps`);
+    if (maps.length < 3) {
+      console.log(`[Ranked Matchmaking] Not enough ranked maps (${maps.length}/3), falling back to squad-team maps`);
       maps = await GameMap.find({ 
         isActive: true,
         ladders: { $in: ['ranked', 'squad-team'] },
@@ -608,7 +607,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     // Si toujours pas assez, prendre toutes les maps actives avec le bon gameMode (sans filtrer par mode)
     let availableMaps = maps;
-    if (maps.length < mapCount) {
+    if (maps.length < 3) {
       console.log(`[Ranked Matchmaking] Still not enough maps, falling back to all active maps with gameMode (no mode filter)`);
       availableMaps = await GameMap.find({ 
         isActive: true,
@@ -618,7 +617,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
     }
     
     // Dernier recours : toutes les maps actives
-    if (availableMaps.length < mapCount) {
+    if (availableMaps.length < 3) {
       console.log(`[Ranked Matchmaking] Last resort: all active maps`);
       availableMaps = await GameMap.find({ isActive: true });
       console.log(`[Ranked Matchmaking] Found ${availableMaps.length} active maps total`);
@@ -654,7 +653,8 @@ const createMatchFromQueue = async (gameMode, mode) => {
       ];
     }
     
-    console.log(`[Ranked Matchmaking] Maps for vote:`, mapsForVote.map(m => m.name));
+    console.log(`[Ranked Matchmaking] Maps for vote (${mapsForVote.length} maps):`, mapsForVote.map(m => m.name));
+    console.log(`[Ranked Matchmaking] Full mapVoteOptions data:`, JSON.stringify(mapsForVote, null, 2));
     
     // Créer les données des joueurs pour le match
     const matchPlayers = [
@@ -746,9 +746,14 @@ const createMatchFromQueue = async (gameMode, mode) => {
       };
     });
     
+    // Préparer les options de vote de map pour l'envoi
+    const mapVoteOptionsForClient = mapsForVote.map(m => ({ name: m.name, image: m.image, votes: 0 }));
+    console.log(`[Ranked Matchmaking] Sending mapVoteOptions to clients:`, JSON.stringify(mapVoteOptionsForClient));
+    
     // Notifier tous les vrais joueurs du match
     for (const player of matchPlayers) {
       if (io && player.user) { // Ne notifier que les vrais joueurs
+        console.log(`[Ranked Matchmaking] Sending rankedMatchFound to user-${player.user} (${player.username}) with ${mapVoteOptionsForClient.length} map options`);
         io.to(`user-${player.user}`).emit('rankedMatchFound', {
           matchId: match._id,
           gameMode,
@@ -759,7 +764,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
           isReferent: player.isReferent,
           isHost: player.team === hostTeam && player.isReferent,
           players: playersForAnimation, // Inclure tous les joueurs pour l'animation
-          mapVoteOptions: mapsForVote.map(m => ({ name: m.name, image: m.image, votes: 0 })) // Maps pour le vote
+          mapVoteOptions: mapVoteOptionsForClient // Maps pour le vote
         });
       }
     }
