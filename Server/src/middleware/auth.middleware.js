@@ -104,6 +104,9 @@ export const requireAdmin = requireRole('admin');
 // Staff (admin or staff)
 export const requireStaff = requireRole('admin', 'staff');
 
+// Arbitre (referee) - can access limited admin features
+export const requireArbitre = requireRole('admin', 'staff', 'arbitre');
+
 // CDL Manager
 export const requireCDLManager = requireRole('admin', 'gerant_cdl');
 

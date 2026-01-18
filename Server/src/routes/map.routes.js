@@ -1,5 +1,6 @@
 import express from 'express';
 import Map from '../models/Map.js';
+import AppSettings from '../models/AppSettings.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -24,22 +25,37 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Obtenir 3 maps aléatoires pour un match
+// Obtenir 3 maps aléatoires pour un match ladder
 router.get('/random/:ladderId', async (req, res) => {
   try {
     const { ladderId } = req.params;
     const { gameMode, mode } = req.query;
     
-    const query = { 
-      isActive: true, 
-      ladders: ladderId 
-    };
-    if (gameMode) query.gameModes = gameMode;
-    // Filter by mode (hardcore, cdl) - include 'both' maps as well
-    if (mode) query.mode = { $in: [mode, 'both'] };
+    // Déterminer le configPath en fonction du mode (hardcore/cdl)
+    const configPath = mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
     
-    // Récupérer toutes les maps éligibles
-    const allMaps = await Map.find(query);
+    // Essayer d'abord avec la nouvelle structure de configuration
+    let allMaps = await Map.find({ 
+      isActive: true,
+      [`${configPath}.ladder.enabled`]: true,
+      ...(gameMode ? { [`${configPath}.ladder.gameModes`]: gameMode } : {})
+    });
+    
+    console.log(`[Random Maps] Found ${allMaps.length} maps for ${mode} ladder ${gameMode || 'any'} (new config)`);
+    
+    // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
+    if (allMaps.length < 3) {
+      console.log(`[Random Maps] Not enough maps with new config, falling back to legacy structure`);
+      const legacyQuery = { 
+        isActive: true, 
+        ladders: ladderId 
+      };
+      if (gameMode) legacyQuery.gameModes = gameMode;
+      if (mode) legacyQuery.mode = { $in: [mode, 'both'] };
+      
+      allMaps = await Map.find(legacyQuery);
+      console.log(`[Random Maps] Found ${allMaps.length} maps with legacy config`);
+    }
     
     if (allMaps.length < 3) {
       return res.status(400).json({ 
@@ -64,18 +80,54 @@ router.get('/ranked', async (req, res) => {
   try {
     const { gameMode, format, mode } = req.query;
     
-    const query = { 
-      isActive: true, 
-      ladders: 'ranked' 
-    };
-    if (gameMode) query.gameModes = gameMode;
-    // Filtrer par format (4v4 ou 5v5)
-    if (format) query.rankedFormats = format;
-    // Filter by mode (hardcore, cdl) - include 'both' maps as well
-    if (mode) query.mode = { $in: [mode, 'both'] };
+    // Déterminer le configPath en fonction du mode (hardcore/cdl)
+    const configPath = mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
     
-    const maps = await Map.find(query).sort({ name: 1 });
-    res.json({ success: true, maps });
+    // Essayer d'abord avec la nouvelle structure de configuration (avec format si spécifié)
+    let maps = await Map.find({ 
+      isActive: true,
+      [`${configPath}.ranked.enabled`]: true,
+      ...(gameMode ? { [`${configPath}.ranked.gameModes`]: gameMode } : {}),
+      ...(format ? { [`${configPath}.ranked.formats`]: format } : {})
+    }).sort({ name: 1 });
+    
+    console.log(`[Ranked Maps] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'} format ${format || 'any'} (new config)`);
+    
+    // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
+    if (maps.length === 0) {
+      console.log(`[Ranked Maps] No maps with new config, falling back to legacy structure`);
+      const legacyQuery = { 
+        isActive: true, 
+        ladders: 'ranked' 
+      };
+      if (gameMode) legacyQuery.gameModes = gameMode;
+      
+      // Filtrer par format (4v4 ou 5v5)
+      if (format) {
+        if (format === '4v4' && gameMode === 'Hardpoint') {
+          legacyQuery.rankedFormats = { $in: ['4v4', 'hardpoint-4v4'] };
+        } else {
+          legacyQuery.rankedFormats = format;
+        }
+      }
+      
+      if (mode) legacyQuery.mode = { $in: [mode, 'both'] };
+      
+      maps = await Map.find(legacyQuery).sort({ name: 1 });
+      console.log(`[Ranked Maps] Found ${maps.length} maps with legacy config`);
+    }
+    
+    // Récupérer le paramètre BO1/BO3 pour déterminer le minimum de maps requises
+    const settings = await AppSettings.getSettings();
+    const bestOf = settings?.rankedSettings?.bestOf || 3;
+    const minMapsRequired = bestOf === 1 ? 1 : 3;
+    
+    // Avertissement si pas assez de maps
+    const warning = maps.length < minMapsRequired 
+      ? `Attention: Seulement ${maps.length} map(s) configurée(s). Minimum ${minMapsRequired} requise(s) pour un BO${bestOf}. Le système utilisera des maps d'autres configurations en fallback.`
+      : null;
+    
+    res.json({ success: true, maps, warning, minRequired: minMapsRequired, bestOf });
   } catch (error) {
     console.error('Get ranked maps error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -246,7 +298,7 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
 // Create map (admin)
 router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, hardcoreConfig, cdlConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     if (!name) {
       return res.status(400).json({ success: false, message: 'Nom requis' });
@@ -256,6 +308,16 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
       name,
       image: image || '',
       mode: mode || 'both',
+      // New granular configuration
+      hardcoreConfig: hardcoreConfig || {
+        ladder: { enabled: false, gameModes: [] },
+        ranked: { enabled: false, gameModes: [] }
+      },
+      cdlConfig: cdlConfig || {
+        ladder: { enabled: false, gameModes: [] },
+        ranked: { enabled: false, gameModes: [] }
+      },
+      // Legacy fields (kept for backward compatibility)
       ladders: ladders || [],
       gameModes: gameModes || [],
       rankedFormats: rankedFormats || [],
@@ -273,7 +335,7 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
 // Update map (admin)
 router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, gameMode, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, hardcoreConfig, cdlConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     const map = await Map.findById(req.params.mapId);
     if (!map) {
@@ -283,7 +345,16 @@ router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (name !== undefined) map.name = name;
     if (image !== undefined) map.image = image;
     if (mode !== undefined) map.mode = mode;
-    if (gameMode !== undefined) map.gameMode = gameMode;
+    
+    // New granular configuration
+    if (hardcoreConfig !== undefined) {
+      map.hardcoreConfig = hardcoreConfig;
+    }
+    if (cdlConfig !== undefined) {
+      map.cdlConfig = cdlConfig;
+    }
+    
+    // Legacy fields (kept for backward compatibility)
     if (ladders !== undefined) map.ladders = ladders;
     if (gameModes !== undefined) map.gameModes = gameModes;
     if (rankedFormats !== undefined) map.rankedFormats = rankedFormats;
@@ -308,6 +379,58 @@ router.delete('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     res.json({ success: true, message: 'Map supprimée' });
   } catch (error) {
     console.error('Delete map error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Enable all maps in all modes and formats by default (admin)
+router.post('/admin/enable-all', verifyToken, requireStaff, async (req, res) => {
+  try {
+    // Default configuration - all modes enabled with all game modes and formats
+    const hardcoreConfig = {
+      ladder: {
+        enabled: true,
+        gameModes: ['Search & Destroy']
+      },
+      ranked: {
+        enabled: true,
+        gameModes: ['Search & Destroy', 'Team Deathmatch', 'Duel'],
+        formats: ['4v4', '5v5']
+      }
+    };
+    
+    const cdlConfig = {
+      ladder: {
+        enabled: true,
+        gameModes: ['Hardpoint', 'Search & Destroy', 'Variant']
+      },
+      ranked: {
+        enabled: true,
+        gameModes: ['Hardpoint', 'Search & Destroy'],
+        formats: ['4v4', '5v5']
+      }
+    };
+    
+    // Update all maps
+    const result = await Map.updateMany(
+      { isActive: true },
+      { 
+        $set: { 
+          hardcoreConfig,
+          cdlConfig
+        } 
+      }
+    );
+    
+    console.log(`[Maps] Enabled all configurations for ${result.modifiedCount} maps`);
+    
+    res.json({ 
+      success: true, 
+      message: `${result.modifiedCount} maps ont été configurées avec tous les modes et formats activés`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Enable all maps error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

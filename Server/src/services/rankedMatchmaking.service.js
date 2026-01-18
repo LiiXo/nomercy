@@ -582,20 +582,89 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const mapCount = bestOf === 1 ? 1 : 3;
     
     // Sélectionner les maps selon le format (BO1 = 1 map, BO3 = 3 maps)
-    // Pour ranked, on utilise le ladder 'ranked' et on filtre par mode (hardcore/cdl) et gameMode
-    // Même logique que le mode test pour assurer la cohérence
-    let maps = await GameMap.find({ 
-      isActive: true,
-      ladders: 'ranked',
-      mode: { $in: [mode, 'both'] },
-      ...(gameMode ? { gameModes: gameMode } : {})
-    });
+    // Pour ranked, on utilise la nouvelle structure de configuration
+    // Le format est déterminé par la taille d'équipe (4v4 ou 5v5)
+    let rankedFormat = teamSize === 5 ? '5v5' : '4v4';
+    const isHardpoint = gameMode === 'Hardpoint';
     
-    console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'}`);
+    // Déterminer le configPath en fonction du mode (hardcore/cdl)
+    const configPath = mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
+    
+    let maps;
+    
+    // Essayer d'abord avec la nouvelle structure de configuration (avec format)
+    maps = await GameMap.find({ 
+      isActive: true,
+      [`${configPath}.ranked.enabled`]: true,
+      [`${configPath}.ranked.gameModes`]: gameMode,
+      [`${configPath}.ranked.formats`]: rankedFormat
+    });
+    console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode} ${rankedFormat} (new config with format)`);
+    
+    // Si pas assez de maps avec le format, essayer sans filtrer par format
+    if (maps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Not enough maps with format ${rankedFormat}, trying without format filter`);
+      maps = await GameMap.find({ 
+        isActive: true,
+        [`${configPath}.ranked.enabled`]: true,
+        [`${configPath}.ranked.gameModes`]: gameMode
+      });
+      console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode} (new config without format)`);
+    }
+    
+    // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
+    if (maps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Not enough maps with new config (${maps.length}/${mapCount}), trying legacy structure`);
+      
+      if (isHardpoint && teamSize === 4) {
+        // Pour Hardpoint, chercher d'abord avec le format spécifique hardpoint-4v4
+        maps = await GameMap.find({ 
+          isActive: true,
+          ladders: 'ranked',
+          mode: { $in: [mode, 'both'] },
+          rankedFormats: 'hardpoint-4v4',
+          gameModes: gameMode
+        });
+        console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked Hardpoint format hardpoint-4v4 (legacy)`);
+        
+        // Si pas de maps avec hardpoint-4v4, essayer avec 4v4
+        if (maps.length < mapCount) {
+          maps = await GameMap.find({ 
+            isActive: true,
+            ladders: 'ranked',
+            mode: { $in: [mode, 'both'] },
+            rankedFormats: '4v4',
+            gameModes: gameMode
+          });
+          console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked Hardpoint format 4v4 (legacy)`);
+        }
+      } else {
+        maps = await GameMap.find({ 
+          isActive: true,
+          ladders: 'ranked',
+          mode: { $in: [mode, 'both'] },
+          rankedFormats: rankedFormat,
+          ...(gameMode ? { gameModes: gameMode } : {})
+        });
+        console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'} format ${rankedFormat} (legacy)`);
+      }
+    }
+    
+    // Si pas assez de maps avec le format spécifique, essayer sans filtrer par rankedFormats
+    if (maps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Not enough maps with format ${rankedFormat} (${maps.length}/${mapCount}), trying without format filter`);
+      maps = await GameMap.find({ 
+        isActive: true,
+        ladders: 'ranked',
+        mode: { $in: [mode, 'both'] },
+        ...(gameMode ? { gameModes: gameMode } : {})
+      });
+      console.log(`[Ranked Matchmaking] Found ${maps.length} maps without format filter`);
+    }
     
     // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
-    if (maps.length < 3) {
-      console.log(`[Ranked Matchmaking] Not enough ranked maps (${maps.length}/3), falling back to squad-team maps`);
+    if (maps.length < mapCount) {
+      console.log(`[Ranked Matchmaking] Not enough ranked maps (${maps.length}/${mapCount}), falling back to squad-team maps`);
       maps = await GameMap.find({ 
         isActive: true,
         ladders: { $in: ['ranked', 'squad-team'] },
@@ -1056,15 +1125,80 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const bestOf = settings?.rankedSettings?.bestOf || 3; // Par défaut BO3
     const mapCount = bestOf === 1 ? 1 : 3;
     
-    // Sélectionner les maps selon le format - pour ranked, utiliser le ladder 'ranked' et filtrer par mode
+    // Sélectionner les maps selon le format - utiliser la nouvelle structure de configuration
+    let rankedFormatTest = teamSize === 5 ? '5v5' : '4v4';
+    const isHardpoint = gameMode === 'Hardpoint';
+    
+    // Déterminer le configPath en fonction du mode (hardcore/cdl)
+    const configPathTest = mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
+    
+    // Essayer d'abord avec la nouvelle structure de configuration (avec format)
     let mapsTest = await GameMap.find({ 
       isActive: true,
-      ladders: 'ranked',
-      mode: { $in: [mode, 'both'] },
-      ...(gameMode ? { gameModes: gameMode } : {})
+      [`${configPathTest}.ranked.enabled`]: true,
+      [`${configPathTest}.ranked.gameModes`]: gameMode,
+      [`${configPathTest}.ranked.formats`]: rankedFormatTest
     });
+    console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode} ${rankedFormatTest} (new config with format)`);
     
-    console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode || 'any'}`);
+    // Si pas assez de maps avec le format, essayer sans filtrer par format
+    if (mapsTest.length < mapCount) {
+      console.log(`[Ranked Matchmaking Test] Not enough maps with format ${rankedFormatTest}, trying without format filter`);
+      mapsTest = await GameMap.find({ 
+        isActive: true,
+        [`${configPathTest}.ranked.enabled`]: true,
+        [`${configPathTest}.ranked.gameModes`]: gameMode
+      });
+      console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode} (new config without format)`);
+    }
+    
+    // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
+    if (mapsTest.length < mapCount) {
+      console.log(`[Ranked Matchmaking Test] Not enough maps with new config (${mapsTest.length}/${mapCount}), trying legacy structure`);
+      
+      if (isHardpoint && teamSize === 4) {
+        mapsTest = await GameMap.find({ 
+          isActive: true,
+          ladders: 'ranked',
+          mode: { $in: [mode, 'both'] },
+          rankedFormats: 'hardpoint-4v4',
+          gameModes: gameMode
+        });
+        console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked Hardpoint format hardpoint-4v4 (legacy)`);
+        
+        if (mapsTest.length < mapCount) {
+          mapsTest = await GameMap.find({ 
+            isActive: true,
+            ladders: 'ranked',
+            mode: { $in: [mode, 'both'] },
+            rankedFormats: '4v4',
+            gameModes: gameMode
+          });
+          console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked Hardpoint format 4v4 (legacy)`);
+        }
+      } else {
+        mapsTest = await GameMap.find({ 
+          isActive: true,
+          ladders: 'ranked',
+          mode: { $in: [mode, 'both'] },
+          rankedFormats: rankedFormatTest,
+          ...(gameMode ? { gameModes: gameMode } : {})
+        });
+        console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode || 'any'} format ${rankedFormatTest} (legacy)`);
+      }
+    }
+    
+    // Si pas assez de maps avec le format spécifique, essayer sans filtrer par rankedFormats
+    if (mapsTest.length < mapCount) {
+      console.log(`[Ranked Matchmaking Test] Not enough maps with format ${rankedFormatTest} (${mapsTest.length}/${mapCount}), trying without format filter`);
+      mapsTest = await GameMap.find({ 
+        isActive: true,
+        ladders: 'ranked',
+        mode: { $in: [mode, 'both'] },
+        ...(gameMode ? { gameModes: gameMode } : {})
+      });
+      console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps without format filter`);
+    }
     
     // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
     if (mapsTest.length < mapCount) {

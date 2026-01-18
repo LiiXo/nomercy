@@ -10,7 +10,7 @@ import SpinWheel from './SpinWheel';
 const Navbar = () => {
   const { language, setLanguage, t } = useLanguage();
   const { selectedMode, resetMode } = useMode();
-  const { user, isAuthenticated, login, logout, isStaff } = useAuth();
+  const { user, isAuthenticated, login, logout, isStaff, isArbitre, hasAdminAccess } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -370,10 +370,10 @@ const Navbar = () => {
                         )}
                       </Link>
 
-                      {isStaff() && (
-                        <Link to="/admin" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition-colors">
+                      {hasAdminAccess() && (
+                        <Link to="/admin" onClick={() => setUserMenuOpen(false)} className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${isArbitre() && !isStaff() ? 'text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10' : 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/10'}`}>
                           <Shield className="w-4 h-4" />
-                          <span>Admin Panel</span>
+                          <span>{isArbitre() && !isStaff() ? 'Panel Arbitre' : 'Admin Panel'}</span>
                         </Link>
                       )}
 
@@ -512,6 +512,17 @@ const Navbar = () => {
                     <Gift className="w-4 h-4" />
                     <span>{language === 'fr' ? 'Roue quotidienne' : 'Daily Wheel'}</span>
                   </button>
+
+                  {hasAdminAccess() && (
+                    <Link 
+                      to="/admin" 
+                      onClick={() => setMobileMenuOpen(false)} 
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium ${isArbitre() && !isStaff() ? 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400' : 'bg-purple-500/10 border border-purple-500/30 text-purple-400'}`}
+                    >
+                      <Shield className="w-4 h-4" />
+                      <span>{isArbitre() && !isStaff() ? 'Panel Arbitre' : 'Admin Panel'}</span>
+                    </Link>
+                  )}
                 </>
               )}
 

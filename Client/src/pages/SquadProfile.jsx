@@ -47,6 +47,18 @@ const SquadProfile = () => {
   const [matchHistoryTotalPages, setMatchHistoryTotalPages] = useState(1);
   const [matchHistoryTotal, setMatchHistoryTotal] = useState(0);
   const MATCHES_PER_PAGE = 20;
+  
+  // Lock body scroll when dialog is open
+  useEffect(() => {
+    if (showMatchDetails) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showMatchDetails]);
 
   // Traductions
   const texts = {
@@ -1090,8 +1102,8 @@ const SquadProfile = () => {
 
       {/* Match Details Dialog */}
       {showMatchDetails && selectedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain" onClick={(e) => { if (e.target === e.currentTarget) { setShowMatchDetails(false); setSelectedMatch(null); } }}>
+          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col my-auto" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className={`p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
               <div className="flex items-center justify-between">

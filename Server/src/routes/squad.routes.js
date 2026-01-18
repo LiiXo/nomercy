@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
 import Match from '../models/Match.js';
-import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
+import { verifyToken, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1258,8 +1258,8 @@ router.get('/:squadId/rank', async (req, res) => {
       return res.json({ success: false, message: 'Squad not ranked' });
     }
     
-    // Get points from mode-specific stats, fallback to legacy stats
-    const modeStats = targetSquad[statsField] || targetSquad.stats || {};
+    // Use ONLY mode-specific stats, no fallback to general stats
+    const modeStats = targetSquad[statsField] || {};
     
     res.json({
       success: true,
@@ -1294,12 +1294,12 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const squads = await Squad.find(query)
       .populate({
         path: 'leader',
-        select: 'username avatarUrl discordAvatar discordId isBanned isDeleted',
+        select: 'username avatar discordAvatar discordId isBanned isDeleted',
         match: { isBanned: false, isDeleted: { $ne: true } } // Exclude squads with banned/deleted leaders
       })
       .populate({
         path: 'members.user',
-        select: 'username avatarUrl discordAvatar discordId isDeleted',
+        select: 'username avatar discordAvatar discordId isDeleted',
         match: { isDeleted: { $ne: true } } // Exclude deleted members
       })
       .sort({ [`${statsField}.totalPoints`]: -1 })
@@ -1323,8 +1323,8 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const startRank = (parseInt(page) - 1) * parseInt(limit);
     const rankedSquads = validSquads.map((squad, index) => {
       const squadData = squad.toJSON();
-      // Use mode-specific stats, fallback to legacy stats for backward compatibility
-      const modeStats = squadData[statsField] || squadData.stats || {};
+      // Use ONLY mode-specific stats, no fallback to general stats
+      const modeStats = squadData[statsField] || {};
       const totalWins = modeStats.totalWins || 0;
       const totalLosses = modeStats.totalLosses || 0;
       const totalPoints = modeStats.totalPoints || 0;
@@ -1450,12 +1450,12 @@ router.get('/ladder/:ladderId/leaderboard', async (req, res) => {
     const squads = await Squad.find(query)
       .populate({
         path: 'leader',
-        select: 'username avatarUrl discordAvatar discordId isBanned isDeleted',
+        select: 'username avatar discordAvatar discordId isBanned isDeleted',
         match: { isBanned: false, isDeleted: { $ne: true } } // Exclude squads with banned/deleted leaders
       })
       .populate({
         path: 'members.user',
-        select: 'username avatarUrl discordAvatar discordId isDeleted',
+        select: 'username avatar discordAvatar discordId isDeleted',
         match: { isDeleted: { $ne: true } } // Exclude deleted members
       })
       .select('name tag color logo members registeredLadders mode');
@@ -1583,8 +1583,8 @@ router.get('/admin/all-trophies', verifyToken, async (req, res) => {
 
 // ==================== ADMIN ROUTES ====================
 
-// Get all squads (admin/staff)
-router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
+// Get all squads (admin/staff/arbitre)
+router.get('/admin/all', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { page = 1, limit = 50, search = '' } = req.query;
     

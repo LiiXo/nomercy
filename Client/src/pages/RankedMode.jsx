@@ -296,6 +296,13 @@ const RankedMode = () => {
   
   // Ref for matchmaking section scroll
   const matchmakingRef = useRef(null);
+  
+  // Maps modal state
+  const [showMapsModal, setShowMapsModal] = useState(false);
+  const [availableMaps, setAvailableMaps] = useState({ '4v4': [], '5v5': [] });
+  const [mapsWarnings, setMapsWarnings] = useState({ '4v4': null, '5v5': null });
+  const [mapsBestOf, setMapsBestOf] = useState(3);
+  const [loadingMaps, setLoadingMaps] = useState(false);
 
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
@@ -337,6 +344,41 @@ const RankedMode = () => {
       console.error('Error fetching rules:', err);
     } finally {
       setLoadingRules(false);
+    }
+  };
+  
+  // Fetch available maps for ranked mode
+  const fetchAvailableMaps = async () => {
+    setLoadingMaps(true);
+    try {
+      // Fetch maps for both formats
+      const [maps4v4Response, maps5v5Response] = await Promise.all([
+        fetch(`${API_URL}/maps/ranked?format=4v4&mode=${selectedMode}&gameMode=${encodeURIComponent(selectedGameMode)}`),
+        fetch(`${API_URL}/maps/ranked?format=5v5&mode=${selectedMode}&gameMode=${encodeURIComponent(selectedGameMode)}`)
+      ]);
+      
+      const maps4v4Data = await maps4v4Response.json();
+      const maps5v5Data = await maps5v5Response.json();
+      
+      setAvailableMaps({
+        '4v4': maps4v4Data.success ? maps4v4Data.maps : [],
+        '5v5': maps5v5Data.success ? maps5v5Data.maps : []
+      });
+      
+      // Capturer les avertissements si pas assez de maps
+      setMapsWarnings({
+        '4v4': maps4v4Data.warning || null,
+        '5v5': maps5v5Data.warning || null
+      });
+      
+      // Capturer le format BO actuel
+      setMapsBestOf(maps4v4Data.bestOf || 3);
+    } catch (err) {
+      console.error('Error fetching maps:', err);
+      setAvailableMaps({ '4v4': [], '5v5': [] });
+      setMapsWarnings({ '4v4': null, '5v5': null });
+    } finally {
+      setLoadingMaps(false);
     }
   };
 
@@ -984,6 +1026,7 @@ const RankedMode = () => {
       distributingTeams: 'Répartition dans les équipes...',
       teamsReady: 'Équipes prêtes !',
       redirecting: 'Redirection vers le match...',
+      seasonLaunch: '(Lancement)',
     },
     en: {
       title: 'Ranked Mode',
@@ -1044,6 +1087,7 @@ const RankedMode = () => {
       distributingTeams: 'Distributing to teams...',
       teamsReady: 'Teams ready!',
       redirecting: 'Redirecting to match...',
+      seasonLaunch: '(Launch)',
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -1104,6 +1148,7 @@ const RankedMode = () => {
       distributingTeams: 'Aufteilung in Teams...',
       teamsReady: 'Teams bereit!',
       redirecting: 'Weiterleitung zum Spiel...',
+      seasonLaunch: '(Start)',
     },
     it: {
       title: 'Modalità Classificata',
@@ -1164,6 +1209,7 @@ const RankedMode = () => {
       distributingTeams: 'Distribuzione nelle squadre...',
       teamsReady: 'Squadre pronte!',
       redirecting: 'Reindirizzamento alla partita...',
+      seasonLaunch: '(Lancio)',
     }
   };
   
@@ -1199,11 +1245,14 @@ const RankedMode = () => {
                   <Sparkles className={`absolute -top-1 -right-1 w-3 h-3 sm:w-4 sm:h-4 ${isHardcore ? 'text-yellow-400' : 'text-cyan-300'} animate-pulse`} />
                 </div>
                 <div className="flex flex-col items-start">
-                  <span 
-                    className={`text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r ${isHardcore ? 'from-orange-400 via-yellow-200 via-white to-red-400' : 'from-cyan-400 via-white via-cyan-200 to-blue-400'} bg-clip-text text-transparent animate-text-shimmer`}
-                  >
-                    SAISON 1
-                  </span>
+                  <div className="flex items-baseline gap-2">
+                    <span 
+                      className={`text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r ${isHardcore ? 'from-orange-400 via-yellow-200 via-white to-red-400' : 'from-cyan-400 via-white via-cyan-200 to-blue-400'} bg-clip-text text-transparent animate-text-shimmer`}
+                    >
+                      {language === 'fr' ? 'Saison 1' : language === 'en' ? 'Season 1' : language === 'de' ? 'Staffel 1' : 'Stagione 1'}
+                    </span>
+                    <span className="text-sm sm:text-lg font-medium text-white/70">{t.seasonLaunch}</span>
+                  </div>
                   <span className={`text-[10px] sm:text-xs uppercase tracking-widest ${isHardcore ? 'text-orange-400/70' : 'text-cyan-400/70'} font-semibold`}>
                     {language === 'fr' ? 'En cours' : language === 'en' ? 'In Progress' : language === 'it' ? 'In Corso' : 'Läuft'}
                   </span>
@@ -1520,6 +1569,20 @@ const RankedMode = () => {
                   <BookOpen className={`w-5 h-5 text-${accent}-400`} />
                   <span className={`text-${accent}-400 font-semibold`}>
                     {language === 'fr' ? 'Voir les règles du mode' : 'View game mode rules'}
+                  </span>
+                </button>
+                
+                {/* Bouton Maps disponibles */}
+                <button
+                  onClick={() => {
+                    fetchAvailableMaps();
+                    setShowMapsModal(true);
+                  }}
+                  className={`mt-2 w-full py-3 rounded-xl border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-all flex items-center justify-center gap-2`}
+                >
+                  <Map className="w-5 h-5 text-green-400" />
+                  <span className="text-green-400 font-semibold">
+                    {language === 'fr' ? 'Maps disponibles' : 'Available Maps'}
                   </span>
                 </button>
                 
@@ -2314,6 +2377,156 @@ const RankedMode = () => {
         </div>
       )}
 
+      {/* Maps Modal */}
+      {showMapsModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto">
+          <div className="bg-dark-900 rounded-2xl p-4 sm:p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-green-500/30 shadow-xl my-auto">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                <Map className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
+                {language === 'fr' ? 'Maps Disponibles' : 'Available Maps'}
+              </h2>
+              <button
+                onClick={() => setShowMapsModal(false)}
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            {loadingMaps ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-green-400 animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Current Mode & Game Mode Info */}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-dark-800/50 rounded-xl border border-white/10">
+                  <span className={`px-3 py-1 rounded-lg text-sm font-medium ${isHardcore ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                    {isHardcore ? 'Hardcore' : 'CDL'}
+                  </span>
+                  <span className="px-3 py-1 rounded-lg text-sm font-medium bg-purple-500/20 text-purple-400">
+                    {selectedGameMode}
+                  </span>
+                  <span className="px-3 py-1 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">
+                    BO{mapsBestOf} ({mapsBestOf === 1 ? '1 map requise' : '3 maps requises'})
+                  </span>
+                </div>
+                
+                {/* 4v4 Format */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-lg text-sm font-bold">4v4</div>
+                    <span className="text-gray-400 text-sm">
+                      {availableMaps['4v4'].length} {language === 'fr' ? 'map(s)' : 'map(s)'}
+                    </span>
+                  </div>
+                  
+                  {/* Warning if not enough maps */}
+                  {mapsWarnings['4v4'] && (
+                    <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                      <p className="text-yellow-400 text-xs sm:text-sm flex items-start gap-2">
+                        <span className="text-yellow-500">⚠️</span>
+                        {mapsWarnings['4v4']}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {availableMaps['4v4'].length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
+                      {availableMaps['4v4'].map((map, index) => (
+                        <div key={map._id || index} className="relative group rounded-xl overflow-hidden border border-blue-500/20 hover:border-blue-500/50 transition-all">
+                          {map.image ? (
+                            <img 
+                              src={map.image} 
+                              alt={map.name}
+                              className="w-full h-20 sm:h-24 object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-20 sm:h-24 bg-dark-700 flex items-center justify-center">
+                              <Map className="w-8 h-8 text-gray-600" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end">
+                            <p className="w-full text-center text-white text-xs sm:text-sm font-semibold p-2 truncate">{map.name}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 bg-dark-800/30 rounded-xl border border-white/5">
+                      <Map className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">
+                        {language === 'fr' ? 'Aucune map configurée pour ce format' : 'No maps configured for this format'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* 5v5 Format - Only for Hardcore */}
+                {isHardcore && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="px-3 py-1 bg-orange-500/20 text-orange-400 rounded-lg text-sm font-bold">5v5</div>
+                      <span className="text-gray-400 text-sm">
+                        {availableMaps['5v5'].length} {language === 'fr' ? 'map(s)' : 'map(s)'}
+                      </span>
+                    </div>
+                    
+                    {/* Warning if not enough maps */}
+                    {mapsWarnings['5v5'] && (
+                      <div className="mb-3 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                        <p className="text-yellow-400 text-xs sm:text-sm flex items-start gap-2">
+                          <span className="text-yellow-500">⚠️</span>
+                          {mapsWarnings['5v5']}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {availableMaps['5v5'].length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3">
+                        {availableMaps['5v5'].map((map, index) => (
+                          <div key={map._id || index} className="relative group rounded-xl overflow-hidden border border-orange-500/20 hover:border-orange-500/50 transition-all">
+                            {map.image ? (
+                              <img 
+                                src={map.image} 
+                                alt={map.name}
+                                className="w-full h-20 sm:h-24 object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            ) : (
+                              <div className="w-full h-20 sm:h-24 bg-dark-700 flex items-center justify-center">
+                                <Map className="w-8 h-8 text-gray-600" />
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end">
+                              <p className="w-full text-center text-white text-xs sm:text-sm font-semibold p-2 truncate">{map.name}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 bg-dark-800/30 rounded-xl border border-white/5">
+                        <Map className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm">
+                          {language === 'fr' ? 'Aucune map configurée pour ce format' : 'No maps configured for this format'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <button
+              onClick={() => setShowMapsModal(false)}
+              className="mt-6 w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-semibold hover:opacity-90 transition-all"
+            >
+              {language === 'fr' ? 'Fermer' : 'Close'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Shuffle Animation Modal */}
       {showShuffleAnimation && shuffleMatchData && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60] p-2 sm:p-4 overflow-y-auto">
@@ -2380,7 +2593,10 @@ const RankedMode = () => {
                     <div className="space-y-1.5 sm:space-y-3">
                       {shuffleMatchData.players
                         ?.filter(p => p.team === 1 || p.team === 'A')
-                        .map((player, index) => (
+                        .map((player, index) => {
+                          const playerRankInfo = getRankFromPoints(player.points || 0);
+                          const RankIcon = playerRankInfo.icon;
+                          return (
                           <div
                             key={player.id || index}
                             className={`flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-1.5 sm:py-3 rounded-lg sm:rounded-xl bg-gray-900/50 border border-cyan-500/20 transform transition-all duration-500 ${
@@ -2398,13 +2614,30 @@ const RankedMode = () => {
                             </div>
                             <div className="min-w-0 flex-1">
                               <span className="text-white font-semibold text-xs sm:text-base truncate block">{player.username || `Joueur ${index + 1}`}</span>
-                              <div className="flex gap-1 flex-wrap">
+                              <div className="flex gap-1 flex-wrap items-center">
                                 {player.isHost && <span className="text-yellow-400 text-[10px] sm:text-xs">(Host)</span>}
                                 {player.isReferent && <span className="text-purple-400 text-[10px] sm:text-xs">(Réf.)</span>}
                               </div>
                             </div>
+                            {/* Animated Rank Badge */}
+                            <div 
+                              className="relative flex-shrink-0"
+                              style={{ animation: (shufflePhase === 2 || shufflePhase === 3) ? `pulse 2s ease-in-out infinite ${index * 0.2}s` : 'none' }}
+                            >
+                              <div 
+                                className="absolute inset-0 rounded-lg blur-md opacity-50"
+                                style={{ backgroundColor: playerRankInfo.color }}
+                              ></div>
+                              <div 
+                                className={`relative flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-gradient-to-r ${playerRankInfo.gradient} border border-white/20`}
+                              >
+                                <RankIcon className="w-3 h-3 sm:w-4 sm:h-4 text-white" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }} />
+                                <span className="text-white text-[10px] sm:text-xs font-bold">{playerRankInfo.name}</span>
+                              </div>
+                            </div>
                           </div>
-                        ))}
+                        );
+                        })}
                     </div>
                   </div>
 
@@ -2432,7 +2665,10 @@ const RankedMode = () => {
                     <div className="space-y-1.5 sm:space-y-3">
                       {shuffleMatchData.players
                         ?.filter(p => p.team === 2 || p.team === 'B')
-                        .map((player, index) => (
+                        .map((player, index) => {
+                          const playerRankInfo = getRankFromPoints(player.points || 0);
+                          const RankIcon = playerRankInfo.icon;
+                          return (
                           <div
                             key={player.id || index}
                             className={`flex items-center gap-1.5 sm:gap-3 px-2 sm:px-4 py-1.5 sm:py-3 rounded-lg sm:rounded-xl bg-gray-900/50 border border-orange-500/20 transform transition-all duration-500 ${
@@ -2440,6 +2676,22 @@ const RankedMode = () => {
                             }`}
                             style={{ transitionDelay: `${index * 100}ms` }}
                           >
+                            {/* Animated Rank Badge - Left side for Team 2 */}
+                            <div 
+                              className="relative flex-shrink-0"
+                              style={{ animation: (shufflePhase === 2 || shufflePhase === 3) ? `pulse 2s ease-in-out infinite ${index * 0.2}s` : 'none' }}
+                            >
+                              <div 
+                                className="absolute inset-0 rounded-lg blur-md opacity-50"
+                                style={{ backgroundColor: playerRankInfo.color }}
+                              ></div>
+                              <div 
+                                className={`relative flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-gradient-to-r ${playerRankInfo.gradient} border border-white/20`}
+                              >
+                                <RankIcon className="w-3 h-3 sm:w-4 sm:h-4 text-white" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }} />
+                                <span className="text-white text-[10px] sm:text-xs font-bold">{playerRankInfo.name}</span>
+                              </div>
+                            </div>
                             <div className="w-7 sm:w-10 h-7 sm:h-10 rounded-full overflow-hidden bg-gray-700 border sm:border-2 border-orange-500/50 flex-shrink-0">
                               <img
                                 src={player.avatar || `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`}
@@ -2450,13 +2702,14 @@ const RankedMode = () => {
                             </div>
                             <div className="min-w-0 flex-1">
                               <span className="text-white font-semibold text-xs sm:text-base truncate block">{player.username || `Joueur ${index + 1}`}</span>
-                              <div className="flex gap-1 flex-wrap">
+                              <div className="flex gap-1 flex-wrap items-center">
                                 {player.isHost && <span className="text-yellow-400 text-[10px] sm:text-xs">(Host)</span>}
                                 {player.isReferent && <span className="text-purple-400 text-[10px] sm:text-xs">(Réf.)</span>}
                               </div>
                             </div>
                           </div>
-                        ))}
+                        );
+                        })}
                     </div>
                   </div>
                 </div>

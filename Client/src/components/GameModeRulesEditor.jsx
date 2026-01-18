@@ -39,7 +39,7 @@ const getLocationLabels = (lang) => {
 
 // Sub-types based on location and mode
 // Hardcore ranked: Duel, TDM (Mêlée Générale), S&D (Recherche et Destruction)
-// CDL ranked: Hardpoint (Points Stratégiques) only
+// CDL ranked: Hardpoint (Points Stratégiques), S&D (Recherche et Destruction)
 const getSubTypeLabels = (lang, mode = 'hardcore') => {
   const translations = {
     fr: {
@@ -53,7 +53,8 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
         { value: 'snd', label: '💣 Recherche & Destruction', sublabel: 'Search and Destroy' }
       ],
       ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Points Stratégiques', sublabel: 'Hardpoint' }
+        { value: 'hardpoint', label: '📍 Points Stratégiques', sublabel: 'Hardpoint' },
+        { value: 'snd', label: '💣 Recherche & Destruction', sublabel: 'Search and Destroy' }
       ]
     },
     en: {
@@ -67,7 +68,8 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
         { value: 'snd', label: '💣 Search & Destroy', sublabel: 'Search and Destroy' }
       ],
       ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint Mode' }
+        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint Mode' },
+        { value: 'snd', label: '💣 Search & Destroy', sublabel: 'Search and Destroy' }
       ]
     },
     it: {
@@ -81,7 +83,8 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
         { value: 'snd', label: '💣 Cerca e Distruggi', sublabel: 'Cerca e Distruggi' }
       ],
       ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Punti Strategici', sublabel: 'Hardpoint' }
+        { value: 'hardpoint', label: '📍 Punti Strategici', sublabel: 'Hardpoint' },
+        { value: 'snd', label: '💣 Cerca e Distruggi', sublabel: 'Cerca e Distruggi' }
       ]
     },
     de: {
@@ -95,7 +98,8 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
         { value: 'snd', label: '💣 Suchen & Zerstören', sublabel: 'Suchen & Zerstören' }
       ],
       ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint-Modus' }
+        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint-Modus' },
+        { value: 'snd', label: '💣 Suchen & Zerstören', sublabel: 'Suchen & Zerstören' }
       ]
     }
   };

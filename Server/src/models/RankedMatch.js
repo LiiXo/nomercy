@@ -46,7 +46,7 @@ const rankedMatchSchema = new mongoose.Schema({
   gameMode: {
     type: String,
     required: true,
-    enum: ['Search & Destroy', 'Team Deathmatch', 'Duel']
+    enum: ['Search & Destroy', 'Team Deathmatch', 'Duel', 'Hardpoint']
   },
   // Mode hardcore ou cdl
   mode: {

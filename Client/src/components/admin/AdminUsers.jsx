@@ -17,7 +17,8 @@ const AdminUsers = ({
   setDeleteConfirm,
   handleToggleReferentBan,
   formatDate,
-  getRoleColor
+  getRoleColor,
+  userIsArbitre = false
 }) => {
   return (
     <div className="space-y-4">
@@ -88,11 +89,12 @@ const AdminUsers = ({
                   </div>
                 )}
                 <div className="flex items-center gap-1 ml-auto">
-                  <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>
-                  <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>
+                  {/* Arbitre only sees block referent and ban buttons */}
+                  {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>}
+                  {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>}
                   <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                   <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`}><Ban className="w-4 h-4" /></button>
-                  <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                  {!userIsArbitre && <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>}
                 </div>
               </div>
             </div>
@@ -187,11 +189,12 @@ const AdminUsers = ({
                     </td>
                     <td className="px-4 lg:px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>
+                        {/* Arbitre only sees block referent and ban buttons */}
+                        {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>}
+                        {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>}
                         <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg transition-colors ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                         <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg transition-colors ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`} title={user.isBanned ? 'Débannir' : 'Bannir'}><Ban className="w-4 h-4" /></button>
-                        <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                        {!userIsArbitre && <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>}
                       </div>
                     </td>
                   </tr>

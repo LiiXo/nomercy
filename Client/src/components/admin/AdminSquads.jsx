@@ -12,12 +12,15 @@ const AdminSquads = ({
   setPage,
   totalPages,
   userIsAdmin,
+  userIsArbitre = false,
   openEditModal,
   openLadderPointsModal,
   openSquadTrophyModal,
   setDeleteConfirm,
   handleKickMember
 }) => {
+  // Arbitre has view-only access to squads
+  const canModify = !userIsArbitre;
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -142,7 +145,7 @@ const AdminSquads = ({
                               <Star className="w-3 h-3 text-purple-400 flex-shrink-0" />
                             )}
                           </div>
-                          {!isLeader && (
+                          {!isLeader && canModify && (
                             <button
                               onClick={() => handleKickMember(squad._id, userId)}
                               className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
@@ -172,38 +175,41 @@ const AdminSquads = ({
                 </div>
               )}
 
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <button
-                  onClick={() => openEditModal('squad', squad)}
-                  className="flex-1 py-1.5 sm:py-2 px-2 sm:px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-xs sm:text-sm font-medium"
-                >
-                  Modifier
-                </button>
-                {userIsAdmin && squad.registeredLadders && squad.registeredLadders.length > 0 && (
+              {/* Action buttons - hidden for arbitre (view-only) */}
+              {canModify && (
+                <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                   <button
-                    onClick={() => openLadderPointsModal(squad)}
-                    className="py-1.5 sm:py-2 px-2 sm:px-3 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
-                    title="Modifier les points Ladder"
+                    onClick={() => openEditModal('squad', squad)}
+                    className="flex-1 py-1.5 sm:py-2 px-2 sm:px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-xs sm:text-sm font-medium"
                   >
-                    <TrendingUp className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                    Modifier
                   </button>
-                )}
-                {userIsAdmin && (
+                  {userIsAdmin && squad.registeredLadders && squad.registeredLadders.length > 0 && (
+                    <button
+                      onClick={() => openLadderPointsModal(squad)}
+                      className="py-1.5 sm:py-2 px-2 sm:px-3 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+                      title="Modifier les points Ladder"
+                    >
+                      <TrendingUp className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                    </button>
+                  )}
+                  {userIsAdmin && (
+                    <button
+                      onClick={() => openSquadTrophyModal(squad)}
+                      className="py-1.5 sm:py-2 px-2 sm:px-3 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-colors"
+                      title="Gérer les trophées"
+                    >
+                      <Trophy className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                    </button>
+                  )}
                   <button
-                    onClick={() => openSquadTrophyModal(squad)}
-                    className="py-1.5 sm:py-2 px-2 sm:px-3 bg-yellow-500/20 text-yellow-400 rounded-lg hover:bg-yellow-500/30 transition-colors"
-                    title="Gérer les trophées"
+                    onClick={() => setDeleteConfirm({ type: 'squad', id: squad._id })}
+                    className="py-1.5 sm:py-2 px-2 sm:px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
                   >
-                    <Trophy className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                    <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                   </button>
-                )}
-                <button
-                  onClick={() => setDeleteConfirm({ type: 'squad', id: squad._id })}
-                  className="py-1.5 sm:py-2 px-2 sm:px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
-                >
-                  <Trash2 className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           ))
         )}

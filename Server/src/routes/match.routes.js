@@ -11,7 +11,7 @@ import User from '../models/User.js';
 import AppSettings from '../models/AppSettings.js';
 import Map from '../models/Map.js';
 import NewSquadApproval from '../models/NewSquadApproval.js';
-import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
+import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getSquadMatchRewards, getRewardsConfig } from '../utils/configHelper.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,9 +49,9 @@ const disputeEvidenceUpload = multer({
   }
 });
 
-// Helper function to check if user is admin or staff
+// Helper function to check if user is admin or staff or arbitre
 const isAdminOrStaff = (user) => {
-  return user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+  return user?.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 };
 
 // Helper function to get the stats field name based on match mode
@@ -656,8 +656,8 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     console.log('[GET MATCH] challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
     console.log('[GET MATCH] opponentRoster:', JSON.stringify(match.opponentRoster, null, 2));
 
-    // Vérifier l'accès : membre d'une des deux équipes, helper dans le roster, ou staff
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    // Vérifier l'accès : membre d'une des deux équipes, helper dans le roster, ou staff/arbitre
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     // Vérifier si l'utilisateur est membre d'une des deux équipes
     const userSquadId = user.squad?._id?.toString() || user.squad?.toString();
@@ -705,7 +705,7 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     }
 
     const user = await User.findById(req.user._id).populate('squad');
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
     const match = await Match.findById(matchId)
       .populate('challengerRoster.user', '_id')
@@ -1110,7 +1110,7 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
       if (req.body.roster && req.body.roster.length > 0) {
         const userIds = req.body.roster.map(r => r.user);
         const rosterUsers = await User.find({ _id: { $in: userIds } })
-          .select('_id username avatarUrl discordAvatar discordId activisionId platform');
+          .select('_id username avatar discordAvatar discordId activisionId platform');
         rosterForApproval = rosterUsers.map(u => ({
           _id: u._id,
           username: u.username,
@@ -1252,16 +1252,29 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     // Si le match est en mode random, piocher 3 maps aléatoires depuis la DB
     if (match.mapType === 'random') {
       try {
-        // Récupérer les maps disponibles pour ce ladder, mode de jeu ET mode (hardcore/cdl)
-        const availableMaps = await Map.find({
+        // Déterminer le configPath en fonction du mode (hardcore/cdl)
+        const configPath = match.mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
+        
+        // Récupérer les maps avec la nouvelle structure de configuration
+        let availableMaps = await Map.find({
           isActive: true,
-          ladders: match.ladderId,
-          gameModes: match.gameMode,
-          // Filter by mode (hardcore, cdl) - include 'both' maps as well
-          mode: { $in: [match.mode, 'both'] }
+          [`${configPath}.ladder.enabled`]: true,
+          [`${configPath}.ladder.gameModes`]: match.gameMode
         });
 
-        console.log(`[RANDOM MAPS] Found ${availableMaps.length} maps for ${match.mode} ${match.ladderId} ${match.gameMode}`);
+        console.log(`[RANDOM MAPS] Found ${availableMaps.length} maps for ${match.mode} ladder ${match.gameMode} (new config)`);
+
+        // Fallback: si pas de maps avec la nouvelle config, essayer l'ancienne structure
+        if (availableMaps.length === 0) {
+          console.log(`[RANDOM MAPS] No maps with new config, falling back to legacy structure`);
+          availableMaps = await Map.find({
+            isActive: true,
+            ladders: match.ladderId,
+            gameModes: match.gameMode,
+            mode: { $in: [match.mode, 'both'] }
+          });
+          console.log(`[RANDOM MAPS] Found ${availableMaps.length} maps with legacy config`);
+        }
 
         if (availableMaps.length >= 3) {
           // Mélanger et prendre 3 maps
@@ -2398,7 +2411,7 @@ router.post('/:matchId/dispute-evidence', verifyToken, disputeEvidenceUpload.sin
     }
 
     // Vérifier que l'utilisateur fait partie du match ou est staff
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     const userSquadId = user.squad?._id?.toString() || user.squad?.toString();
     const challengerId = match.challenger?.toString();
     const opponentId = match.opponent?.toString();
@@ -2495,7 +2508,7 @@ router.delete('/:matchId/dispute-evidence/:evidenceId', verifyToken, async (req,
     const { matchId, evidenceId } = req.params;
     
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -2686,7 +2699,7 @@ router.post('/:matchId/cancel-request', verifyToken, async (req, res) => {
 router.get('/disputes/pending', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -2713,7 +2726,7 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
     const { winnerId, resolution, cancel } = req.body;
     
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -2968,7 +2981,7 @@ router.post('/:matchId/cancel-dispute', verifyToken, async (req, res) => {
     const { matchId } = req.params;
     
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     
     if (!isStaff) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé' });
@@ -3036,9 +3049,8 @@ router.post('/:matchId/cancel-dispute', verifyToken, async (req, res) => {
 
 // ==================== ADMIN ROUTES ====================
 
-// Get all matches (admin)
-// Get all matches (admin/staff)
-router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
+// Get all matches (admin/staff/arbitre)
+router.get('/admin/all', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { page = 1, limit = 20, status = '' } = req.query;
     
@@ -3073,8 +3085,8 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Delete match (admin/staff) - with stats rollback
-router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
+// Delete match (admin/staff/arbitre) - with stats rollback
+router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) => {
   try {
     const match = await Match.findById(req.params.matchId)
       .populate('challenger', 'name')
@@ -3217,8 +3229,8 @@ router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => 
   }
 });
 
-// Update match status (admin/staff)
-router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, res) => {
+// Update match status (admin/staff/arbitre)
+router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { status } = req.body;
     const validStatuses = ['pending', 'accepted', 'in_progress', 'completed', 'disputed', 'cancelled', 'expired'];
@@ -3255,8 +3267,8 @@ router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, re
   }
 });
 
-// Cancel match (admin/staff)
-router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res) => {
+// Cancel match (admin/staff/arbitre)
+router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { reason } = req.body;
     const match = await Match.findById(req.params.matchId)
@@ -3307,8 +3319,8 @@ router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res
   }
 });
 
-// Resolve dispute (admin/staff)
-router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async (req, res) => {
+// Resolve dispute (admin/staff/arbitre)
+router.post('/admin/:matchId/resolve-dispute', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { winner, resolution } = req.body;
     

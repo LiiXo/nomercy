@@ -7,7 +7,7 @@ const router = express.Router();
 // Valid subTypes for each location
 const VALID_SUBTYPES = {
   rankings: ['duo-trio', 'squad-team'],
-  ranked: ['duel', 'tdm', 'domination', 'snd']
+  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint']
 };
 
 // ==================== PUBLIC ROUTES ====================

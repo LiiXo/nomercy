@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame } from 'lucide-react';
+import { useAuth } from '../AuthContext';
+import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame, Link2 } from 'lucide-react';
 
 import { getAvatarUrl, getDefaultAvatar, getUserAvatar } from '../utils/avatar';
 
@@ -13,14 +14,19 @@ const PlayerProfile = () => {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { selectedMode } = useMode();
+  const { user } = useAuth();
 
   const isHardcore = selectedMode === 'hardcore';
   const accentColor = isHardcore ? 'red' : 'cyan';
   const gradientFrom = isHardcore ? 'from-red-500' : 'from-cyan-400';
   const gradientTo = isHardcore ? 'to-orange-600' : 'to-cyan-600';
+  
+  // Check if viewing own profile
+  const isOwnProfile = user && (user._id === playerId || user.id === playerId);
 
   // States
   const [loading, setLoading] = useState(true);
+  const [copiedMatchId, setCopiedMatchId] = useState(null);
   const [error, setError] = useState(null);
   const [playerData, setPlayerData] = useState(null);
   const [ranking, setRanking] = useState(null);
@@ -53,6 +59,18 @@ const PlayerProfile = () => {
     }, 50);
     return () => clearInterval(interval);
   }, []);
+  
+  // Lock body scroll when dialog is open
+  useEffect(() => {
+    if (showMatchDetails || showRankedMatchDetails) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showMatchDetails, showRankedMatchDetails]);
 
   // Traductions
   const texts = {
@@ -847,7 +865,7 @@ const PlayerProfile = () => {
                             )}
                           </div>
                           
-                          {/* Bottom row: Date + Button */}
+                          {/* Bottom row: Date + Buttons */}
                           <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
                             {/* Date + Heure */}
                             <div className="flex items-center gap-1.5 text-gray-500 text-xs sm:text-sm">
@@ -860,20 +878,47 @@ const PlayerProfile = () => {
                               </span>
                             </div>
 
-                            {/* View Details Button */}
-                            {match.status === 'completed' && (
-                              <button
-                                onClick={() => {
-                                  setSelectedMatch(match);
-                                  setShowMatchDetails(true);
-                                }}
-                                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 transition-colors flex items-center gap-1.5`}
-                              >
-                                <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                                <span className="hidden sm:inline">{t.viewDetails}</span>
-                                <span className="sm:hidden">{language === 'fr' ? 'Voir' : 'View'}</span>
-                              </button>
-                            )}
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              {/* Copy Match Link Button - Only for own profile */}
+                              {isOwnProfile && match.status === 'completed' && (
+                                <button
+                                  onClick={() => {
+                                    const matchUrl = `${window.location.origin}/match/${match._id}`;
+                                    navigator.clipboard.writeText(matchUrl);
+                                    setCopiedMatchId(match._id);
+                                    setTimeout(() => setCopiedMatchId(null), 2000);
+                                  }}
+                                  className={`px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
+                                    copiedMatchId === match._id
+                                      ? 'bg-green-500/20 text-green-400'
+                                      : 'bg-gray-500/20 text-gray-400 hover:bg-gray-500/30'
+                                  }`}
+                                  title={language === 'fr' ? 'Copier le lien pour arbitre' : 'Copy link for referee'}
+                                >
+                                  {copiedMatchId === match._id ? (
+                                    <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                  ) : (
+                                    <Link2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                  )}
+                                  <span className="hidden sm:inline">{copiedMatchId === match._id ? (language === 'fr' ? 'Copié!' : 'Copied!') : (language === 'fr' ? 'Copier lien' : 'Copy link')}</span>
+                                </button>
+                              )}
+
+                              {/* View Details Button */}
+                              {match.status === 'completed' && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedMatch(match);
+                                    setShowMatchDetails(true);
+                                  }}
+                                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-${accentColor}-500/20 text-${accentColor}-400 hover:bg-${accentColor}-500/30 transition-colors flex items-center gap-1.5`}
+                                >
+                                  <Play className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                  <span className="hidden sm:inline">{t.viewDetails}</span>
+                                  <span className="sm:hidden">{language === 'fr' ? 'Voir' : 'View'}</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -976,8 +1021,8 @@ const PlayerProfile = () => {
                           </div>
                         </div>
                         
-                        {/* Right: Date + View Details */}
-                        <div className="flex items-center gap-3">
+                        {/* Right: Date + Buttons */}
+                        <div className="flex items-center gap-2 sm:gap-3">
                           {/* Date + Heure */}
                           <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
                             <Clock className="w-3.5 h-3.5" />
@@ -989,13 +1034,38 @@ const PlayerProfile = () => {
                             </span>
                           </div>
                           
+                          {/* Copy Match Link Button - Only for own profile */}
+                          {isOwnProfile && (
+                            <button
+                              onClick={() => {
+                                const matchUrl = `${window.location.origin}/ranked-match/${match._id}`;
+                                navigator.clipboard.writeText(matchUrl);
+                                setCopiedMatchId(match._id);
+                                setTimeout(() => setCopiedMatchId(null), 2000);
+                              }}
+                              className={`px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
+                                copiedMatchId === match._id
+                                  ? 'bg-green-500/20 text-green-400'
+                                  : 'bg-gray-500/20 text-gray-400 hover:bg-gray-500/30'
+                              }`}
+                              title={language === 'fr' ? 'Copier le lien pour arbitre' : 'Copy link for referee'}
+                            >
+                              {copiedMatchId === match._id ? (
+                                <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              ) : (
+                                <Link2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              )}
+                              <span className="hidden sm:inline">{copiedMatchId === match._id ? (language === 'fr' ? 'Copié!' : 'Copied!') : (language === 'fr' ? 'Copier' : 'Copy')}</span>
+                            </button>
+                          )}
+                          
                           {/* View Details Button */}
                           <button
                             onClick={() => {
                               setSelectedRankedMatch(match);
                               setShowRankedMatchDetails(true);
                             }}
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1.5"
+                            className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1.5"
                           >
                             <Play className="w-3 h-3" />
                             <span>{language === 'fr' ? 'Voir détails' : 'View details'}</span>
@@ -1062,8 +1132,8 @@ const PlayerProfile = () => {
 
       {/* Match Details Dialog */}
       {showMatchDetails && selectedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm">
-          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain" onClick={(e) => { if (e.target === e.currentTarget) { setShowMatchDetails(false); setSelectedMatch(null); } }}>
+          <div className="relative w-full max-w-4xl bg-dark-900 border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col my-auto" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className={`p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}>
               <div className="flex items-center justify-between">
@@ -1268,10 +1338,10 @@ const PlayerProfile = () => {
 
       {/* Ranked Match Details Modal */}
       {showRankedMatchDetails && selectedRankedMatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-dark-900 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl border border-purple-500/30">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain" onClick={(e) => { if (e.target === e.currentTarget) { setShowRankedMatchDetails(false); setSelectedRankedMatch(null); } }}>
+          <div className="bg-dark-900 rounded-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] overflow-hidden shadow-2xl border border-purple-500/30 my-auto flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r from-purple-500 to-pink-600">
+            <div className="flex-shrink-0 p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r from-purple-500 to-pink-600">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
                   <Trophy className="w-5 sm:w-6 h-5 sm:h-6" />
@@ -1317,7 +1387,7 @@ const PlayerProfile = () => {
             </div>
 
             {/* Content - Teams */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 {/* Team 1 */}
                 <div className={`p-4 rounded-xl border-2 ${

@@ -157,6 +157,12 @@ export const AuthProvider = ({ children }) => {
   // Check if user is staff (admin or staff)
   const isStaff = () => hasRole('admin') || hasRole('staff');
 
+  // Check if user is arbitre (referee)
+  const isArbitre = () => hasRole('arbitre');
+
+  // Check if user has admin panel access (admin, staff, or arbitre)
+  const hasAdminAccess = () => hasRole('admin') || hasRole('staff') || hasRole('arbitre');
+
   // Check if user is CDL manager
   const isCDLManager = () => hasRole('admin') || hasRole('gerant_cdl');
 
@@ -185,6 +191,8 @@ export const AuthProvider = ({ children }) => {
     hasRole,
     isAdmin,
     isStaff,
+    isArbitre,
+    hasAdminAccess,
     isCDLManager,
     isHardcoreManager
   };

@@ -8,7 +8,7 @@ import { Zap, Shield, ExternalLink, Settings, Skull, Trophy, Crosshair, Users, M
 const Footer = () => {
   const { t, language } = useLanguage();
   const { selectedMode } = useMode();
-  const { isAuthenticated, user, isStaff } = useAuth();
+  const { isAuthenticated, user, isStaff, isArbitre, hasAdminAccess } = useAuth();
   
   const isHardcore = selectedMode === 'hardcore';
 
@@ -174,15 +174,21 @@ const Footer = () => {
       </div>
 
       {/* Admin Panel Link - Mobile Only */}
-      {isAuthenticated && user && isStaff && isStaff() && (
+      {isAuthenticated && user && hasAdminAccess && hasAdminAccess() && (
         <div className="md:hidden border-t border-white/5">
           <div className="px-6 py-4">
             <Link
               to="/admin"
-              className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-400 hover:text-purple-300 hover:border-purple-400/50 transition-all"
+              className={`flex items-center justify-center gap-2 w-full py-3.5 rounded-xl transition-all ${
+                isArbitre && isArbitre() && !(isStaff && isStaff())
+                  ? 'bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border border-yellow-500/30 text-yellow-400 hover:text-yellow-300 hover:border-yellow-400/50'
+                  : 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-purple-400 hover:text-purple-300 hover:border-purple-400/50'
+              }`}
             >
               <Settings className="w-4 h-4" />
-              <span className="font-semibold text-sm">Admin Panel</span>
+              <span className="font-semibold text-sm">
+                {isArbitre && isArbitre() && !(isStaff && isStaff()) ? 'Panel Arbitre' : 'Admin Panel'}
+              </span>
             </Link>
           </div>
         </div>

@@ -90,7 +90,7 @@ router.get('/:seasonId/leaderboard', async (req, res) => {
       
       await Season.populate(leaderboard, {
         path: 'user',
-        select: 'username avatarUrl discordAvatar isDeleted',
+        select: 'username avatar discordAvatar discordId isDeleted',
         match: { isDeleted: { $ne: true } } // Exclude deleted users
       });
       
@@ -110,7 +110,7 @@ router.get('/:seasonId/leaderboard', async (req, res) => {
     const rankings = await Ranking.find({ mode: season.mode })
       .populate({
         path: 'user',
-        select: 'username avatarUrl discordAvatar isDeleted',
+        select: 'username avatar discordAvatar discordId isDeleted',
         match: { isDeleted: { $ne: true } } // Exclude deleted users
       })
       .sort({ points: -1 })

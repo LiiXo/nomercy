@@ -4,7 +4,7 @@ import RankedMatch from '../models/RankedMatch.js';
 import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
-import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
+import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
 import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
 
@@ -501,8 +501,8 @@ router.get('/:matchId', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
 
-    // Vérifier l'accès : participant ou staff
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    // Vérifier l'accès : participant ou staff/arbitre
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     const isParticipant = match.players.some(p => 
       p.user && p.user._id?.toString() === user._id.toString()
     );
@@ -577,7 +577,7 @@ router.post('/:matchId/chat', verifyToken, async (req, res) => {
     }
 
     const user = await User.findById(req.user._id);
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
     const match = await RankedMatch.findById(matchId);
 
@@ -653,7 +653,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     }
 
     // Vérifier si l'utilisateur fait partie du match ou est staff (pour les matchs de test)
-    const isStaff = user.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+    const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
     const playerInMatch = match.players.find(p => p.user && p.user.toString() === user._id.toString());
     
     if (!playerInMatch && !isStaff) {
@@ -741,9 +741,9 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
 
     // Repopuler le match
     await match.populate([
-      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
-      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
       { path: 'chat.user', select: 'username roles' },
       { path: 'result.playerVotes.user', select: 'username' }
     ]);
@@ -823,9 +823,9 @@ router.post('/:matchId/dispute', verifyToken, async (req, res) => {
 
     // Repopuler et émettre
     await match.populate([
-      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
-      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
       { path: 'dispute.reportedBy', select: 'username' }
     ]);
 
@@ -876,9 +876,9 @@ router.post('/:matchId/code', verifyToken, async (req, res) => {
 
     // Repopuler et émettre
     await match.populate([
-      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
-      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' }
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' }
     ]);
 
     const io = req.app.get('io');
@@ -984,9 +984,9 @@ router.post('/:matchId/cancellation/vote', verifyToken, async (req, res) => {
 
     // Repopuler pour l'événement socket
     await match.populate([
-      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
-      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
       { path: 'cancellationRequest.votes.user', select: 'username' },
       { path: 'cancellationRequest.initiatedBy', select: 'username' }
     ]);
@@ -1124,8 +1124,8 @@ router.post('/matchmaking/start-test-match', verifyToken, requireStaff, async (r
   }
 });
 
-// Lister tous les matchs classés (admin/staff)
-router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
+// Lister tous les matchs classés (admin/staff/arbitre)
+router.get('/admin/all', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { status, mode, gameMode, page = 1, limit = 20 } = req.query;
     
@@ -1160,8 +1160,8 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
   }
 });
 
-// Annuler un match (admin/staff) - Avec remboursement des récompenses si le match était terminé
-router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res) => {
+// Annuler un match (admin/staff/arbitre) - Avec remboursement des récompenses si le match était terminé
+router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { matchId } = req.params;
     const { reason } = req.body;
@@ -1291,8 +1291,8 @@ router.post('/admin/:matchId/cancel', verifyToken, requireStaff, async (req, res
   }
 });
 
-// Forcer un résultat (admin/staff)
-router.post('/admin/:matchId/force-result', verifyToken, requireStaff, async (req, res) => {
+// Forcer un résultat (admin/staff/arbitre)
+router.post('/admin/:matchId/force-result', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { matchId } = req.params;
     const { winner, reason } = req.body;
@@ -1328,9 +1328,9 @@ router.post('/admin/:matchId/force-result', verifyToken, requireStaff, async (re
     
     // Repopuler le match avec toutes les données
     await match.populate([
-      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
-      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
       { path: 'chat.user', select: 'username roles' }
     ]);
     
@@ -1353,8 +1353,8 @@ router.post('/admin/:matchId/force-result', verifyToken, requireStaff, async (re
   }
 });
 
-// Résoudre un litige (admin/staff)
-router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async (req, res) => {
+// Résoudre un litige (admin/staff/arbitre)
+router.post('/admin/:matchId/resolve-dispute', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { matchId } = req.params;
     const { winner, resolution } = req.body;
@@ -1393,9 +1393,9 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async 
     
     // Repopuler le match avec toutes les données
     await match.populate([
-      { path: 'players.user', select: 'username avatarUrl discordAvatar discordId activisionId platform' },
-      { path: 'team1Referent', select: 'username avatarUrl discordAvatar discordId' },
-      { path: 'team2Referent', select: 'username avatarUrl discordAvatar discordId' },
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
       { path: 'chat.user', select: 'username roles' },
       { path: 'dispute.reportedBy', select: 'username' },
       { path: 'dispute.resolvedBy', select: 'username' }
@@ -1420,8 +1420,8 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireStaff, async 
   }
 });
 
-// Mettre à jour le statut d'un match classé (admin/staff)
-router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, res) => {
+// Mettre à jour le statut d'un match classé (admin/staff/arbitre)
+router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { matchId } = req.params;
     const { status } = req.body;
@@ -1475,8 +1475,8 @@ router.patch('/admin/:matchId/status', verifyToken, requireStaff, async (req, re
   }
 });
 
-// Supprimer un match classé et rembourser les récompenses (admin/staff)
-router.delete('/admin/:matchId', verifyToken, requireStaff, async (req, res) => {
+// Supprimer un match classé et rembourser les récompenses (admin/staff/arbitre)
+router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { matchId } = req.params;
     const adminUser = await User.findById(req.user._id);

@@ -110,15 +110,15 @@ router.get('/top-player', async (req, res) => {
       username: { $ne: null, $exists: true },
       [`${statsField}.xp`]: { $gt: 0 }
     })
-      .select(`username avatar avatarUrl discordAvatar discordId ${statsField} stats`)
+      .select(`username avatar discordAvatar discordId ${statsField}`)
       .sort({ [`${statsField}.xp`]: -1 });
 
     if (!topUser) {
       return res.json({ success: true, player: null });
     }
     
-    // Get mode-specific stats, fallback to legacy stats
-    const modeStats = topUser[statsField] || topUser.stats || {};
+    // Use ONLY mode-specific stats, no fallback to general stats
+    const modeStats = topUser[statsField] || {};
 
     res.json({
       success: true,
@@ -155,7 +155,7 @@ router.get('/top-squad', async (req, res) => {
       $or: [{ mode }, { mode: 'both' }],
       [`${statsField}.totalPoints`]: { $gt: 0 }
     })
-      .select(`name tag logo color ${statsField} stats registeredLadders`)
+      .select(`name tag logo color ${statsField} registeredLadders`)
       .sort({ [`${statsField}.totalPoints`]: -1 })
       .lean();
 
@@ -163,8 +163,8 @@ router.get('/top-squad', async (req, res) => {
       return res.json({ success: true, squad: null });
     }
     
-    // Get mode-specific stats, fallback to legacy stats
-    const modeStats = topSquad[statsField] || topSquad.stats || {};
+    // Use ONLY mode-specific stats, no fallback to general stats
+    const modeStats = topSquad[statsField] || {};
 
     res.json({
       success: true,
@@ -200,17 +200,20 @@ router.get('/top-players/:mode', async (req, res) => {
     const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
 
     // Fetch users with stats, sorted by XP for this mode
+    // Only include users who have XP > 0 in this specific mode (no fallback to general stats)
     const users = await User.find({
       isBanned: { $ne: true },
       isDeleted: { $ne: true },
-      username: { $ne: null, $exists: true } // Exclude users with null username
+      username: { $ne: null, $exists: true }, // Exclude users with null username
+      [`${statsField}.xp`]: { $gt: 0 } // Only users with XP in this specific mode
     })
-      .select(`username avatar discordAvatar discordId ${statsField} stats`)
+      .select(`username avatar discordAvatar discordId ${statsField}`)
       .sort({ [`${statsField}.xp`]: -1 }) // Tri par XP du mode
       .limit(parseInt(limit));
 
     const rankings = users.map((u, index) => {
-      const modeStats = u[statsField] || u.stats || {};
+      // Use ONLY mode-specific stats, no fallback to general stats
+      const modeStats = u[statsField] || {};
       return {
         rank: index + 1,
         user: {
@@ -248,13 +251,14 @@ router.get('/player-rank/:userId', async (req, res) => {
     const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
 
     // Get the user
-    const user = await User.findById(userId).select(`username avatar avatarUrl discordAvatar discordId ${statsField} stats isBanned isDeleted`);
+    const user = await User.findById(userId).select(`username avatar discordAvatar discordId ${statsField} isBanned isDeleted`);
     
     if (!user || user.isBanned || user.isDeleted) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const modeStats = user[statsField] || user.stats || {};
+    // Use ONLY mode-specific stats, no fallback to general stats
+    const modeStats = user[statsField] || {};
     const userXp = modeStats.xp || 0;
 
     // Count users with higher XP for this mode

@@ -63,7 +63,7 @@ const userSchema = new mongoose.Schema({
   roles: {
     type: [{
       type: String,
-      enum: ['user', 'admin', 'staff', 'gerant_cdl', 'gerant_hardcore']
+      enum: ['user', 'admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore']
     }],
     default: ['user']
   },
@@ -186,6 +186,16 @@ userSchema.methods.hasRole = function(role) {
 // Method to check if user is admin or staff
 userSchema.methods.isStaff = function() {
   return this.roles.includes('admin') || this.roles.includes('staff');
+};
+
+// Method to check if user is arbitre (referee)
+userSchema.methods.isArbitre = function() {
+  return this.roles.includes('arbitre');
+};
+
+// Method to check if user has admin panel access (admin, staff, or arbitre)
+userSchema.methods.hasAdminAccess = function() {
+  return this.roles.includes('admin') || this.roles.includes('staff') || this.roles.includes('arbitre');
 };
 
 // Ensure virtual fields are serialized

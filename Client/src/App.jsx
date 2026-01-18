@@ -113,9 +113,9 @@ const SetupProfileRoute = ({ children }) => {
   return children;
 };
 
-// Route admin
+// Route admin (for admin, staff, and arbitre)
 const AdminRoute = ({ children }) => {
-  const { isAuthenticated, isProfileComplete, loading, isStaff } = useAuth();
+  const { isAuthenticated, isProfileComplete, loading, hasAdminAccess } = useAuth();
   
   if (loading) {
     return <LoadingScreen />;
@@ -125,7 +125,7 @@ const AdminRoute = ({ children }) => {
     return <Navigate to="/" replace />;
   }
 
-  if (!isStaff()) {
+  if (!hasAdminAccess()) {
     return <Navigate to="/" replace />;
   }
   

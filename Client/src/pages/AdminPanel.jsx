@@ -26,12 +26,21 @@ const AdminPanel = () => {
   const { user, isAdmin, isStaff, refreshUser } = useAuth();
   const { language } = useLanguage();
   
-  // Check if user is admin (full access) or staff (limited access)
+  // Check if user is admin (full access), staff (limited access), or arbitre (very limited access)
   const userIsAdmin = user?.roles?.includes('admin') || false;
   const userIsStaff = user?.roles?.includes('staff') || user?.roles?.includes('admin') || false;
+  const userIsArbitre = user?.roles?.includes('arbitre') || false;
+  const hasAdminAccess = userIsAdmin || userIsStaff || userIsArbitre;
   
   // États principaux
-  const [activeTab, setActiveTab] = useState('overview');
+  // Arbitre starts on 'users' tab since they don't have access to overview
+  const [activeTab, setActiveTab] = useState(() => {
+    // Check if user is only arbitre (not admin or staff)
+    if (user?.roles?.includes('arbitre') && !user?.roles?.includes('admin') && !user?.roles?.includes('staff')) {
+      return 'users';
+    }
+    return 'overview';
+  });
   const [activeSubTab, setActiveSubTab] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -117,41 +126,42 @@ const AdminPanel = () => {
 
   // Navigation tabs configuration grouped by category
   // Staff has limited access based on appSettings.staffAdminAccess
+  // Arbitre has very limited access (users, squads view-only, matches, deleted-accounts)
   const tabGroups = [
     {
       name: 'Général',
       tabs: [
-        { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3, adminOnly: false },
+        { id: 'overview', label: 'Vue d\'ensemble', icon: BarChart3, adminOnly: false, arbitreAccess: false },
       ]
     },
     {
       name: 'Gestion',
       tabs: [
-        { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false },
-        { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false },
-        { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false },
-        { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false },
-        { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false },
+        { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false, arbitreAccess: true },
+        { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false, arbitreAccess: true },
+        { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false, arbitreAccess: true },
+        { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false, arbitreAccess: true },
+        { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false, arbitreAccess: false },
       ]
     },
     {
       name: 'Contenu',
       tabs: [
-        { id: 'shop', label: 'Boutique', icon: ShoppingBag, adminOnly: true },
-        { id: 'trophies', label: 'Trophées', icon: Trophy, adminOnly: true },
-        { id: 'announcements', label: 'Annonces', icon: Megaphone, adminOnly: false },
-        { id: 'maps', label: 'Cartes', icon: MapPin, adminOnly: false },
-        { id: 'gamerules', label: 'Règles', icon: FileText, adminOnly: false },
+        { id: 'shop', label: 'Boutique', icon: ShoppingBag, adminOnly: true, arbitreAccess: false },
+        { id: 'trophies', label: 'Trophées', icon: Trophy, adminOnly: true, arbitreAccess: false },
+        { id: 'announcements', label: 'Annonces', icon: Megaphone, adminOnly: false, arbitreAccess: false },
+        { id: 'maps', label: 'Cartes', icon: MapPin, adminOnly: false, arbitreAccess: false },
+        { id: 'gamerules', label: 'Règles', icon: FileText, adminOnly: false, arbitreAccess: false },
       ]
     },
     {
       name: 'Système',
       adminOnly: true,
       tabs: [
-        { id: 'application', label: 'Application', icon: Power, adminOnly: true },
-        { id: 'config', label: 'Config', icon: Settings, adminOnly: true },
-        { id: 'seasons', label: 'Saisons', icon: Calendar, adminOnly: true },
-        { id: 'system', label: 'Système', icon: Database, adminOnly: true },
+        { id: 'application', label: 'Application', icon: Power, adminOnly: true, arbitreAccess: false },
+        { id: 'config', label: 'Config', icon: Settings, adminOnly: true, arbitreAccess: false },
+        { id: 'seasons', label: 'Saisons', icon: Calendar, adminOnly: true, arbitreAccess: false },
+        { id: 'system', label: 'Système', icon: Database, adminOnly: true, arbitreAccess: false },
       ]
     }
   ];
@@ -162,9 +172,13 @@ const AdminPanel = () => {
   // Filter tabs based on user role and staff access settings
   const getStaffAccess = (tabId) => {
     if (userIsAdmin) return true;
-    // Admin-only tabs are never accessible to staff
+    // Admin-only tabs are never accessible to staff or arbitre
     const tab = allTabs.find(t => t.id === tabId);
     if (tab?.adminOnly) return false;
+    // Arbitre has specific limited access
+    if (userIsArbitre && !userIsStaff) {
+      return tab?.arbitreAccess === true;
+    }
     // Check appSettings for staff access - default to true if not set
     if (!appSettings || !appSettings.staffAdminAccess) return true;
     return appSettings.staffAdminAccess[tabId] !== false;
@@ -172,7 +186,9 @@ const AdminPanel = () => {
   
   const tabs = userIsAdmin 
     ? allTabs 
-    : allTabs.filter(tab => !tab.adminOnly && getStaffAccess(tab.id));
+    : userIsArbitre && !userIsStaff
+      ? allTabs.filter(tab => tab.arbitreAccess === true)
+      : allTabs.filter(tab => !tab.adminOnly && getStaffAccess(tab.id));
 
   // Ban modal states
   const [showBanModal, setShowBanModal] = useState(false);
@@ -304,11 +320,11 @@ const AdminPanel = () => {
   }, [language]);
 
   useEffect(() => {
-    // Allow both admin and staff to access the panel
-    if (!userIsAdmin && !userIsStaff) {
+    // Allow admin, staff, and arbitre to access the panel
+    if (!userIsAdmin && !userIsStaff && !userIsArbitre) {
       navigate('/');
     }
-  }, [userIsAdmin, userIsStaff, navigate]);
+  }, [userIsAdmin, userIsStaff, userIsArbitre, navigate]);
 
   useEffect(() => {
     loadTabData();
@@ -954,11 +970,38 @@ const AdminPanel = () => {
     setError('');
     setSuccess('');
     
-    // Deep copy arrays for proper editing
+    // Deep copy arrays and nested objects for proper editing
     let formDataCopy = { ...item };
     if (item.ladders) formDataCopy.ladders = [...item.ladders];
     if (item.gameModes) formDataCopy.gameModes = [...item.gameModes];
     if (item.rankedFormats) formDataCopy.rankedFormats = [...item.rankedFormats];
+    // Deep copy map config structures
+    if (item.hardcoreConfig) {
+      formDataCopy.hardcoreConfig = {
+        ladder: { 
+          enabled: item.hardcoreConfig?.ladder?.enabled || false, 
+          gameModes: [...(item.hardcoreConfig?.ladder?.gameModes || [])] 
+        },
+        ranked: { 
+          enabled: item.hardcoreConfig?.ranked?.enabled || false, 
+          gameModes: [...(item.hardcoreConfig?.ranked?.gameModes || [])],
+          formats: [...(item.hardcoreConfig?.ranked?.formats || [])]
+        }
+      };
+    }
+    if (item.cdlConfig) {
+      formDataCopy.cdlConfig = {
+        ladder: { 
+          enabled: item.cdlConfig?.ladder?.enabled || false, 
+          gameModes: [...(item.cdlConfig?.ladder?.gameModes || [])] 
+        },
+        ranked: { 
+          enabled: item.cdlConfig?.ranked?.enabled || false, 
+          gameModes: [...(item.cdlConfig?.ranked?.gameModes || [])],
+          formats: [...(item.cdlConfig?.ranked?.formats || [])]
+        }
+      };
+    }
     
     // For users, fetch complete data including ranked points
     if (type === 'user' && item._id) {
@@ -1042,9 +1085,15 @@ const AdminPanel = () => {
         return {
           name: '',
           image: '',
-          ladders: [],
-          gameModes: [],
-          rankedFormats: [],
+          mode: 'both',
+          hardcoreConfig: {
+            ladder: { enabled: false, gameModes: [] },
+            ranked: { enabled: false, gameModes: [], formats: [] }
+          },
+          cdlConfig: {
+            ladder: { enabled: false, gameModes: [] },
+            ranked: { enabled: false, gameModes: [], formats: [] }
+          },
           isActive: true
         };
       default:
@@ -1285,6 +1334,7 @@ const AdminPanel = () => {
     const colors = {
       admin: 'red',
       staff: 'purple',
+      arbitre: 'yellow',
       gerant_cdl: 'cyan',
       gerant_hardcore: 'orange',
       user: 'gray'
@@ -1526,11 +1576,12 @@ const AdminPanel = () => {
                     </div>
                   )}
                   <div className="flex items-center gap-1 ml-auto">
-                    <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>
+                    {/* Arbitre only sees block referent and ban buttons */}
+                    {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>}
+                    {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>}
                     <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                     <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`}><Ban className="w-4 h-4" /></button>
-                    <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                    {!userIsArbitre && <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
               </div>
@@ -1625,11 +1676,12 @@ const AdminPanel = () => {
                       </td>
                       <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>
-                          <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>
+                          {/* Arbitre only sees block referent and ban buttons */}
+                          {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>}
+                          {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>}
                           <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg transition-colors ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                           <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg transition-colors ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`} title={user.isBanned ? 'Débannir' : 'Bannir'}><Ban className="w-4 h-4" /></button>
-                          <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                          {!userIsArbitre && <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>}
                         </div>
                       </td>
                     </tr>
@@ -2984,14 +3036,43 @@ const AdminPanel = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <h2 className="text-2xl font-bold text-white">Gestion des Cartes</h2>
-          <button
-            onClick={() => openCreateModal('map')}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
-          >
-            <Plus className="w-5 h-5" />
-            Nouvelle Carte
-              </button>
-            </div>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                if (!window.confirm('Activer toutes les maps dans tous les modes et formats ? Cela écrasera les configurations existantes.')) {
+                  return;
+                }
+                try {
+                  const response = await fetch(`${API_URL}/maps/admin/enable-all`, {
+                    method: 'POST',
+                    credentials: 'include'
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess(data.message);
+                    fetchMaps();
+                  } else {
+                    setError(data.message || 'Erreur');
+                  }
+                } catch (err) {
+                  console.error('Enable all maps error:', err);
+                  setError('Erreur lors de l\'activation');
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:opacity-90 transition-all"
+            >
+              <CheckCircle className="w-5 h-5" />
+              Tout Activer
+            </button>
+            <button
+              onClick={() => openCreateModal('map')}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
+            >
+              <Plus className="w-5 h-5" />
+              Nouvelle Carte
+            </button>
+          </div>
+        </div>
         
         {/* Mode Filter Tabs */}
         <div className="flex gap-2 p-1 bg-dark-800/50 rounded-xl w-fit">
@@ -3062,48 +3143,78 @@ const AdminPanel = () => {
                     )}
                   </div>
                   <div className="space-y-2 mb-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-gray-400 text-xs">Ladders / Modes</span>
-                      <div className="flex flex-wrap gap-1">
-                        {map.ladders?.length > 0 ? map.ladders.map((ladder, idx) => {
-                          const ladderLabels = {
-                            'duo-trio': 'Duo/Trio',
-                            'squad-team': 'Squad/Team',
-                            'ranked': 'Classé'
-                          };
-                          return (
-                            <span key={idx} className={`px-2 py-0.5 rounded text-xs ${
-                              ladder === 'ranked' 
-                                ? 'bg-orange-500/20 text-orange-400' 
-                                : 'bg-purple-500/20 text-purple-400'
-                            }`}>
-                              {ladderLabels[ladder] || ladder}
-                            </span>
-                          );
-                        }) : <span className="text-gray-500 text-xs">Aucun</span>}
-                </div>
-                </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-gray-400 text-xs">Modes de jeu</span>
-                      <div className="flex flex-wrap gap-1">
-                        {map.gameModes?.length > 0 ? map.gameModes.map((mode, idx) => (
-                          <span key={idx} className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs">
-                            {mode}
-                          </span>
-                        )) : <span className="text-gray-500 text-xs">Aucun</span>}
-                  </div>
-                  </div>
-                    {map.ladders?.includes('ranked') && (
+                    {/* Hardcore Config */}
+                    {(map.hardcoreConfig?.ladder?.enabled || map.hardcoreConfig?.ranked?.enabled) && (
                       <div className="flex flex-col gap-1">
-                        <span className="text-gray-400 text-xs">Formats Classé (S&D)</span>
+                        <span className="text-orange-400 text-xs font-medium">Hardcore</span>
                         <div className="flex flex-wrap gap-1">
-                          {map.rankedFormats?.length > 0 ? map.rankedFormats.map((format, idx) => (
-                            <span key={idx} className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-medium">
-                              {format}
+                          {map.hardcoreConfig?.ladder?.enabled && map.hardcoreConfig?.ladder?.gameModes?.length > 0 && (
+                            <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs">
+                              Ladder: {map.hardcoreConfig.ladder.gameModes.length} mode(s)
                             </span>
-                          )) : <span className="text-gray-500 text-xs">Aucun format</span>}
+                          )}
+                          {map.hardcoreConfig?.ranked?.enabled && map.hardcoreConfig?.ranked?.gameModes?.length > 0 && (
+                            <span className="px-2 py-0.5 bg-orange-500/30 text-orange-300 rounded text-xs">
+                              Ranked: {map.hardcoreConfig.ranked.gameModes.length} mode(s) • {(map.hardcoreConfig.ranked.formats || []).join('/')}
+                            </span>
+                          )}
                         </div>
                       </div>
+                    )}
+                    {/* CDL Config */}
+                    {(map.cdlConfig?.ladder?.enabled || map.cdlConfig?.ranked?.enabled) && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-cyan-400 text-xs font-medium">CDL</span>
+                        <div className="flex flex-wrap gap-1">
+                          {map.cdlConfig?.ladder?.enabled && map.cdlConfig?.ladder?.gameModes?.length > 0 && (
+                            <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 rounded text-xs">
+                              Ladder: {map.cdlConfig.ladder.gameModes.length} mode(s)
+                            </span>
+                          )}
+                          {map.cdlConfig?.ranked?.enabled && map.cdlConfig?.ranked?.gameModes?.length > 0 && (
+                            <span className="px-2 py-0.5 bg-cyan-500/30 text-cyan-300 rounded text-xs">
+                              Ranked: {map.cdlConfig.ranked.gameModes.length} mode(s) • {(map.cdlConfig.ranked.formats || []).join('/')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {/* Legacy display for maps not yet migrated */}
+                    {!map.hardcoreConfig?.ladder?.enabled && !map.hardcoreConfig?.ranked?.enabled && 
+                     !map.cdlConfig?.ladder?.enabled && !map.cdlConfig?.ranked?.enabled && (
+                      <>
+                        {map.ladders?.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-gray-400 text-xs">Ladders (ancien format)</span>
+                            <div className="flex flex-wrap gap-1">
+                              {map.ladders.map((ladder, idx) => {
+                                const ladderLabels = {
+                                  'duo-trio': 'Duo/Trio',
+                                  'squad-team': 'Squad/Team',
+                                  'ranked': 'Classé'
+                                };
+                                return (
+                                  <span key={idx} className="px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded text-xs">
+                                    {ladderLabels[ladder] || ladder}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {map.gameModes?.length > 0 && (
+                          <div className="flex flex-col gap-1">
+                            <span className="text-gray-400 text-xs">Modes de jeu (ancien format)</span>
+                            <div className="flex flex-wrap gap-1">
+                              {map.gameModes.map((mode, idx) => (
+                                <span key={idx} className="px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded text-xs">
+                                  {mode}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -5430,7 +5541,7 @@ const AdminPanel = () => {
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Rôles</label>
               <div className="space-y-2">
-                {['user', 'staff', 'gerant_cdl', 'gerant_hardcore', 'admin'].map((role) => (
+                {['user', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore', 'admin'].map((role) => (
                   <label key={role} className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -6140,153 +6251,373 @@ const AdminPanel = () => {
         );
 
       case 'map':
+        // Helper function to toggle game mode in config
+        const toggleMapGameMode = (configKey, matchType, gameMode) => {
+          const defaultLadder = { enabled: false, gameModes: [] };
+          const defaultRanked = { enabled: false, gameModes: [], formats: [] };
+          
+          const config = formData[configKey] || {
+            ladder: { ...defaultLadder },
+            ranked: { ...defaultRanked }
+          };
+          
+          const matchConfig = matchType === 'ranked' 
+            ? { ...defaultRanked, ...config[matchType] }
+            : { ...defaultLadder, ...config[matchType] };
+          
+          const currentModes = matchConfig.gameModes || [];
+          
+          const newModes = currentModes.includes(gameMode)
+            ? currentModes.filter(m => m !== gameMode)
+            : [...currentModes, gameMode];
+          
+          const newMatchConfig = {
+            ...matchConfig,
+            enabled: newModes.length > 0,
+            gameModes: newModes
+          };
+          
+          setFormData({
+            ...formData,
+            [configKey]: {
+              ladder: matchType === 'ladder' ? newMatchConfig : (config.ladder || defaultLadder),
+              ranked: matchType === 'ranked' ? newMatchConfig : (config.ranked || defaultRanked)
+            }
+          });
+        };
+
+        // Helper to check if a game mode is selected
+        const isGameModeSelected = (configKey, matchType, gameMode) => {
+          return (formData[configKey]?.[matchType]?.gameModes || []).includes(gameMode);
+        };
+
+        // Helper to toggle entire section enabled
+        const toggleSectionEnabled = (configKey, matchType) => {
+          const defaultLadder = { enabled: false, gameModes: [] };
+          const defaultRanked = { enabled: false, gameModes: [], formats: [] };
+          
+          const config = formData[configKey] || {
+            ladder: { ...defaultLadder },
+            ranked: { ...defaultRanked }
+          };
+          
+          const matchConfig = matchType === 'ranked' 
+            ? { ...defaultRanked, ...config[matchType] }
+            : { ...defaultLadder, ...config[matchType] };
+          
+          const newMatchConfig = {
+            ...matchConfig,
+            enabled: !matchConfig.enabled
+          };
+          
+          setFormData({
+            ...formData,
+            [configKey]: {
+              ladder: matchType === 'ladder' ? newMatchConfig : (config.ladder || defaultLadder),
+              ranked: matchType === 'ranked' ? newMatchConfig : (config.ranked || defaultRanked)
+            }
+          });
+        };
+
+        // Game modes available for each context
+        const hardcoreLadderModes = ['Search & Destroy'];
+        const hardcoreRankedModes = ['Search & Destroy', 'Team Deathmatch', 'Duel'];
+        const cdlLadderModes = ['Hardpoint', 'Search & Destroy', 'Variant'];
+        const cdlRankedModes = ['Hardpoint', 'Search & Destroy'];
+        
+        // Available formats for ranked
+        const rankedFormats = ['4v4', '5v5'];
+
+        // Labels for game modes
+        const gameModeLabels = {
+          'Search & Destroy': 'Recherche & Destruction',
+          'Team Deathmatch': 'Mêlée Générale',
+          'Duel': 'Duel (1v1)',
+          'Hardpoint': 'Points Stratégiques',
+          'Variant': 'Variant (HP/S&D/Control)'
+        };
+
+        // Helper function to toggle ranked format
+        const toggleRankedFormat = (configKey, format) => {
+          const defaultLadder = { enabled: false, gameModes: [] };
+          const defaultRanked = { enabled: false, gameModes: [], formats: [] };
+          
+          const config = formData[configKey] || {
+            ladder: { ...defaultLadder },
+            ranked: { ...defaultRanked }
+          };
+          
+          const rankedConfig = { ...defaultRanked, ...config.ranked };
+          const currentFormats = rankedConfig.formats || [];
+          
+          const newFormats = currentFormats.includes(format)
+            ? currentFormats.filter(f => f !== format)
+            : [...currentFormats, format];
+          
+          setFormData({
+            ...formData,
+            [configKey]: {
+              ladder: config.ladder || defaultLadder,
+              ranked: {
+                ...rankedConfig,
+                formats: newFormats
+              }
+            }
+          });
+        };
+
+        // Helper to check if a format is selected
+        const isFormatSelected = (configKey, format) => {
+          return (formData[configKey]?.ranked?.formats || []).includes(format);
+        };
+
         return (
           <>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Nom *</label>
-              <input
-                type="text"
-                value={formData.name || ''}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Image URL</label>
-              <input
-                type="text"
-                value={formData.image || ''}
-                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Mode (Hardcore / CDL)</label>
-              <div className="flex gap-3">
-                {[
-                  { value: 'both', label: 'Les deux', color: 'purple' },
-                  { value: 'hardcore', label: 'Hardcore', color: 'orange' },
-                  { value: 'cdl', label: 'CDL', color: 'cyan' }
-                ].map((modeOption) => (
-                  <button
-                    key={modeOption.value}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, mode: modeOption.value })}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${
-                      (formData.mode || 'both') === modeOption.value
-                        ? `bg-${modeOption.color}-500 text-white border-${modeOption.color}-500`
-                        : 'bg-dark-800 text-gray-400 border-white/10 hover:border-white/20'
-                    }`}
-                    style={
-                      (formData.mode || 'both') === modeOption.value
-                        ? { backgroundColor: modeOption.color === 'purple' ? '#a855f7' : modeOption.color === 'orange' ? '#f97316' : '#06b6d4' }
-                        : {}
-                    }
-                  >
-                    {modeOption.label}
-                  </button>
-                ))}
+            {/* Basic Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Nom de la carte *</label>
+                <input
+                  type="text"
+                  value={formData.name || ''}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  placeholder="Ex: Raid, Terminal..."
+                  required
+                />
               </div>
-              <p className="text-gray-500 text-xs mt-2">
-                Choisissez si cette map est disponible en mode Hardcore, CDL, ou les deux.
-              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Image URL</label>
+                <input
+                  type="text"
+                  value={formData.image || ''}
+                  onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  placeholder="https://..."
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Ladders</label>
-              <div className="flex flex-wrap gap-3">
-                {[
-                  { value: 'duo-trio', label: 'Ladder Duo/Trio' },
-                  { value: 'squad-team', label: 'Ladder Squad/Team' },
-                  { value: 'ranked', label: 'Mode Classé (Ranked)' }
-                ].map((ladder) => (
-                  <label key={ladder.value} className="flex items-center gap-2 cursor-pointer">
+
+            {/* HARDCORE Section */}
+            <div className="p-4 bg-orange-500/5 border border-orange-500/20 rounded-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                <h4 className="text-lg font-bold text-orange-400">HARDCORE</h4>
+              </div>
+
+              {/* Hardcore Ladder */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-orange-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">Ladder (Duo/Trio, Squad/Team)</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={(formData.ladders || []).includes(ladder.value)}
-                      onChange={(e) => {
-                        const current = formData.ladders || [];
-                        if (e.target.checked) {
-                          setFormData({ ...formData, ladders: [...current, ladder.value] });
-                        } else {
-                          setFormData({ ...formData, ladders: current.filter(l => l !== ladder.value) });
-                        }
-                      }}
-                      className="w-4 h-4"
+                      checked={formData.hardcoreConfig?.ladder?.enabled || false}
+                      onChange={() => toggleSectionEnabled('hardcoreConfig', 'ladder')}
+                      className="w-4 h-4 accent-orange-500"
                     />
-                    <span className="text-white">{ladder.label}</span>
+                    <span className="text-xs text-gray-400">Activer</span>
                   </label>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Modes de jeu</label>
-              <div className="flex flex-wrap gap-3">
-                {['Search & Destroy', 'Domination', 'Team Deathmatch', 'Hardpoint', 'Control'].map((mode) => (
-                  <label key={mode} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={(formData.gameModes || []).includes(mode)}
-                      onChange={(e) => {
-                        const current = formData.gameModes || [];
-                        if (e.target.checked) {
-                          setFormData({ ...formData, gameModes: [...current, mode] });
-                        } else {
-                          setFormData({ ...formData, gameModes: current.filter(m => m !== mode) });
-                        }
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-white text-sm">{mode}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-            {/* Formats Ranked - S'affiche uniquement si 'ranked' est sélectionné */}
-            {(formData.ladders || []).includes('ranked') && (
-              <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
-                <label className="block text-sm font-medium text-orange-400 mb-3">
-                  🎮 Formats Mode Classé (Search & Destroy)
-                </label>
-                <div className="flex flex-wrap gap-4">
-                  {[
-                    { value: '4v4', label: 'Search & Destroy 4v4' },
-                    { value: '5v5', label: 'Search & Destroy 5v5' }
-                  ].map((format) => (
-                    <label key={format.value} className="flex items-center gap-2 cursor-pointer bg-dark-800 px-4 py-2 rounded-lg border border-orange-500/20 hover:border-orange-500/40 transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={(formData.rankedFormats || []).includes(format.value)}
-                        onChange={(e) => {
-                          const current = formData.rankedFormats || [];
-                          if (e.target.checked) {
-                            setFormData({ ...formData, rankedFormats: [...current, format.value] });
-                          } else {
-                            setFormData({ ...formData, rankedFormats: current.filter(f => f !== format.value) });
-                          }
-                        }}
-                        className="w-4 h-4 accent-orange-500"
-                      />
-                      <span className="text-white font-medium">{format.label}</span>
-                    </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {hardcoreLadderModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => toggleMapGameMode('hardcoreConfig', 'ladder', mode)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        isGameModeSelected('hardcoreConfig', 'ladder', mode)
+                          ? 'bg-orange-500 text-white border-orange-500'
+                          : 'bg-dark-900 text-gray-400 border-white/10 hover:border-orange-500/50'
+                      }`}
+                    >
+                      {gameModeLabels[mode] || mode}
+                    </button>
                   ))}
                 </div>
-                <p className="text-gray-400 text-xs mt-2">
-                  Sélectionnez les formats dans lesquels cette map sera disponible en mode classé.
-                </p>
               </div>
-            )}
-            <div>
-              <label className="flex items-center gap-2">
+
+              {/* Hardcore Ranked */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-orange-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">Match Ranked</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.hardcoreConfig?.ranked?.enabled || false}
+                      onChange={() => toggleSectionEnabled('hardcoreConfig', 'ranked')}
+                      className="w-4 h-4 accent-orange-500"
+                    />
+                    <span className="text-xs text-gray-400">Activer</span>
+                  </label>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Modes de jeu</span>
+                    <div className="flex flex-wrap gap-2">
+                      {hardcoreRankedModes.map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => toggleMapGameMode('hardcoreConfig', 'ranked', mode)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            isGameModeSelected('hardcoreConfig', 'ranked', mode)
+                              ? 'bg-orange-500 text-white border-orange-500'
+                              : 'bg-dark-900 text-gray-400 border-white/10 hover:border-orange-500/50'
+                          }`}
+                        >
+                          {gameModeLabels[mode] || mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Formats disponibles</span>
+                    <div className="flex flex-wrap gap-2">
+                      {rankedFormats.map((format) => (
+                        <button
+                          key={format}
+                          type="button"
+                          onClick={() => toggleRankedFormat('hardcoreConfig', format)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            isFormatSelected('hardcoreConfig', format)
+                              ? 'bg-orange-600 text-white border-orange-600'
+                              : 'bg-dark-900 text-gray-400 border-white/10 hover:border-orange-500/50'
+                          }`}
+                        >
+                          {format}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* CDL Section */}
+            <div className="p-4 bg-cyan-500/5 border border-cyan-500/20 rounded-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-cyan-500"></div>
+                <h4 className="text-lg font-bold text-cyan-400">CDL</h4>
+              </div>
+
+              {/* CDL Ladder */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-cyan-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">Ladder (Duo/Trio, Squad/Team)</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.cdlConfig?.ladder?.enabled || false}
+                      onChange={() => toggleSectionEnabled('cdlConfig', 'ladder')}
+                      className="w-4 h-4 accent-cyan-500"
+                    />
+                    <span className="text-xs text-gray-400">Activer</span>
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {cdlLadderModes.map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => toggleMapGameMode('cdlConfig', 'ladder', mode)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                        isGameModeSelected('cdlConfig', 'ladder', mode)
+                          ? 'bg-cyan-500 text-white border-cyan-500'
+                          : 'bg-dark-900 text-gray-400 border-white/10 hover:border-cyan-500/50'
+                      }`}
+                    >
+                      {gameModeLabels[mode] || mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* CDL Ranked */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-cyan-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">Match Ranked</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.cdlConfig?.ranked?.enabled || false}
+                      onChange={() => toggleSectionEnabled('cdlConfig', 'ranked')}
+                      className="w-4 h-4 accent-cyan-500"
+                    />
+                    <span className="text-xs text-gray-400">Activer</span>
+                  </label>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Modes de jeu</span>
+                    <div className="flex flex-wrap gap-2">
+                      {cdlRankedModes.map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => toggleMapGameMode('cdlConfig', 'ranked', mode)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            isGameModeSelected('cdlConfig', 'ranked', mode)
+                              ? 'bg-cyan-500 text-white border-cyan-500'
+                              : 'bg-dark-900 text-gray-400 border-white/10 hover:border-cyan-500/50'
+                          }`}
+                        >
+                          {gameModeLabels[mode] || mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Formats disponibles</span>
+                    <div className="flex flex-wrap gap-2">
+                      {rankedFormats.map((format) => (
+                        <button
+                          key={format}
+                          type="button"
+                          onClick={() => toggleRankedFormat('cdlConfig', format)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            isFormatSelected('cdlConfig', format)
+                              ? 'bg-cyan-600 text-white border-cyan-600'
+                              : 'bg-dark-900 text-gray-400 border-white/10 hover:border-cyan-500/50'
+                          }`}
+                        >
+                          {format}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Active Status */}
+            <div className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl border border-white/10">
+              <span className="text-white font-medium">Carte active</span>
+              <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
                   checked={formData.isActive !== undefined ? formData.isActive : true}
                   onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                  className="w-4 h-4"
+                  className="sr-only peer"
                 />
-                <span className="text-white">Active</span>
+                <div className="w-11 h-6 bg-dark-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
               </label>
+            </div>
+
+            {/* Info Note */}
+            <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+              <p className="text-xs text-purple-300">
+                <strong>Note:</strong> Sélectionnez les modes de jeu pour lesquels cette carte sera disponible. 
+                Les cartes seront automatiquement filtrées lors de la création des matchs en fonction de votre configuration.
+              </p>
             </div>
           </>
         );
@@ -6328,6 +6659,7 @@ const AdminPanel = () => {
             handleToggleReferentBan={handleToggleReferentBan}
             formatDate={formatDate}
             getRoleColor={getRoleColor}
+            userIsArbitre={userIsArbitre && !userIsStaff}
           />
         );
       case 'squads':
@@ -6340,6 +6672,7 @@ const AdminPanel = () => {
             setPage={setPage}
             totalPages={totalPages}
             userIsAdmin={userIsAdmin}
+            userIsArbitre={userIsArbitre}
             openEditModal={openEditModal}
             openLadderPointsModal={openLadderPointsModal}
             openSquadTrophyModal={openSquadTrophyModal}

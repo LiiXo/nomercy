@@ -2271,7 +2271,7 @@ const MatchSheet = () => {
                       }
 
                       const isMyMessage = msg.user?._id === user?.id;
-                      const isMsgStaff = msg.isStaff || msg.user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
+                      const isMsgStaff = msg.isStaff || msg.user?.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
                       
                       let teamColor = 'gray';
                       if (isMsgStaff) {
@@ -2322,20 +2322,6 @@ const MatchSheet = () => {
                 </form>
               )}
             </div>
-
-            {/* Warning for referents in ranked matches */}
-            {isRankedMatch && ['accepted', 'in_progress', 'ready'].includes(match.status) && (
-              <div className="bg-gradient-to-r from-red-500/20 via-orange-500/20 to-red-500/20 border-2 border-red-500/40 rounded-xl p-4 mb-4 animate-pulse">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 bg-red-500/20 rounded-lg flex-shrink-0">
-                    <AlertTriangle className="w-5 h-5 text-red-400" />
-                  </div>
-                  <div>
-                    <p className="text-red-400 font-bold text-sm">{t.referentWarning}</p>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Rosters */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -180,13 +180,29 @@ const configSchema = new mongoose.Schema({
 
 // Ensure only one config document exists
 configSchema.statics.getOrCreate = async function() {
-  let config = await this.findOne({ type: 'rewards' }).lean();
+  let config = await this.findOne({ type: 'rewards' });
   if (!config) {
-    const newConfig = new this({ type: 'rewards' });
-    await newConfig.save();
-    config = newConfig.toObject();
+    config = new this({ type: 'rewards' });
+    await config.save();
   }
-  return config;
+  // Convert to object and ensure all default values are applied
+  const configObj = config.toObject();
+  
+  // Apply defaults for rankedPointsLossPerRank if not set
+  if (!configObj.rankedPointsLossPerRank) {
+    configObj.rankedPointsLossPerRank = {
+      bronze: -10,
+      silver: -12,
+      gold: -15,
+      platinum: -18,
+      diamond: -20,
+      master: -22,
+      grandmaster: -25,
+      champion: -30
+    };
+  }
+  
+  return configObj;
 };
 
 export default mongoose.model('Config', configSchema);

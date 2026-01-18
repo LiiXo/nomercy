@@ -12,7 +12,7 @@ import Trophy from '../models/Trophy.js';
 import Announcement from '../models/Announcement.js';
 import AccountDeletion from '../models/AccountDeletion.js';
 import Ranking from '../models/Ranking.js';
-import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
+import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,7 +96,7 @@ router.get('/search', async (req, res) => {
         { activisionId: { $regex: q, $options: 'i' } }
       ]
     })
-    .select('_id username avatarUrl discordAvatar discordId activisionId platform')
+    .select('_id username avatar discordAvatar discordId activisionId platform')
     .limit(parseInt(limit));
 
     res.json({ success: true, users });
@@ -1129,8 +1129,8 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
   }
 });
 
-// Admin: Get all users
-router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
+// Admin: Get all users (admin, staff, arbitre)
+router.get('/admin/all', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { page = 1, limit = 20, search = '' } = req.query;
 
@@ -1333,8 +1333,8 @@ router.put('/admin/:userId/roles', verifyToken, requireAdmin, async (req, res) =
   }
 });
 
-// Admin: Ban/Unban user (staff can do this)
-router.put('/admin/:userId/ban', verifyToken, requireStaff, async (req, res) => {
+// Admin: Ban/Unban user (staff and arbitre can do this)
+router.put('/admin/:userId/ban', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { ban, reason, startDate, endDate } = req.body;
 
@@ -1395,8 +1395,8 @@ router.put('/admin/:userId/ban', verifyToken, requireStaff, async (req, res) => 
   }
 });
 
-// Admin: Toggle referent ban (prevents user from being selected as referent in ranked matches)
-router.put('/admin/:userId/referent-ban', verifyToken, requireStaff, async (req, res) => {
+// Admin: Toggle referent ban (prevents user from being selected as referent in ranked matches) - staff and arbitre can do this
+router.put('/admin/:userId/referent-ban', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { ban } = req.body;
 
@@ -1592,8 +1592,8 @@ router.put('/admin/:userId/gold/set', verifyToken, requireAdmin, async (req, res
   }
 });
 
-// Admin: Get deleted accounts (MUST be before /admin/:userId routes)
-router.get('/admin/deleted-accounts', verifyToken, requireStaff, async (req, res) => {
+// Admin: Get deleted accounts (admin, staff, arbitre) - MUST be before /admin/:userId routes
+router.get('/admin/deleted-accounts', verifyToken, requireArbitre, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;

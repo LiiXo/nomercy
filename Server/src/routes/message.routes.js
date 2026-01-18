@@ -118,7 +118,7 @@ router.get('/conversations/:conversationId', verifyToken, async (req, res) => {
     // Populate message senders
     await Conversation.populate(messages, {
       path: 'sender',
-      select: 'username avatar avatarUrl discordAvatar roles'
+      select: 'username avatar discordAvatar discordId roles'
     });
     
     const otherParticipants = conversation.participants.filter(
@@ -226,7 +226,7 @@ router.post('/conversations/:conversationId/messages', verifyToken, async (req, 
     // Populate sender
     await Conversation.populate(message, {
       path: 'sender',
-      select: 'username avatar avatarUrl discordAvatar roles'
+      select: 'username avatar discordAvatar discordId roles'
     });
     
     res.json({ success: true, message });
@@ -277,7 +277,7 @@ router.post('/conversations/:conversationId/messages/image', verifyToken, upload
     // Populate sender
     await Conversation.populate(message, {
       path: 'sender',
-      select: 'username avatar avatarUrl discordAvatar roles'
+      select: 'username avatar discordAvatar discordId roles'
     });
     
     res.json({ success: true, message });
@@ -480,7 +480,7 @@ router.get('/admin/conversations/:conversationId', verifyToken, async (req, res)
     // Populate message senders
     await Conversation.populate(conversation.messages, {
       path: 'sender',
-      select: 'username avatar avatarUrl discordAvatar roles'
+      select: 'username avatar discordAvatar discordId roles'
     });
     
     // Sort messages by createdAt
@@ -531,7 +531,7 @@ router.post('/admin/send', verifyToken, async (req, res) => {
     
     await Conversation.populate(message, {
       path: 'sender',
-      select: 'username avatar avatarUrl discordAvatar roles'
+      select: 'username avatar discordAvatar discordId roles'
     });
     
     res.json({ success: true, conversation, message });
