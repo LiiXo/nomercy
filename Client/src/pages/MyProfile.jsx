@@ -461,16 +461,28 @@ const MyProfile = () => {
     return icons[category] || Package;
   };
 
+  // Traductions des noms de rangs
+  const RANK_NAMES = {
+    bronze: { fr: 'Bronze', en: 'Bronze', de: 'Bronze', it: 'Bronzo' },
+    silver: { fr: 'Argent', en: 'Silver', de: 'Silber', it: 'Argento' },
+    gold: { fr: 'Or', en: 'Gold', de: 'Gold', it: 'Oro' },
+    platinum: { fr: 'Platine', en: 'Platinum', de: 'Platin', it: 'Platino' },
+    diamond: { fr: 'Diamant', en: 'Diamond', de: 'Diamant', it: 'Diamante' },
+    master: { fr: 'Maître', en: 'Master', de: 'Meister', it: 'Maestro' },
+    grandmaster: { fr: 'Grand Maître', en: 'Grandmaster', de: 'Großmeister', it: 'Gran Maestro' },
+    champion: { fr: 'Champion', en: 'Champion', de: 'Champion', it: 'Campione' }
+  };
+
   // Rank styles for each division
   const RANK_STYLES = {
-    champion: { name: 'Champion', color: 'text-yellow-400', icon: Zap },
-    grandmaster: { name: 'Grandmaster', color: 'text-red-400', icon: Crown },
-    master: { name: 'Master', color: 'text-purple-400', icon: Trophy },
-    diamond: { name: 'Diamond', color: 'text-blue-400', icon: Star },
-    platinum: { name: 'Platinum', color: 'text-teal-400', icon: Medal },
-    gold: { name: 'Gold', color: 'text-yellow-400', icon: Medal },
-    silver: { name: 'Silver', color: 'text-gray-300', icon: Shield },
-    bronze: { name: 'Bronze', color: 'text-amber-600', icon: Shield }
+    champion: { key: 'champion', color: 'text-yellow-400', icon: Zap, image: '/8.png', hexColor: '#F1C40F' },
+    grandmaster: { key: 'grandmaster', color: 'text-red-400', icon: Crown, image: '/7.png', hexColor: '#E74C3C' },
+    master: { key: 'master', color: 'text-purple-400', icon: Trophy, image: '/6.png', hexColor: '#9B59B6' },
+    diamond: { key: 'diamond', color: 'text-blue-400', icon: Star, image: '/5.png', hexColor: '#B9F2FF' },
+    platinum: { key: 'platinum', color: 'text-teal-400', icon: Medal, image: '/4.png', hexColor: '#00CED1' },
+    gold: { key: 'gold', color: 'text-yellow-400', icon: Medal, image: '/3.png', hexColor: '#FFD700' },
+    silver: { key: 'silver', color: 'text-gray-300', icon: Shield, image: '/2.png', hexColor: '#C0C0C0' },
+    bronze: { key: 'bronze', color: 'text-amber-600', icon: Shield, image: '/1.png', hexColor: '#CD7F32' }
   };
 
   const getDivisionFromPoints = (points) => {
@@ -491,10 +503,17 @@ const MyProfile = () => {
     for (const rankKey of rankOrder) {
       const threshold = thresholds[rankKey];
       if (threshold && points >= threshold.min) {
-        return RANK_STYLES[rankKey];
+        const style = RANK_STYLES[rankKey];
+        return {
+          ...style,
+          name: RANK_NAMES[rankKey]?.[language] || RANK_NAMES[rankKey]?.en || rankKey
+        };
       }
     }
-    return RANK_STYLES.bronze;
+    return {
+      ...RANK_STYLES.bronze,
+      name: RANK_NAMES.bronze?.[language] || RANK_NAMES.bronze?.en || 'bronze'
+    };
   };
 
   const getWinRate = () => {
@@ -1051,6 +1070,28 @@ const MyProfile = () => {
                     </div>
                   )}
                 </div>
+                
+                {/* Rank badge */}
+                {division && (
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+                    <img 
+                      src={division.image} 
+                      alt={division.name}
+                      className="w-6 h-6 object-contain"
+                      style={{ filter: `drop-shadow(0 0 4px ${division.hexColor || '#fff'}80)` }}
+                    />
+                    <span 
+                      className="text-sm font-semibold"
+                      style={{ color: division.hexColor || '#fff' }}
+                    >
+                      {division.name}
+                    </span>
+                    {bestRanking && bestRanking.points > 0 && (
+                      <span className="text-xs text-gray-500">({bestRanking.points} pts)</span>
+                    )}
+                  </div>
+                )}
+                
                 <p className="text-gray-400 text-sm mb-3">{user.bio || t.noBio}</p>
                 
                 {/* Roles */}

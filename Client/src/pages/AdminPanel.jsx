@@ -4189,7 +4189,11 @@ const AdminPanel = () => {
                         diamond: -20, master: -22, grandmaster: -25, champion: -30
                       };
                     }
-                    newConfig.rankedPointsLossPerRank[key] = parseInt(e.target.value) || 0;
+                    // Keep default negative value if input is empty or invalid
+                    const defaultValues = { bronze: -10, silver: -12, gold: -15, platinum: -18, diamond: -20, master: -22, grandmaster: -25, champion: -30 };
+                    const parsed = parseInt(e.target.value);
+                    // Use parsed value if it's a valid negative number, otherwise keep the default
+                    newConfig.rankedPointsLossPerRank[key] = !isNaN(parsed) && parsed < 0 ? parsed : defaultValues[key];
                     setEditedConfig(newConfig);
                   }}
                   className="w-full px-3 py-2 bg-dark-900 border border-red-500/40 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none text-center"

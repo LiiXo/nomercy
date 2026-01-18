@@ -38,6 +38,12 @@ const queueTimers = {};
 // Socket.io instance (set from index.js)
 let io = null;
 
+// Historique des équipes récentes pour éviter les répétitions
+// Structure: Map<mode_gameMode, Array<{ team1: Set<userId>, team2: Set<userId>, timestamp }>>
+const recentTeamHistory = new Map();
+const TEAM_HISTORY_SIZE = 10; // Nombre de matchs à garder en historique
+const TEAM_HISTORY_DURATION_MS = 30 * 60 * 1000; // 30 minutes d'historique
+
 // Cleanup interval reference
 let cleanupInterval = null;
 
@@ -142,6 +148,160 @@ const getNextThreshold = (currentCount) => {
     }
   }
   return PLAYER_THRESHOLDS[PLAYER_THRESHOLDS.length - 1]; // Max atteint
+};
+
+/**
+ * Algorithme de mélange Fisher-Yates (vrai mélange aléatoire uniforme)
+ */
+const fisherYatesShuffle = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+/**
+ * Nettoie l'historique des équipes anciennes
+ */
+const cleanupTeamHistory = (gameMode, mode) => {
+  const key = `${mode}_${gameMode}`;
+  const history = recentTeamHistory.get(key);
+  if (!history) return;
+  
+  const now = Date.now();
+  const filtered = history.filter(h => now - h.timestamp < TEAM_HISTORY_DURATION_MS);
+  
+  // Garder seulement les derniers matchs
+  if (filtered.length > TEAM_HISTORY_SIZE) {
+    filtered.splice(0, filtered.length - TEAM_HISTORY_SIZE);
+  }
+  
+  recentTeamHistory.set(key, filtered);
+};
+
+/**
+ * Ajoute une composition d'équipe à l'historique
+ */
+const addTeamToHistory = (gameMode, mode, team1PlayerIds, team2PlayerIds) => {
+  const key = `${mode}_${gameMode}`;
+  let history = recentTeamHistory.get(key);
+  if (!history) {
+    history = [];
+    recentTeamHistory.set(key, history);
+  }
+  
+  history.push({
+    team1: new Set(team1PlayerIds),
+    team2: new Set(team2PlayerIds),
+    timestamp: Date.now()
+  });
+  
+  // Nettoyer l'historique
+  cleanupTeamHistory(gameMode, mode);
+};
+
+/**
+ * Calcule un score de similarité entre deux compositions d'équipes
+ * Plus le score est élevé, plus les équipes sont similaires à des équipes passées
+ */
+const calculateTeamSimilarityScore = (gameMode, mode, team1PlayerIds, team2PlayerIds) => {
+  const key = `${mode}_${gameMode}`;
+  const history = recentTeamHistory.get(key);
+  if (!history || history.length === 0) return 0;
+  
+  const now = Date.now();
+  let totalScore = 0;
+  
+  for (const past of history) {
+    // Plus le match est récent, plus le poids est élevé
+    const ageMs = now - past.timestamp;
+    const recencyWeight = Math.max(0, 1 - (ageMs / TEAM_HISTORY_DURATION_MS));
+    
+    // Compter combien de joueurs sont dans la même équipe qu'avant
+    let sameTeamCount = 0;
+    
+    // Pour team1 actuelle, compter ceux qui étaient déjà ensemble dans le passé
+    for (const playerId of team1PlayerIds) {
+      if (past.team1.has(playerId)) {
+        // Ce joueur était dans l'équipe 1 avant
+        for (const otherId of team1PlayerIds) {
+          if (otherId !== playerId && past.team1.has(otherId)) {
+            sameTeamCount++;
+          }
+        }
+      } else if (past.team2.has(playerId)) {
+        // Ce joueur était dans l'équipe 2 avant
+        for (const otherId of team1PlayerIds) {
+          if (otherId !== playerId && past.team2.has(otherId)) {
+            sameTeamCount++;
+          }
+        }
+      }
+    }
+    
+    // Pour team2 actuelle, compter ceux qui étaient déjà ensemble dans le passé
+    for (const playerId of team2PlayerIds) {
+      if (past.team1.has(playerId)) {
+        for (const otherId of team2PlayerIds) {
+          if (otherId !== playerId && past.team1.has(otherId)) {
+            sameTeamCount++;
+          }
+        }
+      } else if (past.team2.has(playerId)) {
+        for (const otherId of team2PlayerIds) {
+          if (otherId !== playerId && past.team2.has(otherId)) {
+            sameTeamCount++;
+          }
+        }
+      }
+    }
+    
+    totalScore += sameTeamCount * recencyWeight;
+  }
+  
+  return totalScore;
+};
+
+/**
+ * Génère plusieurs compositions d'équipes possibles et choisit la plus diversifiée
+ */
+const generateDiverseTeams = (players, teamSize, gameMode, mode) => {
+  const ATTEMPTS = 15; // Nombre de compositions à essayer
+  let bestTeam1 = null;
+  let bestTeam2 = null;
+  let lowestSimilarityScore = Infinity;
+  
+  for (let i = 0; i < ATTEMPTS; i++) {
+    // Mélanger avec Fisher-Yates
+    const shuffled = fisherYatesShuffle(players);
+    
+    // Diviser en équipes
+    const team1 = shuffled.slice(0, teamSize);
+    const team2 = shuffled.slice(teamSize, teamSize * 2);
+    
+    // Extraire les IDs pour le calcul de similarité
+    const team1Ids = team1.map(p => p.userId?.toString() || p.oduserId);
+    const team2Ids = team2.map(p => p.userId?.toString() || p.oduserId);
+    
+    // Calculer le score de similarité avec l'historique
+    const similarityScore = calculateTeamSimilarityScore(gameMode, mode, team1Ids, team2Ids);
+    
+    // Ajouter un peu d'aléatoire pour éviter les patterns prévisibles
+    const randomFactor = Math.random() * 0.5;
+    const adjustedScore = similarityScore + randomFactor;
+    
+    if (adjustedScore < lowestSimilarityScore) {
+      lowestSimilarityScore = adjustedScore;
+      bestTeam1 = team1;
+      bestTeam2 = team2;
+    }
+  }
+  
+  console.log(`[Ranked Matchmaking] Team diversity: best similarity score = ${lowestSimilarityScore.toFixed(2)} after ${ATTEMPTS} attempts`);
+  
+  return { team1: bestTeam1, team2: bestTeam2 };
 };
 
 /**
@@ -531,12 +691,18 @@ const createMatchFromQueue = async (gameMode, mode) => {
   // Créer le match
   try {
     
-    // Mélanger aléatoirement les joueurs
-    const shuffled = [...playersForMatch].sort(() => Math.random() - 0.5);
+    // Générer des équipes diversifiées en évitant les compositions récentes
+    const { team1: team1Players, team2: team2Players } = generateDiverseTeams(
+      playersForMatch, 
+      teamSize, 
+      gameMode, 
+      mode
+    );
     
-    // Diviser en 2 équipes
-    const team1Players = shuffled.slice(0, teamSize);
-    const team2Players = shuffled.slice(teamSize);
+    // Sauvegarder cette composition dans l'historique pour les futurs matchs
+    const team1Ids = team1Players.map(p => p.userId?.toString()).filter(Boolean);
+    const team2Ids = team2Players.map(p => p.userId?.toString()).filter(Boolean);
+    addTeamToHistory(gameMode, mode, team1Ids, team2Ids);
     
     // Fonction pour vérifier si un joueur est un faux joueur
     const isFakePlayer = (player) => player.isFake || player.userId.toString().startsWith('fake-');
@@ -811,7 +977,8 @@ const createMatchFromQueue = async (gameMode, mode) => {
         team: p.team,
         isReferent: p.isReferent,
         isHost: p.team === hostTeam && p.isReferent,
-        isFake: p.isFake
+        isFake: p.isFake,
+        points: p.points || 0 // Points classés pour afficher le rang
       };
     });
     
@@ -890,6 +1057,31 @@ const broadcastQueueUpdate = (gameMode, mode) => {
       maxPlayers: 10
     });
   }
+  
+  // Broadcast global queue count to all users on the ranked page for this mode
+  broadcastGlobalQueueCount(mode);
+};
+
+/**
+ * Broadcast le nombre total de joueurs en matchmaking à tous les utilisateurs sur la page ranked
+ */
+const broadcastGlobalQueueCount = (mode) => {
+  if (!io) return;
+  
+  // Calculer le total de joueurs en file d'attente pour ce mode
+  let totalInQueue = 0;
+  for (const key in queues) {
+    // Les clés sont au format "gameMode_mode" (ex: "Search & Destroy_hardcore")
+    if (key.endsWith(`_${mode}`)) {
+      totalInQueue += queues[key].length;
+    }
+  }
+  
+  // Envoyer à tous les utilisateurs connectés à la page ranked de ce mode
+  io.to(`ranked-mode-${mode}`).emit('rankedGlobalQueueCount', {
+    count: totalInQueue,
+    mode
+  });
 };
 
 /**
@@ -1097,8 +1289,8 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       isFake: false
     };
     
-    // Mélanger tous les joueurs
-    const allPlayers = [staffPlayer, ...fakePlayers].sort(() => Math.random() - 0.5);
+    // Mélanger tous les joueurs avec Fisher-Yates
+    const allPlayers = fisherYatesShuffle([staffPlayer, ...fakePlayers]);
     
     // Diviser en 2 équipes
     const team1Players = allPlayers.slice(0, teamSize);
@@ -1336,7 +1528,8 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         team: p.team,
         isReferent: p.isReferent,
         isHost: p.team === hostTeam && p.isReferent,
-        isFake: p.isFake
+        isFake: p.isFake,
+        points: p.points || 0 // Points classés pour afficher le rang
       };
     });
     

@@ -36,7 +36,9 @@ async function distributeRankedRewards(match) {
     // Récupérer la configuration des points perdus par rang depuis Config
     const Config = (await import('../models/Config.js')).default;
     const config = await Config.getOrCreate();
-    const pointsLossPerRank = config?.rankedPointsLossPerRank || {
+    
+    // Default values for points loss per rank - ensures all ranks have valid negative values
+    const DEFAULT_POINTS_LOSS = {
       bronze: -10,
       silver: -12,
       gold: -15,
@@ -46,6 +48,18 @@ async function distributeRankedRewards(match) {
       grandmaster: -25,
       champion: -30
     };
+    
+    // Merge config values with defaults, ensuring each rank has a valid negative value
+    const pointsLossPerRank = { ...DEFAULT_POINTS_LOSS };
+    if (config?.rankedPointsLossPerRank) {
+      Object.keys(DEFAULT_POINTS_LOSS).forEach(rank => {
+        const value = config.rankedPointsLossPerRank[rank];
+        // Only use the config value if it's a negative number (valid loss)
+        if (typeof value === 'number' && value < 0) {
+          pointsLossPerRank[rank] = value;
+        }
+      });
+    }
     
     // S'assurer que winningTeam est un Number pour les comparaisons
     const winningTeam = Number(match.result.winner);
@@ -522,10 +536,41 @@ router.get('/:matchId', verifyToken, async (req, res) => {
       (match.team1Referent?._id?.toString() === user._id.toString()) ||
       (match.team2Referent?._id?.toString() === user._id.toString());
 
+    // Récupérer les vrais points de classement pour chaque joueur réel
+    const matchData = match.toJSON();
+    const realPlayerIds = matchData.players
+      .filter(p => !p.isFake && p.user)
+      .map(p => p.user._id || p.user);
+    
+    if (realPlayerIds.length > 0) {
+      const rankings = await Ranking.find({ 
+        user: { $in: realPlayerIds }, 
+        mode: match.mode 
+      });
+      
+      // Map des rankings par ID utilisateur
+      const rankingMap = {};
+      rankings.forEach(r => {
+        rankingMap[r.user.toString()] = r.points;
+      });
+      
+      // Mettre à jour les points des joueurs avec leurs vrais points de classement
+      matchData.players = matchData.players.map(p => {
+        if (!p.isFake && p.user) {
+          const playerId = p.user._id?.toString() || p.user.toString();
+          const currentPoints = rankingMap[playerId];
+          if (currentPoints !== undefined) {
+            return { ...p, points: currentPoints };
+          }
+        }
+        return p;
+      });
+    }
+
     res.json({ 
       success: true, 
       match: {
-        ...match.toJSON(),
+        ...matchData,
         isRanked: true // Flag pour identifier un match classé
       },
       isStaff,

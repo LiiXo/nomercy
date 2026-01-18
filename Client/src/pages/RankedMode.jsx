@@ -86,7 +86,7 @@ const playMatchFoundSound = () => {
     source.buffer = audioBuffer;
     source.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    gainNode.gain.value = 0.5;
+    gainNode.gain.value = 0.3;
     
     currentAudioSource = source;
     currentGainNode = gainNode;
@@ -181,33 +181,51 @@ const DEFAULT_RANK_THRESHOLDS = {
   champion: { min: 3500, max: null }
 };
 
+// Traductions des noms de rangs
+const RANK_NAMES = {
+  bronze: { fr: 'Bronze', en: 'Bronze', de: 'Bronze', it: 'Bronzo' },
+  silver: { fr: 'Argent', en: 'Silver', de: 'Silber', it: 'Argento' },
+  gold: { fr: 'Or', en: 'Gold', de: 'Gold', it: 'Oro' },
+  platinum: { fr: 'Platine', en: 'Platinum', de: 'Platin', it: 'Platino' },
+  diamond: { fr: 'Diamant', en: 'Diamond', de: 'Diamant', it: 'Diamante' },
+  master: { fr: 'Maître', en: 'Master', de: 'Meister', it: 'Maestro' },
+  grandmaster: { fr: 'Grand Maître', en: 'Grandmaster', de: 'Großmeister', it: 'Gran Maestro' },
+  champion: { fr: 'Champion', en: 'Champion', de: 'Champion', it: 'Campione' }
+};
+
+// Helper pour obtenir le nom traduit d'un rang
+const getRankName = (rankKey, language) => {
+  return RANK_NAMES[rankKey]?.[language] || RANK_NAMES[rankKey]?.en || rankKey;
+};
+
 // Rank styling data (constante - ne change pas)
 const RANK_STYLES = {
-  bronze: { name: 'Bronze', color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, tier: 'IV-I' },
-  silver: { name: 'Silver', color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, tier: 'IV-I' },
-  gold: { name: 'Gold', color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, tier: 'IV-I' },
-  platinum: { name: 'Platinum', color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, tier: 'IV-I' },
-  diamond: { name: 'Diamond', color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, tier: 'IV-I' },
-  master: { name: 'Master', color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, tier: 'III-I' },
-  grandmaster: { name: 'Grandmaster', color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, tier: 'II-I' },
-  champion: { name: 'Champion', color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, tier: 'Top 100' }
+  bronze: { key: 'bronze', color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, tier: 'IV-I', image: '/1.png' },
+  silver: { key: 'silver', color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, tier: 'IV-I', image: '/2.png' },
+  gold: { key: 'gold', color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, tier: 'IV-I', image: '/3.png' },
+  platinum: { key: 'platinum', color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, tier: 'IV-I', image: '/4.png' },
+  diamond: { key: 'diamond', color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, tier: 'IV-I', image: '/5.png' },
+  master: { key: 'master', color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, tier: 'III-I', image: '/6.png' },
+  grandmaster: { key: 'grandmaster', color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, tier: 'II-I', image: '/7.png' },
+  champion: { key: 'champion', color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, tier: 'Top 100', image: '/8.png' }
 };
 
 // Helper to build RANKS array from thresholds
-const buildRanksFromThresholds = (thresholds) => {
+const buildRanksFromThresholds = (thresholds, language = 'en') => {
   const rankOrder = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'];
   return rankOrder.map(key => {
     const threshold = thresholds[key] || DEFAULT_RANK_THRESHOLDS[key];
     const style = RANK_STYLES[key];
     return {
       key,
-      name: style.name,
+      name: getRankName(key, language),
       min: threshold.min ?? 0,
       max: threshold.max ?? 99999,
       color: style.color,
       gradient: style.gradient,
       icon: style.icon,
-      tier: style.tier
+      tier: style.tier,
+      image: style.image
     };
   });
 };
@@ -233,6 +251,7 @@ const RankedMode = () => {
   const [selectedGameMode, setSelectedGameMode] = useState('Search & Destroy');
   const [inQueue, setInQueue] = useState(false);
   const [queueSize, setQueueSize] = useState(0);
+  const [globalQueueCount, setGlobalQueueCount] = useState(0); // Total players in matchmaking for this mode
   const [queuePosition, setQueuePosition] = useState(null);
   const [timerActive, setTimerActive] = useState(false);
   const [timerEndTime, setTimerEndTime] = useState(null);
@@ -283,10 +302,21 @@ const RankedMode = () => {
   // Rewards from config
   
   // Dynamic ranks from config
-  const [ranks, setRanks] = useState(() => buildRanksFromThresholds(DEFAULT_RANK_THRESHOLDS));
+  const [ranks, setRanks] = useState(() => buildRanksFromThresholds(DEFAULT_RANK_THRESHOLDS, language));
+  const [currentThresholds, setCurrentThresholds] = useState(DEFAULT_RANK_THRESHOLDS);
   
-  // Points loss per rank from config
-  const [pointsLossPerRank, setPointsLossPerRank] = useState(null);
+  // Points loss per rank from config - with defaults
+  const DEFAULT_POINTS_LOSS_PER_RANK = {
+    bronze: -10,
+    silver: -12,
+    gold: -15,
+    platinum: -18,
+    diamond: -20,
+    master: -22,
+    grandmaster: -25,
+    champion: -30
+  };
+  const [pointsLossPerRank, setPointsLossPerRank] = useState(DEFAULT_POINTS_LOSS_PER_RANK);
   
   // Matchmaking enabled/disabled
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
@@ -411,6 +441,11 @@ const RankedMode = () => {
     }
   };
 
+  // Rebuild ranks when language changes
+  useEffect(() => {
+    setRanks(buildRanksFromThresholds(currentThresholds, language));
+  }, [language, currentThresholds]);
+
   // Fetch rank thresholds and points loss per rank from config
   const fetchRankThresholds = async () => {
     try {
@@ -419,14 +454,24 @@ const RankedMode = () => {
       const appSettingsData = await appSettingsRes.json();
       if (appSettingsData.success && appSettingsData.rankedSettings?.rankPointsThresholds) {
         const thresholds = appSettingsData.rankedSettings.rankPointsThresholds;
-        setRanks(buildRanksFromThresholds(thresholds));
+        setCurrentThresholds(thresholds);
+        setRanks(buildRanksFromThresholds(thresholds, language));
       }
       
       // Fetch main config for points loss per rank (configured in admin panel)
       const configRes = await fetch(`${API_URL}/config`);
       const configData = await configRes.json();
       if (configData.success && configData.config?.rankedPointsLossPerRank) {
-        setPointsLossPerRank(configData.config.rankedPointsLossPerRank);
+        // Merge with defaults to ensure all ranks have valid negative values
+        const mergedLoss = { ...DEFAULT_POINTS_LOSS_PER_RANK };
+        Object.keys(DEFAULT_POINTS_LOSS_PER_RANK).forEach(rank => {
+          const value = configData.config.rankedPointsLossPerRank[rank];
+          // Only use config value if it's a valid negative number
+          if (typeof value === 'number' && value < 0) {
+            mergedLoss[rank] = value;
+          }
+        });
+        setPointsLossPerRank(mergedLoss);
       }
     } catch (err) {
       console.error('Error fetching rank thresholds:', err);
@@ -808,6 +853,19 @@ const RankedMode = () => {
     return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); };
   }, [isAuthenticated, isConnected, on, navigate]);
 
+  // Listen for global queue count (for all users viewing the page)
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    const unsubGlobalQueue = on('rankedGlobalQueueCount', (data) => {
+      if (data.mode === selectedMode) {
+        setGlobalQueueCount(data.count);
+      }
+    });
+    
+    return () => { unsubGlobalQueue(); };
+  }, [isConnected, selectedMode, on]);
+
   // Timer countdown
   useEffect(() => {
     if (!timerActive || !timerEndTime) { setTimeRemaining(null); return; }
@@ -963,7 +1021,6 @@ const RankedMode = () => {
   }, [selectedMode, joinMode, leaveMode]);
 
   const playerRank = myRanking ? getRankFromPoints(myRanking.points) : ranks[0];
-  const PlayerRankIcon = playerRank.icon;
 
   // Translations - 4 languages
   const translations = {
@@ -988,6 +1045,7 @@ const RankedMode = () => {
       searching: 'Recherche...',
       cancel: 'Annuler',
       playersInQueue: 'joueurs en file',
+      playersSearching: 'joueur(s) en recherche',
       matchIn: 'Match dans',
       waitingMore: 'En attente de joueurs...',
       minPlayers: 'Minimum 8 joueurs (4v4)',
@@ -1049,6 +1107,7 @@ const RankedMode = () => {
       searching: 'Searching...',
       cancel: 'Cancel',
       playersInQueue: 'players in queue',
+      playersSearching: 'player(s) searching',
       matchIn: 'Match in',
       waitingMore: 'Waiting for players...',
       minPlayers: 'Minimum 8 players (4v4)',
@@ -1110,6 +1169,7 @@ const RankedMode = () => {
       searching: 'Suche...',
       cancel: 'Abbrechen',
       playersInQueue: 'Spieler in Warteschlange',
+      playersSearching: 'Spieler in der Suche',
       matchIn: 'Match in',
       waitingMore: 'Warte auf Spieler...',
       minPlayers: 'Minimum 8 Spieler (4v4)',
@@ -1171,6 +1231,7 @@ const RankedMode = () => {
       searching: 'Ricerca...',
       cancel: 'Annulla',
       playersInQueue: 'giocatori in coda',
+      playersSearching: 'giocatore(i) in ricerca',
       matchIn: 'Partita tra',
       waitingMore: 'In attesa di giocatori...',
       minPlayers: 'Minimo 8 giocatori (4v4)',
@@ -1279,71 +1340,69 @@ const RankedMode = () => {
                     </div>
                   ) : myRanking ? (
                     <>
-                    <div className="flex flex-col md:flex-row items-center gap-6">
-                      {/* Rank Badge - Animated */}
-                      <div className="relative group">
-                        {/* Glow effect animé */}
+                    <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-8">
+                      {/* Left: Rank Badge with glow */}
+                      <div className="relative flex-shrink-0">
+                        {/* Animated glow ring */}
                         <div 
-                          className="absolute -inset-2 rounded-3xl opacity-60 blur-xl transition-all group-hover:opacity-80"
-                          style={{
-                            background: `conic-gradient(from ${rankAnimationPhase}deg, ${playerRank.color}40, transparent, ${playerRank.color}60, transparent, ${playerRank.color}40)`
+                          className="absolute -inset-3 rounded-full opacity-30 blur-xl"
+                          style={{ 
+                            background: `radial-gradient(circle, ${playerRank.color} 0%, transparent 70%)`
                           }}
-                        ></div>
-                        {/* Outer ring animé */}
+                        />
+                        {/* Logo container with border */}
                         <div 
-                          className="absolute -inset-1 rounded-2xl opacity-70"
+                          className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-2xl flex items-center justify-center"
                           style={{
-                            background: `linear-gradient(${rankAnimationPhase}deg, ${playerRank.color}, transparent, ${playerRank.color})`,
-                            animation: 'spin 4s linear infinite'
+                            background: `linear-gradient(145deg, ${playerRank.color}15, transparent)`,
+                            border: `2px solid ${playerRank.color}40`
                           }}
-                        ></div>
-                        <div className={`relative w-20 h-20 sm:w-28 sm:h-28 rounded-xl sm:rounded-2xl bg-gradient-to-br ${playerRank.gradient} p-1 shadow-2xl transform transition-transform group-hover:scale-105`}>
-                          <div className="w-full h-full rounded-lg sm:rounded-xl bg-dark-900/50 flex items-center justify-center backdrop-blur-sm">
-                            <PlayerRankIcon 
-                              className="w-8 h-8 sm:w-12 sm:h-12 text-white drop-shadow-lg" 
-                              style={{ 
-                                filter: `drop-shadow(0 0 8px ${playerRank.color}80)`,
-                                animation: 'pulse 2s ease-in-out infinite'
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <div 
-                          className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-dark-900 border-2 shadow-lg"
-                          style={{ borderColor: `${playerRank.color}50` }}
                         >
-                          <span className="text-xs font-bold" style={{ color: playerRank.color }}>{playerRank.tier}</span>
+                          <img 
+                            src={playerRank.image} 
+                            alt={playerRank.name}
+                            className="w-16 h-16 sm:w-24 sm:h-24 object-contain" 
+                            style={{ filter: `drop-shadow(0 4px 12px ${playerRank.color}50)` }}
+                          />
                         </div>
-                        {/* Sparkles effect */}
-                        <div className="absolute -top-1 -right-1 animate-ping">
-                          <Sparkles className="w-4 h-4" style={{ color: playerRank.color }} />
+                        {/* Division badge */}
+                        <div 
+                          className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-lg"
+                          style={{ 
+                            background: `linear-gradient(135deg, ${playerRank.color}, ${playerRank.color}CC)`,
+                            boxShadow: `0 4px 12px ${playerRank.color}40`
+                          }}
+                        >
+                          <span className="text-xs font-bold text-white">{playerRank.tier}</span>
                         </div>
                       </div>
 
-                      {/* Rank Info */}
-                      <div className="flex-1 text-center md:text-left">
-                        <p className="text-gray-500 text-xs sm:text-sm uppercase tracking-wider">{t.yourRank}</p>
-                        <h2 className="text-2xl sm:text-3xl font-black text-white mb-1" style={{ color: playerRank.color }}>{playerRank.name}</h2>
-                        <p className="text-gray-400 text-sm sm:text-base">#{myRanking.rank} • <span className={`text-${accent}-400 font-semibold`}>{myRanking.points} pts</span></p>
+                      {/* Center: Rank Info */}
+                      <div className="flex-1 text-center sm:text-left">
+                        <p className="text-gray-500 text-xs uppercase tracking-widest mb-1">{t.yourRank}</p>
+                        <h2 className="text-3xl sm:text-4xl font-black mb-1" style={{ color: playerRank.color }}>{playerRank.name}</h2>
+                        <p className="text-gray-400 text-sm">
+                          #{myRanking.rank} • <span className={`text-${accent}-400 font-bold`}>{myRanking.points} pts</span>
+                        </p>
                       </div>
 
-                      {/* Stats Grid */}
-                      <div className="grid grid-cols-3 gap-2 sm:gap-4 w-full md:w-auto md:min-w-[240px]">
-                        <div className="text-center p-2 sm:p-3 rounded-lg sm:rounded-xl bg-dark-800/50">
-                          <p className="text-lg sm:text-2xl font-bold text-green-400">{myRanking.wins}</p>
-                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase">{t.wins}</p>
+                      {/* Right: Stats */}
+                      <div className="flex items-center gap-6 sm:gap-8">
+                        <div className="text-center">
+                          <p className="text-2xl sm:text-3xl font-black text-green-400">{myRanking.wins}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.wins}</p>
                         </div>
-                        <div className="text-center p-2 sm:p-3 rounded-lg sm:rounded-xl bg-dark-800/50">
-                          <p className="text-lg sm:text-2xl font-bold text-red-400">{myRanking.losses}</p>
-                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase">{t.losses}</p>
+                        <div className="text-center">
+                          <p className="text-2xl sm:text-3xl font-black text-red-400">{myRanking.losses}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.losses}</p>
                         </div>
-                        <div className="text-center p-2 sm:p-3 rounded-lg sm:rounded-xl bg-dark-800/50">
-                          <p className="text-lg sm:text-2xl font-bold text-yellow-400">
+                        <div className="text-center">
+                          <p className="text-2xl sm:text-3xl font-black text-yellow-400">
                             {myRanking.wins + myRanking.losses > 0 
                               ? Math.round((myRanking.wins / (myRanking.wins + myRanking.losses)) * 100) 
                               : 0}%
                           </p>
-                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase">{t.winRate}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.winRate}</p>
                         </div>
                       </div>
                     </div>
@@ -1357,12 +1416,12 @@ const RankedMode = () => {
                       if (!nextRank) {
                         // Already at max rank (Champion)
                         return (
-                          <div className="w-full mt-4 pt-4 border-t border-white/10">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm text-gray-400">{language === 'fr' ? 'Rang Maximum Atteint' : 'Maximum Rank Achieved'}</span>
-                              <span className="text-sm font-bold" style={{ color: currentRank.color }}>🏆 Champion</span>
+                          <div className="w-full mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/10">
+                            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                              <span className="text-xs sm:text-sm text-gray-400">{language === 'fr' ? 'Rang Maximum Atteint' : 'Maximum Rank Achieved'}</span>
+                              <span className="text-xs sm:text-sm font-bold" style={{ color: currentRank.color }}>🏆 Champion</span>
                             </div>
-                            <div className="relative h-3 rounded-full overflow-hidden bg-dark-700">
+                            <div className="relative h-2 sm:h-3 rounded-full overflow-hidden bg-dark-700">
                               <div 
                                 className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-600"
                                 style={{ width: '100%' }}
@@ -1379,17 +1438,17 @@ const RankedMode = () => {
                       const pointsToNextRank = nextRank.min - myRanking.points;
                       
                       return (
-                        <div className="w-full mt-4 pt-4 border-t border-white/10">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm text-gray-400">{language === 'fr' ? 'Prochain rang:' : 'Next rank:'}</span>
-                              <span className="text-sm font-bold" style={{ color: nextRank.color }}>{nextRank.name}</span>
+                        <div className="w-full mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-white/10">
+                          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <span className="text-xs sm:text-sm text-gray-400">{language === 'fr' ? 'Prochain rang:' : 'Next rank:'}</span>
+                              <span className="text-xs sm:text-sm font-bold" style={{ color: nextRank.color }}>{nextRank.name}</span>
                             </div>
-                            <span className="text-sm text-gray-400">
-                              <span className="font-bold" style={{ color: nextRank.color }}>{pointsToNextRank}</span> pts restants
+                            <span className="text-xs sm:text-sm text-gray-400">
+                              <span className="font-bold" style={{ color: nextRank.color }}>{pointsToNextRank}</span> {language === 'fr' ? 'pts restants' : 'pts left'}
                             </span>
                           </div>
-                          <div className="relative h-3 rounded-full overflow-hidden bg-dark-700">
+                          <div className="relative h-2 sm:h-3 rounded-full overflow-hidden bg-dark-700">
                             {/* Progress fill */}
                             <div 
                               className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
@@ -1409,8 +1468,8 @@ const RankedMode = () => {
                             />
                           </div>
                           <div className="flex justify-between mt-1">
-                            <span className="text-xs text-gray-500">{currentRank.min} pts</span>
-                            <span className="text-xs text-gray-500">{nextRank.min} pts</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500">{currentRank.min} pts</span>
+                            <span className="text-[10px] sm:text-xs text-gray-500">{nextRank.min} pts</span>
                           </div>
                         </div>
                       );
@@ -1904,6 +1963,15 @@ const RankedMode = () => {
                         </div>
                       </div>
 
+                      {/* Players in Matchmaking Counter */}
+                      <div className="flex items-center justify-center gap-2 mb-4 py-3 px-4 rounded-xl bg-dark-800/50 border border-white/5">
+                        <Users className={`w-5 h-5 text-${accent}-400`} />
+                        <span className="text-gray-300 font-medium">
+                          <span className={`text-${accent}-400 font-bold`}>{globalQueueCount}</span>
+                          {' '}{t.playersSearching}
+                        </span>
+                      </div>
+
                       {/* Find Match Button */}
                       <button
                         onClick={joinQueue}
@@ -1956,103 +2024,84 @@ const RankedMode = () => {
                   }}
                 />
                 
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2 relative z-10">
+                <h3 className="text-lg font-bold text-white mb-5 flex items-center gap-2 relative z-10">
                   <Sparkles className={`w-5 h-5 text-${accent}-500 animate-pulse`} />
                   {t.ranks}
                 </h3>
                 
-                {/* Animated connection line */}
-                <div className="absolute left-10 top-16 bottom-6 w-0.5 bg-gradient-to-b from-yellow-400 via-purple-500 to-amber-700 opacity-30" />
-                
-                <div className="space-y-2 relative z-10">
+                <div className="space-y-1.5 relative z-10">
                   {/* Reverse ranks to show Champion at top, Bronze at bottom */}
                   {[...ranks].reverse().map((rank, index) => {
-                    const Icon = rank.icon;
                     const isCurrentRank = myRanking && myRanking.points >= rank.min && myRanking.points <= rank.max;
-                    const animationDelay = index * 0.1;
-                    const isTopRank = index < 2; // Champion & Grandmaster
+                    const animationDelay = index * 0.05;
                     
                     return (
                       <div 
                         key={rank.name}
-                        className={`group relative flex items-center gap-3 p-3 rounded-xl transition-all duration-300 hover:scale-[1.02] cursor-default ${
+                        className={`group relative flex items-center gap-4 p-2.5 sm:p-3 rounded-xl transition-all duration-300 cursor-default ${
                           isCurrentRank 
-                            ? `bg-gradient-to-r ${rank.gradient} bg-opacity-30 border-2 shadow-lg` 
-                            : 'bg-dark-800/30 hover:bg-dark-800/60 border border-transparent hover:border-white/10'
+                            ? 'border-2' 
+                            : 'hover:bg-white/5'
                         }`}
                         style={{
-                          borderColor: isCurrentRank ? `${rank.color}50` : undefined,
-                          boxShadow: isCurrentRank ? `0 0 20px ${rank.color}30` : undefined,
-                          animation: `slideInRight 0.5s ease-out ${animationDelay}s both`
+                          borderColor: isCurrentRank ? rank.color : 'transparent',
+                          background: isCurrentRank ? `linear-gradient(135deg, ${rank.color}20, ${rank.color}05)` : undefined,
+                          boxShadow: isCurrentRank ? `0 0 25px ${rank.color}25, inset 0 0 20px ${rank.color}10` : undefined,
+                          animation: `slideInRight 0.4s ease-out ${animationDelay}s both`
                         }}
                       >
-                        {/* Animated glow for current rank */}
-                        {isCurrentRank && (
-                          <div 
-                            className="absolute -inset-0.5 rounded-xl opacity-50 blur-sm -z-10"
-                            style={{
-                              background: `linear-gradient(${rankAnimationPhase}deg, ${rank.color}, transparent, ${rank.color})`,
-                            }}
-                          />
-                        )}
-                        
-                        {/* Rank icon with animation */}
-                        <div 
-                          className={`relative w-10 h-10 rounded-lg bg-gradient-to-br ${rank.gradient} flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${isTopRank ? 'ring-2 ring-white/20' : ''}`}
-                          style={{
-                            boxShadow: `0 4px 15px ${rank.color}40`
-                          }}
-                        >
-                          <Icon 
-                            className={`w-5 h-5 text-white ${isCurrentRank ? 'animate-pulse' : ''}`}
+                        {/* Rank image - BIGGER */}
+                        <div className="relative flex-shrink-0">
+                          <img 
+                            src={rank.image}
+                            alt={rank.name}
+                            className="w-12 h-12 sm:w-14 sm:h-14 object-contain transition-transform duration-300 group-hover:scale-110"
                             style={{ 
-                              filter: isTopRank ? `drop-shadow(0 0 6px ${rank.color})` : undefined
+                              filter: `drop-shadow(0 2px 8px ${rank.color}50)`
                             }}
                           />
-                          {/* Sparkle effect for top ranks */}
-                          {isTopRank && (
-                            <div className="absolute -top-1 -right-1">
-                              <Sparkles 
-                                className="w-3 h-3 animate-ping" 
-                                style={{ color: rank.color, animationDuration: '2s' }}
-                              />
-                            </div>
+                          {isCurrentRank && (
+                            <div 
+                              className="absolute inset-0 blur-lg opacity-40"
+                              style={{ background: rank.color }}
+                            />
                           )}
                         </div>
                         
-                        <div className="flex-1">
+                        {/* Rank info */}
+                        <div className="flex-1 min-w-0">
                           <p 
-                            className={`font-bold text-sm transition-colors ${isCurrentRank ? 'text-white' : 'text-gray-300 group-hover:text-white'}`}
+                            className={`font-bold text-base sm:text-lg transition-colors truncate ${isCurrentRank ? '' : 'text-white group-hover:text-white'}`}
                             style={{ 
                               color: isCurrentRank ? rank.color : undefined,
-                              textShadow: isCurrentRank ? `0 0 10px ${rank.color}60` : undefined
+                              textShadow: isCurrentRank ? `0 0 15px ${rank.color}60` : undefined
                             }}
                           >
                             {rank.name}
                           </p>
-                          <p className="text-xs text-gray-500">{rank.min} - {rank.max === 99999 ? '∞' : rank.max} pts</p>
+                          <p className="text-xs sm:text-sm text-gray-500">{rank.min} - {rank.max === 99999 ? '∞' : rank.max} pts</p>
                         </div>
                         
-                        {/* Current rank indicator */}
-                        {isCurrentRank && (
+                        {/* Right side badge */}
+                        {isCurrentRank ? (
                           <div className="flex items-center gap-2">
                             <span 
-                              className="px-2.5 py-1 rounded-full text-xs font-bold animate-pulse"
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold"
                               style={{ 
-                                backgroundColor: `${rank.color}30`,
-                                color: rank.color,
-                                boxShadow: `0 0 10px ${rank.color}40`
+                                background: rank.color,
+                                color: '#000',
+                                boxShadow: `0 0 15px ${rank.color}50`
                               }}
                             >
                               {t.you}
                             </span>
-                            <ChevronRight className="w-4 h-4 text-white animate-bounce" style={{ animationDuration: '1.5s' }} />
+                            <ChevronRight className="w-5 h-5" style={{ color: rank.color }} />
                           </div>
-                        )}
-                        
-                        {/* Tier badge for top ranks */}
-                        {isTopRank && !isCurrentRank && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/10 text-gray-400">
+                        ) : (
+                          <span 
+                            className="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-gray-400"
+                            style={{ background: `${rank.color}15`, color: `${rank.color}CC` }}
+                          >
                             {rank.tier}
                           </span>
                         )}
@@ -2066,38 +2115,45 @@ const RankedMode = () => {
           </div>
 
           {/* Points Loss Per Rank Info */}
-          {pointsLossPerRank && (
+          {(pointsLossPerRank || DEFAULT_POINTS_LOSS_PER_RANK) && (
             <div className={`rounded-2xl bg-dark-800/50 backdrop-blur-xl border ${isHardcore ? 'border-red-500/20' : 'border-cyan-500/20'} overflow-hidden mb-6`}>
               <div className={`px-4 py-3 bg-gradient-to-r ${isHardcore ? 'from-red-500/10 to-orange-500/5' : 'from-cyan-500/10 to-blue-500/5'} border-b border-white/10`}>
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <AlertTriangle className={`w-4 h-4 ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`} />
-                  {language === 'fr' ? 'Points perdus en cas de défaite (par rang)' : 'Points lost on defeat (by rank)'}
+                  {{ fr: 'Points perdus en cas de défaite (par rang)', en: 'Points lost on defeat (by rank)', de: 'Verlorene Punkte bei Niederlage (pro Rang)', it: 'Punti persi in caso di sconfitta (per rango)' }[language] || 'Points lost on defeat (by rank)'}
                 </h4>
               </div>
               <div className="p-4">
                 <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
                   {['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'].map((rankKey) => {
                     const style = RANK_STYLES[rankKey];
-                    const RankIcon = style.icon;
-                    const loss = pointsLossPerRank[rankKey] || 0;
+                    const rankName = getRankName(rankKey, language);
+                    // Use config value if valid negative number, otherwise use default
+                    const configValue = pointsLossPerRank?.[rankKey];
+                    const loss = (typeof configValue === 'number' && configValue < 0) 
+                      ? configValue 
+                      : DEFAULT_POINTS_LOSS_PER_RANK[rankKey];
                     return (
                       <div 
                         key={rankKey}
                         className="flex flex-col items-center p-2 rounded-xl bg-dark-900/50 border border-white/5"
                       >
-                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${style.gradient} flex items-center justify-center mb-1`}>
-                          <RankIcon className="w-4 h-4 text-white" />
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-1`}>
+                          <img src={style.image} alt={rankName} className="w-7 h-7 object-contain" />
                         </div>
-                        <span className="text-[10px] text-gray-400 font-medium truncate">{style.name}</span>
+                        <span className="text-[10px] text-gray-400 font-medium truncate">{rankName}</span>
                         <span className="text-sm font-bold text-red-400">{loss}</span>
                       </div>
                     );
                   })}
                 </div>
                 <p className="text-xs text-gray-500 mt-3 text-center">
-                  {language === 'fr' 
-                    ? 'Plus votre rang est élevé, plus vous perdez de points en cas de défaite.' 
-                    : 'The higher your rank, the more points you lose on defeat.'}
+                  {{ 
+                    fr: 'Plus votre rang est élevé, plus vous perdez de points en cas de défaite.', 
+                    en: 'The higher your rank, the more points you lose on defeat.',
+                    de: 'Je höher Ihr Rang, desto mehr Punkte verlieren Sie bei einer Niederlage.',
+                    it: 'Più alto è il tuo rango, più punti perdi in caso di sconfitta.'
+                  }[language] || 'The higher your rank, the more points you lose on defeat.'}
                 </p>
               </div>
             </div>
@@ -2125,7 +2181,6 @@ const RankedMode = () => {
                   // Calculate actual position based on current page
                   const position = (leaderboardPage - 1) * LEADERBOARD_PER_PAGE + idx + 1;
                   const rank = getRankFromPoints(player.points);
-                  const RankIcon = rank.icon;
                   const winRate = player.wins + player.losses > 0 
                     ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
                     : 0;
@@ -2174,8 +2229,8 @@ const RankedMode = () => {
                           {position === 1 && '👑 '}{player.user?.username || 'Unknown'}
                         </p>
                         <div className="flex items-center gap-2">
-                          <div className={`w-4 h-4 rounded bg-gradient-to-br ${rank.gradient} flex items-center justify-center`}>
-                            <RankIcon className="w-2.5 h-2.5 text-white" />
+                          <div className={`w-5 h-5 rounded flex items-center justify-center`}>
+                            <img src={rank.image} alt={rank.name} className="w-5 h-5 object-contain" />
                           </div>
                           <span className="text-xs text-gray-500">{rank.name}</span>
                         </div>
@@ -2276,8 +2331,8 @@ const RankedMode = () => {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className={`w-4 h-4 rounded bg-gradient-to-br ${playerRank.gradient} flex items-center justify-center`}>
-                            <PlayerRankIcon className="w-2.5 h-2.5 text-white" />
+                          <div className={`w-5 h-5 rounded flex items-center justify-center`}>
+                            <img src={playerRank.image} alt={playerRank.name} className="w-5 h-5 object-contain" />
                           </div>
                           <span className="text-xs text-gray-500">{playerRank.name}</span>
                         </div>
@@ -2595,7 +2650,6 @@ const RankedMode = () => {
                         ?.filter(p => p.team === 1 || p.team === 'A')
                         .map((player, index) => {
                           const playerRankInfo = getRankFromPoints(player.points || 0);
-                          const RankIcon = playerRankInfo.icon;
                           return (
                           <div
                             key={player.id || index}
@@ -2631,7 +2685,7 @@ const RankedMode = () => {
                               <div 
                                 className={`relative flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-gradient-to-r ${playerRankInfo.gradient} border border-white/20`}
                               >
-                                <RankIcon className="w-3 h-3 sm:w-4 sm:h-4 text-white" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }} />
+                                <img src={playerRankInfo.image} alt={playerRankInfo.name} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }} />
                                 <span className="text-white text-[10px] sm:text-xs font-bold">{playerRankInfo.name}</span>
                               </div>
                             </div>
@@ -2667,7 +2721,6 @@ const RankedMode = () => {
                         ?.filter(p => p.team === 2 || p.team === 'B')
                         .map((player, index) => {
                           const playerRankInfo = getRankFromPoints(player.points || 0);
-                          const RankIcon = playerRankInfo.icon;
                           return (
                           <div
                             key={player.id || index}
@@ -2688,7 +2741,7 @@ const RankedMode = () => {
                               <div 
                                 className={`relative flex items-center gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-gradient-to-r ${playerRankInfo.gradient} border border-white/20`}
                               >
-                                <RankIcon className="w-3 h-3 sm:w-4 sm:h-4 text-white" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }} />
+                                <img src={playerRankInfo.image} alt={playerRankInfo.name} className="w-4 h-4 sm:w-5 sm:h-5 object-contain" style={{ filter: 'drop-shadow(0 0 4px rgba(255,255,255,0.5))' }} />
                                 <span className="text-white text-[10px] sm:text-xs font-bold">{playerRankInfo.name}</span>
                               </div>
                             </div>

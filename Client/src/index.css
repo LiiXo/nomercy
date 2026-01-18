@@ -608,6 +608,16 @@
     animation: trophy-float 3s ease-in-out infinite;
   }
 
+  /* Rank float animation */
+  @keyframes float {
+    0%, 100% { 
+      transform: translateY(0px) scale(1); 
+    }
+    50% { 
+      transform: translateY(-10px) scale(1.02); 
+    }
+  }
+
   /* === SCROLL ANIMATION === */
   @keyframes scroll-left {
     0% { transform: translateX(0); }
@@ -664,6 +674,7 @@
     z-index: -1;
   }
 }
+
 
 
 

@@ -6,12 +6,46 @@ import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
 import { 
   ArrowLeft, Trophy, Users, Clock, Send, Loader2, Shield, 
-  Swords, MessageCircle, AlertTriangle, Crown, Shuffle, Map
+  Swords, MessageCircle, AlertTriangle, Crown, Shuffle, Map,
+  Medal, Star, Flame, Zap
 } from 'lucide-react';
 import RankedMatchReport from '../components/RankedMatchReport';
 import LadderMatchReport from '../components/LadderMatchReport';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
+
+// Traductions des noms de rangs
+const RANK_NAMES = {
+  bronze: { fr: 'Bronze', en: 'Bronze', de: 'Bronze', it: 'Bronzo' },
+  silver: { fr: 'Argent', en: 'Silver', de: 'Silber', it: 'Argento' },
+  gold: { fr: 'Or', en: 'Gold', de: 'Gold', it: 'Oro' },
+  platinum: { fr: 'Platine', en: 'Platinum', de: 'Platin', it: 'Platino' },
+  diamond: { fr: 'Diamant', en: 'Diamond', de: 'Diamant', it: 'Diamante' },
+  master: { fr: 'Maître', en: 'Master', de: 'Meister', it: 'Maestro' },
+  grandmaster: { fr: 'Grand Maître', en: 'Grandmaster', de: 'Großmeister', it: 'Gran Maestro' },
+  champion: { fr: 'Champion', en: 'Champion', de: 'Champion', it: 'Campione' }
+};
+
+// Définition des rangs pour le mode classé
+const RANKS = [
+  { key: 'bronze', min: 0, max: 499, color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, image: '/1.png' },
+  { key: 'silver', min: 500, max: 999, color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, image: '/2.png' },
+  { key: 'gold', min: 1000, max: 1499, color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, image: '/3.png' },
+  { key: 'platinum', min: 1500, max: 1999, color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, image: '/4.png' },
+  { key: 'diamond', min: 2000, max: 2499, color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, image: '/5.png' },
+  { key: 'master', min: 2500, max: 2999, color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, image: '/6.png' },
+  { key: 'grandmaster', min: 3000, max: 3499, color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, image: '/7.png' },
+  { key: 'champion', min: 3500, max: 99999, color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, image: '/8.png' },
+];
+
+// Obtenir le rang à partir des points avec le nom traduit
+const getRankFromPoints = (points, language = 'en') => {
+  const rank = RANKS.find(r => points >= r.min && points <= r.max) || RANKS[0];
+  return {
+    ...rank,
+    name: RANK_NAMES[rank.key]?.[language] || RANK_NAMES[rank.key]?.en || rank.key
+  };
+};
 
 const MatchSheet = () => {
   const { matchId } = useParams();
@@ -2346,6 +2380,8 @@ const MatchSheet = () => {
                         const isRef = !p.isFake && player._id && match.team1Referent?._id && 
                                      (match.team1Referent._id.toString() === player._id.toString() || 
                                       match.team1Referent.toString() === player._id.toString());
+                        // Obtenir le rang du joueur
+                        const playerRank = getRankFromPoints(p.points || 0, language);
                         return (
                           <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                             <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
@@ -2360,6 +2396,14 @@ const MatchSheet = () => {
                               {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                             </div>
                             <div className="flex items-center gap-1">
+                              {/* Badge de rang */}
+                              <div 
+                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
+                                title={`${playerRank.name} - ${p.points || 0} pts`}
+                              >
+                                <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
+                                <span className="text-white text-[10px] font-bold">{playerRank.name}</span>
+                              </div>
                               {player.platform && (
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                                   {player.platform}
@@ -2392,6 +2436,8 @@ const MatchSheet = () => {
                         const isRef = !p.isFake && player._id && match.team2Referent?._id && 
                                      (match.team2Referent._id.toString() === player._id.toString() || 
                                       match.team2Referent.toString() === player._id.toString());
+                        // Obtenir le rang du joueur
+                        const playerRank = getRankFromPoints(p.points || 0, language);
                         return (
                           <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                             <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
@@ -2406,6 +2452,14 @@ const MatchSheet = () => {
                               {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                             </div>
                             <div className="flex items-center gap-1">
+                              {/* Badge de rang */}
+                              <div 
+                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
+                                title={`${playerRank.name} - ${p.points || 0} pts`}
+                              >
+                                <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
+                                <span className="text-white text-[10px] font-bold">{playerRank.name}</span>
+                              </div>
                               {player.platform && (
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
                                   {player.platform}

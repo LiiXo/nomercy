@@ -465,16 +465,28 @@ const PlayerProfile = () => {
   // Get rank for ornament (use ranking.rank from DB)
   const playerRank = playerStats?.rank || 999;
 
+  // Traductions des noms de rangs
+  const RANK_NAMES = {
+    bronze: { fr: 'Bronze', en: 'Bronze', de: 'Bronze', it: 'Bronzo' },
+    silver: { fr: 'Argent', en: 'Silver', de: 'Silber', it: 'Argento' },
+    gold: { fr: 'Or', en: 'Gold', de: 'Gold', it: 'Oro' },
+    platinum: { fr: 'Platine', en: 'Platinum', de: 'Platin', it: 'Platino' },
+    diamond: { fr: 'Diamant', en: 'Diamond', de: 'Diamant', it: 'Diamante' },
+    master: { fr: 'Maître', en: 'Master', de: 'Meister', it: 'Maestro' },
+    grandmaster: { fr: 'Grand Maître', en: 'Grandmaster', de: 'Großmeister', it: 'Gran Maestro' },
+    champion: { fr: 'Champion', en: 'Champion', de: 'Champion', it: 'Campione' }
+  };
+
   // Rank styles for each division
   const RANK_STYLES = {
-    champion: { name: 'Champion', color: 'from-yellow-400 to-amber-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '👑', hexColor: '#F1C40F', Icon: Crown, isTop: true },
-    grandmaster: { name: 'Grandmaster', color: 'from-red-500 to-rose-600', textColor: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: '🔥', hexColor: '#E74C3C', Icon: Flame, isTop: true },
-    master: { name: 'Master', color: 'from-purple-500 to-violet-600', textColor: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50', icon: '💎', hexColor: '#9B59B6', Icon: Crown, isTop: false },
-    diamond: { name: 'Diamond', color: 'from-cyan-400 to-blue-500', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', icon: '💠', hexColor: '#B9F2FF', Icon: Star, isTop: false },
-    platinum: { name: 'Platinum', color: 'from-teal-400 to-emerald-500', textColor: 'text-teal-400', bgColor: 'bg-teal-500/20', borderColor: 'border-teal-500/50', icon: '🏅', hexColor: '#00CED1', Icon: Medal, isTop: false },
-    gold: { name: 'Gold', color: 'from-yellow-500 to-amber-600', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '🥇', hexColor: '#FFD700', Icon: Medal, isTop: false },
-    silver: { name: 'Silver', color: 'from-gray-300 to-gray-400', textColor: 'text-gray-300', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50', icon: '🥈', hexColor: '#C0C0C0', Icon: Shield, isTop: false },
-    bronze: { name: 'Bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉', hexColor: '#CD7F32', Icon: Shield, isTop: false }
+    champion: { key: 'champion', color: 'from-yellow-400 to-amber-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '👑', hexColor: '#F1C40F', Icon: Crown, isTop: true, image: '/8.png' },
+    grandmaster: { key: 'grandmaster', color: 'from-red-500 to-rose-600', textColor: 'text-red-400', bgColor: 'bg-red-500/20', borderColor: 'border-red-500/50', icon: '🔥', hexColor: '#E74C3C', Icon: Flame, isTop: true, image: '/7.png' },
+    master: { key: 'master', color: 'from-purple-500 to-violet-600', textColor: 'text-purple-400', bgColor: 'bg-purple-500/20', borderColor: 'border-purple-500/50', icon: '💎', hexColor: '#9B59B6', Icon: Crown, isTop: false, image: '/6.png' },
+    diamond: { key: 'diamond', color: 'from-cyan-400 to-blue-500', textColor: 'text-cyan-400', bgColor: 'bg-cyan-500/20', borderColor: 'border-cyan-500/50', icon: '💠', hexColor: '#B9F2FF', Icon: Star, isTop: false, image: '/5.png' },
+    platinum: { key: 'platinum', color: 'from-teal-400 to-emerald-500', textColor: 'text-teal-400', bgColor: 'bg-teal-500/20', borderColor: 'border-teal-500/50', icon: '🏅', hexColor: '#00CED1', Icon: Medal, isTop: false, image: '/4.png' },
+    gold: { key: 'gold', color: 'from-yellow-500 to-amber-600', textColor: 'text-yellow-500', bgColor: 'bg-yellow-500/20', borderColor: 'border-yellow-500/50', icon: '🥇', hexColor: '#FFD700', Icon: Medal, isTop: false, image: '/3.png' },
+    silver: { key: 'silver', color: 'from-gray-300 to-gray-400', textColor: 'text-gray-300', bgColor: 'bg-gray-500/20', borderColor: 'border-gray-500/50', icon: '🥈', hexColor: '#C0C0C0', Icon: Shield, isTop: false, image: '/2.png' },
+    bronze: { key: 'bronze', color: 'from-orange-600 to-amber-700', textColor: 'text-orange-400', bgColor: 'bg-orange-500/20', borderColor: 'border-orange-500/50', icon: '🥉', hexColor: '#CD7F32', Icon: Shield, isTop: false, image: '/1.png' }
   };
 
   // Get division based on points using thresholds from admin config
@@ -496,10 +508,17 @@ const PlayerProfile = () => {
     for (const rankKey of rankOrder) {
       const threshold = thresholds[rankKey];
       if (threshold && points >= threshold.min) {
-        return RANK_STYLES[rankKey];
+        const style = RANK_STYLES[rankKey];
+        return {
+          ...style,
+          name: RANK_NAMES[rankKey]?.[language] || RANK_NAMES[rankKey]?.en || rankKey
+        };
       }
     }
-    return RANK_STYLES.bronze;
+    return {
+      ...RANK_STYLES.bronze,
+      name: RANK_NAMES.bronze?.[language] || RANK_NAMES.bronze?.en || 'bronze'
+    };
   };
 
   // Find the ranking with the highest points to display the best rank
@@ -634,20 +653,75 @@ const PlayerProfile = () => {
                     />
                   )}
                 </h1>
-                {/* Division name under username */}
+                {/* Division badge with BIG animated image */}
                 {division && (
-                  <p 
-                    className="text-sm font-semibold mt-1 opacity-80"
-                    style={{ color: division.hexColor }}
-                  >
-                    {division.icon} {division.name}
-                  </p>
-                )}
-                {/* Show ranked points if player has played */}
-                {bestRanking && bestRanking.points > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {bestRanking.points} pts
-                  </p>
+                  <div className="relative flex flex-col items-center mt-4 mb-2">
+                    {/* Animated glow background */}
+                    <div 
+                      className="absolute inset-0 blur-3xl opacity-30"
+                      style={{ 
+                        background: `radial-gradient(circle, ${division.hexColor} 0%, transparent 70%)`,
+                        animation: 'pulse 3s ease-in-out infinite'
+                      }}
+                    />
+                    {/* Rotating ring for top ranks */}
+                    {division.isTop && (
+                      <div 
+                        className="absolute w-32 h-32 sm:w-40 sm:h-40 rounded-full opacity-40"
+                        style={{ 
+                          background: `conic-gradient(from ${rankAnimationPhase}deg, ${division.hexColor}, transparent 30%, ${division.hexColor}80, transparent 60%, ${division.hexColor})`,
+                          filter: 'blur(8px)'
+                        }}
+                      />
+                    )}
+                    {/* Big rank logo */}
+                    <div className="relative group">
+                      <img 
+                        src={division.image} 
+                        alt={division.name}
+                        className="w-24 h-24 sm:w-32 sm:h-32 object-contain relative z-10 transition-transform duration-500 group-hover:scale-110"
+                        style={{ 
+                          filter: `drop-shadow(0 0 25px ${division.hexColor}80) drop-shadow(0 0 50px ${division.hexColor}40)`,
+                          animation: division.isTop ? 'float 3s ease-in-out infinite' : 'pulse 4s ease-in-out infinite'
+                        }}
+                      />
+                      {/* Sparkles for top ranks */}
+                      {division.isTop && (
+                        <>
+                          <Sparkles 
+                            className="absolute -top-2 -left-2 w-5 h-5 animate-ping" 
+                            style={{ color: division.hexColor, animationDuration: '2s' }}
+                          />
+                          <Sparkles 
+                            className="absolute -bottom-1 -right-1 w-4 h-4 animate-ping" 
+                            style={{ color: division.hexColor, animationDuration: '2.5s', animationDelay: '0.5s' }}
+                          />
+                        </>
+                      )}
+                    </div>
+                    {/* Rank name */}
+                    <p 
+                      className="text-xl sm:text-2xl font-black mt-3 tracking-wide"
+                      style={{ 
+                        color: division.hexColor,
+                        textShadow: `0 0 20px ${division.hexColor}60`
+                      }}
+                    >
+                      {division.name}
+                    </p>
+                    {/* Points */}
+                    {bestRanking && bestRanking.points > 0 && (
+                      <p 
+                        className="text-sm font-semibold mt-1 px-4 py-1 rounded-full"
+                        style={{ 
+                          background: `${division.hexColor}20`,
+                          color: division.hexColor
+                        }}
+                      >
+                        {bestRanking.points} pts
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
               

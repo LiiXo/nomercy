@@ -673,8 +673,13 @@ const AdminApplication = ({
                     max="0"
                     value={currentValue}
                     onChange={async (e) => {
-                      const newValue = Math.min(0, parseInt(e.target.value) || 0);
+                      // Keep default negative value if input is empty or invalid
+                      const defaultValues = { bronze: -10, silver: -12, gold: -15, platinum: -18, diamond: -20, master: -22, grandmaster: -25, champion: -30 };
+                      const parsed = parseInt(e.target.value);
+                      const newValue = !isNaN(parsed) && parsed < 0 ? parsed : defaultValues[key];
+                      
                       try {
+                        // Update AppSettings (for display in this panel)
                         const response = await fetch(`${API_URL}/app-settings/admin`, {
                           method: 'PUT',
                           headers: { 'Content-Type': 'application/json' },
@@ -688,6 +693,20 @@ const AdminApplication = ({
                             }
                           })
                         });
+                        
+                        // ALSO update Config (which is used by the server for actual calculations)
+                        await fetch(`${API_URL}/config/admin`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({
+                            rankedPointsLossPerRank: {
+                              ...appSettings?.rankedSettings?.pointsLossPerRank,
+                              [key]: newValue
+                            }
+                          })
+                        });
+                        
                         const data = await response.json();
                         if (data.success) fetchAppSettings();
                       } catch (err) {

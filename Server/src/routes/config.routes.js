@@ -56,11 +56,44 @@ router.put('/admin', verifyToken, requireAdmin, async (req, res) => {
 
 // ==================== PUBLIC ROUTES ====================
 
+// Default values for points loss per rank (negative values = points lost)
+const DEFAULT_POINTS_LOSS_PER_RANK = {
+  bronze: -10,
+  silver: -12,
+  gold: -15,
+  platinum: -18,
+  diamond: -20,
+  master: -22,
+  grandmaster: -25,
+  champion: -30
+};
+
 // Get public config
 router.get('/', async (req, res) => {
   try {
-    const config = await Config.findOne() || {};
-    res.json({ success: true, config });
+    // Use getOrCreate to ensure defaults are applied
+    const config = await Config.getOrCreate();
+    
+    // Ensure rankedPointsLossPerRank has all ranks with valid negative values
+    // This fixes issues where individual ranks might be missing or set to 0
+    const rankedPointsLossPerRank = { ...DEFAULT_POINTS_LOSS_PER_RANK };
+    if (config.rankedPointsLossPerRank) {
+      Object.keys(DEFAULT_POINTS_LOSS_PER_RANK).forEach(rank => {
+        const value = config.rankedPointsLossPerRank[rank];
+        // Only use the config value if it's a negative number (valid loss)
+        if (typeof value === 'number' && value < 0) {
+          rankedPointsLossPerRank[rank] = value;
+        }
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      config: {
+        ...config,
+        rankedPointsLossPerRank
+      }
+    });
   } catch (error) {
     console.error('Get config error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
