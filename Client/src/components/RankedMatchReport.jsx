@@ -8,8 +8,8 @@ import {
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
-// Définition des rangs (même que RankedMode.jsx)
-const RANKS = [
+// Définition des rangs par défaut (seuils dynamiques chargés depuis AppSettings)
+const DEFAULT_RANKS = [
   { name: 'Bronze', min: 0, max: 499, color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield },
   { name: 'Silver', min: 500, max: 999, color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield },
   { name: 'Gold', min: 1000, max: 1499, color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal },
@@ -19,6 +19,40 @@ const RANKS = [
   { name: 'Grandmaster', min: 3000, max: 3499, color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame },
   { name: 'Champion', min: 3500, max: 99999, color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap },
 ];
+
+// Styles des rangs (couleurs, gradients, icons)
+const RANK_STYLES = {
+  bronze: { color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield },
+  silver: { color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield },
+  gold: { color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal },
+  platinum: { color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal },
+  diamond: { color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star },
+  master: { color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown },
+  grandmaster: { color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame },
+  champion: { color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap },
+};
+
+// Construire les rangs depuis les seuils configurés
+const buildRanksFromThresholds = (thresholds) => {
+  const rankOrder = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'];
+  const rankNames = {
+    bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum',
+    diamond: 'Diamond', master: 'Master', grandmaster: 'Grandmaster', champion: 'Champion'
+  };
+  
+  return rankOrder.map(key => {
+    const threshold = thresholds[key];
+    const style = RANK_STYLES[key];
+    return {
+      name: rankNames[key],
+      min: threshold?.min ?? DEFAULT_RANKS.find(r => r.name === rankNames[key])?.min ?? 0,
+      max: threshold?.max ?? DEFAULT_RANKS.find(r => r.name === rankNames[key])?.max ?? 99999,
+      color: style.color,
+      gradient: style.gradient,
+      icon: style.icon
+    };
+  });
+};
 
 const RankedMatchReport = ({ 
   show, 
@@ -36,6 +70,25 @@ const RankedMatchReport = ({
   const { refreshUser } = useAuth();
   const [animationStep, setAnimationStep] = useState(0);
   const [progressAnimation, setProgressAnimation] = useState(0);
+  const [ranks, setRanks] = useState(DEFAULT_RANKS);
+  
+  // Charger les seuils de rang depuis AppSettings
+  useEffect(() => {
+    const fetchRankThresholds = async () => {
+      try {
+        const response = await fetch(`${API_URL}/app-settings/public`);
+        const data = await response.json();
+        if (data.success && data.rankedSettings?.rankPointsThresholds) {
+          const dynamicRanks = buildRanksFromThresholds(data.rankedSettings.rankPointsThresholds);
+          setRanks(dynamicRanks);
+          console.log('[RankedMatchReport] Loaded dynamic rank thresholds:', dynamicRanks);
+        }
+      } catch (err) {
+        console.error('[RankedMatchReport] Error loading rank thresholds:', err);
+      }
+    };
+    fetchRankThresholds();
+  }, []);
   
   // Log pour debugging
   console.log('[RankedMatchReport] Component rendered');
@@ -46,9 +99,9 @@ const RankedMatchReport = ({
   console.log('[RankedMatchReport] newRank:', newRank);
   console.log('[RankedMatchReport] mode:', mode);
 
-  // Calculer les infos de rang
+  // Calculer les infos de rang (utilise les rangs dynamiques)
   const getRankInfo = (points) => {
-    return RANKS.find(r => points >= r.min && points <= r.max) || RANKS[0];
+    return ranks.find(r => points >= r.min && points <= r.max) || ranks[0];
   };
 
   const oldRankInfo = getRankInfo(oldRank?.points || 0);
@@ -312,7 +365,7 @@ const RankedMatchReport = ({
                       {oldRank?.points || 0} <ChevronRight className="inline w-4 h-4" /> {newRank?.points || 0}
                     </div>
                     <div className="text-gray-400 text-sm">
-                      {Math.round(progressInCurrentRank)}% vers {RANKS[RANKS.findIndex(r => r.name === currentRankInfo.name) + 1]?.name || 'Max'}
+                      {Math.round(progressInCurrentRank)}% vers {ranks[ranks.findIndex(r => r.name === currentRankInfo.name) + 1]?.name || 'Max'}
                     </div>
                   </div>
                 </div>

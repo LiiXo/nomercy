@@ -23,10 +23,9 @@ const router = express.Router();
  */
 async function distributeRankedRewards(match) {
   try {
-    // Ne pas distribuer de récompenses pour les matchs de test
+    // Note: Les matchs de test distribuent maintenant les récompenses pour permettre les tests
     if (match.isTestMatch) {
-      console.log(`[RANKED REWARDS] ⚡ Match de test ${match._id} - Aucune récompense distribuée`);
-      return;
+      console.log(`[RANKED REWARDS] ⚡ Match de test ${match._id} - Distribution des récompenses ACTIVÉE pour test`);
     }
     
     // Récupérer la configuration des récompenses
@@ -36,6 +35,14 @@ async function distributeRankedRewards(match) {
     // Récupérer la configuration des points perdus par rang depuis Config
     const Config = (await import('../models/Config.js')).default;
     const config = await Config.getOrCreate();
+    
+    // Récupérer les seuils de rang depuis AppSettings
+    const AppSettings = (await import('../models/AppSettings.js')).default;
+    const appSettings = await AppSettings.getSettings();
+    const rankThresholds = appSettings?.rankedSettings?.rankPointsThresholds || null;
+    
+    console.log(`[RANKED REWARDS] DEBUG - Config rankedPointsLossPerRank from DB:`, JSON.stringify(config?.rankedPointsLossPerRank));
+    console.log(`[RANKED REWARDS] DEBUG - Rank thresholds from AppSettings:`, JSON.stringify(rankThresholds));
     
     // Default values for points loss per rank - ensures all ranks have valid negative values
     const DEFAULT_POINTS_LOSS = {
@@ -54,11 +61,14 @@ async function distributeRankedRewards(match) {
     if (config?.rankedPointsLossPerRank) {
       Object.keys(DEFAULT_POINTS_LOSS).forEach(rank => {
         const value = config.rankedPointsLossPerRank[rank];
+        console.log(`[RANKED REWARDS] DEBUG - Rank ${rank}: config value = ${value} (type: ${typeof value})`);
         // Only use the config value if it's a negative number (valid loss)
         if (typeof value === 'number' && value < 0) {
           pointsLossPerRank[rank] = value;
         }
       });
+    } else {
+      console.log(`[RANKED REWARDS] ⚠️ WARNING - rankedPointsLossPerRank not found in config, using defaults!`);
     }
     
     // S'assurer que winningTeam est un Number pour les comparaisons
@@ -127,16 +137,20 @@ async function distributeRankedRewards(match) {
         // ========== CALCULER LES RÉCOMPENSES ==========
         
         // Déterminer le rang actuel du joueur pour calculer les points perdus
+        // Utiliser les seuils dynamiques depuis AppSettings
         let playerDivision = 'bronze';
         if (ranking) {
           const points = ranking.points || 0;
-          if (points >= 3500) playerDivision = 'champion';
-          else if (points >= 3000) playerDivision = 'grandmaster';
-          else if (points >= 2500) playerDivision = 'master';
-          else if (points >= 2000) playerDivision = 'diamond';
-          else if (points >= 1500) playerDivision = 'platinum';
-          else if (points >= 1000) playerDivision = 'gold';
-          else if (points >= 500) playerDivision = 'silver';
+          const thresholds = rankThresholds || {};
+          
+          // Vérifier chaque rang du plus haut au plus bas
+          if (points >= (thresholds.champion?.min ?? 3500)) playerDivision = 'champion';
+          else if (points >= (thresholds.grandmaster?.min ?? 3000)) playerDivision = 'grandmaster';
+          else if (points >= (thresholds.master?.min ?? 2500)) playerDivision = 'master';
+          else if (points >= (thresholds.diamond?.min ?? 2000)) playerDivision = 'diamond';
+          else if (points >= (thresholds.platinum?.min ?? 1500)) playerDivision = 'platinum';
+          else if (points >= (thresholds.gold?.min ?? 1000)) playerDivision = 'gold';
+          else if (points >= (thresholds.silver?.min ?? 500)) playerDivision = 'silver';
           else playerDivision = 'bronze';
         }
         
@@ -146,8 +160,9 @@ async function distributeRankedRewards(match) {
           rankedPointsChange = pointsWin;
         } else {
           // Utiliser les points perdus configurés pour le rang du joueur
-          rankedPointsChange = pointsLossPerRank[playerDivision] ?? pointsLoss;
-          console.log(`[RANKED REWARDS] Player ${i}: Using per-rank loss for ${playerDivision}: ${rankedPointsChange} pts`);
+          const configuredLoss = pointsLossPerRank[playerDivision];
+          rankedPointsChange = configuredLoss ?? pointsLoss;
+          console.log(`[RANKED REWARDS] Player ${i}: Division=${playerDivision}, Points=${ranking?.points || 0}, ConfiguredLoss=${configuredLoss}, FallbackLoss=${pointsLoss}, FinalLoss=${rankedPointsChange} pts`);
         }
         
         // Gold (monnaie du jeu)

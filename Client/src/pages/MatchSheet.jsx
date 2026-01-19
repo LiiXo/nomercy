@@ -26,21 +26,52 @@ const RANK_NAMES = {
   champion: { fr: 'Champion', en: 'Champion', de: 'Champion', it: 'Campione' }
 };
 
-// Définition des rangs pour le mode classé
-const RANKS = [
-  { key: 'bronze', min: 0, max: 499, color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, image: '/1.png' },
-  { key: 'silver', min: 500, max: 999, color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, image: '/2.png' },
-  { key: 'gold', min: 1000, max: 1499, color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, image: '/3.png' },
-  { key: 'platinum', min: 1500, max: 1999, color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, image: '/4.png' },
-  { key: 'diamond', min: 2000, max: 2499, color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, image: '/5.png' },
-  { key: 'master', min: 2500, max: 2999, color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, image: '/6.png' },
-  { key: 'grandmaster', min: 3000, max: 3499, color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, image: '/7.png' },
-  { key: 'champion', min: 3500, max: 99999, color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, image: '/8.png' },
-];
+// Styles des rangs (constante - ne change pas)
+const RANK_STYLES = {
+  bronze: { key: 'bronze', color: '#CD7F32', gradient: 'from-amber-700 to-amber-900', icon: Shield, image: '/1.png' },
+  silver: { key: 'silver', color: '#C0C0C0', gradient: 'from-slate-400 to-slate-600', icon: Shield, image: '/2.png' },
+  gold: { key: 'gold', color: '#FFD700', gradient: 'from-yellow-500 to-amber-600', icon: Medal, image: '/3.png' },
+  platinum: { key: 'platinum', color: '#00CED1', gradient: 'from-teal-400 to-cyan-600', icon: Medal, image: '/4.png' },
+  diamond: { key: 'diamond', color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, image: '/5.png' },
+  master: { key: 'master', color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, image: '/6.png' },
+  grandmaster: { key: 'grandmaster', color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, image: '/7.png' },
+  champion: { key: 'champion', color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, image: '/8.png' }
+};
 
-// Obtenir le rang à partir des points avec le nom traduit
-const getRankFromPoints = (points, language = 'en') => {
-  const rank = RANKS.find(r => points >= r.min && points <= r.max) || RANKS[0];
+// Seuils par défaut (seront remplacés par les seuils configurés depuis l'API)
+const DEFAULT_RANK_THRESHOLDS = {
+  bronze: { min: 0, max: 499 },
+  silver: { min: 500, max: 999 },
+  gold: { min: 1000, max: 1499 },
+  platinum: { min: 1500, max: 1999 },
+  diamond: { min: 2000, max: 2499 },
+  master: { min: 2500, max: 2999 },
+  grandmaster: { min: 3000, max: 3499 },
+  champion: { min: 3500, max: null }
+};
+
+// Helper pour construire les rangs avec les seuils dynamiques
+const buildRanksFromThresholds = (thresholds) => {
+  const rankOrder = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'master', 'grandmaster', 'champion'];
+  return rankOrder.map(key => {
+    const threshold = thresholds[key] || DEFAULT_RANK_THRESHOLDS[key];
+    const style = RANK_STYLES[key];
+    return {
+      key,
+      min: threshold.min ?? 0,
+      max: threshold.max ?? 99999,
+      color: style.color,
+      gradient: style.gradient,
+      icon: style.icon,
+      image: style.image
+    };
+  });
+};
+
+// Obtenir le rang à partir des points avec le nom traduit (utilise les seuils passés en paramètre)
+const getRankFromPointsWithThresholds = (points, thresholds, language = 'en') => {
+  const ranks = buildRanksFromThresholds(thresholds);
+  const rank = ranks.find(r => points >= r.min && points <= r.max) || ranks[0];
   return {
     ...rank,
     name: RANK_NAMES[rank.key]?.[language] || RANK_NAMES[rank.key]?.en || rank.key
@@ -104,6 +135,14 @@ const MatchSheet = () => {
   
   // Flag pour éviter d'afficher le rapport plusieurs fois
   const [reportShownForMatch, setReportShownForMatch] = useState(null);
+  
+  // Seuils de rangs configurés (récupérés depuis l'API)
+  const [rankThresholds, setRankThresholds] = useState(DEFAULT_RANK_THRESHOLDS);
+  
+  // Helper local pour obtenir le rang à partir des points
+  const getRankFromPoints = (points, lang = language) => {
+    return getRankFromPointsWithThresholds(points, rankThresholds, lang);
+  };
 
   // Translations
   const t = {
@@ -605,6 +644,25 @@ const MatchSheet = () => {
       fetchCancellationStatus();
     }
   }, [matchId, isAuthenticated, isRankedMatch]);
+
+  // Récupérer les seuils de rangs configurés depuis l'API (pour les matchs classés)
+  useEffect(() => {
+    if (!isRankedMatch) return;
+    
+    const fetchRankThresholds = async () => {
+      try {
+        const res = await fetch(`${API_URL}/app-settings`, { credentials: 'include' });
+        const data = await res.json();
+        if (data.success && data.settings?.rankedSettings?.rankPointsThresholds) {
+          setRankThresholds(data.settings.rankedSettings.rankPointsThresholds);
+        }
+      } catch (err) {
+        console.error('Error fetching rank thresholds:', err);
+      }
+    };
+    
+    fetchRankThresholds();
+  }, [isRankedMatch]);
 
   // 🎯 Effet pour détecter quand le match devient complété et afficher le rapport
   useEffect(() => {

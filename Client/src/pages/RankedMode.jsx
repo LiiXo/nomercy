@@ -86,7 +86,7 @@ const playMatchFoundSound = () => {
     source.buffer = audioBuffer;
     source.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    gainNode.gain.value = 0.3;
+    gainNode.gain.value = 0.15;
     
     currentAudioSource = source;
     currentGainNode = gainNode;
