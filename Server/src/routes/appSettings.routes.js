@@ -7,8 +7,21 @@ const router = express.Router();
 
 // ==================== PUBLIC ROUTES ====================
 
+// Default rank thresholds (fallback)
+const DEFAULT_RANK_THRESHOLDS = {
+  bronze: { min: 0, max: 499 },
+  silver: { min: 500, max: 999 },
+  gold: { min: 1000, max: 1499 },
+  platinum: { min: 1500, max: 1999 },
+  diamond: { min: 2000, max: 2499 },
+  master: { min: 2500, max: 2999 },
+  grandmaster: { min: 3000, max: 3499 },
+  champion: { min: 3500, max: null }
+};
+
 // Get current app settings (public - for checking feature flags)
-router.get('/public', async (req, res) => {
+// Also accessible via root route for backward compatibility
+const getPublicSettings = async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
     
@@ -23,13 +36,11 @@ router.get('/public', async (req, res) => {
       ladderSettings: settings.ladderSettings || {
         duoTrioTimeRestriction: { enabled: true, startHour: 0, endHour: 20 }
       },
-      rankedSettings: settings.rankedSettings || {
-        searchAndDestroy: {
-          enabled: true,
-          rewards: { pointsWin: 25, pointsLose: -15, goldWin: 50 },
-          matchmaking: { minPlayers: 6, maxPlayers: 10, waitTimer: 120 }
-        },
-        pointsLossPerRank: {
+      rankedSettings: {
+        bestOf: settings.rankedSettings?.bestOf || 3,
+        // Important: inclure les seuils de rang pour le calcul des rangs côté client
+        rankPointsThresholds: settings.rankedSettings?.rankPointsThresholds || DEFAULT_RANK_THRESHOLDS,
+        pointsLossPerRank: settings.rankedSettings?.pointsLossPerRank || {
           bronze: -10,
           silver: -12,
           gold: -15,
@@ -39,13 +50,25 @@ router.get('/public', async (req, res) => {
           grandmaster: -25,
           champion: -30
         }
+      },
+      // Pour compatibilité avec l'ancien format (settings directement)
+      settings: {
+        rankedSettings: {
+          rankPointsThresholds: settings.rankedSettings?.rankPointsThresholds || DEFAULT_RANK_THRESHOLDS
+        }
       }
     });
   } catch (error) {
     console.error('Error fetching public app settings:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
-});
+};
+
+// Route racine (pour compatibilité avec /api/app-settings)
+router.get('/', getPublicSettings);
+
+// Route /public explicite
+router.get('/public', getPublicSettings);
 
 // ==================== ADMIN ROUTES ====================
 

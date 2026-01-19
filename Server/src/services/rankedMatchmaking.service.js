@@ -305,16 +305,42 @@ const generateDiverseTeams = (players, teamSize, gameMode, mode) => {
 };
 
 /**
- * Calcule le rang à partir des points
+ * Calcule le rang à partir des points (utilise les seuils dynamiques de AppSettings)
+ * @param {number} points - Les points du joueur
+ * @param {object|null} thresholds - Les seuils de rang (optionnel, sera chargé depuis AppSettings si null)
  */
-const getRankFromPoints = (points) => {
-  if (points >= 3500) return 'Champion';
-  if (points >= 3000) return 'Grandmaster';
-  if (points >= 2500) return 'Master';
-  if (points >= 2000) return 'Diamond';
-  if (points >= 1500) return 'Platinum';
-  if (points >= 1000) return 'Gold';
-  if (points >= 500) return 'Silver';
+const getRankFromPoints = async (points, thresholds = null) => {
+  // Si les seuils ne sont pas fournis, les charger depuis AppSettings
+  if (!thresholds) {
+    try {
+      const settings = await AppSettings.getSettings();
+      thresholds = settings.rankedSettings?.rankPointsThresholds || {};
+    } catch (error) {
+      console.error('[Ranked Matchmaking] Error loading rank thresholds:', error);
+      thresholds = {};
+    }
+  }
+  
+  // Seuils par défaut (fallback)
+  const defaultThresholds = {
+    champion: { min: 3500 },
+    grandmaster: { min: 3000 },
+    master: { min: 2500 },
+    diamond: { min: 2000 },
+    platinum: { min: 1500 },
+    gold: { min: 1000 },
+    silver: { min: 500 },
+    bronze: { min: 0 }
+  };
+  
+  // Vérifier chaque rang du plus haut au plus bas
+  if (points >= (thresholds.champion?.min ?? defaultThresholds.champion.min)) return 'Champion';
+  if (points >= (thresholds.grandmaster?.min ?? defaultThresholds.grandmaster.min)) return 'Grandmaster';
+  if (points >= (thresholds.master?.min ?? defaultThresholds.master.min)) return 'Master';
+  if (points >= (thresholds.diamond?.min ?? defaultThresholds.diamond.min)) return 'Diamond';
+  if (points >= (thresholds.platinum?.min ?? defaultThresholds.platinum.min)) return 'Platinum';
+  if (points >= (thresholds.gold?.min ?? defaultThresholds.gold.min)) return 'Gold';
+  if (points >= (thresholds.silver?.min ?? defaultThresholds.silver.min)) return 'Silver';
   return 'Bronze';
 };
 
@@ -454,7 +480,7 @@ export const joinQueue = async (userId, gameMode, mode) => {
     const playerData = {
       userId: userId,
       username: user.username,
-      rank: getRankFromPoints(ranking.points),
+      rank: await getRankFromPoints(ranking.points),
       points: ranking.points,
       platform: user.platform,
       joinedAt: new Date()
@@ -1282,7 +1308,7 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const staffPlayer = {
       userId: userId,
       username: user.username,
-      rank: getRankFromPoints(ranking.points),
+      rank: await getRankFromPoints(ranking.points),
       points: ranking.points,
       platform: user.platform || 'PC',
       joinedAt: new Date(),
