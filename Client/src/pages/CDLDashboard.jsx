@@ -64,6 +64,9 @@ const CDLDashboard = () => {
   const [topPlayer, setTopPlayer] = useState(null);
   const [topSquad, setTopSquad] = useState(null);
   
+  // Ranked matches stats for the banner
+  const [rankedMatchesStats, setRankedMatchesStats] = useState({ totalMatches: 0, totalPlayers: 0, stats: [] });
+  
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
@@ -558,16 +561,43 @@ const CDLDashboard = () => {
     }
   };
 
+  // Fetch ranked matches stats for the banner
+  const fetchRankedMatchesStats = async () => {
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/active-matches/stats?mode=cdl`);
+      const data = await response.json();
+      if (data.success) {
+        // Calculate total players based on format (4v4 = 8 players, 5v5 = 10 players, etc.)
+        let totalPlayers = 0;
+        data.stats?.forEach(stat => {
+          stat.formats?.forEach(fmt => {
+            const teamSize = parseInt(fmt.format.split('v')[0]) || 4;
+            totalPlayers += fmt.count * teamSize * 2; // 2 teams per match
+          });
+        });
+        setRankedMatchesStats({
+          totalMatches: data.totalMatches || 0,
+          totalPlayers,
+          stats: data.stats || []
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching ranked matches stats:', err);
+    }
+  };
+
   // Initial fetch and unified refresh interval
   useEffect(() => {
     fetchMatches(true);
     fetchInProgressCounts();
+    fetchRankedMatchesStats();
     if (isAuthenticated) fetchMyActiveMatches();
     
     // Single unified interval for all periodic refreshes
     const refreshInterval = setInterval(() => {
       fetchMatches(false);
       fetchInProgressCounts();
+      fetchRankedMatchesStats();
       if (isAuthenticated) fetchMyActiveMatches();
     }, 30000);
     
@@ -1647,6 +1677,23 @@ const CDLDashboard = () => {
                       ? 'Affronte les meilleurs joueurs et grimpe les échelons !' 
                       : 'Face the best players and climb the ranks!'}
                   </p>
+                  {/* Ranked matches stats */}
+                  {rankedMatchesStats.totalMatches > 0 && (
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-green-500/20 border border-green-500/30">
+                        <Swords className="w-3 h-3 text-green-400" />
+                        <span className="text-green-400 text-xs font-semibold">
+                          {rankedMatchesStats.totalMatches} {language === 'fr' ? 'match(s) en cours' : 'active match(es)'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-cyan-500/20 border border-cyan-500/30">
+                        <Users className="w-3 h-3 text-cyan-400" />
+                        <span className="text-cyan-400 text-xs font-semibold">
+                          {rankedMatchesStats.totalPlayers} {language === 'fr' ? 'joueurs en match' : 'players in match'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               

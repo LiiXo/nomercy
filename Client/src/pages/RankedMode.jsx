@@ -244,8 +244,8 @@ const RankedMode = () => {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
   const [leaderboardPage, setLeaderboardPage] = useState(1);
   const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(1);
-  const LEADERBOARD_PER_PAGE = 20;
-  const LEADERBOARD_TOTAL = 100;
+  const LEADERBOARD_PER_PAGE = 10;
+  const LEADERBOARD_TOTAL = 10;
   
   // Game mode & Matchmaking
   const [selectedGameMode, setSelectedGameMode] = useState('Search & Destroy');
@@ -2167,7 +2167,7 @@ const RankedMode = () => {
                 <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
                   <Crown className="w-5 h-5 text-white" />
                 </div>
-                {t.leaderboard} - Top 100
+                {t.leaderboard} - Top 10
               </h3>
             </div>
             

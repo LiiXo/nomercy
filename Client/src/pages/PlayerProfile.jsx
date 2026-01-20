@@ -582,150 +582,114 @@ const PlayerProfile = () => {
         </button>
 
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-6`}>
-          {/* Banner */}
-          {playerData.banner && (
-            <div className="w-full h-48 relative overflow-hidden">
-              <img 
-                src={`https://api-nomercy.ggsecure.io${playerData.banner}`}
-                alt="Profile banner"
-                className="w-full h-full object-cover"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-dark-900/80"></div>
-            </div>
-          )}
-          
-          <div className="p-8">
-          <div className="flex flex-col items-center text-center">
-              {/* Avatar simple */}
-              <div className="relative group mb-6">
-                <div className={`relative w-40 h-40 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center text-5xl font-bold text-dark-950 overflow-hidden transition-all duration-300 group-hover:scale-105`} 
-                  style={{ 
-                    backgroundImage: playerData.avatar ? `url(${getAvatarUrl(playerData.avatar)})` : 'none', 
-                    backgroundSize: 'cover', 
-                    backgroundPosition: 'center',
-                  }}>
-                  {!playerData.avatar && <span>{(playerData.username || playerData.discordUsername)?.charAt(0).toUpperCase()}</span>}
-                </div>
+          {/* Banner avec avatar qui chevauche */}
+          <div className="relative">
+            {playerData.banner ? (
+              <div className="w-full h-40 sm:h-48 relative overflow-hidden">
+                <img 
+                  src={`https://api-nomercy.ggsecure.io${playerData.banner}`}
+                  alt="Profile banner"
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.target.style.display = 'none'; }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-dark-900"></div>
               </div>
-              
-              {/* Animated Username based on ranked division */}
-              <div className="relative group mb-5">
+            ) : (
+              <div className="w-full h-20 sm:h-24"></div>
+            )}
+            
+            {/* Avatar positionné pour chevaucher la bannière */}
+            <div className="absolute left-1/2 -translate-x-1/2 -bottom-14 sm:-bottom-16 z-20">
+              <div className="relative">
+                {/* Avatar */}
+                <div className="relative group">
+                  <div className={`relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center text-4xl sm:text-5xl font-bold text-dark-950 overflow-hidden transition-all duration-300 group-hover:scale-105 shadow-2xl`} 
+                    style={{ 
+                      backgroundImage: playerData.avatar ? `url(${getAvatarUrl(playerData.avatar)})` : 'none', 
+                      backgroundSize: 'cover', 
+                      backgroundPosition: 'center',
+                    }}>
+                    {!playerData.avatar && <span>{(playerData.username || playerData.discordUsername)?.charAt(0).toUpperCase()}</span>}
+                  </div>
+                </div>
+                
+                {/* Badge de rang positionné en bas à droite de l'avatar */}
                 {division && (
-                  <>
-                    {/* Animated glow behind username for top ranks */}
-                    <div 
-                      className="absolute -inset-2 rounded-xl opacity-40 blur-xl transition-opacity"
-                      style={{
-                        background: `conic-gradient(from ${rankAnimationPhase}deg, ${division.hexColor}60, transparent, ${division.hexColor}80, transparent, ${division.hexColor}60)`
-                      }}
-                    />
-                    {/* Rotating border for top ranks */}
-                    {division.isTop && (
+                  <div className="absolute -bottom-1 -right-1 sm:-bottom-2 sm:-right-2 z-30">
+                    <div className="relative">
+                      {/* Glow effect */}
                       <div 
-                        className="absolute -inset-1 rounded-xl opacity-50 blur-sm"
-                        style={{
-                          background: `linear-gradient(${rankAnimationPhase * 2}deg, ${division.hexColor}, transparent 40%, ${division.hexColor})`,
-                        }}
-                      />
-                    )}
-                  </>
-                )}
-                <h1 
-                  className={`relative text-3xl font-bold ${division ? '' : 'text-white'}`}
-                  style={division ? { 
-                    color: division.hexColor,
-                    textShadow: `0 0 20px ${division.hexColor}80, 0 0 40px ${division.hexColor}40`,
-                    animation: division.isTop ? 'pulse 3s ease-in-out infinite' : undefined
-                  } : {}}
-                >
-                  {division && division.isTop && (
-                    <Sparkles 
-                      className="inline w-6 h-6 mr-2 animate-pulse" 
-                      style={{ color: division.hexColor }}
-                    />
-                  )}
-                  {playerData.username || playerData.discordUsername || 'Utilisateur'}
-                  {division && division.isTop && (
-                    <Sparkles 
-                      className="inline w-6 h-6 ml-2 animate-pulse" 
-                      style={{ color: division.hexColor }}
-                    />
-                  )}
-                </h1>
-                {/* Division badge with BIG animated image */}
-                {division && (
-                  <div className="relative flex flex-col items-center mt-4 mb-2">
-                    {/* Animated glow background */}
-                    <div 
-                      className="absolute inset-0 blur-3xl opacity-30"
-                      style={{ 
-                        background: `radial-gradient(circle, ${division.hexColor} 0%, transparent 70%)`,
-                        animation: 'pulse 3s ease-in-out infinite'
-                      }}
-                    />
-                    {/* Rotating ring for top ranks */}
-                    {division.isTop && (
-                      <div 
-                        className="absolute w-32 h-32 sm:w-40 sm:h-40 rounded-full opacity-40"
+                        className="absolute inset-0 rounded-full blur-lg opacity-50"
                         style={{ 
-                          background: `conic-gradient(from ${rankAnimationPhase}deg, ${division.hexColor}, transparent 30%, ${division.hexColor}80, transparent 60%, ${division.hexColor})`,
-                          filter: 'blur(8px)'
+                          background: division.hexColor,
+                          transform: 'scale(1.3)'
                         }}
                       />
-                    )}
-                    {/* Big rank logo */}
-                    <div className="relative group">
                       <img 
                         src={division.image} 
                         alt={division.name}
-                        className="w-24 h-24 sm:w-32 sm:h-32 object-contain relative z-10 transition-transform duration-500 group-hover:scale-110"
+                        className="w-12 h-12 sm:w-14 sm:h-14 object-contain relative z-10"
                         style={{ 
-                          filter: `drop-shadow(0 0 25px ${division.hexColor}80) drop-shadow(0 0 50px ${division.hexColor}40)`,
-                          animation: division.isTop ? 'float 3s ease-in-out infinite' : 'pulse 4s ease-in-out infinite'
+                          filter: `drop-shadow(0 0 8px ${division.hexColor}80)`
                         }}
                       />
-                      {/* Sparkles for top ranks */}
-                      {division.isTop && (
-                        <>
-                          <Sparkles 
-                            className="absolute -top-2 -left-2 w-5 h-5 animate-ping" 
-                            style={{ color: division.hexColor, animationDuration: '2s' }}
-                          />
-                          <Sparkles 
-                            className="absolute -bottom-1 -right-1 w-4 h-4 animate-ping" 
-                            style={{ color: division.hexColor, animationDuration: '2.5s', animationDelay: '0.5s' }}
-                          />
-                        </>
-                      )}
                     </div>
-                    {/* Rank name */}
-                    <p 
-                      className="text-xl sm:text-2xl font-black mt-3 tracking-wide"
-                      style={{ 
-                        color: division.hexColor,
-                        textShadow: `0 0 20px ${division.hexColor}60`
-                      }}
-                    >
-                      {division.name}
-                    </p>
-                    {/* Points */}
-                    {bestRanking && bestRanking.points > 0 && (
-                      <p 
-                        className="text-sm font-semibold mt-1 px-4 py-1 rounded-full"
-                        style={{ 
-                          background: `${division.hexColor}20`,
-                          color: division.hexColor
-                        }}
-                      >
-                        {bestRanking.points} pts
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+          
+          <div className="pt-16 sm:pt-20 pb-6 px-6 sm:px-8">
+          <div className="flex flex-col items-center text-center">
               
-              <div className="flex flex-wrap items-center justify-center gap-3 text-sm mb-4">
+              {/* Username */}
+              <h1 
+                className={`text-2xl sm:text-3xl font-bold mb-1 ${division ? '' : 'text-white'}`}
+                style={division ? { 
+                  color: division.hexColor,
+                  textShadow: `0 0 20px ${division.hexColor}60`
+                } : {}}
+              >
+                {division && division.isTop && (
+                  <Sparkles 
+                    className="inline w-5 h-5 sm:w-6 sm:h-6 mr-1.5 animate-pulse" 
+                    style={{ color: division.hexColor }}
+                  />
+                )}
+                {playerData.username || playerData.discordUsername || 'Utilisateur'}
+                {division && division.isTop && (
+                  <Sparkles 
+                    className="inline w-5 h-5 sm:w-6 sm:h-6 ml-1.5 animate-pulse" 
+                    style={{ color: division.hexColor }}
+                  />
+                )}
+              </h1>
+              
+              {/* Division name + points en ligne */}
+              {division && (
+                <div className="flex items-center gap-2 mb-3">
+                  <span 
+                    className="text-base sm:text-lg font-bold"
+                    style={{ color: division.hexColor }}
+                  >
+                    {division.name}
+                  </span>
+                  {bestRanking && bestRanking.points > 0 && (
+                    <span 
+                      className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                      style={{ 
+                        background: `${division.hexColor}20`,
+                        color: division.hexColor
+                      }}
+                    >
+                      {bestRanking.points} pts
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              <div className="flex flex-wrap items-center justify-center gap-2 text-sm mb-3">
                 {playerStats && playerStats.xp > 0 && (
                   <span className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-cyan-400 font-medium">
                     <Zap className="w-4 h-4" />
