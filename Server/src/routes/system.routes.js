@@ -10,6 +10,7 @@ import Announcement from '../models/Announcement.js';
 import Purchase from '../models/Purchase.js';
 import ItemUsage from '../models/ItemUsage.js';
 import Season from '../models/Season.js';
+import { deleteMatchVoiceChannels } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -35,6 +36,22 @@ router.post('/admin/reset-all', verifyToken, requireAdmin, async (req, res) => {
     }
     
     console.log('🔥 Starting full system reset...');
+    
+    // Supprimer les salons vocaux Discord pour tous les matchs classés avant suppression
+    const rankedMatchesWithVoice = await RankedMatch.find({
+      $or: [
+        { 'team1VoiceChannel.channelId': { $ne: null } },
+        { 'team2VoiceChannel.channelId': { $ne: null } }
+      ]
+    }).select('team1VoiceChannel team2VoiceChannel');
+    
+    console.log(`🎙️ Suppression de ${rankedMatchesWithVoice.length} salons vocaux Discord...`);
+    for (const match of rankedMatchesWithVoice) {
+      if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+        await deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+      }
+    }
+    console.log('✅ Salons vocaux Discord supprimés');
     
     // Delete ALL users including admins
     const deletedUsers = await User.deleteMany({});

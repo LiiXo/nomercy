@@ -392,8 +392,11 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     return null;
   }
 
+  // Convert matchId to string in case it's an ObjectId
+  const matchIdStr = matchId?.toString() || matchId;
+
   try {
-    console.log(`[Discord Bot] Attempting to create voice channels for match ${matchId} in category ${RANKED_VOICE_CATEGORY_ID}`);
+    console.log(`[Discord Bot] Attempting to create voice channels for match ${matchIdStr} in category ${RANKED_VOICE_CATEGORY_ID}`);
     
     // Get the category
     const category = await client.channels.fetch(RANKED_VOICE_CATEGORY_ID);
@@ -470,7 +473,7 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     }
     
     // Use last 4 characters of matchId as unique identifier
-    const matchCode = matchId.slice(-4).toUpperCase();
+    const matchCode = matchIdStr.slice(-4).toUpperCase();
     
     // Create team 1 voice channel with restricted permissions
     const team1ChannelName = `🔵 Blue #${matchCode}`;
@@ -479,7 +482,7 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
       permissionOverwrites: team1Permissions,
-      reason: `Match classé ${matchId}`
+      reason: `Match classé ${matchIdStr}`
     });
 
     // Create team 2 voice channel with restricted permissions
@@ -489,17 +492,17 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
       permissionOverwrites: team2Permissions,
-      reason: `Match classé ${matchId}`
+      reason: `Match classé ${matchIdStr}`
     });
 
-    console.log(`[Discord Bot] Created voice channels for match ${matchId}: #${matchCode} (Blue: ${validTeam1Ids.length} players, Red: ${validTeam2Ids.length} players)`);
+    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (Blue: ${validTeam1Ids.length} players, Red: ${validTeam2Ids.length} players)`);
 
     return {
       team1: { channelId: team1Channel.id, channelName: team1ChannelName },
       team2: { channelId: team2Channel.id, channelName: team2ChannelName }
     };
   } catch (error) {
-    console.error(`[Discord Bot] Failed to create voice channels for match ${matchId}:`, error.message);
+    console.error(`[Discord Bot] Failed to create voice channels for match ${matchIdStr}:`, error.message);
     return null;
   }
 };
