@@ -7,6 +7,7 @@ import Squad from '../models/Squad.js';
 import User from '../models/User.js';
 import Match from '../models/Match.js';
 import { verifyToken, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
+import { logAdminAction } from '../services/discordBot.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1527,6 +1528,14 @@ router.post('/:squadId/assign-trophy', verifyToken, async (req, res) => {
     // Populate and return
     await squad.populate('trophies.trophy');
 
+    // Log to Discord
+    await logAdminAction(req.user, 'Assign Trophy', squad.name, {
+      fields: [
+        { name: 'Trophée ID', value: trophyId },
+        { name: 'Raison', value: reason || 'Non spécifiée' }
+      ]
+    });
+
     res.json({ success: true, message: 'Trophée attribué', squad });
   } catch (error) {
     console.error('Assign trophy error:', error);
@@ -1553,6 +1562,13 @@ router.delete('/:squadId/remove-trophy/:trophyId', verifyToken, async (req, res)
     squad.trophies = squad.trophies.filter(t => t.trophy?.toString() !== trophyId);
 
     await squad.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Remove Trophy', squad.name, {
+      fields: [
+        { name: 'Trophée ID', value: trophyId }
+      ]
+    });
 
     res.json({ success: true, message: 'Trophée retiré', squad });
   } catch (error) {
@@ -1657,6 +1673,11 @@ router.post('/admin/:squadId/reset-progression', verifyToken, requireAdmin, asyn
     }
     
     await squad.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Reset Progression', squad.name, {
+      description: ladderId ? `Ladder ${ladderId} réinitialisé` : 'Progression complète réinitialisée'
+    });
     
     res.json({
       success: true,
@@ -1703,6 +1724,13 @@ router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
 
     await squad.save();
 
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Squad', squad.name, {
+      fields: [
+        { name: 'Modifications', value: Object.keys(req.body).join(', ') || 'Aucune' }
+      ]
+    });
+
     res.json({
       success: true,
       message: 'Escouade mise à jour',
@@ -1744,6 +1772,13 @@ router.put('/admin/:squadId/ladder-points', verifyToken, requireAdmin, async (re
 
     console.log(`[ADMIN] Squad ${squad.name} ladder points updated by admin`);
 
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Ladder Points', squad.name, {
+      fields: [
+        { name: 'Points', value: JSON.stringify(ladderPoints) }
+      ]
+    });
+
     res.json({
       success: true,
       message: 'Points ladder mis à jour',
@@ -1776,6 +1811,14 @@ router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => 
     );
 
     await Squad.findByIdAndDelete(req.params.squadId);
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Delete Squad', squad.name, {
+      fields: [
+        { name: 'Tag', value: squad.tag },
+        { name: 'Membres', value: squad.members.length.toString() }
+      ]
+    });
 
     res.json({
       success: true,
@@ -1836,6 +1879,16 @@ router.post('/admin/:squadId/kick/:memberId', verifyToken, requireStaff, async (
       userIdToUpdate,
       { $unset: { squad: 1 } }
     );
+
+    // Get kicked user info for logging
+    const kickedUser = await User.findById(userIdToUpdate).select('username');
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Kick Member', squad.name, {
+      fields: [
+        { name: 'Membre expulsé', value: kickedUser?.username || 'Inconnu' }
+      ]
+    });
 
     res.json({
       success: true,

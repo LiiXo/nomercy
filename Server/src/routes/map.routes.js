@@ -2,6 +2,7 @@ import express from 'express';
 import Map from '../models/Map.js';
 import AppSettings from '../models/AppSettings.js';
 import { verifyToken, requireStaff } from '../middleware/auth.middleware.js';
+import { logAdminAction } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -152,6 +153,10 @@ router.post('/', verifyToken, requireStaff, async (req, res) => {
     });
     
     await map.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Create Map', map.name);
+
     res.status(201).json({ success: true, map });
   } catch (error) {
     console.error('Create map error:', error);
@@ -178,6 +183,10 @@ router.put('/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (isActive !== undefined) map.isActive = isActive;
     
     await map.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Map', map.name);
+
     res.json({ success: true, map });
   } catch (error) {
     console.error('Update map error:', error);
@@ -194,6 +203,9 @@ router.delete('/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (!map) {
       return res.status(404).json({ success: false, message: 'Map non trouvée' });
     }
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Delete Map', map.name);
     
     res.json({ success: true, message: 'Map supprimée' });
   } catch (error) {
@@ -375,6 +387,9 @@ router.delete('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     if (!map) {
       return res.status(404).json({ success: false, message: 'Map non trouvée' });
     }
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Delete Map', map.name);
     
     res.json({ success: true, message: 'Map supprimée' });
   } catch (error) {

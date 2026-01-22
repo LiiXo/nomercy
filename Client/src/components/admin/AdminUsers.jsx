@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert 
+  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2 
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
@@ -13,6 +13,8 @@ const AdminUsers = ({
   totalPages,
   openEditModal,
   openBanModal,
+  openWarnModal,
+  openRankedBanModal,
   setResetStatsConfirm,
   setDeleteConfirm,
   handleToggleReferentBan,
@@ -92,6 +94,8 @@ const AdminUsers = ({
                   {/* Arbitre only sees block referent and ban buttons */}
                   {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>}
                   {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>}
+                  <button onClick={() => openWarnModal(user)} className="p-1.5 text-orange-400 hover:bg-orange-500/20 rounded-lg" title="Avertir"><AlertTriangle className="w-4 h-4" /></button>
+                  <button onClick={() => openRankedBanModal(user)} className={`p-1.5 rounded-lg ${user.isRankedBanned ? 'text-purple-400 hover:bg-purple-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isRankedBanned ? 'Débannir ranked' : 'Bannir ranked'}><Gamepad2 className="w-4 h-4" /></button>
                   <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                   <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`}><Ban className="w-4 h-4" /></button>
                   {!userIsArbitre && <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4" /></button>}
@@ -192,6 +196,8 @@ const AdminUsers = ({
                         {/* Arbitre only sees block referent and ban buttons */}
                         {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>}
                         {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>}
+                        <button onClick={() => openWarnModal(user)} className="p-1.5 text-orange-400 hover:bg-orange-500/20 rounded-lg transition-colors" title="Avertir"><AlertTriangle className="w-4 h-4" /></button>
+                        <button onClick={() => openRankedBanModal(user)} className={`p-1.5 rounded-lg transition-colors ${user.isRankedBanned ? 'text-purple-400 hover:bg-purple-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isRankedBanned ? 'Débannir ranked' : 'Bannir ranked'}><Gamepad2 className="w-4 h-4" /></button>
                         <button onClick={() => handleToggleReferentBan(user)} className={`p-1.5 rounded-lg transition-colors ${user.isReferentBanned ? 'text-yellow-400 hover:bg-yellow-500/20' : 'text-gray-400 hover:bg-gray-500/20'}`} title={user.isReferentBanned ? 'Autoriser référent' : 'Bloquer référent'}><ShieldAlert className="w-4 h-4" /></button>
                         <button onClick={() => openBanModal(user)} className={`p-1.5 rounded-lg transition-colors ${user.isBanned ? 'text-green-400 hover:bg-green-500/20' : 'text-orange-400 hover:bg-orange-500/20'}`} title={user.isBanned ? 'Débannir' : 'Bannir'}><Ban className="w-4 h-4" /></button>
                         {!userIsArbitre && <button onClick={() => setDeleteConfirm({ type: 'user', id: user._id })} className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors" title="Supprimer"><Trash2 className="w-4 h-4" /></button>}

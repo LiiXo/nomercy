@@ -153,6 +153,36 @@ const userSchema = new mongoose.Schema({
     default: null
   },
 
+  // Warnings - avertissements donnés par les admins/staff/arbitres
+  warns: [{
+    reason: { type: String, required: true },
+    warnedAt: { type: Date, default: Date.now },
+    warnedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }],
+
+  // Ban du mode classé (ranked) - empêche de jouer en ranked pendant une durée
+  isRankedBanned: {
+    type: Boolean,
+    default: false
+  },
+  rankedBanReason: {
+    type: String,
+    default: null
+  },
+  rankedBannedAt: {
+    type: Date,
+    default: null
+  },
+  rankedBanExpiresAt: {
+    type: Date,
+    default: null // null = permanent ranked ban
+  },
+  rankedBannedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+
   // Stats reset - first one is free, then costs 2000 gold each
   statsResetCount: {
     type: Number,

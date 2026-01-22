@@ -1,6 +1,7 @@
 import express from 'express';
 import Announcement from '../models/Announcement.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
+import { logAdminAction } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -193,6 +194,15 @@ router.post('/admin', verifyToken, requireStaff, async (req, res) => {
 
     await announcement.save();
 
+    // Log to Discord
+    await logAdminAction(req.user, 'Create Announcement', announcement.title, {
+      fields: [
+        { name: 'Type', value: announcement.type },
+        { name: 'Priorité', value: announcement.priority },
+        { name: 'Mode cible', value: announcement.targetMode }
+      ]
+    });
+
     res.status(201).json({
       success: true,
       message: 'Announcement created',
@@ -227,6 +237,13 @@ router.put('/admin/:id', verifyToken, requireStaff, async (req, res) => {
 
     await announcement.save();
 
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Announcement', announcement.title, {
+      fields: [
+        { name: 'Champs modifiés', value: Object.keys(req.body).join(', ') || 'Aucun' }
+      ]
+    });
+
     res.json({
       success: true,
       message: 'Announcement updated',
@@ -245,6 +262,9 @@ router.delete('/admin/:id', verifyToken, requireStaff, async (req, res) => {
     if (!announcement) {
       return res.status(404).json({ success: false, message: 'Announcement not found' });
     }
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Delete Announcement', announcement.title);
 
     res.json({
       success: true,

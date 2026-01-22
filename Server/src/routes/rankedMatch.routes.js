@@ -7,6 +7,7 @@ import AppSettings from '../models/AppSettings.js';
 import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
 import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
+import { logArbitratorCall } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -1163,6 +1164,95 @@ router.get('/:matchId/cancellation/status', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Cancellation status error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== ARBITRATOR CALL ROUTES ====================
+
+// Appeler un arbitre (un seul appel par match au total)
+router.post('/:matchId/call-arbitrator', verifyToken, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const userId = req.user._id;
+
+    const match = await RankedMatch.findById(matchId)
+      .populate('players.user', 'username');
+
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+
+    // Vérifier que le match est en cours (ready ou in_progress)
+    if (!['ready', 'in_progress'].includes(match.status)) {
+      return res.status(400).json({ success: false, message: 'L\'appel arbitre n\'est possible que pendant un match en cours' });
+    }
+
+    // Vérifier que l'utilisateur est un participant du match
+    const player = match.players.find(p => 
+      p.user && (p.user._id?.toString() === userId.toString() || p.user.toString() === userId.toString()) && !p.isFake
+    );
+
+    if (!player) {
+      return res.status(403).json({ success: false, message: 'Vous n\'êtes pas un participant de ce match' });
+    }
+
+    // Initialiser le tableau des appels si pas encore fait
+    if (!match.arbitratorCalls) {
+      match.arbitratorCalls = [];
+    }
+
+    // Vérifier si un arbitre a déjà été appelé pour ce match (un seul appel par match)
+    if (match.arbitratorCalls.length > 0) {
+      return res.status(400).json({ success: false, message: 'Un arbitre a déjà été appelé pour ce match' });
+    }
+
+    // Enregistrer l'appel
+    match.arbitratorCalls.push({
+      user: userId,
+      calledAt: new Date()
+    });
+
+    // Ajouter un message système dans le chat
+    const callerUsername = req.user.username || player.user?.username || player.username || 'Un joueur';
+    match.chat.push({
+      isSystem: true,
+      messageType: 'arbitrator_called',
+      message: `${callerUsername} a demandé l'intervention d'un arbitre`
+    });
+
+    await match.save();
+
+    // Envoyer la notification Discord
+    try {
+      const callerUser = await User.findById(userId).select('username');
+      await logArbitratorCall(match, callerUser);
+      console.log(`[ARBITRATOR CALL] ${callerUsername} called arbitrator for match ${matchId}`);
+    } catch (discordError) {
+      console.error('Error sending Discord notification for arbitrator call:', discordError);
+      // On ne fait pas échouer la requête si Discord échoue
+    }
+
+    // Émettre via socket
+    const io = req.app.get('io');
+    if (io) {
+      // Repopuler pour l'événement socket
+      await match.populate([
+        { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+        { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+        { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
+        { path: 'chat.user', select: 'username roles' }
+      ]);
+      io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+    }
+
+    res.json({
+      success: true,
+      message: 'Un arbitre a été appelé. Il interviendra dès que possible.',
+      calledAt: new Date()
+    });
+  } catch (error) {
+    console.error('Call arbitrator error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

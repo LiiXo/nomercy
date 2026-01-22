@@ -13,6 +13,7 @@ import Announcement from '../models/Announcement.js';
 import AccountDeletion from '../models/AccountDeletion.js';
 import Ranking from '../models/Ranking.js';
 import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
+import { logPlayerBan, logPlayerUnban, logAdminAction, logPlayerWarn, logRankedBan, logRankedUnban, logReferentBan } from '../services/discordBot.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,24 +81,72 @@ const avatarUpload = multer({
 });
 
 // Search users (for finding helpers, etc.)
+// Admin/staff/arbitre can also see banned players via includeBanned=true
 router.get('/search', async (req, res) => {
   try {
-    const { q, limit = 5 } = req.query;
+    const { q, limit = 5, includeBanned } = req.query;
     
     if (!q || q.length < 2) {
       return res.json({ success: true, users: [] });
     }
 
-    const users = await User.find({
+    // Check if user wants to include banned players and has permission
+    let canIncludeBanned = false;
+    if (includeBanned === 'true') {
+      // Try to get user from token (optional auth)
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          const token = authHeader.substring(7);
+          const jwt = await import('jsonwebtoken');
+          const decoded = jwt.default.verify(token, process.env.JWT_SECRET);
+          const requestingUser = await User.findById(decoded.id).select('roles');
+          if (requestingUser && (
+            requestingUser.roles.includes('admin') ||
+            requestingUser.roles.includes('staff') ||
+            requestingUser.roles.includes('arbitre')
+          )) {
+            canIncludeBanned = true;
+          }
+        } catch (e) {
+          // Invalid token, just ignore
+        }
+      }
+      // Also check for cookie-based auth
+      if (!canIncludeBanned && req.cookies && req.cookies.jwt) {
+        try {
+          const jwt = await import('jsonwebtoken');
+          const decoded = jwt.default.verify(req.cookies.jwt, process.env.JWT_SECRET);
+          const requestingUser = await User.findById(decoded.id).select('roles');
+          if (requestingUser && (
+            requestingUser.roles.includes('admin') ||
+            requestingUser.roles.includes('staff') ||
+            requestingUser.roles.includes('arbitre')
+          )) {
+            canIncludeBanned = true;
+          }
+        } catch (e) {
+          // Invalid token, just ignore
+        }
+      }
+    }
+
+    const query = {
       isProfileComplete: true,
-      isBanned: false,
       $or: [
         { username: { $regex: q, $options: 'i' } },
         { activisionId: { $regex: q, $options: 'i' } }
       ]
-    })
-    .select('_id username avatar discordAvatar discordId activisionId platform')
-    .limit(parseInt(limit));
+    };
+
+    // Only filter out banned users if not explicitly including them
+    if (!canIncludeBanned) {
+      query.isBanned = false;
+    }
+
+    const users = await User.find(query)
+      .select('_id username avatar discordAvatar discordId activisionId platform isBanned')
+      .limit(parseInt(limit));
 
     res.json({ success: true, users });
   } catch (error) {
@@ -1313,8 +1362,17 @@ router.put('/admin/:userId/roles', verifyToken, requireAdmin, async (req, res) =
       });
     }
 
+    const previousRoles = [...user.roles];
     user.roles = roles;
     await user.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Roles', user.username, {
+      fields: [
+        { name: 'Anciens rôles', value: previousRoles.join(', ') || 'Aucun' },
+        { name: 'Nouveaux rôles', value: roles.join(', ') || 'Aucun' }
+      ]
+    });
 
     res.json({
       success: true,
@@ -1374,6 +1432,13 @@ router.put('/admin/:userId/ban', verifyToken, requireArbitre, async (req, res) =
     // Populate bannedBy for response
     await user.populate('bannedBy', 'username');
 
+    // Log to Discord
+    if (ban) {
+      await logPlayerBan(user, req.user, reason, user.bannedAt, user.banExpiresAt);
+    } else {
+      await logPlayerUnban(user, req.user);
+    }
+
     res.json({
       success: true,
       message: ban ? 'User banned.' : 'User unbanned.',
@@ -1431,6 +1496,9 @@ router.put('/admin/:userId/referent-ban', verifyToken, requireArbitre, async (re
     // Populate referentBannedBy for response
     await user.populate('referentBannedBy', 'username');
 
+    // Log to Discord (BAN_LOG_CHANNEL with role mentions)
+    await logReferentBan(user, req.user, ban);
+
     res.json({
       success: true,
       message: ban ? 'User banned from being referent.' : 'User can now be referent.',
@@ -1487,6 +1555,14 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
 
     console.log(`[ADMIN] User ${user.username} (${userId}) stats reset by ${req.user._id}. ${deleteResult.deletedCount} matches deleted.`);
 
+    // Log to Discord
+    await logAdminAction(req.user, 'Reset Stats', user.username, {
+      description: 'Réinitialisation des stats et suppression de l\'historique',
+      fields: [
+        { name: 'Matchs supprimés', value: deleteResult.deletedCount.toString() }
+      ]
+    });
+
     res.json({
       success: true,
       message: `Stats réinitialisées et ${deleteResult.deletedCount} match(s) supprimé(s).`,
@@ -1529,6 +1605,16 @@ router.put('/admin/:userId/gold', verifyToken, requireAdmin, async (req, res) =>
     const previousGold = user.goldCoins;
     user.goldCoins = Math.max(0, user.goldCoins + parseInt(amount));
     await user.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, amount > 0 ? 'Give Gold' : 'Remove Gold', user.username, {
+      fields: [
+        { name: 'Montant', value: `${amount > 0 ? '+' : ''}${amount} 🪙` },
+        { name: 'Avant', value: previousGold.toString() },
+        { name: 'Après', value: user.goldCoins.toString() },
+        { name: 'Raison', value: reason || 'Non spécifiée', inline: false }
+      ]
+    });
 
     res.json({
       success: true,
@@ -1573,6 +1659,14 @@ router.put('/admin/:userId/gold/set', verifyToken, requireAdmin, async (req, res
     const previousGold = user.goldCoins;
     user.goldCoins = parseInt(amount);
     await user.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Set Gold', user.username, {
+      fields: [
+        { name: 'Avant', value: previousGold.toString() },
+        { name: 'Après', value: user.goldCoins.toString() }
+      ]
+    });
 
     res.json({
       success: true,
@@ -2011,6 +2105,134 @@ router.get('/admin/:userId/matches', verifyToken, requireStaff, async (req, res)
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'
+    });
+  }
+});
+
+// Admin: Add warning to user (admin, staff, arbitre can do this)
+router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Une raison est requise pour l\'avertissement.'
+      });
+    }
+
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé.'
+      });
+    }
+
+    // Can't warn admins
+    if (user.roles.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Impossible d\'avertir un administrateur.'
+      });
+    }
+
+    // Add the warning
+    user.warns.push({
+      reason: reason.trim(),
+      warnedAt: new Date(),
+      warnedBy: req.user._id
+    });
+
+    await user.save();
+
+    // Log to Discord (both channels)
+    await logPlayerWarn(user, req.user, reason.trim(), user.warns.length);
+
+    res.json({
+      success: true,
+      message: 'Avertissement ajouté.',
+      user: {
+        id: user._id,
+        username: user.username,
+        warnCount: user.warns.length
+      }
+    });
+  } catch (error) {
+    console.error('Warn user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur.'
+    });
+  }
+});
+
+// Admin: Ban/Unban user from ranked mode (admin, staff, arbitre can do this)
+router.put('/admin/:userId/ranked-ban', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const { ban, reason, expiresAt } = req.body;
+
+    const user = await User.findById(req.params.userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé.'
+      });
+    }
+
+    // Can't ban admins
+    if (user.roles.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Impossible de bannir un administrateur du mode classé.'
+      });
+    }
+
+    user.isRankedBanned = ban;
+    user.rankedBanReason = ban ? reason : null;
+    
+    // Set ban dates
+    if (ban) {
+      user.rankedBannedAt = new Date();
+      user.rankedBanExpiresAt = expiresAt ? new Date(expiresAt) : null; // null = permanent
+      user.rankedBannedBy = req.user._id;
+    } else {
+      // Unban
+      user.rankedBannedAt = null;
+      user.rankedBanExpiresAt = null;
+      user.rankedBannedBy = null;
+    }
+    
+    await user.save();
+
+    // Populate rankedBannedBy for response
+    await user.populate('rankedBannedBy', 'username');
+
+    // Log to Discord (BAN_LOG_CHANNEL only)
+    if (ban) {
+      await logRankedBan(user, req.user, reason, user.rankedBannedAt, user.rankedBanExpiresAt);
+    } else {
+      await logRankedUnban(user, req.user);
+    }
+
+    res.json({
+      success: true,
+      message: ban ? 'Utilisateur banni du mode classé.' : 'Utilisateur débanni du mode classé.',
+      user: {
+        id: user._id,
+        username: user.username,
+        isRankedBanned: user.isRankedBanned,
+        rankedBannedAt: user.rankedBannedAt,
+        rankedBanExpiresAt: user.rankedBanExpiresAt,
+        rankedBannedBy: user.rankedBannedBy,
+        rankedBanReason: user.rankedBanReason
+      }
+    });
+  } catch (error) {
+    console.error('Toggle ranked ban error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur.'
     });
   }
 });

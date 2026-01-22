@@ -2,6 +2,7 @@ import express from 'express';
 import AppSettings from '../models/AppSettings.js';
 import Ranking from '../models/Ranking.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
+import { logAdminAction } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -202,6 +203,13 @@ router.patch('/admin/feature/:featureKey', verifyToken, requireStaff, async (req
     
     settings.markModified('features');
     await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Toggle Feature', featureKey, {
+      fields: [
+        { name: 'État', value: enabled ? 'Activé' : 'Désactivé' }
+      ]
+    });
     
     res.json({ 
       success: true, 
@@ -241,6 +249,13 @@ router.post('/admin/alert', verifyToken, requireStaff, async (req, res) => {
     
     settings.globalAlerts.push(newAlert);
     await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Add Alert', newAlert.type, {
+      fields: [
+        { name: 'Message', value: message.substring(0, 100) + (message.length > 100 ? '...' : '') }
+      ]
+    });
     
     res.json({ success: true, alert: newAlert });
   } catch (error) {
@@ -293,6 +308,11 @@ router.patch('/admin/maintenance', verifyToken, requireStaff, async (req, res) =
     
     settings.markModified('maintenance');
     await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Toggle Maintenance', enabled ? 'Activé' : 'Désactivé', {
+      description: message || 'Maintenance mode toggled'
+    });
     
     res.json({ success: true, maintenance: settings.maintenance });
   } catch (error) {
@@ -379,6 +399,14 @@ router.post('/admin/reset-ranked-leaderboard/:mode', verifyToken, requireAdmin, 
     );
     
     console.log(`[ADMIN] Ranked leaderboard reset for mode "${mode}" by ${req.user.username}. ${result.modifiedCount} rankings reset.`);
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Reset Leaderboard', mode === 'hardcore' ? 'Hardcore' : 'CDL', {
+      fields: [
+        { name: 'Mode', value: mode },
+        { name: 'Rankings réinitialisés', value: result.modifiedCount.toString() }
+      ]
+    });
     
     res.json({ 
       success: true, 

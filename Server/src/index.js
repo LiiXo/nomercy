@@ -49,6 +49,9 @@ const startServer = async () => {
   // Import GGSecure monitoring service
   const { initGGSecureMonitoring, startGGSecureMonitoring } = await import('./services/ggsecureMonitoring.service.js');
 
+  // Import Discord bot service
+  const { initDiscordBot } = await import('./services/discordBot.service.js');
+
   const app = express();
   const httpServer = createServer(app);
   const PORT = process.env.PORT || 5000;
@@ -374,6 +377,9 @@ const startServer = async () => {
       
       // Start GGSecure monitoring for active matches
       startGGSecureMonitoring();
+      
+      // Initialize Discord Arbitrage bot
+      initDiscordBot().catch(err => console.error('Discord bot init error:', err));
     });
   } catch (err) {
     console.error('MongoDB connection error:', err);

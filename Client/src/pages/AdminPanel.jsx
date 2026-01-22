@@ -206,6 +206,25 @@ const AdminPanel = () => {
   const [selectedTrophyToAdd, setSelectedTrophyToAdd] = useState('');
   const [trophyReason, setTrophyReason] = useState('');
 
+  // Warn modal state
+  const [showWarnModal, setShowWarnModal] = useState(false);
+  const [warnData, setWarnData] = useState({
+    userId: null,
+    username: '',
+    reason: ''
+  });
+
+  // Ranked ban modal state
+  const [showRankedBanModal, setShowRankedBanModal] = useState(false);
+  const [rankedBanData, setRankedBanData] = useState({
+    userId: null,
+    username: '',
+    isRankedBanned: false,
+    reason: '',
+    duration: '7d', // '1d', '7d', '30d', 'permanent', 'custom'
+    customDays: 7
+  });
+
   // Squad ladder points modal state
   const [showLadderPointsModal, setShowLadderPointsModal] = useState(false);
   const [squadForLadderPoints, setSquadForLadderPoints] = useState(null);
@@ -1251,6 +1270,155 @@ const AdminPanel = () => {
     } catch (err) {
       console.error('Toggle referent ban error:', err);
       setError('Erreur lors de la modification du statut référent');
+    }
+  };
+
+  // Open warn modal
+  const openWarnModal = (user) => {
+    setWarnData({
+      userId: user._id,
+      username: user.username,
+      reason: ''
+    });
+    setShowWarnModal(true);
+  };
+
+  // Handle warn user
+  const handleWarn = async () => {
+    if (!warnData.reason.trim()) {
+      setError('Veuillez entrer une raison pour l\'avertissement');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${warnData.userId}/warn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reason: warnData.reason })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`${warnData.username} a reçu un avertissement (Total: ${data.warnCount})`);
+        setShowWarnModal(false);
+        fetchUsers();
+      } else {
+        setError(data.message || 'Erreur lors de l\'avertissement');
+      }
+    } catch (err) {
+      console.error('Warn error:', err);
+      setError('Erreur lors de l\'avertissement');
+    }
+  };
+
+  // Open ranked ban modal
+  const openRankedBanModal = (user) => {
+    setRankedBanData({
+      userId: user._id,
+      username: user.username,
+      isRankedBanned: user.isRankedBanned || false,
+      reason: user.rankedBanReason || '',
+      duration: '7d',
+      customDays: 7
+    });
+    setShowRankedBanModal(true);
+  };
+
+  // Handle ranked ban/unban
+  const handleRankedBan = async () => {
+    // If user is already banned, this is an unban action
+    if (rankedBanData.isRankedBanned) {
+      try {
+        const response = await fetch(`${API_URL}/users/admin/${rankedBanData.userId}/ranked-ban`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ ban: false })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setSuccess(`${rankedBanData.username} a été débanni du mode classé`);
+          setShowRankedBanModal(false);
+          fetchUsers();
+        } else {
+          setError(data.message || 'Erreur lors du débannissement ranked');
+        }
+      } catch (err) {
+        console.error('Ranked unban error:', err);
+        setError('Erreur lors du débannissement ranked');
+      }
+      return;
+    }
+
+    // Ban action
+    if (!rankedBanData.reason.trim()) {
+      setError('Veuillez entrer une raison pour le ban ranked');
+      return;
+    }
+
+    try {
+      let expiresAt = null;
+      const now = new Date();
+
+      switch (rankedBanData.duration) {
+        case '15m':
+          expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+          break;
+        case '30m':
+          expiresAt = new Date(now.getTime() + 30 * 60 * 1000);
+          break;
+        case '1h':
+          expiresAt = new Date(now.getTime() + 60 * 60 * 1000);
+          break;
+        case '1d':
+          expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+          break;
+        case '7d':
+          expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+          break;
+        case '30d':
+          expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+          break;
+        case 'custom':
+          expiresAt = new Date(now.getTime() + rankedBanData.customDays * 24 * 60 * 60 * 1000);
+          break;
+        default: // permanent
+          expiresAt = null;
+      }
+
+      const response = await fetch(`${API_URL}/users/admin/${rankedBanData.userId}/ranked-ban`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          ban: true,
+          reason: rankedBanData.reason,
+          expiresAt: expiresAt ? expiresAt.toISOString() : null
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const durationText = rankedBanData.duration === 'permanent' ? 'définitivement' :
+          rankedBanData.duration === 'custom' ? `pour ${rankedBanData.customDays} jours` :
+          rankedBanData.duration === '15m' ? 'pour 15 minutes' :
+          rankedBanData.duration === '30m' ? 'pour 30 minutes' :
+          rankedBanData.duration === '1h' ? 'pour 1 heure' :
+          `pour ${rankedBanData.duration.replace('d', ' jour(s)')}`;
+        setSuccess(`${rankedBanData.username} a été banni du mode classé ${durationText}`);
+        setShowRankedBanModal(false);
+        fetchUsers();
+      } else {
+        setError(data.message || 'Erreur lors du ban ranked');
+      }
+    } catch (err) {
+      console.error('Ranked ban error:', err);
+      setError('Erreur lors du ban ranked');
     }
   };
 
@@ -3305,7 +3473,13 @@ const AdminPanel = () => {
     };
 
     const handleLadderSeasonReset = async () => {
-      if (!window.confirm(`Voulez-vous vraiment réinitialiser les saisons de TOUS les ladders (Chill et Compétitif) ?\n\n- Les 3 premières équipes recevront des points (150, 100, 75) dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ladder seront remis à zéro\n\nCette action est irréversible!`)) {
+      if (!window.confirm(`Voulez-vous vraiment réinitialiser les saisons de TOUS les ladders (Chill et Compétitif) ?
+
+- Les 3 premières équipes recevront des points (150, 100, 75) dans le Top 10 Escouade
+- Un trophée unique de saison sera généré et attribué
+- Tous les stats de ladder seront remis à zéro
+
+Cette action est irréversible!`)) {
         return;
       }
 
@@ -3351,7 +3525,13 @@ const AdminPanel = () => {
     const handleSingleLadderSeasonReset = async (ladderId) => {
       const ladderName = ladderId === 'duo-trio' ? 'Chill' : 'Compétitif';
       
-      if (!window.confirm(`Voulez-vous vraiment réinitialiser la saison du ladder ${ladderName} ?\n\n- Les 3 premières équipes recevront des points dans le Top 10 Escouade\n- Un trophée unique de saison sera généré et attribué\n- Tous les stats de ce ladder seront remis à zéro\n\nCette action est irréversible!`)) {
+      if (!window.confirm(`Voulez-vous vraiment réinitialiser la saison du ladder ${ladderName} ?
+
+- Les 3 premières équipes recevront des points dans le Top 10 Escouade
+- Un trophée unique de saison sera généré et attribué
+- Tous les stats de ce ladder seront remis à zéro
+
+Cette action est irréversible!`)) {
         return;
       }
 
@@ -6658,6 +6838,8 @@ const AdminPanel = () => {
             totalPages={totalPages}
             openEditModal={openEditModal}
             openBanModal={openBanModal}
+            openWarnModal={openWarnModal}
+            openRankedBanModal={openRankedBanModal}
             setResetStatsConfirm={setResetStatsConfirm}
             setDeleteConfirm={setDeleteConfirm}
             handleToggleReferentBan={handleToggleReferentBan}
@@ -7063,6 +7245,173 @@ const AdminPanel = () => {
               >
                 <Ban className="w-5 h-5" />
                 Bannir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Warn Modal */}
+      {showWarnModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowWarnModal(false)}></div>
+          <div className="relative bg-dark-900 border-t sm:border border-orange-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-3 bg-orange-500/20 rounded-xl">
+                <AlertTriangle className="w-5 sm:w-6 h-5 sm:h-6 text-orange-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">Avertir {warnData.username}</h3>
+                <p className="text-gray-400 text-xs sm:text-sm">Ajouter un avertissement au joueur</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Raison de l'avertissement *</label>
+                <textarea
+                  value={warnData.reason}
+                  onChange={(e) => setWarnData({ ...warnData, reason: e.target.value })}
+                  placeholder="Ex: Comportement inapproprié, propos offensants, etc."
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50 resize-none"
+                  rows={3}
+                  required
+                />
+              </div>
+
+              <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                <p className="text-orange-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  L'avertissement sera enregistré dans l'historique du joueur et logé sur Discord.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 sm:mt-6">
+              <button
+                onClick={() => setShowWarnModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleWarn}
+                disabled={!warnData.reason.trim()}
+                className="flex-1 py-3 px-4 bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <AlertTriangle className="w-5 h-5" />
+                Avertir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ranked Ban Modal */}
+      {showRankedBanModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowRankedBanModal(false)}></div>
+          <div className="relative bg-dark-900 border-t sm:border border-purple-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-3 bg-purple-500/20 rounded-xl">
+                <Gamepad2 className="w-5 sm:w-6 h-5 sm:h-6 text-purple-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">
+                  {rankedBanData.isRankedBanned ? 'Débannir' : 'Bannir'} {rankedBanData.username} du Ranked
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm">
+                  {rankedBanData.isRankedBanned ? 'Retirer le ban du mode classé' : 'Empêcher l\'accès au mode classé'}
+                </p>
+              </div>
+            </div>
+
+            {rankedBanData.isRankedBanned ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                  <p className="text-green-400 text-sm">
+                    Ce joueur est actuellement banni du mode classé.
+                    {rankedBanData.reason && (
+                      <span className="block mt-1 text-gray-400">Raison: {rankedBanData.reason}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Raison du ban ranked *</label>
+                  <textarea
+                    value={rankedBanData.reason}
+                    onChange={(e) => setRankedBanData({ ...rankedBanData, reason: e.target.value })}
+                    placeholder="Ex: Abandon de match, toxicité en ranked, etc."
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50 resize-none"
+                    rows={3}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Durée</label>
+                  <select
+                    value={rankedBanData.duration}
+                    onChange={(e) => setRankedBanData({ ...rankedBanData, duration: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  >
+                    <option value="15m">15 minutes</option>
+                    <option value="30m">30 minutes</option>
+                    <option value="1h">1 heure</option>
+                    <option value="1d">1 jour</option>
+                    <option value="7d">7 jours</option>
+                    <option value="30d">30 jours</option>
+                    <option value="custom">Personnalisé</option>
+                    <option value="permanent">Permanent</option>
+                  </select>
+                </div>
+
+                {rankedBanData.duration === 'custom' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Nombre de jours</label>
+                    <input
+                      type="number"
+                      value={rankedBanData.customDays}
+                      onChange={(e) => setRankedBanData({ ...rankedBanData, customDays: parseInt(e.target.value) || 1 })}
+                      min={1}
+                      max={365}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                    />
+                  </div>
+                )}
+
+                {rankedBanData.duration === 'permanent' && (
+                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                    <p className="text-red-400 text-sm flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4" />
+                      Le bannissement permanent empêchera définitivement l'utilisateur de jouer en ranked.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 sm:mt-6">
+              <button
+                onClick={() => setShowRankedBanModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleRankedBan}
+                disabled={!rankedBanData.isRankedBanned && !rankedBanData.reason.trim()}
+                className={`flex-1 py-3 px-4 font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${
+                  rankedBanData.isRankedBanned 
+                    ? 'bg-green-500 text-white hover:bg-green-600' 
+                    : 'bg-purple-500 text-white hover:bg-purple-600'
+                }`}
+              >
+                <Gamepad2 className="w-5 h-5" />
+                {rankedBanData.isRankedBanned ? 'Débannir du Ranked' : 'Bannir du Ranked'}
               </button>
             </div>
           </div>

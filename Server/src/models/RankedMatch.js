@@ -219,6 +219,11 @@ const rankedMatchSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Appels arbitre par les joueurs (chaque joueur ne peut appeler qu'une seule fois)
+  arbitratorCalls: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    calledAt: { type: Date, default: Date.now }
+  }],
   // Timestamps
   matchmakingStartedAt: Date, // Quand le timer de 2 min a commencé
   startedAt: Date, // Quand le match a réellement commencé

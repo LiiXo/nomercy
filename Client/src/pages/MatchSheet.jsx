@@ -7,7 +7,7 @@ import { useSocket } from '../SocketContext';
 import { 
   ArrowLeft, Trophy, Users, Clock, Send, Loader2, Shield, 
   Swords, MessageCircle, AlertTriangle, Crown, Shuffle, Map,
-  Medal, Star, Flame, Zap
+  Medal, Star, Flame, Zap, BookOpen, X
 } from 'lucide-react';
 import RankedMatchReport from '../components/RankedMatchReport';
 import LadderMatchReport from '../components/LadderMatchReport';
@@ -125,6 +125,10 @@ const MatchSheet = () => {
   });
   const [votingCancellation, setVotingCancellation] = useState(false);
   
+  // Appel arbitre (mode classé)
+  const [callingArbitrator, setCallingArbitrator] = useState(false);
+  const [hasCalledArbitrator, setHasCalledArbitrator] = useState(false);
+  
   // Rapport de combat (mode classé)
   const [showMatchReport, setShowMatchReport] = useState(false);
   const [matchReportData, setMatchReportData] = useState(null);
@@ -138,6 +142,11 @@ const MatchSheet = () => {
   
   // Seuils de rangs configurés (récupérés depuis l'API)
   const [rankThresholds, setRankThresholds] = useState(DEFAULT_RANK_THRESHOLDS);
+  
+  // État pour les règles du mode de jeu
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [rules, setRules] = useState(null);
+  const [loadingRules, setLoadingRules] = useState(false);
   
   // Helper local pour obtenir le rang à partir des points
   const getRankFromPoints = (points, lang = language) => {
@@ -233,6 +242,14 @@ const MatchSheet = () => {
       noVoteYet: 'Pas encore voté',
       waitingFor60Percent: '60% des joueurs doivent voter pour le même gagnant',
       voteRecorded: 'Vote enregistré',
+      viewGameRules: 'Voir les règles du mode',
+      gameRules: 'Règles du jeu',
+      close: 'Fermer',
+      loadingRules: 'Chargement des règles...',
+      callArbitrator: 'Appeler un arbitre',
+      arbitratorCalled: 'Arbitre appelé',
+      arbitratorCalledDesc: 'Un arbitre a été notifié et interviendra dès que possible.',
+      alreadyCalledArbitrator: 'Vous avez déjà appelé un arbitre',
     },
     en: {
       back: 'Back',
@@ -321,6 +338,14 @@ const MatchSheet = () => {
       noVoteYet: 'Not voted yet',
       waitingFor60Percent: '60% of players must vote for the same winner',
       voteRecorded: 'Vote recorded',
+      viewGameRules: 'View Game Rules',
+      gameRules: 'Game Rules',
+      close: 'Close',
+      loadingRules: 'Loading rules...',
+      callArbitrator: 'Call an arbitrator',
+      arbitratorCalled: 'Arbitrator called',
+      arbitratorCalledDesc: 'An arbitrator has been notified and will intervene as soon as possible.',
+      alreadyCalledArbitrator: 'You have already called an arbitrator',
     },
     de: {
       back: 'Zurück',
@@ -409,6 +434,14 @@ const MatchSheet = () => {
       noVoteYet: 'Noch nicht abgestimmt',
       waitingFor60Percent: '60% der Spieler müssen für denselben Gewinner stimmen',
       voteRecorded: 'Stimme aufgezeichnet',
+      viewGameRules: 'Spielregeln anzeigen',
+      gameRules: 'Spielregeln',
+      close: 'Schließen',
+      loadingRules: 'Regeln werden geladen...',
+      callArbitrator: 'Schiedsrichter rufen',
+      arbitratorCalled: 'Schiedsrichter gerufen',
+      arbitratorCalledDesc: 'Ein Schiedsrichter wurde benachrichtigt und wird so schnell wie möglich eingreifen.',
+      alreadyCalledArbitrator: 'Sie haben bereits einen Schiedsrichter gerufen',
     },
     it: {
       back: 'Indietro',
@@ -497,6 +530,14 @@ const MatchSheet = () => {
       noVoteYet: 'Non hai ancora votato',
       waitingFor60Percent: 'Il 60% dei giocatori deve votare per lo stesso vincitore',
       voteRecorded: 'Voto registrato',
+      viewGameRules: 'Visualizza regole del gioco',
+      gameRules: 'Regole del gioco',
+      close: 'Chiudi',
+      loadingRules: 'Caricamento regole...',
+      callArbitrator: 'Chiama un arbitro',
+      arbitratorCalled: 'Arbitro chiamato',
+      arbitratorCalledDesc: 'Un arbitro è stato notificato e interverrà il prima possibile.',
+      alreadyCalledArbitrator: 'Hai già chiamato un arbitro',
     },
   }[language] || {};
 
@@ -526,6 +567,10 @@ const MatchSheet = () => {
         if (isRankedMatch) {
           if (data.myTeam !== undefined) setMyTeam(data.myTeam);
           if (data.isReferent !== undefined) setIsReferent(data.isReferent);
+          // Vérifier si un arbitre a déjà été appelé pour ce match (un seul appel par match)
+          if (data.match.arbitratorCalls && data.match.arbitratorCalls.length > 0) {
+            setHasCalledArbitrator(true);
+          }
           // Debug: vérifier si les maps sont présentes
           if (data.match.maps) {
             console.log('[MatchSheet] Maps reçues (classé):', data.match.maps);
@@ -618,6 +663,34 @@ const MatchSheet = () => {
       console.error('Error toggling cancellation vote:', err);
     } finally {
       setVotingCancellation(false);
+    }
+  };
+
+  // Call arbitrator (for ranked matches) - can only be used once per player
+  const handleCallArbitrator = async () => {
+    if (!isRankedMatch || callingArbitrator || hasCalledArbitrator) return;
+    setCallingArbitrator(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/${matchId}/call-arbitrator`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setHasCalledArbitrator(true);
+        // Rafraîchir les données du match pour mettre à jour le chat
+        fetchMatchData(false);
+      } else {
+        // Si l'erreur indique qu'un arbitre a déjà été appelé, mettre à jour l'état
+        if (data.message?.includes('déjà') && data.message?.includes('appelé')) {
+          setHasCalledArbitrator(true);
+        }
+        console.error('Call arbitrator error:', data.message);
+      }
+    } catch (err) {
+      console.error('Error calling arbitrator:', err);
+    } finally {
+      setCallingArbitrator(false);
     }
   };
 
@@ -1384,7 +1457,32 @@ const MatchSheet = () => {
       setSubmittingCancellation(false);
     }
   };
-
+  
+  // Fetch game mode rules
+  const fetchRules = async () => {
+    if (!match || !match.gameMode) return;
+    
+    setLoadingRules(true);
+    try {
+      // Map game mode to rules slug
+      const gameModeSlug = match.gameMode === 'Search & Destroy' ? 'snd' 
+        : match.gameMode === 'Hardpoint' ? 'hardpoint'
+        : match.gameMode === 'Team Deathmatch' ? 'tdm' 
+        : match.gameMode === 'Duel' ? 'duel' 
+        : 'snd';
+        
+      const response = await fetch(`${API_URL}/game-mode-rules/${selectedMode}/ranked/${gameModeSlug}`);
+      const data = await response.json();
+      
+      if (data.success && data.rules) {
+        setRules(data.rules);
+      }
+    } catch (err) {
+      console.error('Error fetching rules:', err);
+    } finally {
+      setLoadingRules(false);
+    }
+  };
   // Respond to cancellation request (accept or reject)
   const handleRespondCancellation = async (approved) => {
     setRespondingCancellation(true);
@@ -1826,6 +1924,22 @@ const MatchSheet = () => {
                 )}
               </div>
             </div>
+            
+            {/* Bouton pour voir les règles du mode de jeu - Uniquement pour les matchs classés */}
+            {isRankedMatch && (
+              <button
+                onClick={() => {
+                  fetchRules();
+                  setShowRulesModal(true);
+                }}
+                className={`w-full py-2.5 rounded-lg border border-${accentColor}-500/30 bg-${accentColor}-500/10 hover:bg-${accentColor}-500/20 transition-all flex items-center justify-center gap-2`}
+              >
+                <BookOpen className={`w-4 h-4 text-${accentColor}-400`} />
+                <span className={`text-${accentColor}-400 font-medium text-sm`}>
+                  {t.viewGameRules}
+                </span>
+              </button>
+            )}
 
             {/* Référents - Uniquement pour mode classé */}
             {isRankedMatch && (match.team1Referent || match.team2Referent) && (
@@ -2122,6 +2236,58 @@ const MatchSheet = () => {
                     ? '80% des joueurs doivent voter pour annuler le match' 
                     : '80% of players must vote to cancel the match'}
                 </p>
+              </div>
+            )}
+
+            {/* Bouton Appeler un arbitre - Uniquement pour les matchs classés en cours */}
+            {isRankedMatch && isRankedParticipant && ['ready', 'in_progress'].includes(match.status) && (
+              <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  <h3 className="text-blue-400 font-semibold text-sm">
+                    {hasCalledArbitrator ? (t.arbitratorCalled || 'Arbitre appelé') : (t.callArbitrator || 'Appeler un arbitre')}
+                  </h3>
+                </div>
+                
+                {hasCalledArbitrator ? (
+                  <div className="text-center py-2">
+                    <div className="flex items-center justify-center gap-2 text-green-400 mb-2">
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="font-medium">{t.arbitratorCalled || 'Arbitre appelé'}</span>
+                    </div>
+                    <p className="text-gray-400 text-xs">
+                      {t.arbitratorCalledDesc || 'Un arbitre a été notifié et interviendra dès que possible.'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleCallArbitrator}
+                      disabled={callingArbitrator}
+                      className="w-full py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-blue-500/20 border border-blue-500/40 text-blue-400 hover:bg-blue-500/30 disabled:opacity-50"
+                    >
+                      {callingArbitrator ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                          </svg>
+                          {t.callArbitrator || 'Appeler un arbitre'}
+                        </>
+                      )}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      {language === 'fr' 
+                        ? 'Ce bouton ne peut être utilisé qu\'une seule fois par match' 
+                        : 'This button can only be used once per match'}
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -2868,6 +3034,59 @@ const MatchSheet = () => {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal des règles du mode de jeu */}
+      {showRulesModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-dark-900 rounded-2xl border border-white/10 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10 flex-shrink-0">
+              <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                <BookOpen className="w-6 h-6 text-cyan-400" />
+                {t.gameRules} - {match?.gameMode}
+              </h2>
+              <button
+                onClick={() => setShowRulesModal(false)}
+                className="p-2 rounded-lg bg-dark-800 hover:bg-dark-700 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingRules ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+                  <span className="ml-3 text-gray-400">{t.loadingRules}</span>
+                </div>
+              ) : rules && rules.sections?.length > 0 ? (
+                <div className="space-y-6">
+                  {rules.sections.sort((a, b) => a.order - b.order).map((section, idx) => (
+                    <div key={idx} className="bg-dark-800/50 rounded-xl p-4 border border-white/5">
+                      <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                        <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
+                        {section.title[language] || section.title.fr}
+                      </h3>
+                      <div 
+                        className="text-gray-300 text-sm leading-relaxed prose prose-invert max-w-none"
+                        dangerouslySetInnerHTML={{ 
+                          __html: section.content[language] || section.content.fr || '' 
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <BookOpen className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-500">{language === 'fr' ? 'Aucune règle disponible pour ce mode de jeu' : 'No rules available for this game mode'}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

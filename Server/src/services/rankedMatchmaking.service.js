@@ -425,9 +425,34 @@ export const joinQueue = async (userId, gameMode, mode) => {
     }
     
     // Récupérer l'utilisateur
-    const user = await User.findById(userId).select('username platform');
+    const user = await User.findById(userId).select('username platform isRankedBanned rankedBanExpiresAt rankedBanReason');
     if (!user) {
       return { success: false, message: 'Utilisateur non trouvé.' };
+    }
+    
+    // Vérifier si le joueur est banni du mode ranked
+    if (user.isRankedBanned) {
+      // Vérifier si le ban a expiré
+      if (user.rankedBanExpiresAt && new Date() > new Date(user.rankedBanExpiresAt)) {
+        // Le ban a expiré, lever automatiquement le ban
+        user.isRankedBanned = false;
+        user.rankedBanReason = null;
+        user.rankedBannedAt = null;
+        user.rankedBanExpiresAt = null;
+        user.rankedBannedBy = null;
+        await user.save();
+        console.log(`[Ranked Matchmaking] Ranked ban expired for ${user.username}, auto-unbanned`);
+      } else {
+        // Le ban est toujours actif
+        const expiresText = user.rankedBanExpiresAt 
+          ? `jusqu'au ${new Date(user.rankedBanExpiresAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` 
+          : 'définitivement';
+        return { 
+          success: false, 
+          message: `Vous êtes banni du mode classé ${expiresText}. Raison: ${user.rankedBanReason || 'Non spécifiée'}`,
+          rankedBanned: true
+        };
+      }
     }
     
     // Vérifier GGSecure pour les joueurs PC
