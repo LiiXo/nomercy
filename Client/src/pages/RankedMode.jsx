@@ -311,6 +311,7 @@ const RankedMode = () => {
   // Cancellation button timeout state
   const [showCancellationButton, setShowCancellationButton] = useState(true);
   const [cancellationTimeoutId, setCancellationTimeoutId] = useState(null);
+  const fallbackRedirectTimeoutRef = useRef(null);
   
   // Rewards from config
   
@@ -857,25 +858,17 @@ const RankedMode = () => {
       console.log('[RankedMode] Map selected:', data);
       if (data.selectedMap) {
         setSelectedMap(data.selectedMap);
-        
-        // Clear any existing timeouts
-        if (cancellationTimeoutId) {
-          clearTimeout(cancellationTimeoutId);
-          setCancellationTimeoutId(null);
-        }
-        
-        // Hide cancellation button
+        // Map selected by server means 20-second window has passed - redirect immediately
         setShowCancellationButton(false);
-        
-        // Wait 20 seconds after map selection then redirect
-        const redirectTimeout = setTimeout(() => {
-          console.log('[RankedMode] 20 seconds after map selection, redirecting to match sheet');
-          stopMatchFoundSound();
-          setShowShuffleAnimation(false);
-          navigate(`/ranked/match/${data.matchId}`);
-        }, 20000);
-        
-        setCancellationTimeoutId(redirectTimeout);
+        // Clear fallback timeout since we're redirecting now
+        if (fallbackRedirectTimeoutRef.current) {
+          clearTimeout(fallbackRedirectTimeoutRef.current);
+          fallbackRedirectTimeoutRef.current = null;
+        }
+        console.log('[RankedMode] Map finalized, redirecting to match sheet');
+        stopMatchFoundSound();
+        setShowShuffleAnimation(false);
+        navigate(`/ranked/match/${data.matchId}`);
       }
     });
     
@@ -892,6 +885,11 @@ const RankedMode = () => {
         
         // Si le match est annulé, fermer l'animation
         if (data.isCancelled) {
+          // Clear fallback timeout
+          if (fallbackRedirectTimeoutRef.current) {
+            clearTimeout(fallbackRedirectTimeoutRef.current);
+            fallbackRedirectTimeoutRef.current = null;
+          }
           stopMatchFoundSound();
           setShowShuffleAnimation(false);
           setMatchmakingError(language === 'fr' ? 'Match annulé par vote des joueurs.' : 'Match cancelled by player vote.');
@@ -991,15 +989,19 @@ const RankedMode = () => {
           // Start 20-second timeout for cancellation button
           const timeoutId = setTimeout(() => {
             setShowCancellationButton(false);
-            // If no map selected after 20 seconds, redirect to match sheet
-            if (!selectedMap) {
-              console.log('[RankedMode] 20 seconds passed, redirecting to match sheet');
-              stopMatchFoundSound();
-              setShowShuffleAnimation(false);
-              navigate(`/ranked/match/${shuffleMatchData.matchId}`);
-            }
+            console.log('[RankedMode] 20 seconds cancellation window ended');
+            // Don't redirect here - wait for mapSelected event from backend
+            // The backend will finalize the map and send mapSelected at 30 seconds total
           }, 20000);
           setCancellationTimeoutId(timeoutId);
+          
+          // Fallback redirect at 25 seconds in case mapSelected event doesn't arrive
+          fallbackRedirectTimeoutRef.current = setTimeout(() => {
+            console.log('[RankedMode] Fallback redirect - mapSelected not received');
+            stopMatchFoundSound();
+            setShowShuffleAnimation(false);
+            navigate(`/ranked/match/${shuffleMatchData.matchId}`);
+          }, 25000);
         } else {
           // No maps, navigate directly
           console.log('[RankedMode] No maps available, navigating to match sheet');
@@ -1039,26 +1041,7 @@ const RankedMode = () => {
       setSelectedMapIndex(mapIndex);
       emit('mapVote', { matchId: shuffleMatchData.matchId, mapIndex });
       console.log('[RankedMode] Voted for map:', mapVoteOptions[mapIndex]?.name);
-      
-      // Clear the cancellation timeout since a map was selected
-      if (cancellationTimeoutId) {
-        clearTimeout(cancellationTimeoutId);
-        setCancellationTimeoutId(null);
-      }
-      
-      // Hide cancellation button immediately
-      setShowCancellationButton(false);
-      
-      // Wait 20 seconds after map selection then redirect
-      const redirectTimeout = setTimeout(() => {
-        console.log('[RankedMode] 20 seconds after map selection, redirecting to match sheet');
-        stopMatchFoundSound();
-        setShowShuffleAnimation(false);
-        navigate(`/ranked/match/${shuffleMatchData.matchId}`);
-      }, 20000);
-      
-      // Store the redirect timeout ID to clear if needed
-      setCancellationTimeoutId(redirectTimeout);
+      // Don't hide cancellation button or redirect - wait for the 20-second window to complete
     }
   };
   
@@ -1082,6 +1065,11 @@ const RankedMode = () => {
         
         // Si le match est annulé, fermer l'animation et rediriger
         if (data.isCancelled) {
+          // Clear fallback timeout
+          if (fallbackRedirectTimeoutRef.current) {
+            clearTimeout(fallbackRedirectTimeoutRef.current);
+            fallbackRedirectTimeoutRef.current = null;
+          }
           stopMatchFoundSound();
           setShowShuffleAnimation(false);
           // Rediriger vers la page du mode classé
@@ -1101,6 +1089,10 @@ const RankedMode = () => {
     return () => {
       if (cancellationTimeoutId) {
         clearTimeout(cancellationTimeoutId);
+      }
+      if (fallbackRedirectTimeoutRef.current) {
+        clearTimeout(fallbackRedirectTimeoutRef.current);
+        fallbackRedirectTimeoutRef.current = null;
       }
     };
   }, [cancellationTimeoutId]);
@@ -2462,7 +2454,7 @@ const RankedMode = () => {
                     
                     {/* My position */}
                     <button
-                      onClick={() => navigate(`/player/${user._id}`)}
+                      onClick={() => navigate(`/player/${user.id}`)}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
                         isHardcore ? 'bg-red-500/10 border border-red-500/30' : 'bg-cyan-500/10 border border-cyan-500/30'
                       }`}
@@ -2521,7 +2513,7 @@ const RankedMode = () => {
                     
                     {/* My position */}
                     <button
-                      onClick={() => navigate(`/player/${user._id}`)}
+                      onClick={() => navigate(`/player/${user.id}`)}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
                         isHardcore ? 'bg-red-500/10 border border-red-500/30' : 'bg-cyan-500/10 border border-cyan-500/30'
                       }`}

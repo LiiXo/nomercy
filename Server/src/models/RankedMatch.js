@@ -224,6 +224,15 @@ const rankedMatchSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     calledAt: { type: Date, default: Date.now }
   }],
+  // Salons vocaux Discord temporaires pour le match
+  team1VoiceChannel: {
+    channelId: { type: String, default: null },
+    channelName: { type: String, default: null }
+  },
+  team2VoiceChannel: {
+    channelId: { type: String, default: null },
+    channelName: { type: String, default: null }
+  },
   // Timestamps
   matchmakingStartedAt: Date, // Quand le timer de 2 min a commencé
   startedAt: Date, // Quand le match a réellement commencé

@@ -161,6 +161,24 @@ const appSettingsSchema = new mongoose.Schema({
         champion: -30
       })
     }
+  },
+  
+  // Événements temporaires (Double XP, Double Gold, etc.)
+  events: {
+    // Double XP sur le mode classé (double les points gagnés en victoire)
+    doubleXP: {
+      enabled: { type: Boolean, default: false },
+      expiresAt: { type: Date, default: null },
+      enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      enabledAt: { type: Date, default: null }
+    },
+    // Double Gold (double les pièces gagnées)
+    doubleGold: {
+      enabled: { type: Boolean, default: false },
+      expiresAt: { type: Date, default: null },
+      enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+      enabledAt: { type: Date, default: null }
+    }
   }
 }, {
   timestamps: true

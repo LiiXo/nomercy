@@ -13,6 +13,7 @@ import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
 import GameMap from '../models/Map.js';
+import { createMatchVoiceChannels } from './discordBot.service.js';
 
 // Files d'attente par mode de jeu et mode (hardcore/cdl) - UNE SEULE FILE PAR MODE
 // Structure: { 'Search & Destroy_hardcore': [{ userId, username, rank, points, platform, joinedAt }] }
@@ -1681,6 +1682,34 @@ const finalizeMapVote = async (matchId) => {
       votes: winningMap.votes
     };
     match.status = 'ready';
+    
+    // Créer les salons vocaux Discord temporaires avec accès restreint aux joueurs du match
+    try {
+      // Peupler les joueurs pour obtenir leurs Discord IDs
+      await match.populate('players.user', 'discordId username');
+      
+      // Extraire les Discord IDs par équipe
+      const team1DiscordIds = match.players
+        .filter(p => p.team === 1 && p.user?.discordId && !p.isFake)
+        .map(p => p.user.discordId);
+      const team2DiscordIds = match.players
+        .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
+        .map(p => p.user.discordId);
+      
+      console.log(`[Ranked Matchmaking] Creating voice channels with Discord IDs - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
+      
+      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+      if (voiceChannels) {
+        match.team1VoiceChannel = voiceChannels.team1;
+        match.team2VoiceChannel = voiceChannels.team2;
+        console.log(`[Ranked Matchmaking] ✓ Voice channels created for match ${matchId}:`, JSON.stringify(voiceChannels));
+      } else {
+        console.warn(`[Ranked Matchmaking] ⚠️ Voice channels NOT created for match ${matchId} - Discord bot may not be ready or configured`);
+      }
+    } catch (voiceError) {
+      console.error(`[Ranked Matchmaking] ❌ Failed to create voice channels:`, voiceError.message);
+    }
+    
     await match.save();
     
     console.log(`[Ranked Matchmaking] Map vote finalized for match ${matchId}: ${winningMap.name} (${winningMap.votes} votes)`);
@@ -1688,14 +1717,19 @@ const finalizeMapVote = async (matchId) => {
     // Notifier tous les joueurs de la map sélectionnée
     if (io) {
       for (const player of match.players) {
-        if (player.user) {
-          io.to(`user-${player.user}`).emit('mapSelected', {
+        // Après populate, player.user peut être un objet ou un ID
+        const playerId = player.user?._id || player.user;
+        if (playerId) {
+          io.to(`user-${playerId}`).emit('mapSelected', {
             matchId: match._id,
             selectedMap: {
               name: winningMap.name,
               image: winningMap.image,
               votes: winningMap.votes
-            }
+            },
+            // Inclure les infos des salons vocaux
+            team1VoiceChannel: match.team1VoiceChannel,
+            team2VoiceChannel: match.team2VoiceChannel
           });
         }
       }

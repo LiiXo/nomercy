@@ -209,9 +209,14 @@ const MatchSheet = () => {
       onlyLeaderCanValidate: 'Seul le leader ou un officier peut valider',
       onlyReferentCanValidate: 'Tous les joueurs peuvent voter pour le gagnant',
       warningMessage: '⚠️ Rappel : Tout débordement ou comportement inacceptable peuvent entraîner des sanctions sévères.',
-      voiceChannelRequired: '🎙️ Salon vocal recommandé',
-      voiceChannelMessage: 'Tous les joueurs d\'une même équipe peuvent rejoindre un salon vocal sur le serveur Discord NoMercy. Ce n\'est pas obligatoire mais fortement recommandé.',
+      voiceChannelRequired: '🎙️ Salon vocal OBLIGATOIRE',
+      voiceChannelMessage: 'Rejoindre le salon vocal de votre équipe est obligatoire pour jouer en mode classé. Seuls les joueurs du match peuvent accéder à ces salons.',
       joinDiscord: 'Rejoindre le Discord',
+      voiceChannelTitle: '🎙️ Salons vocaux du match',
+      voiceChannelDesc: 'Rejoindre votre salon est OBLIGATOIRE pour jouer en ranked',
+      joinVoice: 'Rejoindre',
+      yourVoiceChannel: 'Votre salon',
+      voiceMandatory: 'Obligatoire',
       playerDisconnected: 's\'est déconnecté de l\'anti-cheat (GGSecure)',
       playerReconnected: 's\'est reconnecté à l\'anti-cheat (GGSecure)',
       requestCancellation: 'Demander l\'annulation',
@@ -305,9 +310,14 @@ const MatchSheet = () => {
       onlyLeaderCanValidate: 'Only the leader or an officer can validate',
       onlyReferentCanValidate: 'All players can vote for the winner',
       warningMessage: '⚠️ Warning: Any misconduct or unacceptable behavior may result in severe penalties.',
-      voiceChannelRequired: '🎙️ Voice channel recommended',
-      voiceChannelMessage: 'All players on the same team can join a voice channel on the NoMercy Discord server. This is not mandatory but strongly recommended.',
+      voiceChannelRequired: '🎙️ Voice channel REQUIRED',
+      voiceChannelMessage: 'Joining your team\'s voice channel is mandatory to play ranked mode. Only match players can access these channels.',
       joinDiscord: 'Join Discord',
+      voiceChannelTitle: '🎙️ Match Voice Channels',
+      voiceChannelDesc: 'Joining your channel is MANDATORY to play ranked',
+      joinVoice: 'Join',
+      yourVoiceChannel: 'Your channel',
+      voiceMandatory: 'Mandatory',
       playerDisconnected: 'disconnected from anti-cheat (GGSecure)',
       playerReconnected: 'reconnected to anti-cheat (GGSecure)',
       requestCancellation: 'Request cancellation',
@@ -1804,7 +1814,7 @@ const MatchSheet = () => {
           </div>
         </div>
 
-        {/* Voice Channel Warning - Only for ranked matches that are not completed */}
+        {/* Voice Channel Section - Only for ranked matches that are not completed */}
         {isRankedMatch && !['completed', 'cancelled'].includes(match.status) && (
           <div className="bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6">
             <div className="flex items-start gap-3 sm:gap-4">
@@ -1814,8 +1824,79 @@ const MatchSheet = () => {
                 </svg>
               </div>
               <div className="flex-1">
-                <h3 className="text-white font-bold text-sm sm:text-base mb-1">{t.voiceChannelRequired}</h3>
-                <p className="text-gray-300 text-xs sm:text-sm">{t.voiceChannelMessage}</p>
+                {/* Si les salons vocaux existent, les afficher */}
+                {(match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-white font-bold text-sm sm:text-base">{t.voiceChannelTitle}</h3>
+                      <span className="px-2 py-0.5 bg-red-500/30 border border-red-500/50 text-red-400 text-[10px] font-bold rounded animate-pulse">
+                        {t.voiceMandatory}
+                      </span>
+                    </div>
+                    <p className="text-yellow-400 text-xs mb-3 font-medium">{t.voiceChannelDesc}</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {/* Salon Équipe 1 */}
+                      {match.team1VoiceChannel?.channelId && (
+                        <a
+                          href={`https://discord.com/channels/1448744757261070467/${match.team1VoiceChannel.channelId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:scale-[1.02] ${
+                            myTeam === 1 
+                              ? 'bg-blue-500/30 border-blue-400 ring-2 ring-blue-400/50' 
+                              : 'bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                            <span className="text-blue-400 font-semibold text-sm">{match.team1VoiceChannel.channelName}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {myTeam === 1 && (
+                              <span className="text-yellow-400 text-[10px] px-1.5 py-0.5 bg-yellow-500/20 rounded">{t.yourVoiceChannel}</span>
+                            )}
+                            <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </div>
+                        </a>
+                      )}
+                      
+                      {/* Salon Équipe 2 */}
+                      {match.team2VoiceChannel?.channelId && (
+                        <a
+                          href={`https://discord.com/channels/1448744757261070467/${match.team2VoiceChannel.channelId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center justify-between p-3 rounded-lg border transition-all hover:scale-[1.02] ${
+                            myTeam === 2 
+                              ? 'bg-purple-500/30 border-purple-400 ring-2 ring-purple-400/50' 
+                              : 'bg-purple-500/10 border-purple-500/30 hover:bg-purple-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                            <span className="text-purple-400 font-semibold text-sm">{match.team2VoiceChannel.channelName}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {myTeam === 2 && (
+                              <span className="text-yellow-400 text-[10px] px-1.5 py-0.5 bg-yellow-500/20 rounded">{t.yourVoiceChannel}</span>
+                            )}
+                            <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </div>
+                        </a>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  /* Si pas de salons vocaux, afficher le message par défaut */
+                  <>
+                    <h3 className="text-white font-bold text-sm sm:text-base mb-1">{t.voiceChannelRequired}</h3>
+                    <p className="text-gray-300 text-xs sm:text-sm">{t.voiceChannelMessage}</p>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2639,6 +2720,28 @@ const MatchSheet = () => {
                         );
                       })}
                     </div>
+                    
+                    {/* Bouton pour rejoindre le salon vocal - Équipe 1 */}
+                    {match.team1VoiceChannel?.channelId && !['completed', 'cancelled'].includes(match.status) && (
+                      <a
+                        href={`https://discord.com/channels/1448744757261070467/${match.team1VoiceChannel.channelId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border transition-all hover:scale-[1.02] ${
+                          myTeam === 1 
+                            ? 'bg-blue-500/30 border-blue-400 text-blue-300 hover:bg-blue-500/40' 
+                            : 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
+                        }`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                        <span className="font-semibold text-sm">{match.team1VoiceChannel.channelName}</span>
+                        {myTeam === 1 && (
+                          <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] font-bold rounded">{t.voiceMandatory}</span>
+                        )}
+                      </a>
+                    )}
                   </div>
 
                   {/* Équipe 2 - Mode classé */}
@@ -2695,6 +2798,28 @@ const MatchSheet = () => {
                         );
                       })}
                     </div>
+                    
+                    {/* Bouton pour rejoindre le salon vocal - Équipe 2 */}
+                    {match.team2VoiceChannel?.channelId && !['completed', 'cancelled'].includes(match.status) && (
+                      <a
+                        href={`https://discord.com/channels/1448744757261070467/${match.team2VoiceChannel.channelId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border transition-all hover:scale-[1.02] ${
+                          myTeam === 2 
+                            ? 'bg-purple-500/30 border-purple-400 text-purple-300 hover:bg-purple-500/40' 
+                            : 'bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20'
+                        }`}
+                      >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                        <span className="font-semibold text-sm">{match.team2VoiceChannel.channelName}</span>
+                        {myTeam === 2 && (
+                          <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] font-bold rounded">{t.voiceMandatory}</span>
+                        )}
+                      </a>
+                    )}
                   </div>
                 </>
               ) : (

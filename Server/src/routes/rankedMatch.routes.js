@@ -7,7 +7,7 @@ import AppSettings from '../models/AppSettings.js';
 import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
 import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
-import { logArbitratorCall } from '../services/discordBot.service.js';
+import { logArbitratorCall, deleteMatchVoiceChannels } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -41,6 +41,20 @@ async function distributeRankedRewards(match) {
     const AppSettings = (await import('../models/AppSettings.js')).default;
     const appSettings = await AppSettings.getSettings();
     const rankThresholds = appSettings?.rankedSettings?.rankPointsThresholds || null;
+    
+    // Vérifier les événements actifs (Double XP, Double Gold)
+    const now = new Date();
+    const isDoubleXP = appSettings?.events?.doubleXP?.enabled && 
+                       (!appSettings?.events?.doubleXP?.expiresAt || new Date(appSettings.events.doubleXP.expiresAt) > now);
+    const isDoubleGold = appSettings?.events?.doubleGold?.enabled && 
+                         (!appSettings?.events?.doubleGold?.expiresAt || new Date(appSettings.events.doubleGold.expiresAt) > now);
+    
+    if (isDoubleXP) {
+      console.log(`[RANKED REWARDS] 🌟 EVENT ACTIF: Double XP !`);
+    }
+    if (isDoubleGold) {
+      console.log(`[RANKED REWARDS] 💰 EVENT ACTIF: Double Gold !`);
+    }
     
     console.log(`[RANKED REWARDS] DEBUG - Config rankedPointsLossPerRank from DB:`, JSON.stringify(config?.rankedPointsLossPerRank));
     console.log(`[RANKED REWARDS] DEBUG - Rank thresholds from AppSettings:`, JSON.stringify(rankThresholds));
@@ -156,9 +170,10 @@ async function distributeRankedRewards(match) {
         }
         
         // Points pour le ladder classé - utiliser les points par rang pour les perdants
+        // DOUBLE XP: Si l'événement est actif, doubler les points gagnés en victoire
         let rankedPointsChange;
         if (isWinner) {
-          rankedPointsChange = pointsWin;
+          rankedPointsChange = isDoubleXP ? pointsWin * 2 : pointsWin;
         } else {
           // Utiliser les points perdus configurés pour le rang du joueur
           const configuredLoss = pointsLossPerRank[playerDivision];
@@ -167,7 +182,10 @@ async function distributeRankedRewards(match) {
         }
         
         // Gold (monnaie du jeu)
-        const goldChange = isWinner ? coinsWin : coinsLoss;
+        // DOUBLE GOLD: Si l'événement est actif, doubler les pièces gagnées
+        const goldChange = isWinner 
+          ? (isDoubleGold ? coinsWin * 2 : coinsWin) 
+          : (isDoubleGold ? coinsLoss * 2 : coinsLoss);
         
         // XP pour le classement Top Player (expérience générale)
         const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
@@ -749,16 +767,18 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       console.log(`[RANKED] Player ${user.username} voted for Team ${winner}`);
     }
 
-    // Calculer les votes
-    const totalPlayers = match.players.length;
+    // Calculer les votes - seuls les vrais joueurs comptent (pas les bots)
+    const realPlayers = match.players.filter(p => !p.isFake);
+    const totalRealPlayers = realPlayers.length;
+    const totalAllPlayers = match.players.length;
     const votesForTeam1 = match.result.playerVotes.filter(v => v.winner === 1).length;
     const votesForTeam2 = match.result.playerVotes.filter(v => v.winner === 2).length;
     const totalVotes = match.result.playerVotes.length;
     
-    // Seuil de 60%
-    const threshold = Math.ceil(totalPlayers * 0.6);
+    // Seuil de 60% basé sur les vrais joueurs uniquement (pas les bots)
+    const threshold = Math.ceil(totalRealPlayers * 0.6);
     
-    console.log(`[RANKED] Votes: Team1=${votesForTeam1}, Team2=${votesForTeam2}, Total=${totalVotes}/${totalPlayers}, Threshold=${threshold}`);
+    console.log(`[RANKED] Votes: Team1=${votesForTeam1}, Team2=${votesForTeam2}, Total=${totalVotes}/${totalRealPlayers} real players (${totalAllPlayers} total), Threshold=${threshold}`);
 
     let resultMessage = '';
     let matchCompleted = false;
@@ -774,10 +794,15 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       // Attribuer les récompenses aux joueurs
       await distributeRankedRewards(match);
       
-      console.log('[RANKED] ✅ Match completed with 60%+ consensus for Team 1');
-      console.log(`[RANKED] Votes for Team 1: ${votesForTeam1}/${totalPlayers} (${Math.round(votesForTeam1/totalPlayers*100)}%)`);
-      resultMessage = `Match validé ! L'équipe 1 gagne avec ${votesForTeam1}/${totalPlayers} votes (${Math.round(votesForTeam1/totalPlayers*100)}%)`;
+      console.log('[RANKED] \u2705 Match completed with 60%+ consensus for Team 1');
+      console.log(`[RANKED] Votes for Team 1: ${votesForTeam1}/${totalRealPlayers} (${Math.round(votesForTeam1/totalRealPlayers*100)}%)`);
+      resultMessage = `Match valid\u00e9 ! L'\u00e9quipe 1 gagne avec ${votesForTeam1}/${totalRealPlayers} votes (${Math.round(votesForTeam1/totalRealPlayers*100)}%)`;
       matchCompleted = true;
+            
+      // Supprimer les salons vocaux Discord
+      if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+        deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+      }
     } else if (votesForTeam2 >= threshold) {
       match.result.winner = 2;
       match.result.confirmed = true;
@@ -788,10 +813,15 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       // Attribuer les récompenses aux joueurs
       await distributeRankedRewards(match);
       
-      console.log('[RANKED] ✅ Match completed with 60%+ consensus for Team 2');
-      console.log(`[RANKED] Votes for Team 2: ${votesForTeam2}/${totalPlayers} (${Math.round(votesForTeam2/totalPlayers*100)}%)`);
-      resultMessage = `Match validé ! L'équipe 2 gagne avec ${votesForTeam2}/${totalPlayers} votes (${Math.round(votesForTeam2/totalPlayers*100)}%)`;
+      console.log('[RANKED] \u2705 Match completed with 60%+ consensus for Team 2');
+      console.log(`[RANKED] Votes for Team 2: ${votesForTeam2}/${totalRealPlayers} (${Math.round(votesForTeam2/totalRealPlayers*100)}%)`);
+      resultMessage = `Match valid\u00e9 ! L'\u00e9quipe 2 gagne avec ${votesForTeam2}/${totalRealPlayers} votes (${Math.round(votesForTeam2/totalRealPlayers*100)}%)`;
       matchCompleted = true;
+            
+      // Supprimer les salons vocaux Discord
+      if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+        deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+      }
     } else {
       // Pas encore de consensus
       resultMessage = `Vote enregistré. Équipe 1: ${votesForTeam1} votes, Équipe 2: ${votesForTeam2} votes. Il faut ${threshold} votes (60%) pour valider.`;
@@ -834,7 +864,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         votesForTeam1,
         votesForTeam2,
         totalVotes,
-        totalPlayers,
+        totalPlayers: totalRealPlayers,
         threshold,
         yourVote: winner
       }
@@ -1054,6 +1084,11 @@ router.post('/:matchId/cancellation/vote', verifyToken, async (req, res) => {
       // Annuler le match
       match.status = 'cancelled';
       match.cancellationRequest.cancelledAt = new Date();
+      
+      // Supprimer les salons vocaux Discord
+      if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+        deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+      }
       
       // Ajouter un message système
       match.chat.push({
@@ -1456,6 +1491,12 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
     match.cancelledAt = new Date();
     match.cancelledBy = req.user._id;
     match.cancelReason = reason || 'Annulé par un administrateur';
+    
+    // Supprimer les salons vocaux Discord
+    if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+      deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+    }
+    
     await match.save();
     
     console.log(`[RANKED CANCEL] Match annulé avec succès`);
@@ -1516,6 +1557,11 @@ router.post('/admin/:matchId/force-result', verifyToken, requireArbitre, async (
     
     // Distribuer les récompenses
     await distributeRankedRewards(match);
+    
+    // Supprimer les salons vocaux Discord
+    if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+      deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+    }
     
     await match.save();
     
@@ -1582,6 +1628,11 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireArbitre, asyn
     // Distribuer les récompenses
     await distributeRankedRewards(match);
     
+    // Supprimer les salons vocaux Discord
+    if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+      deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+    }
+    
     await match.save();
     
     // Repopuler le match avec toutes les données
@@ -1641,8 +1692,16 @@ router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, 
     if (status === 'cancelled') {
       match.cancelledAt = new Date();
       match.cancelledBy = req.user._id;
+      // Supprimer les salons vocaux Discord
+      if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+        deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+      }
     } else if (status === 'completed') {
       match.completedAt = new Date();
+      // Supprimer les salons vocaux Discord
+      if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+        deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
+      }
     } else if (status === 'in_progress') {
       match.startedAt = new Date();
     }
@@ -1761,6 +1820,11 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
       console.log(`[RANKED DELETE] Remboursement terminé pour ${match.players.filter(p => !p.isFake && p.user).length} joueurs`);
     } else {
       console.log(`[RANKED DELETE] Match non complété - Pas de remboursement nécessaire`);
+    }
+    
+    // Supprimer les salons vocaux Discord si présents
+    if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+      deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
     }
     
     // Supprimer le match

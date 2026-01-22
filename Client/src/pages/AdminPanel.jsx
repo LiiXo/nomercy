@@ -110,6 +110,13 @@ const AdminPanel = () => {
   const [allMessages, setAllMessages] = useState([]);
   const [conversations, setConversations] = useState([]);
   
+  // Events states (Double XP, Double Gold)
+  const [events, setEvents] = useState({
+    doubleXP: { enabled: false, expiresAt: null },
+    doubleGold: { enabled: false, expiresAt: null }
+  });
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  
   // Update editedConfig when config changes
   useEffect(() => {
     if (config) {
@@ -123,6 +130,88 @@ const AdminPanel = () => {
       fetchAppSettings();
     }
   }, [userIsStaff]);
+  
+  // Fetch events status
+  const fetchEvents = async () => {
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/events`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success && data.events) {
+        setEvents(data.events);
+      }
+    } catch (err) {
+      console.error('Error fetching events:', err);
+    }
+  };
+  
+  // Load events on mount for admin
+  useEffect(() => {
+    if (userIsAdmin) {
+      fetchEvents();
+    }
+  }, [userIsAdmin]);
+  
+  // Toggle Double XP event
+  const handleToggleDoubleXP = async () => {
+    setLoadingEvents(true);
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/events/double-xp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled: !events.doubleXP?.enabled, durationHours: 24 })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message);
+        fetchEvents();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+  
+  // Toggle Double Gold event
+  const handleToggleDoubleGold = async () => {
+    setLoadingEvents(true);
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/events/double-gold`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled: !events.doubleGold?.enabled, durationHours: 24 })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message);
+        fetchEvents();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+  
+  // Format remaining time for events
+  const formatEventTimeRemaining = (expiresAt) => {
+    if (!expiresAt) return null;
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    const diff = expiry - now;
+    if (diff <= 0) return 'Expiré';
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m restantes`;
+  };
 
   // Navigation tabs configuration grouped by category
   // Staff has limited access based on appSettings.staffAdminAccess
@@ -3573,6 +3662,114 @@ Cette action est irréversible!`)) {
     return (
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-white">Configuration Globale</h2>
+
+        {/* Événements Temporaires */}
+        <div className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Zap className="w-5 h-5 text-yellow-400" />
+            Événements Temporaires (Mode Classé)
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Activez des événements spéciaux pour booster les récompenses en mode classé. Durée: 24h.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Double XP Event */}
+            <div className={`p-4 rounded-xl border transition-all ${
+              events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
+                ? 'bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/20'
+                : 'bg-dark-800/50 border-white/10'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
+                      ? 'bg-purple-500/30'
+                      : 'bg-dark-700'
+                  }`}>
+                    <TrendingUp className="w-6 h-6 text-purple-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold">Double XP</h4>
+                    <p className="text-gray-400 text-xs">Points doublés en victoire</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleDoubleXP}
+                  disabled={loadingEvents}
+                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                    events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
+                      ? 'bg-purple-500'
+                      : 'bg-dark-700'
+                  }`}
+                >
+                  <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                    events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
+                      ? 'translate-x-7'
+                      : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              {events.doubleXP?.enabled && events.doubleXP?.expiresAt && new Date(events.doubleXP.expiresAt) > new Date() && (
+                <div className="flex items-center gap-2 text-purple-400 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>{formatEventTimeRemaining(events.doubleXP.expiresAt)}</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Double Gold Event */}
+            <div className={`p-4 rounded-xl border transition-all ${
+              events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
+                ? 'bg-yellow-500/20 border-yellow-500/50 shadow-lg shadow-yellow-500/20'
+                : 'bg-dark-800/50 border-white/10'
+            }`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${
+                    events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
+                      ? 'bg-yellow-500/30'
+                      : 'bg-dark-700'
+                  }`}>
+                    <Coins className="w-6 h-6 text-yellow-400" />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold">Double Gold</h4>
+                    <p className="text-gray-400 text-xs">Gold doublé (victoire + défaite)</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleDoubleGold}
+                  disabled={loadingEvents}
+                  className={`relative w-14 h-7 rounded-full transition-colors ${
+                    events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
+                      ? 'bg-yellow-500'
+                      : 'bg-dark-700'
+                  }`}
+                >
+                  <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                    events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
+                      ? 'translate-x-7'
+                      : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              {events.doubleGold?.enabled && events.doubleGold?.expiresAt && new Date(events.doubleGold.expiresAt) > new Date() && (
+                <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>{formatEventTimeRemaining(events.doubleGold.expiresAt)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+            <p className="text-yellow-400 text-sm">
+              💡 <strong>Double XP</strong> : Double les points classés gagnés en victoire.<br />
+              💰 <strong>Double Gold</strong> : Double le gold gagné (victoire ET consolation défaite).
+            </p>
+          </div>
+        </div>
 
         {/* Reset Rankings */}
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">

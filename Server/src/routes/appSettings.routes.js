@@ -52,6 +52,19 @@ const getPublicSettings = async (req, res) => {
           champion: -30
         }
       },
+      // Événements actifs (Double XP, Double Gold)
+      events: {
+        doubleXP: {
+          enabled: settings.events?.doubleXP?.enabled && 
+                   (!settings.events?.doubleXP?.expiresAt || new Date(settings.events.doubleXP.expiresAt) > new Date()),
+          expiresAt: settings.events?.doubleXP?.expiresAt
+        },
+        doubleGold: {
+          enabled: settings.events?.doubleGold?.enabled && 
+                   (!settings.events?.doubleGold?.expiresAt || new Date(settings.events.doubleGold.expiresAt) > new Date()),
+          expiresAt: settings.events?.doubleGold?.expiresAt
+        }
+      },
       // Pour compatibilité avec l'ancien format (settings directement)
       settings: {
         rankedSettings: {
@@ -415,6 +428,157 @@ router.post('/admin/reset-ranked-leaderboard/:mode', verifyToken, requireAdmin, 
     });
   } catch (error) {
     console.error('Error resetting ranked leaderboard:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== EVENTS ROUTES (ADMIN ONLY) ====================
+
+// Toggle Double XP event (admin only)
+router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { enabled, durationHours = 24 } = req.body;
+    
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    
+    // Initialize events if not exists
+    if (!settings.events) {
+      settings.events = {};
+    }
+    
+    if (enabled) {
+      // Enable double XP for specified duration
+      settings.events.doubleXP = {
+        enabled: true,
+        expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000),
+        enabledBy: req.user._id,
+        enabledAt: new Date()
+      };
+      
+      console.log(`[EVENT] Double XP activé pour ${durationHours}h par ${req.user.username}`);
+    } else {
+      // Disable double XP
+      settings.events.doubleXP = {
+        enabled: false,
+        expiresAt: null,
+        enabledBy: null,
+        enabledAt: null
+      };
+      
+      console.log(`[EVENT] Double XP désactivé par ${req.user.username}`);
+    }
+    
+    settings.markModified('events');
+    await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Toggle Event', 'Double XP', {
+      fields: [
+        { name: 'État', value: enabled ? `Activé (${durationHours}h)` : 'Désactivé' },
+        { name: 'Expiration', value: enabled ? settings.events.doubleXP.expiresAt.toLocaleString('fr-FR') : 'N/A' }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: enabled ? `Événement Double XP activé pour ${durationHours}h` : 'Événement Double XP désactivé',
+      event: settings.events.doubleXP
+    });
+  } catch (error) {
+    console.error('Error toggling double XP event:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Toggle Double Gold event (admin only)
+router.post('/admin/events/double-gold', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { enabled, durationHours = 24 } = req.body;
+    
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    
+    // Initialize events if not exists
+    if (!settings.events) {
+      settings.events = {};
+    }
+    
+    if (enabled) {
+      // Enable double gold for specified duration
+      settings.events.doubleGold = {
+        enabled: true,
+        expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000),
+        enabledBy: req.user._id,
+        enabledAt: new Date()
+      };
+      
+      console.log(`[EVENT] Double Gold activé pour ${durationHours}h par ${req.user.username}`);
+    } else {
+      // Disable double gold
+      settings.events.doubleGold = {
+        enabled: false,
+        expiresAt: null,
+        enabledBy: null,
+        enabledAt: null
+      };
+      
+      console.log(`[EVENT] Double Gold désactivé par ${req.user.username}`);
+    }
+    
+    settings.markModified('events');
+    await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Toggle Event', 'Double Gold', {
+      fields: [
+        { name: 'État', value: enabled ? `Activé (${durationHours}h)` : 'Désactivé' },
+        { name: 'Expiration', value: enabled ? settings.events.doubleGold.expiresAt.toLocaleString('fr-FR') : 'N/A' }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: enabled ? `Événement Double Gold activé pour ${durationHours}h` : 'Événement Double Gold désactivé',
+      event: settings.events.doubleGold
+    });
+  } catch (error) {
+    console.error('Error toggling double gold event:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get current events status (admin only)
+router.get('/admin/events', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const settings = await AppSettings.getSettings();
+    
+    // Check if events are still valid (not expired)
+    const now = new Date();
+    const events = {
+      doubleXP: {
+        enabled: settings.events?.doubleXP?.enabled && 
+                 (!settings.events?.doubleXP?.expiresAt || new Date(settings.events.doubleXP.expiresAt) > now),
+        expiresAt: settings.events?.doubleXP?.expiresAt,
+        enabledBy: settings.events?.doubleXP?.enabledBy,
+        enabledAt: settings.events?.doubleXP?.enabledAt
+      },
+      doubleGold: {
+        enabled: settings.events?.doubleGold?.enabled && 
+                 (!settings.events?.doubleGold?.expiresAt || new Date(settings.events.doubleGold.expiresAt) > now),
+        expiresAt: settings.events?.doubleGold?.expiresAt,
+        enabledBy: settings.events?.doubleGold?.enabledBy,
+        enabledAt: settings.events?.doubleGold?.enabledAt
+      }
+    };
+    
+    res.json({ success: true, events });
+  } catch (error) {
+    console.error('Error fetching events:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
