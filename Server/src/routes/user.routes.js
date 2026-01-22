@@ -629,18 +629,28 @@ router.get('/profile/:username', async (req, res) => {
     }
 
     // Calculate total wins and losses (including ranked matches)
+    // Filter out matches before statsResetAt if the user has reset their stats
     let totalWins = 0;
     let totalLosses = 0;
+    const statsResetAt = user.statsResetAt || null;
 
-    // Count wins/losses from squad matches
-    const squadMatches = await Match.find({
+    // Count wins/losses from squad matches (only after stats reset if applicable)
+    const squadMatchQuery = {
       status: 'completed',
       $or: [
         { 'challengerRoster.user': user._id },
         { 'opponentRoster.user': user._id }
       ],
       'result.winner': { $exists: true }
-    }).populate('result.winner challenger opponent');
+    };
+    
+    // Filter by statsResetAt if the user has reset their stats
+    if (statsResetAt) {
+      squadMatchQuery['result.confirmedAt'] = { $gt: statsResetAt };
+    }
+    
+    const squadMatches = await Match.find(squadMatchQuery)
+      .populate('result.winner challenger opponent');
 
     for (const match of squadMatches) {
       // Determine which squad the user was in
@@ -657,13 +667,20 @@ router.get('/profile/:username', async (req, res) => {
       }
     }
 
-    // Count wins/losses from ranked matches
+    // Count wins/losses from ranked matches (only after stats reset if applicable)
     const RankedMatch = (await import('../models/RankedMatch.js')).default;
-    const rankedMatches = await RankedMatch.find({
+    const rankedMatchQuery = {
       status: 'completed',
       'players.user': user._id,
       'result.winner': { $exists: true }
-    });
+    };
+    
+    // Filter by statsResetAt if the user has reset their stats
+    if (statsResetAt) {
+      rankedMatchQuery.completedAt = { $gt: statsResetAt };
+    }
+    
+    const rankedMatches = await RankedMatch.find(rankedMatchQuery);
 
     for (const match of rankedMatches) {
       const player = match.players.find(p => p.user.toString() === user._id.toString());
@@ -748,18 +765,28 @@ router.get('/by-id/:id', async (req, res) => {
     }
 
     // Calculate total wins and losses (including ranked matches)
+    // Filter out matches before statsResetAt if the user has reset their stats
     let totalWins = 0;
     let totalLosses = 0;
+    const statsResetAt = user.statsResetAt || null;
 
-    // Count wins/losses from squad matches
-    const squadMatches = await Match.find({
+    // Count wins/losses from squad matches (only after stats reset if applicable)
+    const squadMatchQuery = {
       status: 'completed',
       $or: [
         { 'challengerRoster.user': user._id },
         { 'opponentRoster.user': user._id }
       ],
       'result.winner': { $exists: true }
-    }).populate('result.winner challenger opponent');
+    };
+    
+    // Filter by statsResetAt if the user has reset their stats
+    if (statsResetAt) {
+      squadMatchQuery['result.confirmedAt'] = { $gt: statsResetAt };
+    }
+    
+    const squadMatches = await Match.find(squadMatchQuery)
+      .populate('result.winner challenger opponent');
 
     for (const match of squadMatches) {
       const isInChallenger = match.challengerRoster.some(r => r.user.toString() === user._id.toString());
@@ -774,13 +801,20 @@ router.get('/by-id/:id', async (req, res) => {
       }
     }
 
-    // Count wins/losses from ranked matches
+    // Count wins/losses from ranked matches (only after stats reset if applicable)
     const RankedMatch = (await import('../models/RankedMatch.js')).default;
-    const rankedMatches = await RankedMatch.find({
+    const rankedMatchQuery = {
       status: 'completed',
       'players.user': user._id,
       'result.winner': { $exists: true }
-    });
+    };
+    
+    // Filter by statsResetAt if the user has reset their stats
+    if (statsResetAt) {
+      rankedMatchQuery.completedAt = { $gt: statsResetAt };
+    }
+    
+    const rankedMatches = await RankedMatch.find(rankedMatchQuery);
 
     for (const match of rankedMatches) {
       const player = match.players.find(p => {
@@ -1121,12 +1155,13 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
       };
     }
 
-    // Increment stats reset count
+    // Increment stats reset count and set reset timestamp
     req.user.statsResetCount = (req.user.statsResetCount || 0) + 1;
+    req.user.statsResetAt = new Date(); // Track when stats were reset for filtering match history
 
     await req.user.save();
 
-    // Reset rankings in Ranking collection (for ranked mode)
+    // Reset rankings in Ranking collection (for ranked mode) - reset ALL fields
     await Ranking.updateMany(
       { user: userId },
       { 
@@ -1134,7 +1169,12 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
           points: 0, 
           wins: 0, 
           losses: 0,
-          matchesPlayed: 0
+          kills: 0,
+          deaths: 0,
+          currentStreak: 0,
+          bestStreak: 0,
+          rank: 0,
+          division: 'bronze'
         } 
       }
     );

@@ -188,6 +188,10 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  statsResetAt: {
+    type: Date,
+    default: null // When stats were last reset - matches before this date are excluded from history
+  },
   
   // IP tracking
   lastIp: {

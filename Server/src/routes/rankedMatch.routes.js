@@ -1866,14 +1866,25 @@ router.get('/player-history/:playerId', async (req, res) => {
       return res.status(400).json({ success: false, message: 'ID joueur invalide' });
     }
 
-    console.log(`[PLAYER HISTORY] Recherche matchs pour joueur: ${playerId}`);
+    // Get user's statsResetAt to filter out old matches
+    const user = await User.findById(playerObjectId).select('statsResetAt');
+    const statsResetAt = user?.statsResetAt || null;
 
-    // Récupérer les matchs classés où le joueur a participé
-    // Utiliser ObjectId pour la recherche
-    const matches = await RankedMatch.find({
+    console.log(`[PLAYER HISTORY] Recherche matchs pour joueur: ${playerId}, statsResetAt: ${statsResetAt}`);
+
+    // Build query - filter out matches before stats reset if applicable
+    const query = {
       'players.user': playerObjectId,
       status: 'completed'
-    })
+    };
+    
+    // If user has reset their stats, only show matches after the reset
+    if (statsResetAt) {
+      query.completedAt = { $gt: statsResetAt };
+    }
+
+    // Récupérer les matchs classés où le joueur a participé
+    const matches = await RankedMatch.find(query)
       .populate('players.user', 'username avatarUrl discordAvatar discordId')
       .select('gameMode mode teamSize players result status completedAt createdAt')
       .sort({ completedAt: -1 })

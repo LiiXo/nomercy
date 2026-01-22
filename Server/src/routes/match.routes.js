@@ -507,12 +507,13 @@ router.get('/player-history/:playerId', async (req, res) => {
     // Convertir en ObjectId pour les recherches MongoDB
     const playerObjectId = new mongoose.Types.ObjectId(playerId);
 
-    // Récupérer le joueur avec son historique de matchs et son escouade
+    // Récupérer le joueur avec son historique de matchs, escouade et statsResetAt
     const player = await User.findById(playerId)
-      .select('squad matchHistory')
+      .select('squad matchHistory statsResetAt')
       .populate('matchHistory.match');
     
     const playerSquadId = player?.squad;
+    const statsResetAt = player?.statsResetAt || null;
     
     // Récupérer les IDs des matchs depuis le matchHistory de l'utilisateur
     const matchHistoryIds = player?.matchHistory?.map(mh => mh.match?._id || mh.match).filter(Boolean) || [];
@@ -534,10 +535,18 @@ router.get('/player-history/:playerId', async (req, res) => {
       orConditions.push({ opponent: playerSquadId });
     }
 
-    const matches = await Match.find({
+    // Build the base query
+    const query = {
       $or: orConditions,
       status: 'completed'
-    })
+    };
+    
+    // If user has reset their stats, only show matches completed after the reset
+    if (statsResetAt) {
+      query['result.confirmedAt'] = { $gt: statsResetAt };
+    }
+
+    const matches = await Match.find(query)
       .populate('challenger', 'name tag color logo members')
       .populate('opponent', 'name tag color logo members')
       .populate('result.winner', 'name tag')
@@ -547,10 +556,7 @@ router.get('/player-history/:playerId', async (req, res) => {
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit));
 
-    const total = await Match.countDocuments({
-      $or: orConditions,
-      status: 'completed'
-    });
+    const total = await Match.countDocuments(query);
 
     // Créer un map des résultats depuis matchHistory pour un accès rapide
     const matchHistoryMap = new Map();
