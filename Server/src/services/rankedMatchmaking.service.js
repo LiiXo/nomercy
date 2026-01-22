@@ -1025,6 +1025,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
           yourTeam: player.team,
           isReferent: player.isReferent,
           isHost: player.team === hostTeam && player.isReferent,
+          isTestMatch: match.isTestMatch || false, // Add test match flag
           players: playersForAnimation, // Inclure tous les joueurs pour l'animation
           mapVoteOptions: mapVoteOptionsForClient // Maps pour le vote
         });
@@ -1570,7 +1571,7 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         yourTeam: staffTeam,
         isReferent: true,
         isHost: true,
-        isTestMatch: true,
+        isTestMatch: true, // Test match flag
         players: playersForAnimation, // Inclure tous les joueurs pour l'animation
         mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 })) // Maps pour le vote
       });

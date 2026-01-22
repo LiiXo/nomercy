@@ -67,6 +67,9 @@ const HardcoreDashboard = () => {
   // Ranked matches stats for the banner
   const [rankedMatchesStats, setRankedMatchesStats] = useState({ totalMatches: 0, totalPlayers: 0, stats: [] });
   
+  // Site statistics
+  const [siteStats, setSiteStats] = useState({ totalUsers: 0, totalSquads: 0, totalMatches: 0 });
+  
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
 
@@ -137,6 +140,10 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Fermé • 00h00 - 20h00',
       matchesInProgress: 'match(s) en cours',
       inLadder: 'dans le classement',
+      totalPlayers: 'Joueurs',
+      totalMatches: 'Matchs',
+      totalSquads: 'Escouades',
+      siteStatistics: 'Statistiques du site',
       waitingHelperConfirmation: 'En attente de confirmation de l\'aide...',
       helperAccepted: 'L\'aide a accepté !',
       helperDeclined: 'L\'aide a refusé de jouer.',
@@ -219,6 +226,10 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Closed • 00:00 - 20:00',
       matchesInProgress: 'match(es) in progress',
       inLadder: 'in the',
+      totalPlayers: 'Players',
+      totalMatches: 'Matches',
+      totalSquads: 'Squads',
+      siteStatistics: 'Site Statistics',
       waitingHelperConfirmation: 'Waiting for helper confirmation...',
       helperAccepted: 'Helper accepted!',
       helperDeclined: 'Helper declined to play.',
@@ -301,6 +312,10 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Geschlossen • 00:00 - 20:00',
       matchesInProgress: 'Spiel(e) läuft',
       inLadder: 'in der Rangliste',
+      totalPlayers: 'Spieler',
+      totalMatches: 'Spiele',
+      totalSquads: 'Squads',
+      siteStatistics: 'Seitenstatistiken',
       waitingHelperConfirmation: 'Warte auf Helferbestätigung...',
       helperAccepted: 'Helfer hat akzeptiert!',
       helperDeclined: 'Helfer hat abgelehnt.',
@@ -383,6 +398,10 @@ const HardcoreDashboard = () => {
       closedHours: '✗ Chiuso • 00:00 - 20:00',
       matchesInProgress: 'partita(e) in corso',
       inLadder: 'nella classifica',
+      totalPlayers: 'Giocatori',
+      totalMatches: 'Partite',
+      totalSquads: 'Squadre',
+      siteStatistics: 'Statistiche del sito',
       waitingHelperConfirmation: 'In attesa di conferma dell\'aiuto...',
       helperAccepted: 'L\'aiuto ha accettato!',
       helperDeclined: 'L\'aiuto ha rifiutato di giocare.',
@@ -586,11 +605,25 @@ const HardcoreDashboard = () => {
     }
   };
 
+  // Fetch site statistics
+  const fetchSiteStats = async () => {
+    try {
+      const response = await fetch(`${API_URL}/system/stats`);
+      const data = await response.json();
+      if (data.success) {
+        setSiteStats(data.stats);
+      }
+    } catch (err) {
+      console.error('Error fetching site stats:', err);
+    }
+  };
+
   // Initial fetch and unified refresh interval
   useEffect(() => {
     fetchMatches(true);
     fetchInProgressCounts();
     fetchRankedMatchesStats();
+    fetchSiteStats();
     if (isAuthenticated) fetchMyActiveMatches();
     
     // Single unified interval for all periodic refreshes
@@ -598,6 +631,7 @@ const HardcoreDashboard = () => {
       fetchMatches(false);
       fetchInProgressCounts();
       fetchRankedMatchesStats();
+      fetchSiteStats();
       if (isAuthenticated) fetchMyActiveMatches();
     }, 30000);
     
@@ -2177,6 +2211,56 @@ const HardcoreDashboard = () => {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Site Statistics */}
+          <section className="mt-16 mb-8">
+            <div className="max-w-5xl mx-auto glass-card rounded-2xl p-8 neon-border-red">
+              <h2 className="text-2xl font-display text-white mb-6 text-center flex items-center justify-center gap-3">
+                <Target className="w-6 h-6 text-neon-red" />
+                {txt.siteStatistics}
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Total Players */}
+                <div className="p-6 glass rounded-xl border border-neon-red/30 hover:border-neon-red/50 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-neon-red/20 rounded-xl">
+                      <Users className="w-8 h-8 text-neon-red" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-400 text-sm uppercase tracking-wider">{txt.totalPlayers}</p>
+                      <p className="text-3xl font-bold text-white mt-1">{siteStats.totalUsers.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Matches */}
+                <div className="p-6 glass rounded-xl border border-neon-orange/30 hover:border-neon-orange/50 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-neon-orange/20 rounded-xl">
+                      <Swords className="w-8 h-8 text-neon-orange" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-400 text-sm uppercase tracking-wider">{txt.totalMatches}</p>
+                      <p className="text-3xl font-bold text-white mt-1">{siteStats.totalMatches.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Squads */}
+                <div className="p-6 glass rounded-xl border border-neon-green/30 hover:border-neon-green/50 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-neon-green/20 rounded-xl">
+                      <Shield className="w-8 h-8 text-neon-green" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-400 text-sm uppercase tracking-wider">{txt.totalSquads}</p>
+                      <p className="text-3xl font-bold text-white mt-1">{siteStats.totalSquads.toLocaleString()}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

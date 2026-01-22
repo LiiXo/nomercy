@@ -207,7 +207,7 @@ const RANK_STYLES = {
   diamond: { key: 'diamond', color: '#B9F2FF', gradient: 'from-cyan-300 to-blue-500', icon: Star, tier: 'IV-I', image: '/5.png' },
   master: { key: 'master', color: '#9B59B6', gradient: 'from-purple-500 to-pink-600', icon: Crown, tier: 'III-I', image: '/6.png' },
   grandmaster: { key: 'grandmaster', color: '#E74C3C', gradient: 'from-red-500 to-orange-600', icon: Flame, tier: 'II-I', image: '/7.png' },
-  champion: { key: 'champion', color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, tier: 'Top 100', image: '/8.png' }
+  champion: { key: 'champion', color: '#F1C40F', gradient: 'from-yellow-400 via-orange-500 to-red-600', icon: Zap, tier: 'Top 10', image: '/8.png' }
 };
 
 // Helper to build RANKS array from thresholds
@@ -245,7 +245,7 @@ const RankedMode = () => {
   const [leaderboardPage, setLeaderboardPage] = useState(1);
   const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(1);
   const LEADERBOARD_PER_PAGE = 10;
-  const LEADERBOARD_TOTAL = 10;
+  const LEADERBOARD_TOTAL = 100;
   
   // Game mode & Matchmaking
   const [selectedGameMode, setSelectedGameMode] = useState('Search & Destroy');
@@ -298,6 +298,19 @@ const RankedMode = () => {
   const [selectedMapIndex, setSelectedMapIndex] = useState(null);
   const [selectedMap, setSelectedMap] = useState(null);
   const mapVoteOptionsRef = useRef([]);
+  
+  // Map vote cancellation state
+  const [mapVoteCancellation, setMapVoteCancellation] = useState({
+    currentVotes: 0,
+    requiredVotes: 0,
+    hasVoted: false,
+    isActive: false
+  });
+  const [votingCancellation, setVotingCancellation] = useState(false);
+  
+  // Cancellation button timeout state
+  const [showCancellationButton, setShowCancellationButton] = useState(true);
+  const [cancellationTimeoutId, setCancellationTimeoutId] = useState(null);
   
   // Rewards from config
   
@@ -817,7 +830,10 @@ const RankedMode = () => {
       
       // Show shuffle animation before navigating
       if (data.players && data.players.length > 0) {
-        setShuffleMatchData(data);
+        setShuffleMatchData({
+          ...data,
+          isTestMatch: data.isTestMatch || false // Store test match flag
+        });
         setShuffledPlayers(data.players.map((p, i) => ({ ...p, shuffleIndex: i })));
         setShufflePhase(0);
         setShowShuffleAnimation(true);
@@ -841,16 +857,50 @@ const RankedMode = () => {
       console.log('[RankedMode] Map selected:', data);
       if (data.selectedMap) {
         setSelectedMap(data.selectedMap);
-        // Navigate to match sheet after a short delay
-        setTimeout(() => {
+        
+        // Clear any existing timeouts
+        if (cancellationTimeoutId) {
+          clearTimeout(cancellationTimeoutId);
+          setCancellationTimeoutId(null);
+        }
+        
+        // Hide cancellation button
+        setShowCancellationButton(false);
+        
+        // Wait 20 seconds after map selection then redirect
+        const redirectTimeout = setTimeout(() => {
+          console.log('[RankedMode] 20 seconds after map selection, redirecting to match sheet');
           stopMatchFoundSound();
           setShowShuffleAnimation(false);
           navigate(`/ranked/match/${data.matchId}`);
-        }, 2000);
+        }, 20000);
+        
+        setCancellationTimeoutId(redirectTimeout);
       }
     });
     
-    return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); };
+    // Listen for cancellation vote updates during map vote
+    const unsubCancellationVote = on('cancellationVoteUpdate', (data) => {
+      console.log('[RankedMode] Cancellation vote update:', data);
+      if (data.matchId === shuffleMatchData?.matchId) {
+        setMapVoteCancellation({
+          currentVotes: data.currentVotes || 0,
+          requiredVotes: data.requiredVotes || 0,
+          hasVoted: data.votedBy === user?._id,
+          isActive: data.currentVotes > 0
+        });
+        
+        // Si le match est annulé, fermer l'animation
+        if (data.isCancelled) {
+          stopMatchFoundSound();
+          setShowShuffleAnimation(false);
+          setMatchmakingError(language === 'fr' ? 'Match annulé par vote des joueurs.' : 'Match cancelled by player vote.');
+          setTimeout(() => setMatchmakingError(null), 5000);
+        }
+      }
+    });
+    
+    return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); unsubCancellationVote(); };
   }, [isAuthenticated, isConnected, on, navigate]);
 
   // Listen for global queue count (for all users viewing the page)
@@ -937,6 +987,19 @@ const RankedMode = () => {
           setMapVoteCountdown(15);
           setShufflePhase(4);
           console.log('[RankedMode] Transitioning to phase 4 (map vote)');
+          
+          // Start 20-second timeout for cancellation button
+          const timeoutId = setTimeout(() => {
+            setShowCancellationButton(false);
+            // If no map selected after 20 seconds, redirect to match sheet
+            if (!selectedMap) {
+              console.log('[RankedMode] 20 seconds passed, redirecting to match sheet');
+              stopMatchFoundSound();
+              setShowShuffleAnimation(false);
+              navigate(`/ranked/match/${shuffleMatchData.matchId}`);
+            }
+          }, 20000);
+          setCancellationTimeoutId(timeoutId);
         } else {
           // No maps, navigate directly
           console.log('[RankedMode] No maps available, navigating to match sheet');
@@ -976,8 +1039,71 @@ const RankedMode = () => {
       setSelectedMapIndex(mapIndex);
       emit('mapVote', { matchId: shuffleMatchData.matchId, mapIndex });
       console.log('[RankedMode] Voted for map:', mapVoteOptions[mapIndex]?.name);
+      
+      // Clear the cancellation timeout since a map was selected
+      if (cancellationTimeoutId) {
+        clearTimeout(cancellationTimeoutId);
+        setCancellationTimeoutId(null);
+      }
+      
+      // Hide cancellation button immediately
+      setShowCancellationButton(false);
+      
+      // Wait 20 seconds after map selection then redirect
+      const redirectTimeout = setTimeout(() => {
+        console.log('[RankedMode] 20 seconds after map selection, redirecting to match sheet');
+        stopMatchFoundSound();
+        setShowShuffleAnimation(false);
+        navigate(`/ranked/match/${shuffleMatchData.matchId}`);
+      }, 20000);
+      
+      // Store the redirect timeout ID to clear if needed
+      setCancellationTimeoutId(redirectTimeout);
     }
   };
+  
+  // Handle map vote cancellation toggle
+  const handleToggleMapVoteCancellation = async () => {
+    if (!shuffleMatchData?.matchId || votingCancellation) return;
+    setVotingCancellation(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/${shuffleMatchData.matchId}/cancellation/vote`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMapVoteCancellation({
+          currentVotes: data.currentVotes || 0,
+          requiredVotes: data.requiredVotes || 0,
+          hasVoted: data.hasVoted || false,
+          isActive: data.currentVotes > 0
+        });
+        
+        // Si le match est annulé, fermer l'animation et rediriger
+        if (data.isCancelled) {
+          stopMatchFoundSound();
+          setShowShuffleAnimation(false);
+          // Rediriger vers la page du mode classé
+          setMatchmakingError(language === 'fr' ? 'Match annulé par vote des joueurs.' : 'Match cancelled by player vote.');
+          setTimeout(() => setMatchmakingError(null), 5000);
+        }
+      }
+    } catch (err) {
+      console.error('Error toggling map vote cancellation:', err);
+    } finally {
+      setVotingCancellation(false);
+    }
+  };
+
+  // Cleanup timeouts when component unmounts or animation ends
+  useEffect(() => {
+    return () => {
+      if (cancellationTimeoutId) {
+        clearTimeout(cancellationTimeoutId);
+      }
+    };
+  }, [cancellationTimeoutId]);
 
   // Fetch leaderboard when page changes
   useEffect(() => {
@@ -1085,6 +1211,12 @@ const RankedMode = () => {
       teamsReady: 'Équipes prêtes !',
       redirecting: 'Redirection vers le match...',
       seasonLaunch: '(Lancement)',
+      requestCancellation: 'Demander l\'annulation',
+      cancellationVotes: 'Votes pour annuler',
+      cancelMatch: 'Annuler le match',
+      removeVote: 'Retirer le vote',
+      votesRequired: 'votes requis',
+      voteForMap: 'Votez pour une map'
     },
     en: {
       title: 'Ranked Mode',
@@ -1147,6 +1279,12 @@ const RankedMode = () => {
       teamsReady: 'Teams ready!',
       redirecting: 'Redirecting to match...',
       seasonLaunch: '(Launch)',
+      requestCancellation: 'Request Cancellation',
+      cancellationVotes: 'Cancellation Votes',
+      cancelMatch: 'Cancel Match',
+      removeVote: 'Remove Vote',
+      votesRequired: 'votes required',
+      voteForMap: 'Vote for a map'
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -1209,6 +1347,12 @@ const RankedMode = () => {
       teamsReady: 'Teams bereit!',
       redirecting: 'Weiterleitung zum Spiel...',
       seasonLaunch: '(Start)',
+      requestCancellation: 'Abbruch anfordern',
+      cancellationVotes: 'Abbruchstimmen',
+      cancelMatch: 'Match abbrechen',
+      removeVote: 'Stimme entfernen',
+      votesRequired: 'Stimmen erforderlich',
+      voteForMap: 'Für eine Karte stimmen'
     },
     it: {
       title: 'Modalità Classificata',
@@ -1271,6 +1415,12 @@ const RankedMode = () => {
       teamsReady: 'Squadre pronte!',
       redirecting: 'Reindirizzamento alla partita...',
       seasonLaunch: '(Lancio)',
+      requestCancellation: 'Richiedi annullamento',
+      cancellationVotes: 'Voti per annullamento',
+      cancelMatch: 'Annulla partita',
+      removeVote: 'Rimuovi voto',
+      votesRequired: 'voti richiesti',
+      voteForMap: 'Vota per una mappa'
     }
   };
   
@@ -2167,7 +2317,7 @@ const RankedMode = () => {
                 <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
                   <Crown className="w-5 h-5 text-white" />
                 </div>
-                {t.leaderboard} - Top 10
+                {t.leaderboard} - Top 100
               </h3>
             </div>
             
@@ -2292,8 +2442,75 @@ const RankedMode = () => {
                   </div>
                 )}
 
-                {/* Show my position if I'm not in top 100 */}
-                {myRanking && myRanking.rank > LEADERBOARD_TOTAL && user && (
+                {/* Show my position if I'm not in current page's top 10 */}
+                {myRanking && user && (() => {
+                  // Calculate current page range
+                  const pageStart = (leaderboardPage - 1) * LEADERBOARD_PER_PAGE + 1;
+                  const pageEnd = leaderboardPage * LEADERBOARD_PER_PAGE;
+                  // Show player if they're not in the current page and within top 100
+                  const isInCurrentPage = myRanking.rank >= pageStart && myRanking.rank <= pageEnd;
+                  const isInTop100 = myRanking.rank <= LEADERBOARD_TOTAL;
+                  return !isInCurrentPage && isInTop100;
+                })() && (
+                  <>
+                    {/* Separator */}
+                    <div className="flex items-center gap-2 py-2">
+                      <div className="flex-1 border-t border-white/10"></div>
+                      <span className="text-xs text-gray-500">...</span>
+                      <div className="flex-1 border-t border-white/10"></div>
+                    </div>
+                    
+                    {/* My position */}
+                    <button
+                      onClick={() => navigate(`/player/${user._id}`)}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        isHardcore ? 'bg-red-500/10 border border-red-500/30' : 'bg-cyan-500/10 border border-cyan-500/30'
+                      }`}
+                    >
+                      {/* Position */}
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm bg-dark-800 text-gray-500">
+                        {myRanking.rank}
+                      </div>
+                      
+                      {/* Avatar */}
+                      <img 
+                        src={getUserAvatar(user)}
+                        alt=""
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                      />
+                      
+                      {/* Name & Rank */}
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center gap-2">
+                          <p className="text-white font-medium truncate">{user.username}</p>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isHardcore ? 'bg-red-500/20 text-red-400' : 'bg-cyan-500/20 text-cyan-400'}`}>
+                            {t.you}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-5 h-5 rounded flex items-center justify-center`}>
+                            <img src={playerRank.image} alt={playerRank.name} className="w-5 h-5 object-contain" />
+                          </div>
+                          <span className="text-xs text-gray-500">{playerRank.name}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Stats */}
+                      <div className="text-right flex-shrink-0">
+                        <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{myRanking.points} pts</p>
+                        <p className="text-xs text-gray-500">
+                          <span className="text-green-400">{myRanking.wins}V</span>
+                          <span className="mx-1">/</span>
+                          <span className="text-red-400">{myRanking.losses}D</span>
+                        </p>
+                      </div>
+                    </button>
+                  </>
+                )}
+                
+                {/* Show my position if I'm beyond top 100 (always show as 11th position) */}
+                {myRanking && user && myRanking.rank > LEADERBOARD_TOTAL && (
                   <>
                     {/* Separator */}
                     <div className="flex items-center gap-2 py-2">
@@ -2878,6 +3095,68 @@ const RankedMode = () => {
                         )}
                       </button>
                     ))}
+                  </div>
+                )}
+                
+                {/* Cancellation Request Button - Visible for 20 seconds during map vote */}
+                {!selectedMap && showCancellationButton && (
+                  <div className="mt-4 sm:mt-6 animate-fadeIn">
+                    {/* Cancellation stats */}
+                    {mapVoteCancellation.isActive && (
+                      <div className={`mb-3 p-3 rounded-lg border ${isHardcore ? 'bg-orange-500/10 border-orange-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className={isHardcore ? 'text-orange-300' : 'text-yellow-300'}>
+                            {t.cancellationVotes}
+                          </span>
+                          <span className={`font-bold ${isHardcore ? 'text-orange-400' : 'text-yellow-400'}`}>
+                            {mapVoteCancellation.currentVotes}/{mapVoteCancellation.requiredVotes}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Cancellation button */}
+                    <div className="flex justify-center">
+                      <button
+                        onClick={handleToggleMapVoteCancellation}
+                        disabled={votingCancellation}
+                        className={`w-64 py-3 px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
+                          mapVoteCancellation.hasVoted
+                            ? isHardcore
+                              ? 'bg-orange-500/30 border-2 border-orange-500 text-orange-300 hover:bg-orange-500/40'
+                              : 'bg-yellow-500/30 border-2 border-yellow-500 text-yellow-300 hover:bg-yellow-500/40'
+                            : isHardcore
+                              ? 'bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20'
+                              : 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
+                        } disabled:opacity-50`}
+                      >
+                      {votingCancellation ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-5 h-5" />
+                          {mapVoteCancellation.hasVoted ? t.removeVote : t.requestCancellation}
+                        </>
+                      )}
+                      </button>
+                    </div>
+                    
+                    {/* Timeout warning */}
+                    <p className="mt-2 text-center text-xs text-gray-500 italic">
+                      {language === 'fr' 
+                        ? 'Bouton disponible pendant 20 secondes' 
+                        : 'Button available for 20 seconds'}
+                    </p>
+                    
+                    {/* Info text */}
+                    <p className="mt-1 text-center text-xs text-gray-400">
+                      {shuffleMatchData?.isTestMatch 
+                        ? (language === 'fr' ? '1 vote requis pour annuler (test)' : '1 vote required to cancel (test)')
+                        : shuffleMatchData?.teamSize === 4 
+                          ? (language === 'fr' ? '6/8 joueurs requis pour annuler (4v4)' : '6/8 players required to cancel (4v4)')
+                          : (language === 'fr' ? '8/10 joueurs requis pour annuler (5v5)' : '8/10 players required to cancel (5v5)')
+                      }
+                    </p>
                   </div>
                 )}
               </div>

@@ -967,8 +967,8 @@ router.post('/:matchId/cancellation/vote', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
 
-    // Vérifier que le match est en cours (ready ou in_progress)
-    if (!['ready', 'in_progress'].includes(match.status)) {
+    // Vérifier que le match peut être annulé (pending, ready ou in_progress)
+    if (!['pending', 'ready', 'in_progress'].includes(match.status)) {
       return res.status(400).json({ success: false, message: 'Ce match ne peut plus être annulé' });
     }
 
@@ -990,9 +990,33 @@ router.post('/:matchId/cancellation/vote', verifyToken, async (req, res) => {
       };
     }
 
-    // Calculer le nombre de votes requis (80% des vrais joueurs)
+    // Calculer le nombre de votes requis selon le format, le statut et si c'est un match de test
     const realPlayers = match.players.filter(p => !p.isFake && p.user);
-    const requiredVotes = Math.ceil(realPlayers.length * 0.8);
+    const totalPlayers = realPlayers.length;
+    
+    // Si le match est en phase de vote de map (pending), utiliser des seuils spécifiques
+    let requiredVotes;
+    if (match.status === 'pending') {
+      // Pour les matchs de test, un seul vote suffit
+      if (match.isTestMatch === true) {
+        requiredVotes = 1;
+      }
+      // Phase de vote de map: 6/10 pour 4v4, 8/10 pour 5v5
+      else if (match.teamSize === 4) {
+        // 4v4 = 8 joueurs total, besoin de 6 votes
+        requiredVotes = 6;
+      } else if (match.teamSize === 5) {
+        // 5v5 = 10 joueurs total, besoin de 8 votes
+        requiredVotes = 8;
+      } else {
+        // Formats plus petits: 80% arrondi au supérieur
+        requiredVotes = Math.ceil(totalPlayers * 0.8);
+      }
+    } else {
+      // Phases ready/in_progress: 80% standard
+      requiredVotes = Math.ceil(totalPlayers * 0.8);
+    }
+    
     match.cancellationRequest.requiredVotes = requiredVotes;
 
     // Vérifier si l'utilisateur a déjà voté
@@ -1098,9 +1122,28 @@ router.get('/:matchId/cancellation/status', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
 
-    // Calculer les stats
+    // Calculer les stats avec la même logique que le vote
     const realPlayers = match.players.filter(p => !p.isFake && p.user);
-    const requiredVotes = Math.ceil(realPlayers.length * 0.8);
+    const totalPlayers = realPlayers.length;
+    
+    // Calculer les votes requis selon le format, le statut et si c'est un match de test (même logique que le vote)
+    let requiredVotes;
+    if (match.status === 'pending') {
+      // Pour les matchs de test, un seul vote suffit
+      if (match.isTestMatch === true) {
+        requiredVotes = 1;
+      }
+      else if (match.teamSize === 4) {
+        requiredVotes = 6;
+      } else if (match.teamSize === 5) {
+        requiredVotes = 8;
+      } else {
+        requiredVotes = Math.ceil(totalPlayers * 0.8);
+      }
+    } else {
+      requiredVotes = Math.ceil(totalPlayers * 0.8);
+    }
+    
     const currentVotes = match.cancellationRequest?.votes?.length || 0;
     const hasVoted = match.cancellationRequest?.votes?.some(
       v => v.user?._id?.toString() === userId.toString() || v.user?.toString() === userId.toString()

@@ -103,5 +103,47 @@ router.post('/admin/reset-all', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
+// Get site statistics (public)
+router.get('/stats', async (req, res) => {
+  try {
+    // Count total users (not banned, not deleted)
+    const totalUsers = await User.countDocuments({
+      isBanned: { $ne: true },
+      isDeleted: { $ne: true }
+    });
+
+    // Count total squads (not deleted)
+    const totalSquads = await Squad.countDocuments({
+      isDeleted: { $ne: true }
+    });
+
+    // Count total matches (both ladder and ranked, completed only)
+    const totalLadderMatches = await Match.countDocuments({
+      status: 'completed'
+    });
+
+    const totalRankedMatches = await RankedMatch.countDocuments({
+      status: 'completed'
+    });
+
+    const totalMatches = totalLadderMatches + totalRankedMatches;
+
+    res.json({
+      success: true,
+      stats: {
+        totalUsers,
+        totalSquads,
+        totalMatches
+      }
+    });
+  } catch (error) {
+    console.error('Get site stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
 export default router;
 

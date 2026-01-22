@@ -477,6 +477,53 @@ const Navbar = () => {
               </Link>
             ))}
             
+            {/* Mobile Search Bar */}
+            <div className="mb-3">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={language === 'fr' ? 'Rechercher un joueur...' : 'Search player...'}
+                  className="w-full px-4 py-3 pl-10 bg-dark-800/50 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-neon-red/50"
+                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                {searchLoading && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 animate-spin" />
+                )}
+              </div>
+              
+              {searchResults.length > 0 && (
+                <div className="mt-2 glass rounded-xl overflow-hidden max-h-60 overflow-y-auto">
+                  {searchResults.map((player) => (
+                    <Link
+                      key={player._id}
+                      to={`/player/${player._id}`}
+                      onClick={() => { setMobileMenuOpen(false); setSearchQuery(''); setSearchResults([]); }}
+                      className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                    >
+                      <img src={player.avatarUrl || player.avatar || getDefaultAvatar(player.username)} alt="" className="w-10 h-10 rounded-full object-cover" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                        {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                      </div>
+                      {player.platform && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                          {player.platform}
+                        </span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
+              )}
+              
+              {searchQuery.length >= 2 && !searchLoading && searchResults.length === 0 && (
+                <div className="mt-2 px-4 py-3 text-center text-gray-500 text-sm glass rounded-xl">
+                  {language === 'fr' ? 'Aucun joueur trouvé' : 'No player found'}
+                </div>
+              )}
+            </div>
+
             <div className="pt-2 border-t border-white/5 space-y-2">
               {isAuthenticated && user && (
                 <>
