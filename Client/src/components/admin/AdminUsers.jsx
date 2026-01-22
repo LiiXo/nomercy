@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2 
+  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe 
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
@@ -118,6 +118,7 @@ const AdminUsers = ({
                 <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Rôles</th>
                 <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Coins</th>
                 <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase hidden xl:table-cell">IP</th>
                 <th className="px-4 lg:px-6 py-4 text-left text-xs font-medium text-gray-400 uppercase hidden xl:table-cell">Date</th>
                 <th className="px-4 lg:px-6 py-4 text-right text-xs font-medium text-gray-400 uppercase">Actions</th>
               </tr>
@@ -125,7 +126,7 @@ const AdminUsers = ({
             <tbody className="divide-y divide-white/5">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan="9" className="px-6 py-8 text-center text-gray-400">
                     Aucun utilisateur trouvé
                   </td>
                 </tr>
@@ -186,6 +187,16 @@ const AdminUsers = ({
                         <span className="px-2 py-1 text-xs font-medium rounded bg-green-500/20 text-green-400">
                           Actif
                         </span>
+                      )}
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 hidden xl:table-cell">
+                      {user.lastIp ? (
+                        <div className="flex items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                          <span className="text-cyan-400 text-xs font-mono">{user.lastIp}</span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500 text-xs">-</span>
                       )}
                     </td>
                     <td className="px-4 lg:px-6 py-4 text-gray-400 text-sm hidden xl:table-cell">

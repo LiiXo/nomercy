@@ -38,8 +38,26 @@ const getCookieOptions = () => {
 // Discord OAuth callback
 router.get('/discord/callback', 
   passport.authenticate('discord', { session: false, failureRedirect: `${process.env.CLIENT_URL}/login?error=auth_failed` }),
-  (req, res) => {
+  async (req, res) => {
     const token = generateToken(req.user);
+    
+    // Capture IP address (handle proxies)
+    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
+                     req.headers['x-real-ip'] || 
+                     req.connection?.remoteAddress || 
+                     req.socket?.remoteAddress ||
+                     req.ip;
+    
+    // Update user's last IP and login time
+    try {
+      const User = (await import('../models/User.js')).default;
+      await User.findByIdAndUpdate(req.user._id, {
+        lastIp: clientIp,
+        lastLoginAt: new Date()
+      });
+    } catch (err) {
+      console.error('Error updating user IP:', err);
+    }
     
     // Set HTTP-only cookie with proper cross-origin settings
     res.cookie('token', token, getCookieOptions());

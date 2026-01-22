@@ -189,6 +189,16 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
   
+  // IP tracking
+  lastIp: {
+    type: String,
+    default: null
+  },
+  lastLoginAt: {
+    type: Date,
+    default: null
+  },
+  
 }, {
   timestamps: true
 });
