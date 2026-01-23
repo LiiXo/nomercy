@@ -2631,9 +2631,198 @@ const RankedMode = () => {
               </div>
             ) : leaderboard.length > 0 ? (
               <div className="p-4 space-y-2">
-                {leaderboard.map((player, idx) => {
+                {/* Top 3 Animated Podium */}
+                {leaderboardPage === 1 && leaderboard.length >= 3 && (
+                  <div className="mb-6 pb-6 border-b border-white/10">
+                    <div className="flex items-end justify-center gap-4 h-[360px] pt-28">
+                      {/* 2nd Place - Left */}
+                      {(() => {
+                        const player = leaderboard[1];
+                        const rank = getRankFromPoints(player.points);
+                        const winRate = player.wins + player.losses > 0 
+                          ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
+                          : 0;
+                        return (
+                          <button
+                            onClick={() => navigate(`/player/${player.user?._id}`)}
+                            className="relative group flex flex-col items-center animate-[slideUp_0.6s_ease-out_0.2s_both]"
+                          >
+                            {/* Glow effect */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-gray-400/30 via-gray-300/20 to-transparent blur-3xl rounded-full scale-150 animate-pulse" />
+                            
+                            {/* Medal badge */}
+                            <div className="relative mb-2">
+                              <div className="absolute -top-1 -right-1 w-8 h-8 bg-gradient-to-br from-gray-300 via-white to-gray-400 rounded-full flex items-center justify-center shadow-lg z-10 animate-bounce">
+                                <span className="font-bold text-gray-700 text-sm">2</span>
+                              </div>
+                              
+                              {/* Avatar with ring */}
+                              <div className="relative">
+                                <div className="absolute -inset-1 bg-gradient-to-r from-gray-300 via-white to-gray-400 rounded-full animate-spin-slow opacity-75" />
+                                <img 
+                                  src={getUserAvatar(player.user)}
+                                  alt=""
+                                  className="relative w-20 h-20 rounded-full object-cover border-4 border-gray-300 group-hover:scale-110 transition-transform duration-300"
+                                  onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Player info */}
+                            <div className="text-center mt-2 relative z-10">
+                              <p className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-gray-200 via-white to-gray-300 text-base max-w-[120px] truncate">
+                                🥈 {player.user?.username || 'Unknown'}
+                              </p>
+                              <div className="flex items-center justify-center gap-1 mt-1">
+                                <img src={rank.image} alt={rank.name} className="w-5 h-5 object-contain" />
+                                <span className="text-xs text-gray-400">{rank.name}</span>
+                              </div>
+                              <p className="text-gray-300 font-bold text-lg mt-1">{player.points} pts</p>
+                              <p className="text-xs text-gray-500">
+                                <span className="text-green-400">{player.wins}V</span> / <span className="text-red-400">{player.losses}D</span>
+                              </p>
+                            </div>
+                            
+                            {/* Podium base */}
+                            <div className="w-28 h-20 mt-3 bg-gradient-to-t from-gray-500 via-gray-400 to-gray-300 rounded-t-lg shadow-2xl flex items-center justify-center">
+                              <Medal className="w-8 h-8 text-gray-700" />
+                            </div>
+                          </button>
+                        );
+                      })()}
+                      
+                      {/* 1st Place - Center (Highest) */}
+                      {(() => {
+                        const player = leaderboard[0];
+                        const rank = getRankFromPoints(player.points);
+                        const winRate = player.wins + player.losses > 0 
+                          ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
+                          : 0;
+                        return (
+                          <button
+                            onClick={() => navigate(`/player/${player.user?._id}`)}
+                            className="relative group flex flex-col items-center animate-[slideUp_0.6s_ease-out_both]"
+                          >
+                            {/* Golden glow effect */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-yellow-500/40 via-amber-400/30 to-transparent blur-3xl rounded-full scale-150 animate-pulse" />
+                            
+                            {/* Crown */}
+                            <div className="relative mb-2">
+                              <Crown className="absolute -top-6 left-1/2 -translate-x-1/2 w-8 h-8 text-yellow-400 animate-bounce drop-shadow-[0_0_10px_rgba(250,204,21,0.8)]" />
+                              
+                              {/* Avatar with golden ring */}
+                              <div className="relative">
+                                <div className="absolute -inset-2 bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 rounded-full animate-spin-slow" />
+                                <div className="absolute -inset-1 bg-gradient-to-r from-yellow-200 via-amber-300 to-yellow-400 rounded-full animate-pulse" />
+                                <img 
+                                  src={getUserAvatar(player.user)}
+                                  alt=""
+                                  className="relative w-24 h-24 rounded-full object-cover border-4 border-yellow-400 group-hover:scale-110 transition-transform duration-300"
+                                  onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                                />
+                              </div>
+                              
+                              {/* Sparkles */}
+                              <Sparkles className="absolute -top-2 -left-2 w-5 h-5 text-yellow-300 animate-ping" />
+                              <Sparkles className="absolute -top-2 -right-2 w-5 h-5 text-yellow-300 animate-ping delay-100" />
+                              <Star className="absolute -bottom-1 -right-3 w-4 h-4 text-yellow-400 animate-pulse" />
+                              <Star className="absolute -bottom-1 -left-3 w-4 h-4 text-yellow-400 animate-pulse delay-200" />
+                            </div>
+                            
+                            {/* Player info */}
+                            <div className="text-center mt-2 relative z-10">
+                              <p className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-amber-400 to-yellow-300 text-lg max-w-[140px] truncate animate-pulse">
+                                👑 {player.user?.username || 'Unknown'}
+                              </p>
+                              <div className="flex items-center justify-center gap-1 mt-1">
+                                <img src={rank.image} alt={rank.name} className="w-6 h-6 object-contain" />
+                                <span className="text-sm text-yellow-200">{rank.name}</span>
+                              </div>
+                              <p className="text-yellow-400 font-bold text-xl mt-1 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">{player.points} pts</p>
+                              <p className="text-xs text-gray-400">
+                                <span className="text-green-400">{player.wins}V</span> / <span className="text-red-400">{player.losses}D</span>
+                              </p>
+                            </div>
+                            
+                            {/* Podium base - Tallest */}
+                            <div className="w-32 h-28 mt-3 bg-gradient-to-t from-yellow-600 via-amber-500 to-yellow-400 rounded-t-lg shadow-2xl flex items-center justify-center relative overflow-hidden">
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                              <Trophy className="w-10 h-10 text-yellow-900" />
+                            </div>
+                          </button>
+                        );
+                      })()}
+                      
+                      {/* 3rd Place - Right */}
+                      {(() => {
+                        const player = leaderboard[2];
+                        const rank = getRankFromPoints(player.points);
+                        const winRate = player.wins + player.losses > 0 
+                          ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
+                          : 0;
+                        return (
+                          <button
+                            onClick={() => navigate(`/player/${player.user?._id}`)}
+                            className="relative group flex flex-col items-center animate-[slideUp_0.6s_ease-out_0.4s_both]"
+                          >
+                            {/* Glow effect */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-orange-500/30 via-amber-400/20 to-transparent blur-3xl rounded-full scale-150 animate-pulse" />
+                            
+                            {/* Medal badge */}
+                            <div className="relative mb-2">
+                              <div className="absolute -top-1 -right-1 w-8 h-8 bg-gradient-to-br from-orange-400 via-amber-500 to-orange-600 rounded-full flex items-center justify-center shadow-lg z-10 animate-bounce">
+                                <span className="font-bold text-orange-900 text-sm">3</span>
+                              </div>
+                              
+                              {/* Avatar with ring */}
+                              <div className="relative">
+                                <div className="absolute -inset-1 bg-gradient-to-r from-orange-400 via-amber-500 to-orange-500 rounded-full animate-spin-slow opacity-75" />
+                                <img 
+                                  src={getUserAvatar(player.user)}
+                                  alt=""
+                                  className="relative w-20 h-20 rounded-full object-cover border-4 border-orange-400 group-hover:scale-110 transition-transform duration-300"
+                                  onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Player info */}
+                            <div className="text-center mt-2 relative z-10">
+                              <p className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-300 via-amber-400 to-orange-400 text-base max-w-[120px] truncate">
+                                🥉 {player.user?.username || 'Unknown'}
+                              </p>
+                              <div className="flex items-center justify-center gap-1 mt-1">
+                                <img src={rank.image} alt={rank.name} className="w-5 h-5 object-contain" />
+                                <span className="text-xs text-orange-200">{rank.name}</span>
+                              </div>
+                              <p className="text-orange-400 font-bold text-lg mt-1">{player.points} pts</p>
+                              <p className="text-xs text-gray-500">
+                                <span className="text-green-400">{player.wins}V</span> / <span className="text-red-400">{player.losses}D</span>
+                              </p>
+                            </div>
+                            
+                            {/* Podium base */}
+                            <div className="w-28 h-16 mt-3 bg-gradient-to-t from-orange-600 via-amber-500 to-orange-400 rounded-t-lg shadow-2xl flex items-center justify-center">
+                              <Medal className="w-8 h-8 text-orange-900" />
+                            </div>
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+                
+                {leaderboard
+                  .filter((_, idx) => {
+                    // Skip first 3 players on page 1 (they're shown in the podium)
+                    if (leaderboardPage === 1 && idx < 3) return false;
+                    return true;
+                  })
+                  .map((player, idx) => {
                   // Calculate actual position based on current page
-                  const position = (leaderboardPage - 1) * LEADERBOARD_PER_PAGE + idx + 1;
+                  // On page 1, skip first 3 (podium), so position starts at 4
+                  const actualIdx = leaderboardPage === 1 ? idx + 3 : idx;
+                  const position = (leaderboardPage - 1) * LEADERBOARD_PER_PAGE + actualIdx + 1;
                   const rank = getRankFromPoints(player.points);
                   const winRate = player.wins + player.losses > 0 
                     ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
