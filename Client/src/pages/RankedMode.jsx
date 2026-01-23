@@ -333,6 +333,12 @@ const RankedMode = () => {
   };
   const [pointsLossPerRank, setPointsLossPerRank] = useState(DEFAULT_POINTS_LOSS_PER_RANK);
   
+  // Ranked rewards per game mode (points won per match)
+  const [rankedRewardsPerMode, setRankedRewardsPerMode] = useState({});
+  
+  // Active events (Double XP, Double Gold)
+  const [activeEvents, setActiveEvents] = useState({ doubleXP: false, doubleGold: false });
+  
   // Matchmaking enabled/disabled
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
   
@@ -492,6 +498,44 @@ const RankedMode = () => {
       }
     } catch (err) {
       console.error('Error fetching rank thresholds:', err);
+    }
+  };
+  
+  // Fetch ranked rewards for all game modes
+  const fetchRankedRewards = async () => {
+    try {
+      // Get game modes based on current mode (hardcore or cdl)
+      const gameModes = isHardcore 
+        ? ['Duel', 'Team Deathmatch', 'Search & Destroy']
+        : ['Duel', 'Team Deathmatch', 'Search & Destroy', 'Hardpoint'];
+      
+      const rewards = {};
+      
+      // Fetch rewards for each game mode
+      await Promise.all(gameModes.map(async (gameMode) => {
+        const response = await fetch(`${API_URL}/config/rewards/ranked?mode=${selectedMode}&gameMode=${encodeURIComponent(gameMode)}`);
+        const data = await response.json();
+        if (data.success) {
+          rewards[gameMode] = data.rewards;
+        }
+      }));
+      
+      setRankedRewardsPerMode(rewards);
+      
+      // Fetch active events (Double XP, Double Gold) from app-settings
+      const eventsResponse = await fetch(`${API_URL}/app-settings/public`);
+      const eventsData = await eventsResponse.json();
+      if (eventsData.success && eventsData.events) {
+        const now = new Date();
+        setActiveEvents({
+          doubleXP: eventsData.events.doubleXP?.enabled && 
+                    (!eventsData.events.doubleXP?.expiresAt || new Date(eventsData.events.doubleXP.expiresAt) > now),
+          doubleGold: eventsData.events.doubleGold?.enabled && 
+                      (!eventsData.events.doubleGold?.expiresAt || new Date(eventsData.events.doubleGold.expiresAt) > now)
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching ranked rewards:', err);
     }
   };
 
@@ -1118,6 +1162,7 @@ const RankedMode = () => {
     fetchActiveMatchesStats();
     fetchMatchmakingStatus();
     fetchRankThresholds(); // Fetch dynamic rank thresholds from config
+    fetchRankedRewards(); // Fetch ranked rewards per game mode
     if (isAuthenticated) {
       checkActiveMatch();
       fetchQueueStatus();
@@ -1465,6 +1510,56 @@ const RankedMode = () => {
                 </div>
               </div>
             </div>
+            
+            {/* Active Event Banner */}
+            {(activeEvents.doubleXP || activeEvents.doubleGold) && (
+              <div className="relative overflow-hidden mx-auto max-w-md mb-4">
+                <div className={`relative rounded-xl border ${activeEvents.doubleXP && activeEvents.doubleGold ? 'bg-gradient-to-r from-purple-500/20 via-yellow-500/20 to-purple-500/20 border-purple-500/30' : activeEvents.doubleXP ? 'bg-gradient-to-r from-purple-500/20 via-purple-600/20 to-purple-500/20 border-purple-500/30' : 'bg-gradient-to-r from-yellow-500/20 via-amber-500/20 to-yellow-500/20 border-yellow-500/30'} p-3 overflow-hidden`}>
+                  {/* Animated background shimmer */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                  
+                  {/* Sparkles decoration */}
+                  <div className="absolute top-1 left-2 animate-pulse"><Sparkles className="w-3 h-3 text-white/30" /></div>
+                  <div className="absolute bottom-1 right-2 animate-pulse" style={{ animationDelay: '0.5s' }}><Sparkles className="w-3 h-3 text-white/30" /></div>
+                  
+                  <div className="relative flex items-center justify-center gap-3">
+                    {activeEvents.doubleXP && (
+                      <div className="flex items-center gap-2 animate-pulse">
+                        <div className="p-1.5 rounded-lg bg-purple-500/30">
+                          <Zap className="w-4 h-4 text-purple-400" />
+                        </div>
+                        <div className="text-center">
+                          <span className="text-purple-400 font-black text-lg">x2</span>
+                          <span className="text-purple-300 font-bold text-sm ml-1">
+                            {{ fr: 'POINTS', en: 'POINTS', de: 'PUNKTE', it: 'PUNTI' }[language] || 'POINTS'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {activeEvents.doubleXP && activeEvents.doubleGold && (
+                      <div className="w-px h-6 bg-white/20" />
+                    )}
+                    
+                    {activeEvents.doubleGold && (
+                      <div className="flex items-center gap-2 animate-pulse" style={{ animationDelay: '0.3s' }}>
+                        <div className="p-1.5 rounded-lg bg-yellow-500/30">
+                          <Coins className="w-4 h-4 text-yellow-400" />
+                        </div>
+                        <div className="text-center">
+                          <span className="text-yellow-400 font-black text-lg">x2</span>
+                          <span className="text-yellow-300 font-bold text-sm ml-1">GOLD</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <p className="text-center text-[10px] text-white/50 mt-1 relative">
+                    {{ fr: '🎉 Événement en cours !', en: '🎉 Event active!', de: '🎉 Event aktiv!', it: '🎉 Evento attivo!' }[language] || '🎉 Event active!'}
+                  </p>
+                </div>
+              </div>
+            )}
             
             <p className="text-gray-400 text-sm sm:text-lg max-w-xl mx-auto px-4">{t.subtitle}</p>
           </div>
@@ -2370,6 +2465,108 @@ const RankedMode = () => {
 
             </div>
           </div>
+
+          {/* Points Won Per Game Mode */}
+          {Object.keys(rankedRewardsPerMode).length > 0 && (
+            <div className={`rounded-2xl bg-dark-800/50 backdrop-blur-xl border ${isHardcore ? 'border-green-500/20' : 'border-green-500/20'} overflow-hidden mb-6`}>
+              <div className={`px-4 py-3 bg-gradient-to-r from-green-500/10 to-emerald-500/5 border-b border-white/10`}>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-green-400" />
+                    {{ fr: 'Récompenses en cas de victoire (par mode)', en: 'Rewards on victory (by mode)', de: 'Belohnungen bei Sieg (pro Modus)', it: 'Ricompense in caso di vittoria (per modalità)' }[language] || 'Rewards on victory (by mode)'}
+                  </h4>
+                  {/* Active events badges */}
+                  <div className="flex items-center gap-2">
+                    {activeEvents.doubleXP && (
+                      <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-bold animate-pulse flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        x2 XP
+                      </span>
+                    )}
+                    {activeEvents.doubleGold && (
+                      <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold animate-pulse flex items-center gap-1">
+                        <Coins className="w-3 h-3" />
+                        x2 Gold
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="p-4">
+                <div className={`grid gap-3 ${isHardcore ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                  {(isHardcore 
+                    ? ['Duel', 'Team Deathmatch', 'Search & Destroy']
+                    : ['Duel', 'Team Deathmatch', 'Search & Destroy', 'Hardpoint']
+                  ).map((gameMode) => {
+                    const rewards = rankedRewardsPerMode[gameMode];
+                    const pointsWin = rewards?.pointsWin ?? 0;
+                    const coinsWin = rewards?.coinsWin ?? 0;
+                    const xpWinMin = rewards?.xpWinMin ?? 0;
+                    const xpWinMax = rewards?.xpWinMax ?? 0;
+                    const gameModeLabel = gameMode === 'Search & Destroy' ? (language === 'fr' ? 'S&D' : 'S&D')
+                      : gameMode === 'Team Deathmatch' ? (language === 'fr' ? 'Mêlée' : 'TDM')
+                      : gameMode === 'Hardpoint' ? (language === 'fr' ? 'HP' : 'HP')
+                      : 'Duel';
+                    const gameModeIcon = gameMode === 'Search & Destroy' ? '💣'
+                      : gameMode === 'Team Deathmatch' ? '⚔️'
+                      : gameMode === 'Hardpoint' ? '📍'
+                      : '🎯';
+                    return (
+                      <div 
+                        key={gameMode}
+                        className="flex flex-col items-center p-3 rounded-xl bg-dark-900/50 border border-white/5 hover:border-green-500/30 transition-all"
+                      >
+                        <span className="text-lg mb-1">{gameModeIcon}</span>
+                        <span className="text-xs text-gray-400 font-medium mb-2">{gameModeLabel}</span>
+                        
+                        {/* Points */}
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className={`text-sm font-bold ${activeEvents.doubleXP ? 'text-purple-400' : 'text-green-400'}`}>
+                            +{activeEvents.doubleXP ? pointsWin * 2 : pointsWin}
+                          </span>
+                          <span className="text-[10px] text-gray-500">pts</span>
+                          {activeEvents.doubleXP && <Sparkles className="w-3 h-3 text-purple-400" />}
+                        </div>
+                        
+                        {/* Gold */}
+                        <div className="flex items-center gap-1 mb-1">
+                          <Coins className="w-3 h-3 text-yellow-400" />
+                          <span className={`text-xs font-semibold ${activeEvents.doubleGold ? 'text-yellow-300' : 'text-yellow-400'}`}>
+                            +{activeEvents.doubleGold ? coinsWin * 2 : coinsWin}
+                          </span>
+                          {activeEvents.doubleGold && <span className="text-[8px] text-yellow-400">x2</span>}
+                        </div>
+                        
+                        {/* XP */}
+                        <div className="flex items-center gap-1">
+                          <Star className="w-3 h-3 text-blue-400" />
+                          <span className="text-[10px] text-blue-400">
+                            {xpWinMin}-{xpWinMax}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-3 text-center">
+                  {{ 
+                    fr: activeEvents.doubleXP || activeEvents.doubleGold 
+                      ? '🎉 Événement actif ! Les récompenses doublées sont appliquées automatiquement.' 
+                      : 'Récompenses attribuées en cas de victoire selon le mode de jeu.', 
+                    en: activeEvents.doubleXP || activeEvents.doubleGold 
+                      ? '🎉 Event active! Doubled rewards are applied automatically.' 
+                      : 'Rewards granted on victory based on game mode.',
+                    de: activeEvents.doubleXP || activeEvents.doubleGold 
+                      ? '🎉 Event aktiv! Verdoppelte Belohnungen werden automatisch angewendet.' 
+                      : 'Belohnungen bei Sieg je nach Spielmodus.',
+                    it: activeEvents.doubleXP || activeEvents.doubleGold 
+                      ? '🎉 Evento attivo! Le ricompense raddoppiate vengono applicate automaticamente.' 
+                      : 'Ricompense assegnate in caso di vittoria in base alla modalità di gioco.'
+                  }[language] || 'Rewards granted on victory based on game mode.'}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Points Loss Per Rank Info */}
           {(pointsLossPerRank || DEFAULT_POINTS_LOSS_PER_RANK) && (
