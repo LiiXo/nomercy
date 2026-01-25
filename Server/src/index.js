@@ -44,7 +44,7 @@ const startServer = async () => {
   const { scheduleMonthlyLadderReset } = await import('./services/monthlyReset.service.js');
   
   // Import ranked matchmaking service
-  const { initMatchmaking, handleMapVote } = await import('./services/rankedMatchmaking.service.js');
+  const { initMatchmaking, handleMapVote, handleRosterPick } = await import('./services/rankedMatchmaking.service.js');
   
   // Import GGSecure monitoring service
   const { initGGSecureMonitoring, startGGSecureMonitoring } = await import('./services/ggsecureMonitoring.service.js');
@@ -209,6 +209,16 @@ const startServer = async () => {
         const result = await handleMapVote(socket.userId, matchId, mapIndex);
         if (!result.success) {
           socket.emit('mapVoteError', { message: result.message });
+        }
+      }
+    });
+
+    // Roster pick for ranked test matches
+    socket.on('rosterPick', async ({ matchId, playerId }) => {
+      if (socket.userId && matchId && playerId) {
+        const result = await handleRosterPick(socket.userId, matchId, playerId);
+        if (!result.success) {
+          socket.emit('rosterPickError', { message: result.message });
         }
       }
     });

@@ -219,6 +219,21 @@ const rankedMatchSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Roster selection phase (for test matches - referents pick players)
+  rosterSelection: {
+    isActive: { type: Boolean, default: false },
+    currentTurn: { type: Number, enum: [1, 2], default: 1 }, // Which team's referent is picking
+    turnStartedAt: { type: Date, default: null }, // When current turn started (for 10s timer)
+    pickOrder: [{
+      team: { type: Number, enum: [1, 2] },
+      playerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      username: String,
+      pickedAt: { type: Date, default: Date.now }
+    }],
+    totalPicks: { type: Number, default: 0 }, // Total picks made
+    startedAt: { type: Date, default: null },
+    completedAt: { type: Date, default: null }
+  },
   // Appels arbitre par les joueurs (chaque joueur ne peut appeler qu'une seule fois)
   arbitratorCalls: [{
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

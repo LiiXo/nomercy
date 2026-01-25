@@ -350,6 +350,23 @@ const RankedMode = () => {
   const [selectedMapIndex, setSelectedMapIndex] = useState(null);
   const [selectedMap, setSelectedMap] = useState(null);
   const mapVoteOptionsRef = useRef([]);
+  const currentMatchIdRef = useRef(null); // Ref to track current match ID for socket listeners
+  
+  // Roster selection state (for test matches)
+  const [rosterSelection, setRosterSelection] = useState({
+    isActive: false,
+    currentTurn: 1,
+    team1Referent: null,
+    team2Referent: null,
+    team2ReferentInfo: null, // Bot referent info (username, points, rank)
+    availablePlayers: [],
+    team1Players: [],
+    team2Players: [],
+    timeRemaining: 10,
+    totalPlayersToSelect: 0,
+    totalPicks: 0
+  });
+  const [rosterSelectionCountdown, setRosterSelectionCountdown] = useState(10);
   
   // Map vote cancellation state
   const [mapVoteCancellation, setMapVoteCancellation] = useState({
@@ -359,6 +376,13 @@ const RankedMode = () => {
     isActive: false
   });
   const [votingCancellation, setVotingCancellation] = useState(false);
+  
+  // Voice channels for map vote phase
+  const [voiceChannels, setVoiceChannels] = useState({
+    team1: null,
+    team2: null,
+    myTeam: null
+  });
   
   // Cancellation button timeout state
   const [showCancellationButton, setShowCancellationButton] = useState(true);
@@ -685,16 +709,144 @@ const RankedMode = () => {
     }
   };
 
-  // Check active match and redirect if found
+  // Check active match and handle reconnection to appropriate phase
   const checkActiveMatch = async () => {
     if (!isAuthenticated) return;
     try {
       const response = await fetch(`${API_URL}/ranked-matches/active/me`, { credentials: 'include' });
       const data = await response.json();
       if (data.success && data.match) {
-        setActiveMatch(data.match);
-        // Redirection automatique vers le match en cours
-        navigate(`/ranked/match/${data.match._id}`);
+        const match = data.match;
+        setActiveMatch(match);
+        
+        console.log('[RankedMode] Active match found:', {
+          id: match._id,
+          status: match.status,
+          rosterSelectionActive: match.rosterSelection?.isActive,
+          hasSelectedMap: !!match.selectedMap,
+          team1Referent: match.team1Referent?._id || match.team1Referent,
+          team2Referent: match.team2Referent?._id || match.team2Referent,
+          userId: user?.id
+        });
+        
+        // Si le match est en phase de sélection de roster (pending + rosterSelection.isActive)
+        if (match.status === 'pending' && match.rosterSelection?.isActive) {
+          console.log('[RankedMode] Reconnecting to roster selection phase');
+          
+          // Restaurer l'état de la sélection de roster
+          const team1ReferentId = match.team1Referent?._id?.toString() || match.team1Referent?.toString();
+          const team2ReferentId = match.team2Referent?._id?.toString() || match.team2Referent?.toString();
+          
+          // Obtenir les avatars des joueurs
+          const getPlayerAvatar = (player) => {
+            if (player.user?.discordId && player.user?.discordAvatar) {
+              return `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
+            } else if (player.user?.avatar) {
+              return player.user.avatar;
+            }
+            return null;
+          };
+          
+          const availablePlayers = match.players
+            .filter(p => p.team === null)
+            .map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString() || p.username,
+              username: p.username,
+              points: p.points || 0,
+              rank: p.rank,
+              isFake: p.isFake,
+              avatar: getPlayerAvatar(p)
+            }));
+          
+          const team1Players = match.players
+            .filter(p => p.team === 1)
+            .map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString(),
+              username: p.username,
+              points: p.points || 0,
+              rank: p.rank,
+              isFake: p.isFake,
+              avatar: getPlayerAvatar(p)
+            }));
+          
+          const team2Players = match.players
+            .filter(p => p.team === 2)
+            .map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString(),
+              username: p.username,
+              points: p.points || 0,
+              rank: p.rank,
+              isFake: p.isFake,
+              avatar: getPlayerAvatar(p)
+            }));
+          
+          setRosterSelection({
+            isActive: true,
+            currentTurn: match.rosterSelection.currentTurn || 1,
+            team1Referent: team1ReferentId,
+            team2Referent: team2ReferentId,
+            availablePlayers,
+            team1Players,
+            team2Players,
+            timeRemaining: 10,
+            totalPlayersToSelect: match.players.filter(p => p.team === null).length,
+            totalPicks: match.rosterSelection.totalPicks || 0
+          });
+          
+          // Stocker les données du match et le matchId
+          currentMatchIdRef.current = match._id;
+          setShuffleMatchData({
+            matchId: match._id,
+            players: match.players.map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString() || p.username,
+              username: p.username,
+              avatar: getPlayerAvatar(p),
+              team: p.team,
+              isFake: p.isFake,
+              points: p.points || 0
+            })),
+            isTestMatch: match.isTestMatch,
+            hasRosterSelection: true,
+            mapVoteOptions: match.mapVoteOptions?.map(m => ({ name: m.name, image: m.image, votes: m.votes || 0 })) || []
+          });
+          
+          mapVoteOptionsRef.current = match.mapVoteOptions?.map(m => ({ name: m.name, image: m.image, votes: m.votes || 0 })) || [];
+          setMapVoteOptions(mapVoteOptionsRef.current);
+          setRosterSelectionCountdown(10);
+          setShufflePhase(5);
+          setShowShuffleAnimation(true);
+          playMatchFoundSound();
+          return;
+        }
+        
+        // Si le match est en phase de vote de map (pending + pas de rosterSelection active + pas de map sélectionnée)
+        if (match.status === 'pending' && !match.rosterSelection?.isActive && !match.selectedMap && match.mapVoteOptions?.length > 0) {
+          console.log('[RankedMode] Reconnecting to map vote phase');
+          
+          // Stocker les données du match
+          currentMatchIdRef.current = match._id;
+          setShuffleMatchData({
+            matchId: match._id,
+            players: match.players.map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString() || p.username,
+              username: p.username,
+              team: p.team,
+              isFake: p.isFake
+            })),
+            isTestMatch: match.isTestMatch
+          });
+          
+          mapVoteOptionsRef.current = match.mapVoteOptions.map(m => ({ name: m.name, image: m.image, votes: m.votes || 0 }));
+          setMapVoteOptions(mapVoteOptionsRef.current);
+          setMapVoteCountdown(15);
+          setShufflePhase(4);
+          setShowShuffleAnimation(true);
+          playMatchFoundSound();
+          return;
+        }
+        
+        // Sinon, rediriger vers la feuille de match
+        navigate(`/ranked/match/${match._id}`);
       } else {
         setActiveMatch(null);
       }
@@ -977,14 +1129,49 @@ const RankedMode = () => {
         console.log('[RankedMode] Map vote options stored:', data.mapVoteOptions);
       }
       
+      // Initialize roster selection state if applicable (test matches)
+      if (data.hasRosterSelection && data.rosterSelection) {
+        console.log('[RankedMode] Roster selection active:', data.rosterSelection);
+        console.log('[RankedMode] Initial team1Players:', data.rosterSelection.team1Players);
+        console.log('[RankedMode] Initial team2Players:', data.rosterSelection.team2Players);
+        console.log('[RankedMode] User ID for comparison:', user?.id, typeof user?.id);
+        console.log('[RankedMode] team1Referent:', data.rosterSelection.team1Referent, typeof data.rosterSelection.team1Referent);
+        console.log('[RankedMode] team2Referent:', data.rosterSelection.team2Referent, typeof data.rosterSelection.team2Referent);
+        setRosterSelection({
+          isActive: true,
+          currentTurn: data.rosterSelection.currentTurn || 1,
+          team1Referent: data.rosterSelection.team1Referent,
+          team2Referent: data.rosterSelection.team2Referent,
+          team2ReferentInfo: data.rosterSelection.team2ReferentInfo || null, // Bot referent info
+          availablePlayers: data.rosterSelection.availablePlayers || [],
+          team1Players: data.rosterSelection.team1Players || [], // Staff déjà dans l'équipe 1
+          team2Players: data.rosterSelection.team2Players || [], // Bot référent déjà dans l'équipe 2
+          timeRemaining: data.rosterSelection.timeRemaining || 10,
+          totalPlayersToSelect: data.rosterSelection.totalPlayersToSelect || 0,
+          totalPicks: 0
+        });
+        setRosterSelectionCountdown(data.rosterSelection.timeRemaining || 10);
+      }
+      
       // Show shuffle animation before navigating
       if (data.players && data.players.length > 0) {
+        // Store matchId in ref for socket listeners
+        currentMatchIdRef.current = data.matchId;
+        
         setShuffleMatchData({
           ...data,
-          isTestMatch: data.isTestMatch || false // Store test match flag
+          isTestMatch: data.isTestMatch || false, // Store test match flag
+          hasRosterSelection: data.hasRosterSelection || false // Store roster selection flag
         });
         setShuffledPlayers(data.players.map((p, i) => ({ ...p, shuffleIndex: i })));
-        setShufflePhase(0);
+        
+        // For test matches with roster selection, skip shuffle and go directly to roster selection
+        if (data.hasRosterSelection && data.rosterSelection) {
+          setShufflePhase(5); // Go directly to roster selection
+          console.log('[RankedMode] Test match with roster selection - skipping shuffle, going to phase 5');
+        } else {
+          setShufflePhase(0); // Normal shuffle animation
+        }
         setShowShuffleAnimation(true);
       } else {
         // No player data, navigate directly
@@ -1023,11 +1210,11 @@ const RankedMode = () => {
     // Listen for cancellation vote updates during map vote
     const unsubCancellationVote = on('cancellationVoteUpdate', (data) => {
       console.log('[RankedMode] Cancellation vote update:', data);
-      if (data.matchId === shuffleMatchData?.matchId) {
+      if (data.matchId === currentMatchIdRef.current) {
         setMapVoteCancellation({
           currentVotes: data.currentVotes || 0,
           requiredVotes: data.requiredVotes || 0,
-          hasVoted: data.votedBy === user?._id,
+          hasVoted: data.votedBy === user?.id,
           isActive: data.currentVotes > 0
         });
         
@@ -1046,7 +1233,66 @@ const RankedMode = () => {
       }
     });
     
-    return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); unsubCancellationVote(); };
+    // Listen for roster selection updates (test matches)
+    const unsubRosterUpdate = on('rosterSelectionUpdate', (data) => {
+      console.log('[RankedMode] Roster selection update:', data);
+      if (data.matchId?.toString() === currentMatchIdRef.current?.toString()) {
+        setRosterSelection(prev => ({
+          ...prev,
+          currentTurn: data.currentTurn,
+          availablePlayers: data.availablePlayers || [],
+          team1Players: data.team1Players || prev.team1Players,
+          team2Players: data.team2Players || prev.team2Players,
+          timeRemaining: data.timeRemaining || 10,
+          totalPicks: data.totalPicks || prev.totalPicks
+        }));
+        setRosterSelectionCountdown(data.timeRemaining || 10);
+      }
+    });
+    
+    // Listen for roster selection completion
+    const unsubRosterComplete = on('rosterSelectionComplete', (data) => {
+      console.log('[RankedMode] Roster selection complete:', data);
+      if (data.matchId?.toString() === currentMatchIdRef.current?.toString()) {
+        setRosterSelection(prev => ({
+          ...prev,
+          isActive: false,
+          team1Players: data.team1Players || prev.team1Players,
+          team2Players: data.team2Players || prev.team2Players
+        }));
+        
+        // Store voice channels for display during map vote
+        if (data.team1VoiceChannel || data.team2VoiceChannel) {
+          setVoiceChannels({
+            team1: data.team1VoiceChannel,
+            team2: data.team2VoiceChannel,
+            myTeam: data.yourTeam
+          });
+          console.log('[RankedMode] Voice channels received:', data.team1VoiceChannel, data.team2VoiceChannel, 'myTeam:', data.yourTeam);
+        }
+        
+        // Update map vote options if provided
+        if (data.mapVoteOptions) {
+          setMapVoteOptions(data.mapVoteOptions);
+          mapVoteOptionsRef.current = data.mapVoteOptions;
+        }
+        
+        // Transition to map vote phase
+        setMapVoteCountdown(15);
+        setShufflePhase(4);
+        console.log('[RankedMode] Roster selection complete, transitioning to map vote');
+        
+        // Fallback redirect at 25 seconds
+        fallbackRedirectTimeoutRef.current = setTimeout(() => {
+          console.log('[RankedMode] Fallback redirect - mapSelected not received');
+          stopMatchFoundSound();
+          setShowShuffleAnimation(false);
+          navigate(`/ranked/match/${currentMatchIdRef.current}`);
+        }, 25000);
+      }
+    });
+    
+    return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); unsubCancellationVote(); unsubRosterUpdate(); unsubRosterComplete(); };
   }, [isAuthenticated, isConnected, on, navigate]);
 
   // Listen for global queue count (for all users viewing the page)
@@ -1124,10 +1370,18 @@ const RankedMode = () => {
       return () => clearTimeout(timer);
     }
 
-    // Phase 3: Countdown 5 seconds then go to map vote
+    // Phase 3: Countdown 5 seconds then go to roster selection (test matches) or map vote
     if (shufflePhase === 3) {
       if (shuffleCountdown <= 0) {
-        // Transition to map vote phase if maps available (use ref for latest value)
+        // Check if this is a test match with roster selection
+        if (shuffleMatchData.hasRosterSelection && rosterSelection.isActive) {
+          console.log('[RankedMode] Phase 3 complete, transitioning to roster selection (phase 5)');
+          setRosterSelectionCountdown(10);
+          setShufflePhase(5);
+          return;
+        }
+        
+        // Otherwise, transition to map vote phase if maps available (use ref for latest value)
         console.log('[RankedMode] Phase 3 complete, checking maps:', mapVoteOptionsRef.current);
         if (mapVoteOptionsRef.current.length > 0) {
           setMapVoteCountdown(15);
@@ -1165,6 +1419,20 @@ const RankedMode = () => {
       return () => clearTimeout(timer);
     }
     
+    // Phase 5: Roster selection (10 seconds per turn) - only for test matches
+    if (shufflePhase === 5) {
+      // Server handles the timer and will send rosterSelectionUpdate or rosterSelectionComplete events
+      // We just update the countdown locally for display
+      if (rosterSelectionCountdown <= 0) {
+        // Timer expired - server will handle random pick and send update
+        return;
+      }
+      const timer = setTimeout(() => {
+        setRosterSelectionCountdown(prev => prev - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    
     // Phase 4: Map vote (15 seconds)
     if (shufflePhase === 4) {
       // If map is already selected (from server), wait for navigation via mapSelected event
@@ -1181,7 +1449,15 @@ const RankedMode = () => {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [showShuffleAnimation, shuffleMatchData, shufflePhase, shuffleCountdown, mapVoteOptions, mapVoteCountdown, selectedMap, navigate]);
+  }, [showShuffleAnimation, shuffleMatchData, shufflePhase, shuffleCountdown, mapVoteOptions, mapVoteCountdown, selectedMap, rosterSelection, rosterSelectionCountdown, navigate]);
+
+  // Handle roster pick (for test matches)
+  const handleRosterPick = (playerId) => {
+    if (shuffleMatchData?.matchId && playerId && rosterSelection.isActive) {
+      emit('rosterPick', { matchId: shuffleMatchData.matchId, playerId });
+      console.log('[RankedMode] Picked player:', playerId);
+    }
+  };
 
   // Handle map vote
   const handleMapVote = (mapIndex) => {
@@ -3022,7 +3298,7 @@ const RankedMode = () => {
                   const winRate = player.wins + player.losses > 0 
                     ? Math.round((player.wins / (player.wins + player.losses)) * 100) 
                     : 0;
-                  const isMe = user && player.user?._id === user._id;
+                  const isMe = user && player.user?._id === user.id;
                   
                   return (
                     <button
@@ -3686,14 +3962,240 @@ const RankedMode = () => {
                     } animate-pulse`}>
                       {shuffleCountdown}
                     </div>
-                    <span className="text-gray-400 text-sm sm:text-base">{language === 'fr' ? 'Choix des maps dans...' : 'Map selection in...'}</span>
+                    <span className="text-gray-400 text-sm sm:text-base">
+                      {shuffleMatchData?.hasRosterSelection 
+                        ? (language === 'fr' ? 'Sélection du roster dans...' : 'Roster selection in...')
+                        : (language === 'fr' ? 'Choix des maps dans...' : 'Map selection in...')}
+                    </span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-2 text-gray-400 text-sm sm:text-base">
                     <Loader2 className="w-4 sm:w-5 h-4 sm:h-5 animate-spin" />
                     <span>{t.teamsReady || 'Équipes prêtes !'}</span>
                   </div>
-                )}
+                )}  
+              </div>
+            )}
+            
+            {/* Phase 5: Roster Selection (Test matches only) */}
+            {shufflePhase === 5 && (
+              <div className="mt-4 sm:mt-8">
+                {/* Header */}
+                <div className="text-center mb-4 sm:mb-6">
+                  <h3 className={`text-lg sm:text-2xl font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
+                    {language === 'fr' ? 'Sélection du Roster' : 'Roster Selection'}
+                  </h3>
+                  <p className="text-gray-400 text-sm mt-1">
+                    {language === 'fr' ? 'Les référents choisissent les joueurs à tour de rôle' : 'Referents pick players in turns'}
+                  </p>
+                </div>
+                
+                {/* Referents Display */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  {/* Team 1 Referent (You) */}
+                  <div className={`rounded-xl p-3 border-2 ${rosterSelection.currentTurn === 1 ? 'border-cyan-500 bg-cyan-500/10' : 'border-cyan-500/30 bg-cyan-500/5'}`}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
+                      <span className="text-cyan-400 font-bold text-sm">{language === 'fr' ? 'Référent Équipe 1' : 'Team 1 Referent'}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2">
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-cyan-500 flex items-center justify-center">
+                        {user?.avatar ? (
+                          <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-6 h-6 bg-cyan-500/50 rounded-full"></div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-white font-medium text-sm">{user?.username || 'Vous'}</p>
+                        <p className="text-cyan-400 text-xs">{language === 'fr' ? '(Vous)' : '(You)'}</p>
+                      </div>
+                    </div>
+                    {rosterSelection.currentTurn === 1 && (
+                      <p className="text-green-400 text-xs font-bold animate-pulse mt-2">
+                        {language === 'fr' ? 'À vous de choisir !' : 'Your pick!'}
+                      </p>
+                    )}
+                  </div>
+                  
+                  {/* Team 2 Referent (Bot) */}
+                  <div className={`rounded-xl p-3 border-2 ${rosterSelection.currentTurn === 2 ? 'border-orange-500 bg-orange-500/10' : 'border-orange-500/30 bg-orange-500/5'}`}>
+                    <div className="flex items-center gap-2 justify-end">
+                      <span className="text-orange-400 font-bold text-sm">{language === 'fr' ? 'Référent Équipe 2' : 'Team 2 Referent'}</span>
+                      <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 justify-end">
+                      <div className="text-right">
+                        <p className="text-white font-medium text-sm">
+                          {rosterSelection.team2ReferentInfo?.username || rosterSelection.team2Referent || 'Bot'}
+                        </p>
+                        <p className="text-orange-400 text-xs">{language === 'fr' ? '(Bot Auto)' : '(Auto Bot)'}</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-orange-500 flex items-center justify-center">
+                        <Bot className="w-6 h-6 text-orange-400" />
+                      </div>
+                    </div>
+                    {rosterSelection.currentTurn === 2 && (
+                      <p className="text-orange-400 text-xs font-bold animate-pulse mt-2 text-right">
+                        {language === 'fr' ? 'Le bot choisit...' : 'Bot is picking...'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                {/* Timer and Turn Indicator */}
+                <div className="flex justify-center items-center gap-4 mb-6">
+                  <div className={`w-14 sm:w-20 h-14 sm:h-20 rounded-full flex items-center justify-center text-2xl sm:text-3xl font-bold border-4 ${
+                    isHardcore 
+                      ? 'bg-red-500/20 border-red-500 text-red-400' 
+                      : 'bg-cyan-500/20 border-cyan-500 text-cyan-400'
+                  } ${rosterSelectionCountdown <= 3 ? 'animate-pulse' : ''}`}>
+                    {rosterSelectionCountdown}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-gray-500 text-xs sm:text-sm">
+                      {language === 'fr' ? 'Tour de' : 'Turn for'}
+                    </p>
+                    <p className={`text-lg sm:text-xl font-bold ${rosterSelection.currentTurn === 1 ? 'text-cyan-400' : 'text-orange-400'}`}>
+                      {rosterSelection.currentTurn === 1 
+                        ? (language === 'fr' ? 'Équipe 1' : 'Team 1')
+                        : (language === 'fr' ? 'Équipe 2 (Bot)' : 'Team 2 (Bot)')}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Available Players */}
+                <div className="bg-dark-800/50 rounded-xl p-4 mb-4 border border-white/10">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    {language === 'fr' ? 'Joueurs disponibles' : 'Available Players'}
+                    <span className="text-gray-500 text-sm">({rosterSelection.availablePlayers.length})</span>
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {rosterSelection.availablePlayers.map((player, index) => {
+                      const playerRankInfo = getRankFromPoints(player.points || 0);
+                      // Pour les matchs de test, seul le staff est référent de l'équipe 1
+                      // L'équipe 2 est contrôlée par un bot
+                      const userId = user?.id?.toString();
+                      const team1Ref = rosterSelection.team1Referent?.toString();
+                      const isMyTurn = rosterSelection.currentTurn === 1 && team1Ref === userId;
+                      
+                      // Debug log pour le premier joueur seulement
+                      if (index === 0) {
+                        console.log('[RankedMode] isMyTurn check:', {
+                          currentTurn: rosterSelection.currentTurn,
+                          userId,
+                          team1Ref,
+                          isMyTurn
+                        });
+                      }
+                      
+                      // Obtenir l'avatar du joueur (depuis les données ou shuffleMatchData.players)
+                      const playerAvatar = player.avatar || 
+                        shuffleMatchData?.players?.find(p => p.username === player.username)?.avatar ||
+                        (player.isFake ? null : `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`);
+                      
+                      return (
+                        <button
+                          key={player.id || index}
+                          onClick={() => isMyTurn && handleRosterPick(player.id)}
+                          disabled={!isMyTurn}
+                          className={`p-2 sm:p-3 rounded-lg border transition-all ${
+                            isMyTurn 
+                              ? `${isHardcore ? 'border-red-500/50 hover:border-red-500 hover:bg-red-500/20' : 'border-cyan-500/50 hover:border-cyan-500 hover:bg-cyan-500/20'} cursor-pointer`
+                              : 'border-gray-700 opacity-50 cursor-not-allowed'
+                          } bg-dark-900/50`}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-gray-600 flex items-center justify-center">
+                              {playerAvatar ? (
+                                <img
+                                  src={playerAvatar}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <Bot className="w-6 h-6 text-gray-500" />
+                              )}
+                            </div>
+                            <span className="text-white text-xs sm:text-sm font-medium truncate w-full text-center">
+                              {player.username}
+                            </span>
+                            <div className={`px-2 py-0.5 rounded text-[10px] font-bold bg-gradient-to-r ${playerRankInfo.gradient}`}>
+                              {playerRankInfo.name}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                {/* Teams */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Team 1 */}
+                  <div className={`rounded-xl p-3 border-2 ${isHardcore ? 'border-red-500/30 bg-red-500/5' : 'border-cyan-500/30 bg-cyan-500/5'}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
+                      <h4 className="text-cyan-400 font-bold text-sm">{language === 'fr' ? 'Équipe 1' : 'Team 1'}</h4>
+                      <span className="text-gray-500 text-xs">({rosterSelection.team1Players.length})</span>
+                    </div>
+                    <div className="space-y-1">
+                      {rosterSelection.team1Players.map((player, index) => {
+                        const playerAvatar = player.avatar || 
+                          shuffleMatchData?.players?.find(p => p.username === player.username)?.avatar;
+                        return (
+                          <div key={player.id || index} className="flex items-center gap-2 p-1.5 rounded bg-dark-800/50">
+                            <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center">
+                              {playerAvatar ? (
+                                <img src={playerAvatar} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Bot className="w-4 h-4 text-gray-500" />
+                              )}
+                            </div>
+                            <span className="text-white text-xs truncate">{player.username}</span>
+                            {player.isFake && <span className="text-gray-500 text-[10px]">(Bot)</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Team 2 */}
+                  <div className={`rounded-xl p-3 border-2 ${isHardcore ? 'border-orange-500/30 bg-orange-500/5' : 'border-orange-500/30 bg-orange-500/5'}`}>
+                    <div className="flex items-center gap-2 mb-2 justify-end">
+                      <span className="text-gray-500 text-xs">({rosterSelection.team2Players.length})</span>
+                      <h4 className="text-orange-400 font-bold text-sm">{language === 'fr' ? 'Équipe 2' : 'Team 2'}</h4>
+                      <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                    </div>
+                    <div className="space-y-1">
+                      {rosterSelection.team2Players.map((player, index) => {
+                        const playerAvatar = player.avatar || 
+                          shuffleMatchData?.players?.find(p => p.username === player.username)?.avatar;
+                        return (
+                          <div key={player.id || index} className="flex items-center gap-2 p-1.5 rounded bg-dark-800/50">
+                            <div className="w-6 h-6 rounded-full overflow-hidden bg-gray-700 flex items-center justify-center">
+                              {playerAvatar ? (
+                                <img src={playerAvatar} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <Bot className="w-4 h-4 text-gray-500" />
+                              )}
+                            </div>
+                            <span className="text-white text-xs truncate">{player.username}</span>
+                            {player.isFake && <span className="text-gray-500 text-[10px]">(Bot)</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Info text */}
+                <p className="text-center text-gray-500 text-xs mt-4">
+                  {language === 'fr' 
+                    ? '10 secondes par tour - Sélection aléatoire si le temps expire'
+                    : '10 seconds per turn - Random pick if time expires'}
+                </p>
               </div>
             )}
             
@@ -3786,65 +4288,76 @@ const RankedMode = () => {
                   </div>
                 )}
                 
-                {/* Cancellation Request Button - Visible for 20 seconds during map vote */}
-                {!selectedMap && showCancellationButton && (
+                {/* Voice Channel - Visible during map vote */}
+                {!selectedMap && (
                   <div className="mt-4 sm:mt-6 animate-fadeIn">
-                    {/* Cancellation stats */}
-                    {mapVoteCancellation.isActive && (
-                      <div className={`mb-3 p-3 rounded-lg border ${isHardcore ? 'bg-orange-500/10 border-orange-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className={isHardcore ? 'text-orange-300' : 'text-yellow-300'}>
-                            {t.cancellationVotes}
-                          </span>
-                          <span className={`font-bold ${isHardcore ? 'text-orange-400' : 'text-yellow-400'}`}>
-                            {mapVoteCancellation.currentVotes}/{mapVoteCancellation.requiredVotes}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Cancellation button */}
-                    <div className="flex justify-center">
-                      <button
-                        onClick={handleToggleMapVoteCancellation}
-                        disabled={votingCancellation}
-                        className={`w-64 py-3 px-4 rounded-lg font-medium transition-all flex items-center justify-center gap-2 ${
-                          mapVoteCancellation.hasVoted
-                            ? isHardcore
-                              ? 'bg-orange-500/30 border-2 border-orange-500 text-orange-300 hover:bg-orange-500/40'
-                              : 'bg-yellow-500/30 border-2 border-yellow-500 text-yellow-300 hover:bg-yellow-500/40'
-                            : isHardcore
-                              ? 'bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20'
-                              : 'bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/20'
-                        } disabled:opacity-50`}
-                      >
-                      {votingCancellation ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                      ) : (
-                        <>
-                          <AlertTriangle className="w-5 h-5" />
-                          {mapVoteCancellation.hasVoted ? t.removeVote : t.requestCancellation}
-                        </>
-                      )}
-                      </button>
-                    </div>
-                    
-                    {/* Timeout warning */}
-                    <p className="mt-2 text-center text-xs text-gray-500 italic">
-                      {language === 'fr' 
-                        ? 'Bouton disponible pendant 20 secondes' 
-                        : 'Button available for 20 seconds'}
-                    </p>
-                    
-                    {/* Info text */}
-                    <p className="mt-1 text-center text-xs text-gray-400">
-                      {shuffleMatchData?.isTestMatch 
-                        ? (language === 'fr' ? '1 vote requis pour annuler (test)' : '1 vote required to cancel (test)')
-                        : shuffleMatchData?.teamSize === 4 
-                          ? (language === 'fr' ? '6/8 joueurs requis pour annuler (4v4)' : '6/8 players required to cancel (4v4)')
-                          : (language === 'fr' ? '8/10 joueurs requis pour annuler (5v5)' : '8/10 players required to cancel (5v5)')
+                    {/* Show team's voice channel if available */}
+                    {(() => {
+                      const myChannel = voiceChannels.myTeam === 1 ? voiceChannels.team1 : voiceChannels.team2;
+                      const isTeam1 = voiceChannels.myTeam === 1;
+                      
+                      if (myChannel?.channelId) {
+                        return (
+                          <div className={`p-4 rounded-xl border ${isTeam1 ? 'bg-blue-500/10 border-blue-500/30' : 'bg-purple-500/10 border-purple-500/30'}`}>
+                            <div className="flex items-center justify-center gap-2 mb-3">
+                              <svg className={`w-6 h-6 ${isTeam1 ? 'text-blue-400' : 'text-purple-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                              </svg>
+                              <span className={`font-bold text-sm ${isTeam1 ? 'text-blue-300' : 'text-purple-300'}`}>
+                                {language === 'fr' ? 'Rejoignez votre salon vocal !' : 'Join your voice channel!'}
+                              </span>
+                            </div>
+                            <p className="text-gray-400 text-xs text-center mb-3">
+                              {language === 'fr' 
+                                ? 'Votre salon vocal est prêt. Rejoignez-le dès maintenant !' 
+                                : 'Your voice channel is ready. Join now!'}
+                            </p>
+                            <a
+                              href={`https://discord.com/channels/1448744757261070467/${myChannel.channelId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all hover:scale-[1.02] ${isTeam1 ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-purple-600 hover:bg-purple-500 text-white'}`}
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                              </svg>
+                              <span>{myChannel.channelName}</span>
+                              <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                            </a>
+                          </div>
+                        );
                       }
-                    </p>
+                      
+                      // Fallback: show general Discord invite if no voice channel
+                      return (
+                        <div className="p-4 rounded-xl border bg-indigo-500/10 border-indigo-500/30">
+                          <div className="flex items-center justify-center gap-2 mb-3">
+                            <svg className="w-6 h-6 text-indigo-400" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                            </svg>
+                            <span className="text-indigo-300 font-bold text-sm">
+                              {language === 'fr' ? 'Rejoignez le Discord !' : 'Join Discord!'}
+                            </span>
+                          </div>
+                          <p className="text-gray-400 text-xs text-center mb-3">
+                            {language === 'fr' 
+                              ? 'Préparez-vous pour le match' 
+                              : 'Get ready for the match'}
+                          </p>
+                          <a
+                            href="https://discord.gg/nomercy"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all hover:scale-[1.02] bg-indigo-600 hover:bg-indigo-500 text-white"
+                          >
+                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+                            </svg>
+                            {language === 'fr' ? 'Rejoindre le serveur Discord' : 'Join Discord Server'}
+                          </a>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>

@@ -165,6 +165,7 @@ const MatchSheet = () => {
   // Pour les matchs classés
   const [myTeam, setMyTeam] = useState(null);
   const [isReferent, setIsReferent] = useState(false);
+  const [isParticipantVerified, setIsParticipantVerified] = useState(false);
   
   // Demande d'annulation par vote (mode classé uniquement)
   const [cancellationVotes, setCancellationVotes] = useState({
@@ -645,8 +646,33 @@ const MatchSheet = () => {
         }
         
         if (isRankedMatch) {
-          if (data.myTeam !== undefined) setMyTeam(data.myTeam);
-          if (data.isReferent !== undefined) setIsReferent(data.isReferent);
+          // Set myTeam and isReferent from server response
+          console.log('[MatchSheet] Server response - myTeam:', data.myTeam, 'isReferent:', data.isReferent);
+          if (data.myTeam !== undefined && data.myTeam !== null) {
+            setMyTeam(data.myTeam);
+            setIsParticipantVerified(true); // If server found our team, we're a participant
+          }
+          if (data.isReferent !== undefined) {
+            setIsReferent(data.isReferent);
+          }
+          
+          // Fallback: calculate from match data if server didn't provide
+          if (data.myTeam === undefined || data.myTeam === null) {
+            const currentUserId = (user?._id || user?.id)?.toString();
+            const userPlayer = data.match.players?.find(p => {
+              const pUserId = (p.user?._id || p.user)?.toString();
+              return pUserId === currentUserId;
+            });
+            if (userPlayer?.team) {
+              console.log('[MatchSheet] Fallback myTeam calculation:', userPlayer.team);
+              setMyTeam(userPlayer.team);
+              setIsParticipantVerified(true);
+            } else if (userPlayer) {
+              // Player found but no team yet (roster selection pending)
+              setIsParticipantVerified(true);
+            }
+          }
+          
           // Vérifier si un arbitre a déjà été appelé pour ce match (un seul appel par match)
           if (data.match.arbitratorCalls && data.match.arbitratorCalls.length > 0) {
             setHasCalledArbitrator(true);
@@ -666,12 +692,8 @@ const MatchSheet = () => {
           }
         }
         
-        setMatch(prev => {
-          if (!prev || prev.status !== data.match.status || prev.opponent?._id !== data.match.opponent?._id) {
-            return data.match;
-          }
-          return prev;
-        });
+        // Always set match data on initial load or when different
+        setMatch(data.match);
         
         setMessages(prev => {
           const newMessages = data.match.chat || [];
@@ -807,13 +829,70 @@ const MatchSheet = () => {
   };
 
   useEffect(() => {
+    if (!matchId) return;
+    
+    // Wait for user to be available for ranked matches
+    if (isRankedMatch && !user) {
+      console.log('[MatchSheet] Waiting for user data before fetching...');
+      return;
+    }
+    
     fetchMatchData(true);
     fetchMySquad();
     if (isRankedMatch) {
       fetchCancellationStatus();
       fetchActiveBoosters();
     }
-  }, [matchId, isAuthenticated, isRankedMatch]);
+  }, [matchId, isAuthenticated, isRankedMatch, user]);
+
+  // Recalculate myTeam when match data changes (for ranked matches)
+  // This ensures myTeam is set even when match is updated via socket
+  useEffect(() => {
+    if (!isRankedMatch || !match?.players || !user) return;
+    
+    const currentUserId = (user._id || user.id)?.toString();
+    if (!currentUserId) {
+      console.log('[MatchSheet] No currentUserId available');
+      return;
+    }
+    
+    console.log('[MatchSheet] useEffect checking participation - userId:', currentUserId);
+    console.log('[MatchSheet] Match players:', match.players.map(p => ({
+      username: p.username,
+      team: p.team,
+      pUserId: (p.user?._id || p.user)?.toString()
+    })));
+    
+    const userPlayer = match.players.find(p => {
+      const pUserId = (p.user?._id || p.user)?.toString();
+      return pUserId === currentUserId;
+    });
+    
+    console.log('[MatchSheet] Found userPlayer:', userPlayer?.username, 'team:', userPlayer?.team);
+    
+    // Mark as verified participant if found
+    if (userPlayer) {
+      if (!isParticipantVerified) {
+        console.log('[MatchSheet] Setting isParticipantVerified to true');
+        setIsParticipantVerified(true);
+      }
+      
+      if (userPlayer.team && userPlayer.team !== myTeam) {
+        console.log('[MatchSheet] Setting myTeam from useEffect:', userPlayer.team);
+        setMyTeam(userPlayer.team);
+      }
+    }
+    
+    // Also check if user is referent
+    const userIsReferent = 
+      (match.team1Referent?._id?.toString() || match.team1Referent?.toString()) === currentUserId ||
+      (match.team2Referent?._id?.toString() || match.team2Referent?.toString()) === currentUserId;
+    
+    if (userIsReferent !== isReferent) {
+      console.log('[MatchSheet] Setting isReferent from useEffect:', userIsReferent);
+      setIsReferent(userIsReferent);
+    }
+  }, [match?.players, match?.team1Referent, match?.team2Referent, user, isRankedMatch]);
 
   // Récupérer les seuils de rangs configurés depuis l'API (pour les matchs classés)
   useEffect(() => {
@@ -1714,11 +1793,12 @@ const MatchSheet = () => {
   const isMyTeamChallenger = mySquad?._id?.toString() === match.challenger?._id?.toString();
   const isMyTeamOpponent = mySquad?._id?.toString() === match.opponent?._id?.toString();
   
-  const isRankedParticipant = isRankedMatch && match.players?.some(p => {
+  // For ranked matches, use the verified participant state
+  const isRankedParticipant = isRankedMatch && (isParticipantVerified || match.players?.some(p => {
     const pUserId = (p.user?._id || p.user)?.toString();
     const currentUserId = (user?._id || user?.id)?.toString();
     return pUserId === currentUserId;
-  });
+  }));
   const isParticipant = isRankedMatch ? isRankedParticipant : (isMyTeamChallenger || isMyTeamOpponent);
   
   // Debug logs for ranked validation

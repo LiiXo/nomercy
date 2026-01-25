@@ -14,6 +14,7 @@ import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
 import GameMap from '../models/Map.js';
 import { createMatchVoiceChannels } from './discordBot.service.js';
+import { checkRankedMatchGGSecureStatus } from './ggsecureMonitoring.service.js';
 
 // Files d'attente par mode de jeu et mode (hardcore/cdl) - UNE SEULE FILE PAR MODE
 // Structure: { 'Search & Destroy_hardcore': [{ userId, username, rank, points, platform, joinedAt }] }
@@ -743,6 +744,58 @@ const createMatchFromQueue = async (gameMode, mode) => {
   // Créer le match
   try {
     
+    // Re-vérifier GGSecure pour tous les joueurs PC AVANT de créer le match
+    // Un joueur pourrait avoir désactivé GGSecure pendant qu'il attendait dans la file
+    const playersToRemove = [];
+    for (const player of playersForMatch) {
+      if (player.platform === 'PC' && !player.isFake && !player.userId.toString().startsWith('fake-')) {
+        const ggsecure = await checkGGSecureStatus(player.userId);
+        if (ggsecure.required && !ggsecure.connected) {
+          playersToRemove.push(player);
+          console.log(`[Ranked Matchmaking] Player ${player.username} is no longer connected to GGSecure, removing from match`);
+          
+          // Notifier le joueur
+          if (io) {
+            io.to(`user-${player.userId}`).emit('rankedQueueUpdate', {
+              type: 'ggsecure_error',
+              message: 'Vous avez été retiré du match car vous n\'êtes plus connecté à GGSecure.',
+              queueSize: 0,
+              position: null
+            });
+          }
+        }
+      }
+    }
+    
+    // Si des joueurs ont été retirés, vérifier si on a encore assez de joueurs
+    if (playersToRemove.length > 0) {
+      const remainingPlayers = playersForMatch.filter(p => 
+        !playersToRemove.some(removed => removed.userId.toString() === p.userId.toString())
+      );
+      
+      if (remainingPlayers.length < 4) {
+        console.log(`[Ranked Matchmaking] Not enough players after GGSecure check (${remainingPlayers.length}), cancelling match creation`);
+        
+        // Remettre les joueurs valides dans la file
+        const queue = getQueue(gameMode, mode);
+        for (const player of remainingPlayers) {
+          if (!queue.some(p => p.userId.toString() === player.userId.toString())) {
+            queue.push(player);
+          }
+        }
+        
+        // Notifier les joueurs restants
+        broadcastQueueUpdate(gameMode, mode);
+        return;
+      }
+      
+      // Continuer avec les joueurs restants (recalculer les équipes)
+      playersForMatch.length = 0;
+      playersForMatch.push(...remainingPlayers);
+      playerCount = remainingPlayers.length;
+      console.log(`[Ranked Matchmaking] Continuing with ${playerCount} players after GGSecure check`);
+    }
+    
     // Générer des équipes diversifiées en évitant les compositions récentes
     const { team1: team1Players, team2: team2Players } = generateDiverseTeams(
       playersForMatch, 
@@ -944,29 +997,34 @@ const createMatchFromQueue = async (gameMode, mode) => {
     console.log(`[Ranked Matchmaking] Full mapVoteOptions data:`, JSON.stringify(mapsForVote, null, 2));
     
     // Créer les données des joueurs pour le match
+    // ROSTER SELECTION: Les référents sont assignés à leur équipe, les autres ont team: null
     const matchPlayers = [
       ...team1Players.map(p => {
         const fake = isFakePlayer(p);
+        const isTeam1Ref = p.userId.toString() === team1Referent.userId.toString();
+        const isTeam2Ref = p.userId.toString() === team2Referent.userId.toString();
         return {
           user: fake ? null : p.userId, // null pour les faux joueurs
           username: p.username,
           rank: p.rank,
           points: p.points,
-          team: 1,
-          isReferent: p.userId.toString() === team1Referent.userId.toString(),
+          team: isTeam1Ref ? 1 : (isTeam2Ref ? 2 : null), // Seulement les référents ont une équipe
+          isReferent: isTeam1Ref || isTeam2Ref,
           isFake: fake,
           queueJoinedAt: p.joinedAt
         };
       }),
       ...team2Players.map(p => {
         const fake = isFakePlayer(p);
+        const isTeam1Ref = p.userId.toString() === team1Referent.userId.toString();
+        const isTeam2Ref = p.userId.toString() === team2Referent.userId.toString();
         return {
           user: fake ? null : p.userId, // null pour les faux joueurs
           username: p.username,
           rank: p.rank,
           points: p.points,
-          team: 2,
-          isReferent: p.userId.toString() === team2Referent.userId.toString(),
+          team: isTeam1Ref ? 1 : (isTeam2Ref ? 2 : null), // Seulement les référents ont une équipe
+          isReferent: isTeam1Ref || isTeam2Ref,
           isFake: fake,
           queueJoinedAt: p.joinedAt
         };
@@ -977,7 +1035,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const team1ReferentId = !isFakePlayer(team1Referent) ? team1Referent.userId : null;
     const team2ReferentId = !isFakePlayer(team2Referent) ? team2Referent.userId : null;
     
-    // Créer le match
+    // Créer le match avec roster selection activé
     const match = await RankedMatch.create({
       gameMode,
       mode,
@@ -986,10 +1044,19 @@ const createMatchFromQueue = async (gameMode, mode) => {
       team1Referent: team1ReferentId,
       team2Referent: team2ReferentId,
       hostTeam,
-      status: 'pending', // En attente du vote de map
+      status: 'pending', // En attente de la sélection de roster puis du vote de map
       maps: selectedMaps,
       mapVoteOptions: mapsForVote,
-      matchmakingStartedAt: new Date()
+      matchmakingStartedAt: new Date(),
+      rosterSelection: {
+        isActive: true,
+        currentTurn: 1,
+        turnStartedAt: new Date(),
+        pickOrder: [],
+        totalPicks: 0,
+        startedAt: new Date(),
+        completedAt: null
+      }
     });
     
     // Populate pour envoyer aux clients (seulement les vrais joueurs)
@@ -1006,7 +1073,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
       isSystem: true,
       messageType: 'match_created',
       messageParams: { teamSize },
-      message: `Match ${teamSize}v${teamSize} créé ! ${team1Referent.username} et ${team2Referent.username} sont les référents.`
+      message: `Match ${teamSize}v${teamSize} créé ! ${team1Referent.username} et ${team2Referent.username} sont les référents. Sélection des joueurs en cours...`
     });
     await match.save();
     
@@ -1041,25 +1108,33 @@ const createMatchFromQueue = async (gameMode, mode) => {
     // Notifier tous les vrais joueurs du match
     for (const player of matchPlayers) {
       if (io && player.user) { // Ne notifier que les vrais joueurs
-        console.log(`[Ranked Matchmaking] Sending rankedMatchFound to user-${player.user} (${player.username}) with ${mapVoteOptionsForClient.length} map options`);
+        console.log(`[Ranked Matchmaking] Sending rankedMatchFound to user-${player.user} (${player.username}) with ${mapVoteOptionsForClient.length} map options, hasRosterSelection: true`);
         io.to(`user-${player.user}`).emit('rankedMatchFound', {
           matchId: match._id,
           gameMode,
           mode,
           format,
           teamSize,
-          yourTeam: player.team,
+          yourTeam: player.team, // null pour les non-référents, 1 ou 2 pour les référents
           isReferent: player.isReferent,
           isHost: player.team === hostTeam && player.isReferent,
-          isTestMatch: match.isTestMatch || false, // Add test match flag
+          isTestMatch: false, // Ce n'est pas un match de test
+          hasRosterSelection: true, // Indique que la sélection de roster est active
           players: playersForAnimation, // Inclure tous les joueurs pour l'animation
           mapVoteOptions: mapVoteOptionsForClient // Maps pour le vote
         });
       }
     }
     
-    // Démarrer le timer de vote de map (15 secondes)
-    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    // NE PAS démarrer le timer de vote de map tout de suite
+    // Le timer sera démarré après la sélection de roster (completeRosterSelection)
+    // startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    
+    // Vérifier immédiatement le statut GGSecure des joueurs PC et notifier sur la feuille de match
+    // Cette vérification envoie un message dans le chat du match si un joueur n'a pas GGSecure activé
+    checkRankedMatchGGSecureStatus(match).catch(err => {
+      console.error('[Ranked Matchmaking] Error in immediate GGSecure check:', err);
+    });
     
     // Mettre à jour le statut de la file pour les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
@@ -1506,53 +1581,79 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     console.log(`[Ranked Matchmaking Test] Maps for vote:`, mapsForVoteTest.map(m => m.name));
     
     // Créer les données des joueurs pour le match
+    // Pour les matchs de test avec roster selection:
+    // - Le staff est automatiquement dans l'équipe 1 (il est référent)
+    // - Un bot aléatoire est automatiquement dans l'équipe 2 (il est référent)
+    
+    // Choisir un bot aléatoire pour être référent de l'équipe 2
+    const allBots = [...team1Players, ...team2Players].filter(p => p.isFake);
+    const team2ReferentBot = allBots[Math.floor(Math.random() * allBots.length)];
+    
     const matchPlayers = [
-      ...team1Players.map(p => ({
-        user: p.isFake ? null : p.userId,
-        username: p.username,
-        rank: p.rank,
-        points: p.points,
-        team: 1,
-        isReferent: p.userId.toString() === team1Referent.userId.toString(),
-        isFake: p.isFake,
-        queueJoinedAt: p.joinedAt
-      })),
-      ...team2Players.map(p => ({
-        user: p.isFake ? null : p.userId,
-        username: p.username,
-        rank: p.rank,
-        points: p.points,
-        team: 2,
-        isReferent: p.userId.toString() === team2Referent.userId.toString(),
-        isFake: p.isFake,
-        queueJoinedAt: p.joinedAt
-      }))
+      ...team1Players.map(p => {
+        const isStaff = !p.isFake && p.userId?.toString() === userId.toString();
+        const isTeam2Referent = p.isFake && p.username === team2ReferentBot?.username;
+        return {
+          user: p.isFake ? null : p.userId,
+          username: p.username,
+          rank: p.rank,
+          points: p.points,
+          team: isStaff ? 1 : (isTeam2Referent ? 2 : null), // Staff en équipe 1, bot référent en équipe 2
+          isReferent: isStaff || isTeam2Referent,
+          isFake: p.isFake,
+          queueJoinedAt: p.joinedAt
+        };
+      }),
+      ...team2Players.map(p => {
+        const isStaff = !p.isFake && p.userId?.toString() === userId.toString();
+        const isTeam2Referent = p.isFake && p.username === team2ReferentBot?.username;
+        return {
+          user: p.isFake ? null : p.userId,
+          username: p.username,
+          rank: p.rank,
+          points: p.points,
+          team: isStaff ? 1 : (isTeam2Referent ? 2 : null), // Staff en équipe 1, bot référent en équipe 2
+          isReferent: isStaff || isTeam2Referent,
+          isFake: p.isFake,
+          queueJoinedAt: p.joinedAt
+        };
+      })
     ];
     
-    // Pour les référents, seulement définir si c'est un vrai joueur
-    const team1ReferentId = !team1Referent.isFake ? team1Referent.userId : null;
-    const team2ReferentId = !team2Referent.isFake ? team2Referent.userId : null;
+    // Pour les matchs de test, le staff est référent de l'équipe 1 uniquement
+    // L'équipe 2 aura un "bot" qui sélectionne automatiquement
+    const team1ReferentId = userId;
+    const team2ReferentId = null; // Bot auto-pick pour l'équipe 2
     
-    // Créer le match avec le flag isTestMatch
+    // Créer le match avec le flag isTestMatch et la sélection de roster
     const match = await RankedMatch.create({
       gameMode,
       mode,
       teamSize,
       players: matchPlayers,
       team1Referent: team1ReferentId,
-      team2Referent: team2ReferentId,
+      team2Referent: null, // Bot pour l'équipe 2
       hostTeam,
-      status: 'pending', // En attente du vote de map
+      status: 'pending', // En attente de la sélection de roster puis du vote de map
       maps: selectedMaps,
       mapVoteOptions: mapsForVoteTest,
       matchmakingStartedAt: new Date(),
-      isTestMatch: true // Flag pour identifier un match de test
+      isTestMatch: true, // Flag pour identifier un match de test
+      rosterSelection: {
+        isActive: true,
+        currentTurn: 1,
+        turnStartedAt: new Date(),
+        pickOrder: [],
+        totalPicks: 0,
+        startedAt: new Date(),
+        completedAt: null
+      }
     });
     
     // Populate pour envoyer au client
     await match.populate('players.user', 'username avatar discordId discordAvatar platform');
     if (team1ReferentId) await match.populate('team1Referent', 'username');
-    if (team2ReferentId) await match.populate('team2Referent', 'username');
+    // team2Referent est null (bot), pas besoin de populate
     
     console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${teamSize}v${teamSize})`);
     
@@ -1565,6 +1666,7 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     await match.save();
     
     // Préparer les données des joueurs pour l'animation de shuffle (test match)
+    // Inclure les joueurs non assignés (vrais joueurs) et les bots
     const playersForAnimation = matchPlayers.map((p, index) => {
       const populatedPlayer = match.players.find(mp => mp.username === p.username);
       let avatar = null;
@@ -1578,15 +1680,74 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         id: p.user?.toString() || `fake-${index}`,
         username: p.username,
         avatar: avatar,
-        team: p.team,
+        team: p.team, // null pour tous les joueurs (sélection par référents)
         isReferent: p.isReferent,
-        isHost: p.team === hostTeam && p.isReferent,
+        isHost: false, // Sera déterminé après la sélection
         isFake: p.isFake,
         points: p.points || 0 // Points classés pour afficher le rang
       };
     });
     
-    // Notifier le staff du match trouvé
+    // Préparer la liste des joueurs disponibles pour la sélection (SAUF le staff et le bot référent)
+    // Inclure les avatars pour l'affichage
+    const availablePlayersForSelection = matchPlayers
+      .filter(p => p.team === null) // Exclure ceux déjà assignés (staff en équipe 1, bot référent en équipe 2)
+      .map((p, index) => {
+        const populatedPlayer = match.players.find(mp => mp.username === p.username);
+        let avatar = null;
+        if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
+          avatar = `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
+        } else if (populatedPlayer?.user?.avatar) {
+          avatar = populatedPlayer.user.avatar;
+        }
+        
+        return {
+          id: p.user?.toString() || p.username, // Pour les bots, utiliser le username comme id
+          username: p.username,
+          points: p.points,
+          rank: p.rank,
+          isFake: p.isFake,
+          avatar: avatar
+        };
+      });
+    
+    // Préparer les données du staff pour team1Players initial
+    const staffInMatch = matchPlayers.find(p => p.user?.toString() === userId.toString());
+    console.log('[Roster Selection] Staff search:', {
+      userId: userId.toString(),
+      staffInMatch: staffInMatch ? { username: staffInMatch.username, team: staffInMatch.team, user: staffInMatch.user?.toString() } : null,
+      matchPlayersCount: matchPlayers.length,
+      playersWithUser: matchPlayers.filter(p => p.user).map(p => ({ username: p.username, user: p.user?.toString(), team: p.team }))
+    });
+    const staffForTeam1 = staffInMatch ? {
+      id: userId.toString(),
+      username: staffInMatch.username,
+      points: staffInMatch.points,
+      rank: staffInMatch.rank,
+      isFake: false,
+      avatar: (() => {
+        const populatedPlayer = match.players.find(mp => mp.username === staffInMatch.username);
+        if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
+          return `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
+        } else if (populatedPlayer?.user?.avatar) {
+          return populatedPlayer.user.avatar;
+        }
+        return null;
+      })()
+    } : null;
+    
+    // Préparer les données du bot référent pour team2Players initial
+    const botReferentInMatch = matchPlayers.find(p => p.isFake && p.username === team2ReferentBot?.username);
+    const botForTeam2 = botReferentInMatch ? {
+      id: botReferentInMatch.username, // Les bots utilisent username comme id
+      username: botReferentInMatch.username,
+      points: botReferentInMatch.points,
+      rank: botReferentInMatch.rank,
+      isFake: true,
+      avatar: null // Les bots n'ont pas d'avatar
+    } : null;
+    
+    // Notifier le staff du match trouvé avec la phase de sélection de roster
     if (io) {
       io.to(`user-${userId}`).emit('rankedMatchFound', {
         matchId: match._id,
@@ -1594,17 +1755,30 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         mode,
         format: `${teamSize}v${teamSize}`,
         teamSize,
-        yourTeam: staffTeam,
+        yourTeam: 1, // Staff est déjà dans l'équipe 1
         isReferent: true,
-        isHost: true,
+        isHost: false, // Sera déterminé après la sélection
         isTestMatch: true, // Test match flag
+        hasRosterSelection: true, // Flag pour activer la phase de sélection de roster
         players: playersForAnimation, // Inclure tous les joueurs pour l'animation
-        mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 })) // Maps pour le vote
+        mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 })), // Maps pour le vote (après sélection)
+        rosterSelection: {
+          isActive: true,
+          currentTurn: 1,
+          team1Referent: userId.toString(),
+          team2Referent: team2ReferentBot?.username || null, // Bot référent pour l'équipe 2
+          team2ReferentInfo: botForTeam2, // Infos complètes du bot référent
+          availablePlayers: availablePlayersForSelection,
+          team1Players: staffForTeam1 ? [staffForTeam1] : [], // Staff déjà dans l'équipe 1
+          team2Players: botForTeam2 ? [botForTeam2] : [], // Bot référent déjà dans l'équipe 2
+          timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
+          totalPlayersToSelect: matchPlayers.filter(p => p.team === null).length
+        }
       });
     }
     
-    // Démarrer le timer de vote de map (15 secondes) pour le test match
-    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    // Démarrer le timer de sélection de roster (au lieu du vote de map)
+    startRosterSelectionTurnTimer(match._id, 1);
     
     return {
       success: true,
@@ -1621,6 +1795,12 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
 
 // Stockage des timers de vote de map
 const mapVoteTimers = {};
+
+// Stockage des timers de sélection de roster
+const rosterSelectionTimers = {};
+
+// Durée du timer par tour de sélection (10 secondes)
+const ROSTER_SELECTION_TURN_TIME = 10000;
 
 /**
  * Timer pour le vote de map
@@ -1683,31 +1863,36 @@ const finalizeMapVote = async (matchId) => {
     };
     match.status = 'ready';
     
-    // Créer les salons vocaux Discord temporaires avec accès restreint aux joueurs du match
-    try {
-      // Peupler les joueurs pour obtenir leurs Discord IDs
-      await match.populate('players.user', 'discordId username');
-      
-      // Extraire les Discord IDs par équipe
-      const team1DiscordIds = match.players
-        .filter(p => p.team === 1 && p.user?.discordId && !p.isFake)
-        .map(p => p.user.discordId);
-      const team2DiscordIds = match.players
-        .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
-        .map(p => p.user.discordId);
-      
-      console.log(`[Ranked Matchmaking] Creating voice channels with Discord IDs - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
-      
-      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
-      if (voiceChannels) {
-        match.team1VoiceChannel = voiceChannels.team1;
-        match.team2VoiceChannel = voiceChannels.team2;
-        console.log(`[Ranked Matchmaking] ✓ Voice channels created for match ${matchId}:`, JSON.stringify(voiceChannels));
-      } else {
-        console.warn(`[Ranked Matchmaking] ⚠️ Voice channels NOT created for match ${matchId} - Discord bot may not be ready or configured`);
+    // Créer les salons vocaux Discord temporaires SEULEMENT s'ils n'existent pas déjà
+    // (ils peuvent avoir été créés lors de completeRosterSelection pour les matchs de test)
+    if (!match.team1VoiceChannel?.channelId && !match.team2VoiceChannel?.channelId) {
+      try {
+        // Peupler les joueurs pour obtenir leurs Discord IDs
+        await match.populate('players.user', 'discordId username');
+        
+        // Extraire les Discord IDs par équipe
+        const team1DiscordIds = match.players
+          .filter(p => p.team === 1 && p.user?.discordId && !p.isFake)
+          .map(p => p.user.discordId);
+        const team2DiscordIds = match.players
+          .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
+          .map(p => p.user.discordId);
+        
+        console.log(`[Ranked Matchmaking] Creating voice channels with Discord IDs - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
+        
+        const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+        if (voiceChannels) {
+          match.team1VoiceChannel = voiceChannels.team1;
+          match.team2VoiceChannel = voiceChannels.team2;
+          console.log(`[Ranked Matchmaking] ✓ Voice channels created for match ${matchId}:`, JSON.stringify(voiceChannels));
+        } else {
+          console.warn(`[Ranked Matchmaking] ⚠️ Voice channels NOT created for match ${matchId} - Discord bot may not be ready or configured`);
+        }
+      } catch (voiceError) {
+        console.error(`[Ranked Matchmaking] ❌ Failed to create voice channels:`, voiceError.message);
       }
-    } catch (voiceError) {
-      console.error(`[Ranked Matchmaking] ❌ Failed to create voice channels:`, voiceError.message);
+    } else {
+      console.log(`[Ranked Matchmaking] Voice channels already exist for match ${matchId}, skipping creation`);
     }
     
     await match.save();
@@ -1811,6 +1996,440 @@ export const handleMapVote = async (userId, matchId, mapIndex) => {
   }
 };
 
+/**
+ * Démarre la phase de sélection de roster pour un match de test
+ * Les référents choisissent à tour de rôle les joueurs
+ */
+const startRosterSelection = async (matchId) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match) {
+      console.error(`[Roster Selection] Match not found: ${matchId}`);
+      return;
+    }
+    
+    console.log(`[Roster Selection] Starting roster selection for match ${matchId}`);
+    
+    // Initialiser la sélection de roster
+    match.rosterSelection = {
+      isActive: true,
+      currentTurn: 1, // Team 1 commence
+      turnStartedAt: new Date(),
+      pickOrder: [],
+      totalPicks: 0,
+      startedAt: new Date(),
+      completedAt: null
+    };
+    await match.save();
+    
+    // Notifier tous les joueurs du début de la sélection
+    const availablePlayers = match.players.filter(p => p.team === null && !p.isFake && p.user);
+    
+    if (io) {
+      for (const player of match.players) {
+        if (player.user) {
+          io.to(`user-${player.user}`).emit('rosterSelectionStart', {
+            matchId: match._id,
+            currentTurn: 1,
+            team1Referent: match.team1Referent?.toString(),
+            team2Referent: match.team2Referent?.toString(),
+            availablePlayers: availablePlayers.map(p => ({
+              id: p.user?.toString(),
+              username: p.username,
+              points: p.points,
+              rank: p.rank
+            })),
+            timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
+            totalPlayersToSelect: match.players.filter(p => !p.isFake && p.user).length
+          });
+        }
+      }
+    }
+    
+    // Démarrer le timer pour le premier tour
+    startRosterSelectionTurnTimer(matchId, 1);
+    
+  } catch (error) {
+    console.error(`[Roster Selection] Error starting roster selection:`, error);
+  }
+};
+
+/**
+ * Démarre le timer pour un tour de sélection
+ * Pour les matchs de test, l'équipe 2 (bot) pick automatiquement après 1.5s
+ */
+const startRosterSelectionTurnTimer = async (matchId, team) => {
+  const matchIdStr = matchId.toString();
+  
+  // Annuler un timer existant si présent
+  if (rosterSelectionTimers[matchIdStr]) {
+    clearTimeout(rosterSelectionTimers[matchIdStr]);
+  }
+  
+  // Pour les matchs de test, vérifier si c'est le tour du bot (équipe 2)
+  const match = await RankedMatch.findById(matchId);
+  const isTestMatch = match?.isTestMatch;
+  const isBotTurn = isTestMatch && team === 2 && !match.team2Referent;
+  
+  // Délai court pour le bot (1.5s), normal pour le joueur (10s)
+  const turnTime = isBotTurn ? 1500 : ROSTER_SELECTION_TURN_TIME;
+  
+  console.log(`[Roster Selection] Starting turn timer for match ${matchIdStr}, team ${team} (${turnTime/1000}s)${isBotTurn ? ' [BOT]' : ''}`);
+  
+  rosterSelectionTimers[matchIdStr] = setTimeout(async () => {
+    console.log(`[Roster Selection] Turn timer expired for match ${matchIdStr}, picking random player for team ${team}${isBotTurn ? ' [BOT]' : ''}`);
+    await forceRandomRosterPick(matchId, team);
+    delete rosterSelectionTimers[matchIdStr];
+  }, turnTime);
+};
+
+/**
+ * Force une sélection aléatoire quand le timer expire
+ */
+const forceRandomRosterPick = async (matchId, team) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match || !match.rosterSelection?.isActive) {
+      return;
+    }
+    
+    // Trouver les joueurs disponibles (pas encore assignés à une équipe)
+    // Exclure le staff référent (team1Referent) de la liste
+    const team1ReferentId = match.team1Referent?.toString();
+    const availablePlayers = match.players.filter(p => 
+      p.team === null && 
+      p.user?.toString() !== team1ReferentId
+    );
+    
+    if (availablePlayers.length === 0) {
+      // Tous les joueurs sont assignés
+      await completeRosterSelection(matchId);
+      return;
+    }
+    
+    // Choisir un joueur au hasard
+    const randomIndex = Math.floor(Math.random() * availablePlayers.length);
+    const selectedPlayer = availablePlayers[randomIndex];
+    
+    // Obtenir l'identifiant du joueur (userId pour vrais joueurs, username pour bots)
+    const playerId = selectedPlayer.user?.toString() || selectedPlayer.username;
+    
+    console.log(`[Roster Selection] Random pick for team ${team}: ${selectedPlayer.username}`);
+    
+    // Effectuer le pick
+    await processRosterPick(matchId, team, playerId, true);
+    
+  } catch (error) {
+    console.error(`[Roster Selection] Error forcing random pick:`, error);
+  }
+};
+
+/**
+ * Traite la sélection d'un joueur par un référent
+ */
+const processRosterPick = async (matchId, team, playerId, isRandom = false) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match || !match.rosterSelection?.isActive) {
+      return { success: false, message: 'Sélection de roster non active.' };
+    }
+    
+    // Vérifier que c'est bien le tour de cette équipe
+    if (match.rosterSelection.currentTurn !== team) {
+      return { success: false, message: "Ce n'est pas votre tour." };
+    }
+    
+    // Trouver le joueur sélectionné (par userId pour vrais joueurs, par username pour bots)
+    let playerIndex = match.players.findIndex(p => p.user?.toString() === playerId);
+    
+    // Si pas trouvé par userId, chercher par username (pour les bots)
+    if (playerIndex === -1) {
+      playerIndex = match.players.findIndex(p => p.username === playerId && !p.user);
+    }
+    
+    if (playerIndex === -1) {
+      return { success: false, message: 'Joueur non trouvé.' };
+    }
+    
+    const selectedPlayer = match.players[playerIndex];
+    
+    // Vérifier que le joueur n'est pas déjà assigné
+    if (selectedPlayer.team !== null) {
+      return { success: false, message: 'Ce joueur est déjà dans une équipe.' };
+    }
+    
+    // Assigner le joueur à l'équipe
+    match.players[playerIndex].team = team;
+    
+    // Enregistrer le pick
+    match.rosterSelection.pickOrder.push({
+      team,
+      playerId: selectedPlayer.user,
+      username: selectedPlayer.username,
+      pickedAt: new Date()
+    });
+    match.rosterSelection.totalPicks += 1;
+    
+    // Vérifier combien de joueurs restent à assigner (exclure le staff référent)
+    const team1ReferentId = match.team1Referent?.toString();
+    const remainingPlayers = match.players.filter(p => 
+      p.team === null && 
+      p.user?.toString() !== team1ReferentId
+    );
+    const allPlayersAssigned = remainingPlayers.length === 0;
+    
+    if (allPlayersAssigned) {
+      // Tous les joueurs sont assignés, terminer la sélection
+      await match.save();
+      await completeRosterSelection(matchId);
+      return { success: true };
+    }
+    
+    // Passer au tour suivant (alterner entre les équipes)
+    const nextTurn = team === 1 ? 2 : 1;
+    match.rosterSelection.currentTurn = nextTurn;
+    match.rosterSelection.turnStartedAt = new Date();
+    
+    await match.save();
+    
+    // Notifier tous les joueurs de la mise à jour
+    // Peupler le match pour avoir les avatars
+    await match.populate('players.user', 'username avatar discordId discordAvatar');
+    
+    // Fonction helper pour obtenir l'avatar d'un joueur
+    const getPlayerAvatar = (player) => {
+      if (player.user?.discordId && player.user?.discordAvatar) {
+        return `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
+      } else if (player.user?.avatar) {
+        return player.user.avatar;
+      }
+      return null;
+    };
+    
+    if (io) {
+      for (const player of match.players) {
+        if (player.user) {
+          const userId = player.user._id || player.user;
+          io.to(`user-${userId}`).emit('rosterSelectionUpdate', {
+            matchId: match._id,
+            pickedPlayer: {
+              id: selectedPlayer.user?.toString(),
+              username: selectedPlayer.username,
+              team: team
+            },
+            isRandom,
+            currentTurn: nextTurn,
+            availablePlayers: remainingPlayers
+              .filter(p => p.user?.toString() !== team1ReferentId) // Exclure le staff
+              .map(p => {
+              const populatedPlayer = match.players.find(mp => mp.username === p.username);
+              return {
+                id: p.user?.toString() || p.username,
+                username: p.username,
+                points: p.points,
+                rank: p.rank,
+                isFake: p.isFake,
+                avatar: populatedPlayer ? getPlayerAvatar(populatedPlayer) : null
+              };
+            }),
+            team1Players: match.players.filter(p => p.team === 1).map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString(),
+              username: p.username,
+              points: p.points,
+              rank: p.rank,
+              isFake: p.isFake,
+              avatar: getPlayerAvatar(p)
+            })),
+            team2Players: match.players.filter(p => p.team === 2).map(p => ({
+              id: p.user?._id?.toString() || p.user?.toString(),
+              username: p.username,
+              points: p.points,
+              rank: p.rank,
+              isFake: p.isFake,
+              avatar: getPlayerAvatar(p)
+            })),
+            timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
+            totalPicks: match.rosterSelection.totalPicks
+          });
+        }
+      }
+    }
+    
+    // Démarrer le timer pour le prochain tour
+    startRosterSelectionTurnTimer(matchId, nextTurn);
+    
+    return { success: true };
+    
+  } catch (error) {
+    console.error(`[Roster Selection] Error processing pick:`, error);
+    return { success: false, message: 'Erreur lors de la sélection.' };
+  }
+};
+
+/**
+ * Termine la sélection de roster et passe au vote de map
+ */
+const completeRosterSelection = async (matchId) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match) return;
+    
+    console.log(`[Roster Selection] Completing roster selection for match ${matchId}`);
+    
+    // Annuler le timer s'il existe encore
+    const matchIdStr = matchId.toString();
+    if (rosterSelectionTimers[matchIdStr]) {
+      clearTimeout(rosterSelectionTimers[matchIdStr]);
+      delete rosterSelectionTimers[matchIdStr];
+    }
+    
+    // Marquer la sélection comme terminée
+    match.rosterSelection.isActive = false;
+    match.rosterSelection.completedAt = new Date();
+    
+    // Déterminer les référents (premier joueur de chaque équipe)
+    const team1Players = match.players.filter(p => p.team === 1 && !p.isFake && p.user);
+    const team2Players = match.players.filter(p => p.team === 2 && !p.isFake && p.user);
+    
+    // Mettre à jour isReferent pour le premier joueur de chaque équipe
+    if (team1Players.length > 0) {
+      const team1ReferentIndex = match.players.findIndex(p => p.user?.toString() === team1Players[0].user?.toString());
+      if (team1ReferentIndex !== -1) {
+        match.players[team1ReferentIndex].isReferent = true;
+        match.team1Referent = team1Players[0].user;
+      }
+    }
+    
+    if (team2Players.length > 0) {
+      const team2ReferentIndex = match.players.findIndex(p => p.user?.toString() === team2Players[0].user?.toString());
+      if (team2ReferentIndex !== -1) {
+        match.players[team2ReferentIndex].isReferent = true;
+        match.team2Referent = team2Players[0].user;
+      }
+    }
+    
+    // Créer les salons vocaux Discord AVANT le vote de map
+    try {
+      await match.populate('players.user', 'discordId username');
+      
+      const team1DiscordIds = match.players
+        .filter(p => p.team === 1 && p.user?.discordId && !p.isFake)
+        .map(p => p.user.discordId);
+      const team2DiscordIds = match.players
+        .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
+        .map(p => p.user.discordId);
+      
+      console.log(`[Roster Selection] Creating voice channels - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
+      
+      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+      if (voiceChannels) {
+        match.team1VoiceChannel = voiceChannels.team1;
+        match.team2VoiceChannel = voiceChannels.team2;
+        console.log(`[Roster Selection] ✓ Voice channels created for match ${matchId}:`, JSON.stringify(voiceChannels));
+      } else {
+        console.warn(`[Roster Selection] ⚠️ Voice channels NOT created for match ${matchId}`);
+      }
+    } catch (voiceError) {
+      console.error(`[Roster Selection] ❌ Failed to create voice channels:`, voiceError.message);
+    }
+    
+    await match.save();
+    
+    // Notifier tous les joueurs que la sélection est terminée (avec les salons vocaux)
+    if (io) {
+      for (const player of match.players) {
+        if (player.user) {
+          // L'équipe du joueur est directement sur l'objet player
+          const playerTeam = player.team;
+          const playerId = player.user._id || player.user;
+          
+          console.log(`[Roster Selection] Sending rosterSelectionComplete to player ${player.username}, team: ${playerTeam}`);
+          
+          io.to(`user-${playerId}`).emit('rosterSelectionComplete', {
+            matchId: match._id,
+            team1Players: match.players.filter(p => p.team === 1).map(p => ({
+              id: p.user?.toString(),
+              username: p.username,
+              points: p.points,
+              rank: p.rank,
+              isReferent: p.isReferent,
+              isFake: p.isFake
+            })),
+            team2Players: match.players.filter(p => p.team === 2).map(p => ({
+              id: p.user?.toString(),
+              username: p.username,
+              points: p.points,
+              rank: p.rank,
+              isReferent: p.isReferent,
+              isFake: p.isFake
+            })),
+            mapVoteOptions: match.mapVoteOptions.map(m => ({ name: m.name, image: m.image, votes: 0 })),
+            // Envoyer les salons vocaux
+            team1VoiceChannel: match.team1VoiceChannel,
+            team2VoiceChannel: match.team2VoiceChannel,
+            yourTeam: playerTeam
+          });
+        }
+      }
+    }
+    
+    // Démarrer le timer de vote de map
+    console.log(`[Roster Selection] Starting map vote timer for match ${matchId}`);
+    startMapVoteTimer(matchId, match.players.filter(p => p.user));
+    
+  } catch (error) {
+    console.error(`[Roster Selection] Error completing roster selection:`, error);
+  }
+};
+
+/**
+ * Gère la sélection d'un joueur par un référent (depuis socket)
+ */
+export const handleRosterPick = async (userId, matchId, playerId) => {
+  try {
+    const match = await RankedMatch.findById(matchId);
+    if (!match) {
+      return { success: false, message: 'Match non trouvé.' };
+    }
+    
+    if (!match.rosterSelection?.isActive) {
+      return { success: false, message: 'Sélection de roster non active.' };
+    }
+    
+    // Vérifier que l'utilisateur est bien un référent
+    const isTeam1Referent = match.team1Referent?.toString() === userId.toString();
+    const isTeam2Referent = match.team2Referent?.toString() === userId.toString();
+    
+    if (!isTeam1Referent && !isTeam2Referent) {
+      return { success: false, message: "Vous n'êtes pas référent." };
+    }
+    
+    // Pour les matchs de test, le staff peut être référent des deux équipes
+    // On utilise le tour actuel pour déterminer quelle équipe pick
+    const currentTurn = match.rosterSelection.currentTurn;
+    
+    // Vérifier que l'utilisateur peut picker pour cette équipe
+    const canPickForCurrentTeam = (currentTurn === 1 && isTeam1Referent) || (currentTurn === 2 && isTeam2Referent);
+    if (!canPickForCurrentTeam) {
+      return { success: false, message: "Ce n'est pas votre tour." };
+    }
+    
+    // Annuler le timer actuel
+    const matchIdStr = matchId.toString();
+    if (rosterSelectionTimers[matchIdStr]) {
+      clearTimeout(rosterSelectionTimers[matchIdStr]);
+      delete rosterSelectionTimers[matchIdStr];
+    }
+    
+    // Traiter le pick avec l'équipe du tour actuel
+    return await processRosterPick(matchId, currentTurn, playerId, false);
+    
+  } catch (error) {
+    console.error('[Roster Selection] Error handling roster pick:', error);
+    return { success: false, message: 'Erreur lors de la sélection.' };
+  }
+};
+
 export default {
   initMatchmaking,
   joinQueue,
@@ -1821,6 +2440,7 @@ export default {
   addFakePlayers,
   removeFakePlayers,
   startStaffTestMatch,
-  handleMapVote
+  handleMapVote,
+  handleRosterPick
 };
 

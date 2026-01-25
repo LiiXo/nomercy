@@ -46,6 +46,10 @@ const userSchema = new mongoose.Schema({
     enum: ['PC', 'PlayStation', 'Xbox'],
     default: null
   },
+  platformChangedAt: {
+    type: Date,
+    default: null // Tracks when platform was last changed (24h cooldown)
+  },
   activisionId: {
     type: String,
     trim: true,

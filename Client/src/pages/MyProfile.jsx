@@ -523,6 +523,24 @@ const MyProfile = () => {
     return `${Math.round((ranking.wins / total) * 100)}%`;
   };
 
+  // Calculate platform change cooldown
+  const getPlatformCooldown = () => {
+    if (!user?.platformChangedAt || !user?.platform) return null;
+    
+    const cooldownMs = 24 * 60 * 60 * 1000; // 24 hours
+    const timeSinceChange = Date.now() - new Date(user.platformChangedAt).getTime();
+    const remainingMs = cooldownMs - timeSinceChange;
+    
+    if (remainingMs <= 0) return null;
+    
+    const hours = Math.floor(remainingMs / (60 * 60 * 1000));
+    const minutes = Math.ceil((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+    
+    return { hours, minutes, remainingMs };
+  };
+
+  const platformCooldown = getPlatformCooldown();
+
   const getKD = () => {
     if (!ranking) return '0.00';
     if (ranking.deaths === 0) return ranking.kills?.toFixed(2) || '0.00';
@@ -631,7 +649,10 @@ const MyProfile = () => {
       goldRequired: 'gold requis',
       resetStatsFree: 'GRATUIT',
       resetStatsFirstFree: 'Première réinitialisation gratuite !',
-      resetStatsCount: 'Réinitialisations effectuées'
+      resetStatsCount: 'Réinitialisations effectuées',
+      platformCooldown: 'Changement de plateforme disponible dans',
+      platformCooldownHours: 'h',
+      platformCooldownMinutes: 'min'
     },
     en: {
       back: 'Back',
@@ -734,7 +755,10 @@ const MyProfile = () => {
       goldRequired: 'gold required',
       resetStatsFree: 'FREE',
       resetStatsFirstFree: 'First reset is free!',
-      resetStatsCount: 'Resets performed'
+      resetStatsCount: 'Resets performed',
+      platformCooldown: 'Platform change available in',
+      platformCooldownHours: 'h',
+      platformCooldownMinutes: 'min'
     },
     de: {
       back: 'Zurück',
@@ -837,7 +861,10 @@ const MyProfile = () => {
       goldRequired: 'Gold erforderlich',
       resetStatsFree: 'KOSTENLOS',
       resetStatsFirstFree: 'Erstes Zurücksetzen ist kostenlos!',
-      resetStatsCount: 'Durchgeführte Zurücksetzungen'
+      resetStatsCount: 'Durchgeführte Zurücksetzungen',
+      platformCooldown: 'Plattformwechsel verfügbar in',
+      platformCooldownHours: 'h',
+      platformCooldownMinutes: 'min'
     },
     it: {
       back: 'Indietro',
@@ -940,7 +967,10 @@ const MyProfile = () => {
       goldRequired: 'gold richiesti',
       resetStatsFree: 'GRATIS',
       resetStatsFirstFree: 'Primo reset gratuito!',
-      resetStatsCount: 'Reset effettuati'
+      resetStatsCount: 'Reset effettuati',
+      platformCooldown: 'Cambio piattaforma disponibile tra',
+      platformCooldownHours: 'h',
+      platformCooldownMinutes: 'min'
     }
   };
 
@@ -1162,36 +1192,50 @@ const MyProfile = () => {
                 <div>
                   <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-1.5 sm:mb-2">{t.platform}</label>
                   <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                    {['PC', 'PlayStation', 'Xbox'].map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setPlatform(p)}
-                        className={`py-2 sm:py-3 px-2 sm:px-4 rounded-lg sm:rounded-xl border transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
-                          platform === p
-                            ? `bg-${accentColor}-500/20 border-${accentColor}-500/50 text-${accentColor}-400`
-                            : 'bg-dark-800/50 border-white/10 text-gray-400 hover:border-white/20'
-                        }`}
-                      >
-                        {p === 'PC' && (
-                          <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M20 3H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H4V5h16v10z"/>
-                          </svg>
-                        )}
-                        {p === 'PlayStation' && (
-                          <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M9.5 6.5v-4H11V7a2 2 0 1 1-4 0V4h1.5v3a.5.5 0 0 0 1 0zM16 6.5v-4h1.5V8a.5.5 0 0 0 1 0V6.5H20V8a2 2 0 1 1-4 0V2.5h1.5V6a.5.5 0 0 0 1 0v-.5h1V8a2 2 0 1 1-4 0v-1.5zM4 10.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zm1.5 1H11v9H5.5v-9z"/>
-                          </svg>
-                        )}
-                        {p === 'Xbox' && (
-                          <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M6.43 3.72A9.97 9.97 0 0 1 12 2c2.05 0 3.95.62 5.57 1.72-.37.15-.86.42-1.47.9-1.23.96-2.56 2.56-3.95 4.76L12 9.5l-.15-.12c-1.39-2.2-2.72-3.8-3.95-4.76-.61-.48-1.1-.75-1.47-.9zM2.05 12.9c-.03-.3-.05-.6-.05-.9 0-2.43.87-4.66 2.32-6.39.3.18.7.45 1.13.79 1.54 1.2 3.18 3.25 4.72 5.95l.18.3-.18.3c-1.54 2.7-3.18 4.75-4.72 5.95-.43.34-.83.61-1.13.79A9.93 9.93 0 0 1 2.05 12.9zm8.1 2.45c1.39 2.2 2.72 3.8 3.95 4.76.61.48 1.1.75 1.47.9A9.97 9.97 0 0 1 12 22a9.97 9.97 0 0 1-5.57-1.72c.37-.15.86-.42 1.47-.9 1.23-.96 2.56-2.56 3.95-4.76l.15-.12.15.12v-.27zm3.7-6.7c1.54-2.7 3.18-4.75 4.72-5.95.43-.34.83-.61 1.13-.79A9.93 9.93 0 0 1 22 12c0 .3-.02.6-.05.9a9.93 9.93 0 0 1-2.27 5.49c-.3-.18-.7-.45-1.13-.79-1.54-1.2-3.18-3.25-4.72-5.95l-.18-.3.18-.3.02.03z"/>
-                          </svg>
-                        )}
-                        <span className="font-medium text-xs sm:text-sm">{p === 'PlayStation' ? 'PS' : p}</span>
-                      </button>
-                    ))}
+                    {['PC', 'PlayStation', 'Xbox'].map((p) => {
+                      const isCurrentPlatform = user?.platform === p;
+                      const isDisabled = platformCooldown && !isCurrentPlatform;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => !isDisabled && setPlatform(p)}
+                          disabled={isDisabled}
+                          className={`py-2 sm:py-3 px-2 sm:px-4 rounded-lg sm:rounded-xl border transition-all flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 ${
+                            platform === p
+                              ? `bg-${accentColor}-500/20 border-${accentColor}-500/50 text-${accentColor}-400`
+                              : isDisabled
+                                ? 'bg-dark-800/30 border-white/5 text-gray-600 cursor-not-allowed'
+                                : 'bg-dark-800/50 border-white/10 text-gray-400 hover:border-white/20'
+                          }`}
+                        >
+                          {p === 'PC' && (
+                            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M20 3H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 12H4V5h16v10z"/>
+                            </svg>
+                          )}
+                          {p === 'PlayStation' && (
+                            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M9.5 6.5v-4H11V7a2 2 0 1 1-4 0V4h1.5v3a.5.5 0 0 0 1 0zM16 6.5v-4h1.5V8a.5.5 0 0 0 1 0V6.5H20V8a2 2 0 1 1-4 0V2.5h1.5V6a.5.5 0 0 0 1 0v-.5h1V8a2 2 0 1 1-4 0v-1.5zM4 10.5v11a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-7a.5.5 0 0 0-.5.5zm1.5 1H11v9H5.5v-9z"/>
+                            </svg>
+                          )}
+                          {p === 'Xbox' && (
+                            <svg className="w-4 sm:w-5 h-4 sm:h-5" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M6.43 3.72A9.97 9.97 0 0 1 12 2c2.05 0 3.95.62 5.57 1.72-.37.15-.86.42-1.47.9-1.23.96-2.56 2.56-3.95 4.76L12 9.5l-.15-.12c-1.39-2.2-2.72-3.8-3.95-4.76-.61-.48-1.1-.75-1.47-.9zM2.05 12.9c-.03-.3-.05-.6-.05-.9 0-2.43.87-4.66 2.32-6.39.3.18.7.45 1.13.79 1.54 1.2 3.18 3.25 4.72 5.95l.18.3-.18.3c-1.54 2.7-3.18 4.75-4.72 5.95-.43.34-.83.61-1.13.79A9.93 9.93 0 0 1 2.05 12.9zm8.1 2.45c1.39 2.2 2.72 3.8 3.95 4.76.61.48 1.1.75 1.47.9A9.97 9.97 0 0 1 12 22a9.97 9.97 0 0 1-5.57-1.72c.37-.15.86-.42 1.47-.9 1.23-.96 2.56-2.56 3.95-4.76l.15-.12.15.12v-.27zm3.7-6.7c1.54-2.7 3.18-4.75 4.72-5.95.43-.34.83-.61 1.13-.79A9.93 9.93 0 0 1 22 12c0 .3-.02.6-.05.9a9.93 9.93 0 0 1-2.27 5.49c-.3-.18-.7-.45-1.13-.79-1.54-1.2-3.18-3.25-4.72-5.95l-.18-.3.18-.3.02.03z"/>
+                            </svg>
+                          )}
+                          <span className="font-medium text-xs sm:text-sm">{p === 'PlayStation' ? 'PS' : p}</span>
+                        </button>
+                      );
+                    })}
                   </div>
+                  {/* Platform cooldown message */}
+                  {platformCooldown && (
+                    <p className="text-xs text-yellow-500 mt-2 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {t.platformCooldown} {platformCooldown.hours}{t.platformCooldownHours} {platformCooldown.minutes}{t.platformCooldownMinutes}
+                    </p>
+                  )}
                 </div>
 
                 {/* Bio */}

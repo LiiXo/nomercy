@@ -535,7 +535,28 @@ router.put('/profile', verifyToken, async (req, res) => {
           message: 'Please select a valid platform (PC, PlayStation, or Xbox).'
         });
       }
-      req.user.platform = platform;
+      
+      // Check if platform is actually changing
+      if (platform !== req.user.platform) {
+        // Check 24-hour cooldown (only if platform was previously set)
+        if (req.user.platform && req.user.platformChangedAt) {
+          const cooldownMs = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+          const timeSinceLastChange = Date.now() - new Date(req.user.platformChangedAt).getTime();
+          
+          if (timeSinceLastChange < cooldownMs) {
+            const remainingMs = cooldownMs - timeSinceLastChange;
+            const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+            return res.status(400).json({
+              success: false,
+              message: `You must wait ${remainingHours} hour(s) before changing your platform again.`,
+              platformCooldownRemaining: remainingMs
+            });
+          }
+        }
+        
+        req.user.platform = platform;
+        req.user.platformChangedAt = new Date();
+      }
     }
 
     // Validate username if provided
@@ -597,6 +618,7 @@ router.put('/profile', verifyToken, async (req, res) => {
         banner: req.user.banner,
         activisionId: req.user.activisionId,
         platform: req.user.platform,
+        platformChangedAt: req.user.platformChangedAt,
         roles: req.user.roles,
         isProfileComplete: req.user.isProfileComplete,
         goldCoins: req.user.goldCoins,

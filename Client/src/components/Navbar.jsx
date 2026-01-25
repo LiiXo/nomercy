@@ -182,7 +182,6 @@ const Navbar = () => {
   // Build navigation links - ranked mode visible to everyone
   const navLinks = [
     { path: `/${selectedMode}`, label: t('home'), icon: Home },
-    { path: `/${selectedMode}/rankings`, label: t('rankings'), icon: Trophy },
     { path: `/${selectedMode}/ranked`, label: t('rankedMode'), icon: Medal },
   ];
 

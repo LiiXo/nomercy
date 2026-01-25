@@ -224,9 +224,10 @@ const monitorLadderMatches = async () => {
  */
 const monitorRankedMatches = async () => {
   try {
-    // Récupérer tous les matchs classés actifs (ready, in_progress)
+    // Récupérer tous les matchs classés actifs (pending, ready, in_progress)
+    // Note: On inclut 'pending' pour détecter les joueurs sans GGSecure dès la création du match
     const activeMatches = await RankedMatch.find({
-      status: { $in: ['ready', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'in_progress'] }
     })
       .populate('players.user', 'username platform _id')
       .lean();
@@ -281,6 +282,55 @@ const cleanupOldStatuses = () => {
 };
 
 /**
+ * Vérifie immédiatement le statut GGSecure pour un match classé spécifique
+ * Appelé lors de la création d'un match pour notifier les joueurs sans GGSecure
+ * @param {Object} match - Le document match avec players populés
+ */
+export const checkRankedMatchGGSecureStatus = async (match) => {
+  if (!io) {
+    console.warn('[GGSecure Monitoring] Cannot check - Socket.io not initialized');
+    return;
+  }
+  
+  try {
+    console.log(`[GGSecure Monitoring] Immediate check for ranked match ${match._id}`);
+    
+    // Collecter tous les joueurs réels du match (non-fake)
+    // La vérification de la plateforme PC est faite dans checkGGSecureStatus
+    const realPlayers = [];
+    
+    if (match.players) {
+      for (const player of match.players) {
+        // Gérer les deux cas: match populé ou non populé
+        const userObj = player.user;
+        const userId = userObj?._id || userObj;
+        const username = player.username || userObj?.username;
+        
+        // Ne vérifier que les vrais joueurs (non fake)
+        if (userId && !player.isFake && !userId.toString().startsWith('fake-')) {
+          realPlayers.push({
+            userId: userId.toString(),
+            username: username,
+            team: player.team
+          });
+        }
+      }
+    }
+    
+    console.log(`[GGSecure Monitoring] Checking ${realPlayers.length} real players in match ${match._id}`);
+    
+    // Vérifier le statut de chaque joueur réel
+    // checkPlayerInMatch vérifiera si c'est un joueur PC via checkGGSecureStatus
+    for (const player of realPlayers) {
+      await checkPlayerInMatch(player, match, 'ranked');
+    }
+    
+  } catch (error) {
+    console.error('[GGSecure Monitoring] Error in immediate ranked match check:', error);
+  }
+};
+
+/**
  * Démarre la surveillance
  */
 export const startGGSecureMonitoring = () => {
@@ -304,6 +354,7 @@ export const startGGSecureMonitoring = () => {
 
 export default {
   initGGSecureMonitoring,
-  startGGSecureMonitoring
+  startGGSecureMonitoring,
+  checkRankedMatchGGSecureStatus
 };
 

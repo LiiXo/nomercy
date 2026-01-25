@@ -632,10 +632,24 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     }
 
     // Déterminer l'équipe de l'utilisateur
-    const userPlayer = match.players.find(p => 
-      p.user && p.user._id?.toString() === user._id.toString()
-    );
+    console.log('[GET Match] Looking for user:', user._id.toString());
+    console.log('[GET Match] Match players:', match.players.map(p => ({
+      username: p.username,
+      team: p.team,
+      isFake: p.isFake,
+      userId: p.user?._id?.toString() || p.user?.toString() || 'null'
+    })));
+    
+    const userPlayer = match.players.find(p => {
+      const pUserId = p.user?._id?.toString() || p.user?.toString();
+      const matches = pUserId === user._id.toString();
+      if (matches) {
+        console.log('[GET Match] Found user player:', p.username, 'team:', p.team);
+      }
+      return matches;
+    });
     const myTeam = userPlayer?.team || null;
+    console.log('[GET Match] Final myTeam:', myTeam);
 
     // Vérifier si l'utilisateur est référent
     const isReferent = 
