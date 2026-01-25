@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Shield, Swords, Eye, Activity, UserPlus, Target } from 'lucide-react';
+import { Users, Shield, Swords, Eye, Activity, UserPlus, Target, Coins } from 'lucide-react';
 
 const AdminOverview = ({ stats }) => {
   if (!stats) return <div className="text-gray-400">Chargement des statistiques...</div>;
@@ -43,6 +43,48 @@ const AdminOverview = ({ stats }) => {
           );
         })}
       </div>
+
+      {/* Gold Statistics */}
+      {stats.goldStats && (
+        <div className="bg-dark-800/50 border border-yellow-500/20 rounded-xl p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Coins className="w-4 sm:w-5 h-4 sm:h-5 text-yellow-400" />
+            Statistiques Gold
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            {/* Top Gold User */}
+            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-yellow-500/20">
+              <p className="text-gray-400 text-xs sm:text-sm mb-2">👑 Plus riche</p>
+              {stats.goldStats.topUser ? (
+                <div className="flex items-center gap-3">
+                  <img 
+                    src={stats.goldStats.topUser.avatar || '/default-avatar.png'} 
+                    alt="" 
+                    className="w-10 h-10 rounded-full border-2 border-yellow-500/50"
+                  />
+                  <div>
+                    <p className="text-white font-semibold text-sm">{stats.goldStats.topUser.username}</p>
+                    <p className="text-yellow-400 font-bold">{stats.goldStats.topUser.goldCoins.toLocaleString()}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm">Aucun utilisateur</p>
+              )}
+            </div>
+            {/* Average Gold */}
+            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-yellow-500/20">
+              <p className="text-gray-400 text-xs sm:text-sm mb-1">📊 Moyenne par joueur</p>
+              <p className="text-xl sm:text-2xl font-bold text-yellow-400">{stats.goldStats.averageGold.toLocaleString()}</p>
+              <p className="text-gray-500 text-xs mt-1">{stats.goldStats.usersWithGold} joueurs actifs</p>
+            </div>
+            {/* Total Gold */}
+            <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-yellow-500/20">
+              <p className="text-gray-400 text-xs sm:text-sm mb-1">💰 Total en circulation</p>
+              <p className="text-xl sm:text-2xl font-bold text-yellow-400">{stats.goldStats.totalGold.toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Matchs Ladder (Completed) */}
       {stats.matchesByLadder && (

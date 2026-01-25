@@ -32,7 +32,16 @@ const shopItemSchema = new mongoose.Schema({
   category: {
     type: String,
     required: true,
-    enum: ['avatar_frame', 'ornament', 'badge', 'title', 'boost', 'cosmetic', 'emote', 'other']
+    enum: ['avatar_frame', 'ornament', 'badge', 'title', 'boost', 'cosmetic', 'emote', 'profile_animation', 'usable_item', 'other']
+  },
+  
+  // Profile animation specific data
+  profileAnimationData: {
+    animationName: { type: String, default: '' }, // CSS animation class name
+    backgroundEffect: { type: String, default: '' }, // Background gradient/effect
+    particleEffect: { type: String, default: '' }, // Particle type (fire, snow, stars, etc.)
+    borderEffect: { type: String, default: '' }, // Border animation
+    glowEffect: { type: String, default: '' } // Glow color/intensity
   },
   
   // Ornament specific data (for avatar frames)
@@ -115,12 +124,12 @@ const shopItemSchema = new mongoose.Schema({
   },
   effectType: {
     type: String,
-    enum: ['double_xp', 'double_gold', 'cancel_match', 'emote', 'other'],
+    enum: ['double_xp', 'double_pts', 'double_gold', 'cancel_match', 'emote', 'other'],
     default: 'other'
   },
-  duration: {
-    type: Number, // Duration in hours (0 = instant/one-time use)
-    default: 0
+  matchCount: {
+    type: Number, // Number of matches the item lasts (0 = instant/one-time use, null = unlimited)
+    default: 1
   },
   usableInMatch: {
     type: Boolean, // Can be used during a match

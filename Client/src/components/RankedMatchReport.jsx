@@ -63,7 +63,9 @@ const RankedMatchReport = ({
   newRank, 
   mode = 'hardcore',
   matchId,
-  isReferent = false
+  isReferent = false,
+  doublePts = false,
+  doubleGold = false
 }) => {
   const navigate = useNavigate();
   const params = useParams();
@@ -242,7 +244,7 @@ const RankedMatchReport = ({
                 (rewards?.pointsChange || 0) >= 0 
                   ? 'border-purple-500/30' 
                   : 'border-red-500/30'
-              }`}>
+              } ${doublePts && isWinner ? 'ring-2 ring-yellow-400/50' : ''}`}>
                 <div className="flex items-center justify-center gap-2 mb-2">
                   {(rewards?.pointsChange || 0) >= 0 ? (
                     <TrendingUp className="w-5 h-5 text-purple-400" />
@@ -250,6 +252,9 @@ const RankedMatchReport = ({
                     <TrendingDown className="w-5 h-5 text-red-400" />
                   )}
                   <span className="text-gray-400 text-sm">Points Ladder</span>
+                  {doublePts && isWinner && (
+                    <span className="px-1.5 py-0.5 bg-yellow-500/30 text-yellow-400 text-[10px] font-bold rounded animate-pulse">x2</span>
+                  )}
                 </div>
                 <div className={`text-2xl font-bold text-center ${
                   (rewards?.pointsChange || 0) >= 0 ? 'text-purple-400' : 'text-red-400'
@@ -257,19 +262,22 @@ const RankedMatchReport = ({
                   {(rewards?.pointsChange || 0) > 0 ? '+' : ''}{rewards?.pointsChange || 0}
                 </div>
                 <p className={`text-xs text-center mt-1 ${(rewards?.pointsChange || 0) >= 0 ? 'text-green-400/70' : 'text-red-400/70'}`}>
-                  {(rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu'}
+                  {doublePts && isWinner ? '🔥 Boosté !' : ((rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu')}
                 </p>
               </div>
 
               {/* Gold */}
               <div className={`bg-dark-900/50 rounded-xl p-4 border-2 ${
                 isWinner ? 'border-yellow-500/30' : 'border-orange-500/30'
-              }`}>
+              } ${doubleGold && isWinner ? 'ring-2 ring-yellow-400/50' : ''}`}>
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <Coins className={`w-5 h-5 ${isWinner ? 'text-yellow-400' : 'text-orange-400'}`} />
                   <span className="text-gray-400 text-sm">
                     {isWinner ? 'Gold Gagné' : 'Gold Consolation'}
                   </span>
+                  {doubleGold && isWinner && (
+                    <span className="px-1.5 py-0.5 bg-yellow-500/30 text-yellow-400 text-[10px] font-bold rounded animate-pulse">x2</span>
+                  )}
                 </div>
                 <div className={`text-2xl font-bold text-center ${
                   isWinner ? 'text-yellow-400' : 'text-orange-400'
@@ -277,7 +285,7 @@ const RankedMatchReport = ({
                   +{rewards?.goldEarned || 0}
                 </div>
                 <p className={`text-xs text-center mt-1 ${isWinner ? 'text-yellow-400/70' : 'text-orange-400/70'}`}>
-                  {isWinner ? '💰 Récompense' : '🎁 Lot de consolation'}
+                  {doubleGold && isWinner ? '🔥 Boosté !' : (isWinner ? '💰 Récompense' : '🎁 Lot de consolation')}
                 </p>
               </div>
 

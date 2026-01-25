@@ -7,12 +7,63 @@ import { useSocket } from '../SocketContext';
 import { 
   ArrowLeft, Trophy, Users, Clock, Send, Loader2, Shield, 
   Swords, MessageCircle, AlertTriangle, Crown, Shuffle, Map,
-  Medal, Star, Flame, Zap, BookOpen, X
+  Medal, Star, Flame, Zap, BookOpen, X, Coins, Target
 } from 'lucide-react';
 import RankedMatchReport from '../components/RankedMatchReport';
 import LadderMatchReport from '../components/LadderMatchReport';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
+
+// Active Booster Item showing remaining matches
+const ActiveBoosterItem = ({ booster, language, t, onExpire }) => {
+  // remainingMatches: number of matches remaining (null = unlimited)
+  const remainingMatches = booster.remainingMatches;
+  
+  // Check if unlimited (null) or has matches remaining
+  const isUnlimited = remainingMatches === null || remainingMatches === undefined;
+  const isLowMatches = !isUnlimited && remainingMatches <= 1 && remainingMatches > 0;
+  
+  // Format matches display
+  const formatMatches = (count) => {
+    if (count === null || count === undefined) return '∞';
+    if (count <= 0) return '0';
+    return count.toString();
+  };
+  
+  return (
+    <div 
+      className={`flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border ${isLowMatches ? 'border-orange-500/50 animate-pulse' : 'border-green-500/30'}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+          {booster.effectType === 'double_pts' ? (
+            <Zap className="w-5 h-5 text-yellow-400" />
+          ) : (
+            <Coins className="w-5 h-5 text-amber-400" />
+          )}
+        </div>
+        <div>
+          <p className="text-white font-semibold text-sm">
+            {booster.item?.nameTranslations?.[language] || booster.item?.name}
+          </p>
+          <p className={`text-xs flex items-center gap-1 ${isLowMatches ? 'text-orange-400' : 'text-green-400'}`}>
+            <Target className="w-3 h-3" />
+            {isUnlimited ? (
+              <span className="font-bold">∞ {language === 'fr' ? 'Illimité' : 'Unlimited'}</span>
+            ) : (
+              <span className="font-bold">
+                {formatMatches(remainingMatches)} {language === 'fr' ? 'match' : 'match'}{remainingMatches > 1 ? (language === 'fr' ? 's restants' : 'es left') : (language === 'fr' ? ' restant' : ' left')}
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+      <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-500/30 text-green-400">
+        {booster.effectType === 'double_pts' ? t.doublePts : t.doubleGold}
+      </span>
+    </div>
+  );
+};
 
 // Traductions des noms de rangs
 const RANK_NAMES = {
@@ -148,6 +199,9 @@ const MatchSheet = () => {
   const [rules, setRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
   
+  // Active boosters (for ranked matches)
+  const [activeBoosters, setActiveBoosters] = useState([]);
+  
   // Helper local pour obtenir le rang à partir des points
   const getRankFromPoints = (points, lang = language) => {
     return getRankFromPointsWithThresholds(points, rankThresholds, lang);
@@ -255,6 +309,10 @@ const MatchSheet = () => {
       arbitratorCalled: 'Arbitre appelé',
       arbitratorCalledDesc: 'Un arbitre a été notifié et interviendra dès que possible.',
       alreadyCalledArbitrator: 'Vous avez déjà appelé un arbitre',
+      activeBoosters: 'Boosters actifs',
+      expiresIn: 'Expire dans',
+      doublePts: 'Points x2',
+      doubleGold: 'Gold x2',
     },
     en: {
       back: 'Back',
@@ -356,6 +414,10 @@ const MatchSheet = () => {
       arbitratorCalled: 'Arbitrator called',
       arbitratorCalledDesc: 'An arbitrator has been notified and will intervene as soon as possible.',
       alreadyCalledArbitrator: 'You have already called an arbitrator',
+      activeBoosters: 'Active Boosters',
+      expiresIn: 'Expires in',
+      doublePts: 'Points x2',
+      doubleGold: 'Gold x2',
     },
     de: {
       back: 'Zurück',
@@ -452,6 +514,10 @@ const MatchSheet = () => {
       arbitratorCalled: 'Schiedsrichter gerufen',
       arbitratorCalledDesc: 'Ein Schiedsrichter wurde benachrichtigt und wird so schnell wie möglich eingreifen.',
       alreadyCalledArbitrator: 'Sie haben bereits einen Schiedsrichter gerufen',
+      activeBoosters: 'Aktive Booster',
+      expiresIn: 'Läuft ab in',
+      doublePts: 'Punkte x2',
+      doubleGold: 'Gold x2',
     },
     it: {
       back: 'Indietro',
@@ -548,6 +614,10 @@ const MatchSheet = () => {
       arbitratorCalled: 'Arbitro chiamato',
       arbitratorCalledDesc: 'Un arbitro è stato notificato e interverrà il prima possibile.',
       alreadyCalledArbitrator: 'Hai già chiamato un arbitro',
+      activeBoosters: 'Booster attivi',
+      expiresIn: 'Scade tra',
+      doublePts: 'Punti x2',
+      doubleGold: 'Oro x2',
     },
   }[language] || {};
 
@@ -646,6 +716,22 @@ const MatchSheet = () => {
     }
   };
 
+  // Fetch active boosters (for ranked matches)
+  const fetchActiveBoosters = async () => {
+    if (!isRankedMatch || !isAuthenticated) return;
+    try {
+      const response = await fetch(`${API_URL}/shop/my-active-boosters`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setActiveBoosters(data.boosters || []);
+      }
+    } catch (err) {
+      console.error('Error fetching active boosters:', err);
+    }
+  };
+
   // Toggle cancellation vote (for ranked matches)
   const handleToggleCancellationVote = async () => {
     if (!isRankedMatch || votingCancellation) return;
@@ -725,6 +811,7 @@ const MatchSheet = () => {
     fetchMySquad();
     if (isRankedMatch) {
       fetchCancellationStatus();
+      fetchActiveBoosters();
     }
   }, [matchId, isAuthenticated, isRankedMatch]);
 
@@ -838,7 +925,9 @@ const MatchSheet = () => {
           },
           oldRank: { points: oldPoints },
           newRank: { points: newPoints },
-          mode: match.mode || selectedMode
+          mode: match.mode || selectedMode,
+          doublePts: currentPlayer.rewards.doublePts || false,
+          doubleGold: currentPlayer.rewards.doubleGold || false
         });
         
         setTimeout(() => setShowMatchReport(true), 500);
@@ -1813,6 +1902,26 @@ const MatchSheet = () => {
             )}
           </div>
         </div>
+
+        {/* Active Boosters Section - Only for ranked matches when user has active boosters */}
+        {isRankedMatch && activeBoosters.length > 0 && (          <div className="bg-gradient-to-r from-purple-500/20 via-indigo-500/20 to-purple-500/20 border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-5 h-5 text-purple-400" />
+              <h3 className="text-white font-bold text-sm sm:text-base">{t.activeBoosters}</h3>
+            </div>
+            <div className="space-y-2">
+              {activeBoosters.map((booster) => (
+                <ActiveBoosterItem 
+                  key={booster.usageId} 
+                  booster={booster} 
+                  language={language} 
+                  t={t}
+                  onExpire={fetchActiveBoosters}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Voice Channel Section - Only for ranked matches that are not completed */}
         {isRankedMatch && !['completed', 'cancelled'].includes(match.status) && (
@@ -3229,6 +3338,8 @@ const MatchSheet = () => {
           mode={matchReportData.mode}
           matchId={matchId}
           isReferent={isReferent}
+          doublePts={matchReportData.doublePts}
+          doubleGold={matchReportData.doubleGold}
         />
       )}
 

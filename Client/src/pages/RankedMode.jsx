@@ -230,6 +230,57 @@ const buildRanksFromThresholds = (thresholds, language = 'en') => {
   });
 };
 
+// Active Booster Item showing remaining matches
+const ActiveBoosterItem = ({ booster, language, t, onExpire }) => {
+  // remainingMatches: number of matches remaining (null = unlimited)
+  const remainingMatches = booster.remainingMatches;
+  
+  // Check if unlimited (null) or has matches remaining
+  const isUnlimited = remainingMatches === null || remainingMatches === undefined;
+  const isLowMatches = !isUnlimited && remainingMatches <= 1 && remainingMatches > 0;
+  
+  // Format matches display
+  const formatMatches = (count) => {
+    if (count === null || count === undefined) return '∞';
+    if (count <= 0) return '0';
+    return count.toString();
+  };
+  
+  return (
+    <div 
+      className={`flex items-center justify-between p-3 rounded-xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border ${isLowMatches ? 'border-orange-500/50 animate-pulse' : 'border-green-500/30'}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+          {booster.effectType === 'double_pts' ? (
+            <Zap className="w-5 h-5 text-yellow-400" />
+          ) : (
+            <Coins className="w-5 h-5 text-amber-400" />
+          )}
+        </div>
+        <div>
+          <p className="text-white font-semibold text-sm">
+            {booster.item?.nameTranslations?.[language] || booster.item?.name}
+          </p>
+          <p className={`text-xs flex items-center gap-1 ${isLowMatches ? 'text-orange-400' : 'text-green-400'}`}>
+            <Target className="w-3 h-3" />
+            {isUnlimited ? (
+              <span className="font-bold">∞ {language === 'fr' ? 'Illimité' : 'Unlimited'}</span>
+            ) : (
+              <span className="font-bold">
+                {formatMatches(remainingMatches)} {language === 'fr' ? 'match' : 'match'}{remainingMatches > 1 ? (language === 'fr' ? 's restants' : 'es left') : (language === 'fr' ? ' restant' : ' left')}
+              </span>
+            )}
+          </p>
+        </div>
+      </div>
+      <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-500/30 text-green-400">
+        {t.active || 'Actif'}
+      </span>
+    </div>
+  );
+};
+
 const RankedMode = () => {
   const { language } = useLanguage();
   const { selectedMode } = useMode();
@@ -354,6 +405,12 @@ const RankedMode = () => {
   const [mapsWarnings, setMapsWarnings] = useState({ '4v4': null, '5v5': null });
   const [mapsBestOf, setMapsBestOf] = useState(3);
   const [loadingMaps, setLoadingMaps] = useState(false);
+
+  // Usable items / Boosters
+  const [availableBoosters, setAvailableBoosters] = useState([]);
+  const [activeBoosters, setActiveBoosters] = useState([]);
+  const [loadingBoosters, setLoadingBoosters] = useState(false);
+  const [activatingBooster, setActivatingBooster] = useState(null);
 
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
@@ -542,6 +599,50 @@ const RankedMode = () => {
   // Get rank from points (using dynamic ranks)
   const getRankFromPoints = (points) => {
     return ranks.find(r => points >= r.min && points <= r.max) || ranks[0];
+  };
+
+  // Fetch available and active boosters
+  const fetchBoosters = async () => {
+    if (!isAuthenticated) return;
+    setLoadingBoosters(true);
+    try {
+      const [availableRes, activeRes] = await Promise.all([
+        fetch(`${API_URL}/shop/my-available-boosters`, { credentials: 'include' }),
+        fetch(`${API_URL}/shop/my-active-boosters`, { credentials: 'include' })
+      ]);
+      const availableData = await availableRes.json();
+      const activeData = await activeRes.json();
+      
+      if (availableData.success) setAvailableBoosters(availableData.boosters || []);
+      if (activeData.success) setActiveBoosters(activeData.boosters || []);
+    } catch (err) {
+      console.error('Error fetching boosters:', err);
+    } finally {
+      setLoadingBoosters(false);
+    }
+  };
+
+  // Activate a booster
+  const activateBooster = async (purchaseId) => {
+    setActivatingBooster(purchaseId);
+    try {
+      const response = await fetch(`${API_URL}/shop/use-item/${purchaseId}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Refresh boosters
+        await fetchBoosters();
+      } else {
+        console.error('Failed to activate booster:', data.message);
+      }
+    } catch (err) {
+      console.error('Error activating booster:', err);
+    } finally {
+      setActivatingBooster(null);
+    }
   };
 
   // Fetch player ranking
@@ -1166,6 +1267,7 @@ const RankedMode = () => {
     if (isAuthenticated) {
       checkActiveMatch();
       fetchQueueStatus();
+      fetchBoosters(); // Fetch available and active boosters
       if (user?.platform === 'PC') checkGGSecure();
     }
     
@@ -1256,7 +1358,13 @@ const RankedMode = () => {
       cancelMatch: 'Annuler le match',
       removeVote: 'Retirer le vote',
       votesRequired: 'votes requis',
-      voteForMap: 'Votez pour une map'
+      voteForMap: 'Votez pour une map',
+      usableItems: 'Objets utilisables',
+      noUsableItems: 'Aucun objet disponible',
+      activate: 'Activer',
+      active: 'Actif',
+      expiresIn: 'Expire dans',
+      boosterActive: 'Booster actif !'
     },
     en: {
       title: 'Ranked Mode',
@@ -1324,7 +1432,13 @@ const RankedMode = () => {
       cancelMatch: 'Cancel Match',
       removeVote: 'Remove Vote',
       votesRequired: 'votes required',
-      voteForMap: 'Vote for a map'
+      voteForMap: 'Vote for a map',
+      usableItems: 'Usable Items',
+      noUsableItems: 'No items available',
+      activate: 'Activate',
+      active: 'Active',
+      expiresIn: 'Expires in',
+      boosterActive: 'Booster active!'
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -1392,7 +1506,13 @@ const RankedMode = () => {
       cancelMatch: 'Match abbrechen',
       removeVote: 'Stimme entfernen',
       votesRequired: 'Stimmen erforderlich',
-      voteForMap: 'Für eine Karte stimmen'
+      voteForMap: 'Für eine Karte stimmen',
+      usableItems: 'Verwendbare Gegenstände',
+      noUsableItems: 'Keine Gegenstände verfügbar',
+      activate: 'Aktivieren',
+      active: 'Aktiv',
+      expiresIn: 'Läuft ab in',
+      boosterActive: 'Booster aktiv!'
     },
     it: {
       title: 'Modalità Classificata',
@@ -1460,7 +1580,13 @@ const RankedMode = () => {
       cancelMatch: 'Annulla partita',
       removeVote: 'Rimuovi voto',
       votesRequired: 'voti richiesti',
-      voteForMap: 'Vota per una mappa'
+      voteForMap: 'Vota per una mappa',
+      usableItems: 'Oggetti utilizzabili',
+      noUsableItems: 'Nessun oggetto disponibile',
+      activate: 'Attiva',
+      active: 'Attivo',
+      expiresIn: 'Scade tra',
+      boosterActive: 'Booster attivo!'
     }
   };
   
@@ -2302,6 +2428,75 @@ const RankedMode = () => {
                               </>
                             )}
                           </button>
+                        </div>
+                      )}
+
+                      {/* Usable Items / Boosters Section */}
+                      {isAuthenticated && (availableBoosters.length > 0 || activeBoosters.length > 0) && (
+                        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-purple-500/10 border border-purple-500/20 mb-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Zap className="w-5 h-5 text-purple-400" />
+                            <h4 className="text-white font-bold">{t.usableItems}</h4>
+                          </div>
+                          
+                          {/* Active Boosters */}
+                          {activeBoosters.length > 0 && (
+                            <div className="mb-3 space-y-2">
+                              {activeBoosters.map((booster) => (
+                                <ActiveBoosterItem 
+                                  key={booster.usageId} 
+                                  booster={booster} 
+                                  language={language} 
+                                  t={t}
+                                  onExpire={fetchBoosters}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          
+                          {/* Available Boosters */}
+                          {availableBoosters.length > 0 && (
+                            <div className="space-y-2">
+                              {availableBoosters.map((booster) => (
+                                <div 
+                                  key={booster.item._id}
+                                  className="flex items-center justify-between p-3 rounded-xl bg-dark-700/50 border border-white/5 hover:border-purple-500/30 transition-all"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-lg bg-${booster.item.color || 'purple'}-500/20 flex items-center justify-center`}>
+                                      {booster.item.effectType === 'double_pts' ? (
+                                        <Zap className="w-5 h-5 text-yellow-400" />
+                                      ) : (
+                                        <Coins className="w-5 h-5 text-amber-400" />
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className="text-white font-semibold text-sm">
+                                        {booster.item?.nameTranslations?.[language] || booster.item?.name}
+                                      </p>
+                                      <p className="text-gray-400 text-xs">
+                                        x{booster.quantity} • {booster.item.matchCount} match{booster.item.matchCount > 1 ? 's' : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => activateBooster(booster.purchaseId)}
+                                    disabled={activatingBooster === booster.purchaseId || activeBoosters.some(ab => ab.effectType === booster.item.effectType)}
+                                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                  >
+                                    {activatingBooster === booster.purchaseId ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      <>
+                                        <Zap className="w-3 h-3" />
+                                        {t.activate}
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 

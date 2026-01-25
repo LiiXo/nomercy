@@ -16,7 +16,7 @@ import {
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
-  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu
+  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -94,6 +94,17 @@ const AdminPanel = () => {
   const [loadingUserMatches, setLoadingUserMatches] = useState(false);
   const [showUserMatchHistory, setShowUserMatchHistory] = useState(false);
   const [deletingMatchId, setDeletingMatchId] = useState(null);
+  
+  // User purchase history and give item states (admin only)
+  const [showUserPurchases, setShowUserPurchases] = useState(false);
+  const [userPurchases, setUserPurchases] = useState([]);
+  const [loadingUserPurchases, setLoadingUserPurchases] = useState(false);
+  const [selectedUserForPurchases, setSelectedUserForPurchases] = useState(null);
+  const [showGiveItemModal, setShowGiveItemModal] = useState(false);
+  const [selectedUserForGiveItem, setSelectedUserForGiveItem] = useState(null);
+  const [availableShopItems, setAvailableShopItems] = useState([]);
+  const [selectedItemToGive, setSelectedItemToGive] = useState(null);
+  const [givingItem, setGivingItem] = useState(false);
   
   // System reset states
   const [confirmText, setConfirmText] = useState('');
@@ -1083,6 +1094,23 @@ const AdminPanel = () => {
     if (item.ladders) formDataCopy.ladders = [...item.ladders];
     if (item.gameModes) formDataCopy.gameModes = [...item.gameModes];
     if (item.rankedFormats) formDataCopy.rankedFormats = [...item.rankedFormats];
+    
+    // Deep copy translations for shop items
+    if (type === 'shopItem') {
+      formDataCopy.nameTranslations = {
+        fr: item.nameTranslations?.fr || '',
+        en: item.nameTranslations?.en || '',
+        de: item.nameTranslations?.de || '',
+        it: item.nameTranslations?.it || ''
+      };
+      formDataCopy.descriptionTranslations = {
+        fr: item.descriptionTranslations?.fr || '',
+        en: item.descriptionTranslations?.en || '',
+        de: item.descriptionTranslations?.de || '',
+        it: item.descriptionTranslations?.it || ''
+      };
+    }
+    
     // Deep copy map config structures
     if (item.hardcoreConfig) {
       formDataCopy.hardcoreConfig = {
@@ -1153,6 +1181,8 @@ const AdminPanel = () => {
         return {
           name: '',
           description: '',
+          nameTranslations: { fr: '', en: '', de: '', it: '' },
+          descriptionTranslations: { fr: '', en: '', de: '', it: '' },
           category: 'other',
           price: 0,
           rarity: 'common',
@@ -1359,6 +1389,125 @@ const AdminPanel = () => {
     } catch (err) {
       console.error('Toggle referent ban error:', err);
       setError('Erreur lors de la modification du statut référent');
+    }
+  };
+
+  // Fetch user purchase history (admin only)
+  const fetchUserPurchases = async (userId) => {
+    setLoadingUserPurchases(true);
+    try {
+      const response = await fetch(`${API_URL}/shop/admin/user-purchases/${userId}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserPurchases(data.purchases);
+      } else {
+        setError(data.message || 'Erreur lors de la récupération des achats');
+      }
+    } catch (err) {
+      console.error('Error fetching user purchases:', err);
+      setError('Erreur lors de la récupération des achats');
+    } finally {
+      setLoadingUserPurchases(false);
+    }
+  };
+
+  // Open user purchase history modal
+  const openUserPurchasesModal = (user) => {
+    setSelectedUserForPurchases(user);
+    setUserPurchases([]);
+    setShowUserPurchases(true);
+    fetchUserPurchases(user._id);
+  };
+
+  // Fetch available shop items for giving
+  const fetchAvailableShopItems = async () => {
+    try {
+      const response = await fetch(`${API_URL}/shop/admin/all-items`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAvailableShopItems(data.items);
+      }
+    } catch (err) {
+      console.error('Error fetching shop items:', err);
+    }
+  };
+
+  // Open give item modal
+  const openGiveItemModal = (user) => {
+    setSelectedUserForGiveItem(user);
+    setSelectedItemToGive(null);
+    setShowGiveItemModal(true);
+    if (availableShopItems.length === 0) {
+      fetchAvailableShopItems();
+    }
+  };
+
+  // Give item to user
+  const handleGiveItem = async () => {
+    if (!selectedItemToGive || !selectedUserForGiveItem) {
+      setError('Veuillez sélectionner un objet');
+      return;
+    }
+
+    setGivingItem(true);
+    try {
+      const response = await fetch(`${API_URL}/shop/admin/give-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: selectedUserForGiveItem._id,
+          itemId: selectedItemToGive._id
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`${selectedItemToGive.name} a été donné à ${selectedUserForGiveItem.username}`);
+        setShowGiveItemModal(false);
+        setSelectedItemToGive(null);
+      } else {
+        setError(data.message || 'Erreur lors du don de l\'objet');
+      }
+    } catch (err) {
+      console.error('Give item error:', err);
+      setError('Erreur lors du don de l\'objet');
+    } finally {
+      setGivingItem(false);
+    }
+  };
+
+  // Delete/Refund a purchase (admin only)
+  const handleDeletePurchase = async (purchaseId, refund = true) => {
+    if (!window.confirm(refund ? 'Supprimer cet achat et rembourser le gold ?' : 'Supprimer cet achat sans remboursement ?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/shop/admin/purchases/${purchaseId}?refund=${refund}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(data.message);
+        // Refresh purchases
+        if (selectedUserForPurchases) {
+          fetchUserPurchases(selectedUserForPurchases._id);
+        }
+      } else {
+        setError(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      console.error('Delete purchase error:', err);
+      setError('Erreur lors de la suppression de l\'achat');
     }
   };
 
@@ -1833,6 +1982,9 @@ const AdminPanel = () => {
                     </div>
                   )}
                   <div className="flex items-center gap-1 ml-auto">
+                    {/* Admin only: Purchase history and give item */}
+                    {userIsAdmin && <button onClick={() => openUserPurchasesModal(user)} className="p-1.5 text-amber-400 hover:bg-amber-500/20 rounded-lg" title="Historique achats"><History className="w-4 h-4" /></button>}
+                    {userIsAdmin && <button onClick={() => openGiveItemModal(user)} className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg" title="Donner objet"><Gift className="w-4 h-4" /></button>}
                     {/* Arbitre only sees block referent and ban buttons */}
                     {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>}
                     {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>}
@@ -1933,6 +2085,9 @@ const AdminPanel = () => {
                       </td>
                       <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
+                          {/* Admin only: Purchase history and give item */}
+                          {userIsAdmin && <button onClick={() => openUserPurchasesModal(user)} className="p-1.5 text-amber-400 hover:bg-amber-500/20 rounded-lg transition-colors" title="Historique achats"><History className="w-4 h-4" /></button>}
+                          {userIsAdmin && <button onClick={() => openGiveItemModal(user)} className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors" title="Donner objet"><Gift className="w-4 h-4" /></button>}
                           {/* Arbitre only sees block referent and ban buttons */}
                           {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>}
                           {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>}
@@ -2417,28 +2572,102 @@ const AdminPanel = () => {
   };
 
   const renderShop = () => {
+    // Category list for filtering
+    const shopCategories = [
+      { id: 'all', label: 'Tout' },
+      { id: 'profile_animation', label: 'Animations' },
+      { id: 'ornament', label: 'Ornements' },
+      { id: 'avatar_frame', label: 'Cadres' },
+      { id: 'title', label: 'Titres' },
+      { id: 'badge', label: 'Badges' },
+      { id: 'boost', label: 'Boosts' },
+      { id: 'emote', label: 'Emotes' },
+      { id: 'cosmetic', label: 'Cosmétiques' },
+      { id: 'other', label: 'Autres' },
+    ];
+    
+    // Use searchTerm state for category filter (repurposing it for shop tab)
+    const shopCategoryFilter = filterMode; // 'all' or specific category
+    
+    // Filter items by category
+    const filteredShopItems = shopCategoryFilter === 'all'
+      ? shopItems
+      : shopItems.filter(item => item.category === shopCategoryFilter);
+    
+    // Sort by category then by price (most expensive first)
+    const sortedShopItems = [...filteredShopItems].sort((a, b) => {
+      // First group by category
+      if (a.category !== b.category) {
+        return a.category.localeCompare(b.category);
+      }
+      // Then sort by price descending
+      return b.price - a.price;
+    });
+    
+    // Pagination
+    const SHOP_ITEMS_PER_PAGE = 12;
+    const shopTotalPages = Math.ceil(sortedShopItems.length / SHOP_ITEMS_PER_PAGE);
+    const paginatedShopItems = sortedShopItems.slice(
+      (page - 1) * SHOP_ITEMS_PER_PAGE,
+      page * SHOP_ITEMS_PER_PAGE
+    );
+    
+    // Get count per category
+    const getCategoryCount = (categoryId) => {
+      if (categoryId === 'all') return shopItems.length;
+      return shopItems.filter(item => item.category === categoryId).length;
+    };
+    
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <h2 className="text-2xl font-bold text-white">Items de la Boutique</h2>
-          <button
-            onClick={() => openCreateModal('shopItem')}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
-          >
-            <Plus className="w-5 h-5" />
-            Nouvel Item
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-400 text-sm">{sortedShopItems.length} items</span>
+            <button
+              onClick={() => openCreateModal('shopItem')}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
+            >
+              <Plus className="w-5 h-5" />
+              Nouvel Item
+            </button>
+          </div>
+        </div>
+        
+        {/* Category Filter Tabs */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+          {shopCategories.map((cat) => {
+            const count = getCategoryCount(cat.id);
+            const isActive = shopCategoryFilter === cat.id;
+            
+            if (cat.id !== 'all' && count === 0) return null;
+            
+            return (
+              <button
+                key={cat.id}
+                onClick={() => { setFilterMode(cat.id); setPage(1); }}
+                className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-all text-sm ${
+                  isActive 
+                    ? 'bg-purple-500 text-white'
+                    : 'bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-700'
+                }`}
+              >
+                {cat.label}
+                <span className="ml-1.5 text-xs opacity-70">({count})</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Items Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {shopItems.length === 0 ? (
+          {paginatedShopItems.length === 0 ? (
             <div className="col-span-full text-center text-gray-400 py-8">
               Aucun item trouvé
             </div>
           ) : (
-            shopItems.map((item) => (
+            paginatedShopItems.map((item) => (
               <div
                 key={item._id}
                 className={`bg-dark-800/50 border rounded-xl p-4 hover:border-white/20 transition-all ${
@@ -2464,8 +2693,16 @@ const AdminPanel = () => {
                     <Coins className="w-4 h-4" />
                     <span className="font-bold">{item.price}</span>
                   </div>
-                  <span className="text-xs text-gray-500">{item.category}</span>
+                  <span className="text-xs text-gray-500 bg-white/5 px-2 py-0.5 rounded">{item.category}</span>
                 </div>
+                
+                {/* Match count for usable items */}
+                {item.isUsable && item.matchCount > 0 && (
+                  <div className="flex items-center gap-1 text-purple-400 text-xs mb-3">
+                    <Target className="w-3 h-3" />
+                    <span>{item.matchCount} match{item.matchCount > 1 ? 's' : ''}</span>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2">
                   <button
@@ -2485,6 +2722,29 @@ const AdminPanel = () => {
             ))
           )}
         </div>
+        
+        {/* Pagination */}
+        {shopTotalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-6">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Précédent
+            </button>
+            <span className="text-gray-400">
+              Page {page} sur {shopTotalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(shopTotalPages, p + 1))}
+              disabled={page === shopTotalPages}
+              className="px-4 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Suivant
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -6271,6 +6531,101 @@ Cette action est irréversible!`)) {
                 required
               />
                 </div>
+
+            {/* Translations */}
+            <div className="border border-white/10 rounded-xl p-4 space-y-4">
+              <p className="text-white font-medium text-sm">Traductions</p>
+              <p className="text-gray-400 text-xs -mt-2">Le nom/description principal sera utilisé si aucune traduction n'est définie</p>
+              
+              {/* Names */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Nom FR</label>
+                  <input
+                    type="text"
+                    value={formData.nameTranslations?.fr || ''}
+                    onChange={(e) => setFormData({ ...formData, nameTranslations: { ...formData.nameTranslations, fr: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    placeholder="Nom en français"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Nom EN</label>
+                  <input
+                    type="text"
+                    value={formData.nameTranslations?.en || ''}
+                    onChange={(e) => setFormData({ ...formData, nameTranslations: { ...formData.nameTranslations, en: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    placeholder="Name in English"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Nom DE</label>
+                  <input
+                    type="text"
+                    value={formData.nameTranslations?.de || ''}
+                    onChange={(e) => setFormData({ ...formData, nameTranslations: { ...formData.nameTranslations, de: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    placeholder="Name auf Deutsch"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Nom IT</label>
+                  <input
+                    type="text"
+                    value={formData.nameTranslations?.it || ''}
+                    onChange={(e) => setFormData({ ...formData, nameTranslations: { ...formData.nameTranslations, it: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    placeholder="Nome in italiano"
+                  />
+                </div>
+              </div>
+              
+              {/* Descriptions */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Description FR</label>
+                  <textarea
+                    value={formData.descriptionTranslations?.fr || ''}
+                    onChange={(e) => setFormData({ ...formData, descriptionTranslations: { ...formData.descriptionTranslations, fr: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    rows={2}
+                    placeholder="Description en français"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Description EN</label>
+                  <textarea
+                    value={formData.descriptionTranslations?.en || ''}
+                    onChange={(e) => setFormData({ ...formData, descriptionTranslations: { ...formData.descriptionTranslations, en: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    rows={2}
+                    placeholder="Description in English"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Description DE</label>
+                  <textarea
+                    value={formData.descriptionTranslations?.de || ''}
+                    onChange={(e) => setFormData({ ...formData, descriptionTranslations: { ...formData.descriptionTranslations, de: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    rows={2}
+                    placeholder="Beschreibung auf Deutsch"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Description IT</label>
+                  <textarea
+                    value={formData.descriptionTranslations?.it || ''}
+                    onChange={(e) => setFormData({ ...formData, descriptionTranslations: { ...formData.descriptionTranslations, it: e.target.value }})}
+                    className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500/50"
+                    rows={2}
+                    placeholder="Descrizione in italiano"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
                   <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Catégorie</label>
@@ -6279,6 +6634,8 @@ Cette action est irréversible!`)) {
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
                 >
+                  <option value="usable_item">Objet utilisable</option>
+                  <option value="profile_animation">Animation profil</option>
                   <option value="avatar_frame">Cadre Avatar</option>
                   <option value="ornament">Ornement</option>
                   <option value="badge">Badge</option>
@@ -6337,6 +6694,74 @@ Cette action est irréversible!`)) {
                       <option value="cdl">CDL uniquement</option>
                     </select>
                   </div>
+            
+            {/* Usable Item Configuration */}
+            <div className="border-t border-white/10 pt-4 mt-4">
+              <label className="flex items-center gap-2 mb-4">
+                <input
+                  type="checkbox"
+                  checked={formData.isUsable || false}
+                  onChange={(e) => setFormData({ ...formData, isUsable: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-white font-medium">Objet utilisable (consommable)</span>
+              </label>
+              
+              {formData.isUsable && (
+                <div className="space-y-4 bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Type d'effet</label>
+                      <select
+                        value={formData.effectType || 'other'}
+                        onChange={(e) => setFormData({ ...formData, effectType: e.target.value })}
+                        className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                      >
+                        <option value="double_pts">Double Points</option>
+                        <option value="double_gold">Double Gold</option>
+                        <option value="double_xp">Double XP</option>
+                        <option value="cancel_match">Annuler Match</option>
+                        <option value="emote">Emote</option>
+                        <option value="other">Autre</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Nombre de matchs</label>
+                      <input
+                        type="number"
+                        value={formData.matchCount !== undefined ? formData.matchCount : 3}
+                        onChange={(e) => setFormData({ ...formData, matchCount: parseInt(e.target.value) || 0 })}
+                        className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                        min={0}
+                        placeholder="0 = usage unique"
+                      />
+                      <p className="text-gray-500 text-xs mt-1">0 = usage unique, vide = illimité</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.usableInMatch || false}
+                        onChange={(e) => setFormData({ ...formData, usableInMatch: e.target.checked })}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-white text-sm">Utilisable en match</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.allowMultiplePurchases || false}
+                        onChange={(e) => setFormData({ ...formData, allowMultiplePurchases: e.target.checked })}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-white text-sm">Achats multiples autorisés</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
             <div>
               <label className="flex items-center gap-2">
                 <input
@@ -7043,6 +7468,9 @@ Cette action est irréversible!`)) {
             formatDate={formatDate}
             getRoleColor={getRoleColor}
             userIsArbitre={userIsArbitre && !userIsStaff}
+            userIsAdmin={userIsAdmin}
+            openUserPurchasesModal={openUserPurchasesModal}
+            openGiveItemModal={openGiveItemModal}
           />
         );
       case 'squads':
@@ -7609,6 +8037,187 @@ Cette action est irréversible!`)) {
               >
                 <Gamepad2 className="w-5 h-5" />
                 {rankedBanData.isRankedBanned ? 'Débannir du Ranked' : 'Bannir du Ranked'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Purchase History Modal (Admin only) */}
+      {showUserPurchases && selectedUserForPurchases && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowUserPurchases(false)}></div>
+          <div className="relative bg-dark-900 border-t sm:border border-amber-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-3 bg-amber-500/20 rounded-xl">
+                <History className="w-5 sm:w-6 h-5 sm:h-6 text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">
+                  Historique d'achats
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm">
+                  {selectedUserForPurchases.username}
+                </p>
+              </div>
+              <button onClick={() => setShowUserPurchases(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {loadingUserPurchases ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+              </div>
+            ) : userPurchases.length === 0 ? (
+              <div className="text-center py-12">
+                <ShoppingBag className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-400">Aucun achat pour cet utilisateur</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {userPurchases.map((purchase) => {
+                  // Determine usage status for usable items
+                  const isUsableItem = purchase.item?.isUsable;
+                  const usage = purchase.usage;
+                  let usageStatus = null;
+                  
+                  if (isUsableItem && usage) {
+                    if (usage.wasConsumed) {
+                      usageStatus = { text: 'Consommé', color: 'text-gray-400' };
+                    } else if (usage.isActive) {
+                      usageStatus = { 
+                        text: `En cours (${usage.remainingMatches || 0} match${(usage.remainingMatches || 0) > 1 ? 's' : ''})`, 
+                        color: 'text-green-400' 
+                      };
+                    } else if (usage.remainingMatches > 0) {
+                      usageStatus = { 
+                        text: `Non activé (${usage.remainingMatches} match${usage.remainingMatches > 1 ? 's' : ''})`, 
+                        color: 'text-cyan-400' 
+                      };
+                    }
+                  }
+                  
+                  return (
+                    <div key={purchase._id} className="flex items-center gap-4 p-4 bg-dark-800/50 rounded-xl border border-white/5">
+                      <div className="w-12 h-12 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                        <ShoppingBag className="w-6 h-6 text-amber-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">
+                          {purchase.item?.nameTranslations?.fr || purchase.item?.name || purchase.itemSnapshot?.name || 'Objet inconnu'}
+                        </p>
+                        <p className="text-gray-500 text-sm">
+                          {purchase.item?.category || purchase.itemSnapshot?.category} • {new Date(purchase.createdAt).toLocaleDateString('fr-FR')}
+                          {purchase.isGift && <span className="ml-2 text-green-400">• Cadeau</span>}
+                          {usageStatus && <span className={`ml-2 ${usageStatus.color}`}>• {usageStatus.text}</span>}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1 text-yellow-400">
+                          <Coins className="w-4 h-4" />
+                          <span className="font-bold">{purchase.pricePaid}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleDeletePurchase(purchase._id, true)}
+                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                            title="Supprimer et rembourser"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Give Item Modal (Admin only) */}
+      {showGiveItemModal && selectedUserForGiveItem && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowGiveItemModal(false)}></div>
+          <div className="relative bg-dark-900 border-t sm:border border-green-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-3 bg-green-500/20 rounded-xl">
+                <Gift className="w-5 sm:w-6 h-5 sm:h-6 text-green-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">
+                  Donner un objet
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm">
+                  À {selectedUserForGiveItem.username}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Sélectionner un objet</label>
+                <select
+                  value={selectedItemToGive?._id || ''}
+                  onChange={(e) => {
+                    const item = availableShopItems.find(i => i._id === e.target.value);
+                    setSelectedItemToGive(item || null);
+                  }}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-green-500/50"
+                >
+                  <option value="">Choisir un objet...</option>
+                  {availableShopItems.map((item) => (
+                    <option key={item._id} value={item._id}>
+                      {item.nameTranslations?.fr || item.name} ({item.category}) - {item.price} coins
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedItemToGive && (
+                <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
+                      <Gift className="w-6 h-6 text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">{selectedItemToGive.nameTranslations?.fr || selectedItemToGive.name}</p>
+                      <p className="text-green-400 text-sm">{selectedItemToGive.category} • {selectedItemToGive.rarity}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <p className="text-amber-400 text-sm flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4" />
+                  L'objet sera donné gratuitement (sans déduction de coins)
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 sm:mt-6">
+              <button
+                onClick={() => setShowGiveItemModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleGiveItem}
+                disabled={!selectedItemToGive || givingItem}
+                className="flex-1 py-3 px-4 bg-green-500 text-white font-medium rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {givingItem ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Gift className="w-5 h-5" />
+                    Donner l'objet
+                  </>
+                )}
               </button>
             </div>
           </div>

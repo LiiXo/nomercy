@@ -19,6 +19,24 @@ const RANKED_VOICE_CATEGORY_ID = '1460717958656688271';
 let client = null;
 let isReady = false;
 
+// Flag to prevent channel deletion during server restart
+let isShuttingDown = false;
+
+/**
+ * Set the shutting down flag to prevent channel deletion during restart
+ */
+export const setShuttingDown = (value) => {
+  isShuttingDown = value;
+  if (value) {
+    console.log('[Discord Bot] Server is shutting down - channel deletion disabled');
+  }
+};
+
+/**
+ * Check if server is shutting down
+ */
+export const getShuttingDown = () => isShuttingDown;
+
 /**
  * Initialize the Discord bot
  */
@@ -512,10 +530,16 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
  * @param {string} team1ChannelId - The team 1 voice channel ID
  * @param {string} team2ChannelId - The team 2 voice channel ID
  */
-export const deleteMatchVoiceChannels = async (team1ChannelId, team2ChannelId) => {
+export const deleteMatchVoiceChannels = async (team1ChannelId, team2ChannelId, options = {}) => {
+  // Skip deletion during server shutdown/restart unless explicitly forced
+  if (isShuttingDown && !options.force) {
+    console.log('[Discord Bot] Skipping channel deletion during server restart');
+    return { skipped: true, reason: 'server_restart' };
+  }
+
   if (!client || !isReady) {
     console.warn('[Discord Bot] Bot not ready, skipping voice channel deletion');
-    return;
+    return { skipped: true, reason: 'bot_not_ready' };
   }
 
   try {
@@ -577,5 +601,7 @@ export default {
   logAdminMessage,
   logArbitratorCall,
   createMatchVoiceChannels,
-  deleteMatchVoiceChannels
+  deleteMatchVoiceChannels,
+  setShuttingDown,
+  getShuttingDown
 };

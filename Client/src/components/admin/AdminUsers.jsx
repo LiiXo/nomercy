@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe 
+  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe, History, Gift 
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
@@ -20,7 +20,10 @@ const AdminUsers = ({
   handleToggleReferentBan,
   formatDate,
   getRoleColor,
-  userIsArbitre = false
+  userIsArbitre = false,
+  userIsAdmin = false,
+  openUserPurchasesModal,
+  openGiveItemModal
 }) => {
   return (
     <div className="space-y-4">
@@ -91,6 +94,9 @@ const AdminUsers = ({
                   </div>
                 )}
                 <div className="flex items-center gap-1 ml-auto">
+                  {/* Admin only: Purchase history and give item */}
+                  {userIsAdmin && openUserPurchasesModal && <button onClick={() => openUserPurchasesModal(user)} className="p-1.5 text-amber-400 hover:bg-amber-500/20 rounded-lg" title="Historique achats"><History className="w-4 h-4" /></button>}
+                  {userIsAdmin && openGiveItemModal && <button onClick={() => openGiveItemModal(user)} className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg" title="Donner objet"><Gift className="w-4 h-4" /></button>}
                   {/* Arbitre only sees block referent and ban buttons */}
                   {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>}
                   {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg"><RotateCcw className="w-4 h-4" /></button>}
@@ -204,6 +210,9 @@ const AdminUsers = ({
                     </td>
                     <td className="px-4 lg:px-6 py-4">
                       <div className="flex items-center justify-end gap-1">
+                        {/* Admin only: Purchase history and give item */}
+                        {userIsAdmin && openUserPurchasesModal && <button onClick={() => openUserPurchasesModal(user)} className="p-1.5 text-amber-400 hover:bg-amber-500/20 rounded-lg transition-colors" title="Historique achats"><History className="w-4 h-4" /></button>}
+                        {userIsAdmin && openGiveItemModal && <button onClick={() => openGiveItemModal(user)} className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors" title="Donner objet"><Gift className="w-4 h-4" /></button>}
                         {/* Arbitre only sees block referent and ban buttons */}
                         {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>}
                         {!userIsArbitre && <button onClick={() => setResetStatsConfirm(user)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title="Reset Stats"><RotateCcw className="w-4 h-4" /></button>}

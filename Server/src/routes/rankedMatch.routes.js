@@ -4,6 +4,7 @@ import RankedMatch from '../models/RankedMatch.js';
 import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
+import ItemUsage from '../models/ItemUsage.js';
 import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
 import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
@@ -149,6 +150,26 @@ async function distributeRankedRewards(match) {
         // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
         let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
         
+        // ========== CHECK FOR ACTIVE BOOSTERS ==========
+        // Now using match-count-based boosters (count decrements after each match)
+        const activeBoosters = await ItemUsage.find({
+          user: userId,
+          isActive: true,
+          wasConsumed: false,
+          effectType: { $in: ['double_pts', 'double_gold'] },
+          $or: [
+            { remainingMatches: null }, // Unlimited
+            { remainingMatches: { $gt: 0 } } // Has matches remaining
+          ]
+        });
+        
+        const hasDoublePts = activeBoosters.some(b => b.effectType === 'double_pts');
+        const hasDoubleGold = activeBoosters.some(b => b.effectType === 'double_gold');
+        
+        if (hasDoublePts || hasDoubleGold) {
+          console.log(`[RANKED REWARDS] Player ${i}: Active boosters - Double PTS: ${hasDoublePts}, Double Gold: ${hasDoubleGold}`);
+        }
+        
         // ========== CALCULER LES RÉCOMPENSES ==========
         
         // Déterminer le rang actuel du joueur pour calculer les points perdus
@@ -171,9 +192,13 @@ async function distributeRankedRewards(match) {
         
         // Points pour le ladder classé - utiliser les points par rang pour les perdants
         // DOUBLE XP: Si l'événement est actif, doubler les points gagnés en victoire
+        // BOOSTER: Si le joueur a un booster double_pts actif, doubler les points en victoire
         let rankedPointsChange;
         if (isWinner) {
-          rankedPointsChange = isDoubleXP ? pointsWin * 2 : pointsWin;
+          let basePoints = pointsWin;
+          if (isDoubleXP) basePoints *= 2; // Event double XP
+          if (hasDoublePts) basePoints *= 2; // Personal booster
+          rankedPointsChange = basePoints;
         } else {
           // Utiliser les points perdus configurés pour le rang du joueur
           const configuredLoss = pointsLossPerRank[playerDivision];
@@ -183,9 +208,16 @@ async function distributeRankedRewards(match) {
         
         // Gold (monnaie du jeu)
         // DOUBLE GOLD: Si l'événement est actif, doubler les pièces gagnées
-        const goldChange = isWinner 
-          ? (isDoubleGold ? coinsWin * 2 : coinsWin) 
-          : (isDoubleGold ? coinsLoss * 2 : coinsLoss);
+        // BOOSTER: Si le joueur a un booster double_gold actif, doubler les golds en victoire
+        let goldChange;
+        if (isWinner) {
+          let baseGold = coinsWin;
+          if (isDoubleGold) baseGold *= 2; // Event double gold
+          if (hasDoubleGold) baseGold *= 2; // Personal booster
+          goldChange = baseGold;
+        } else {
+          goldChange = isDoubleGold ? coinsLoss * 2 : coinsLoss;
+        }
         
         // XP pour le classement Top Player (expérience générale)
         const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
@@ -251,17 +283,57 @@ async function distributeRankedRewards(match) {
           goldEarned: goldChange,
           xpEarned: xpChange,
           oldPoints: oldRankedPoints,
-          newPoints: newRankedPoints
+          newPoints: newRankedPoints,
+          boostersUsed: {
+            doublePts: hasDoublePts && isWinner,
+            doubleGold: hasDoubleGold && isWinner
+          }
         };
         // Stocker aussi les points actuels du joueur pour calculer l'ancien/nouveau rang
         match.players[i].points = newRankedPoints;
         
         // ========== LOG DÉTAILLÉ ==========
         console.log(`[RANKED REWARDS] ✅ Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
-        console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})`);
-        console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})`);
+        console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})${hasDoublePts && isWinner ? ' [BOOSTER x2]' : ''}`);
+        console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})${hasDoubleGold && isWinner ? ' [BOOSTER x2]' : ''}`);
         console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user[statsField].xp} (+${xpChange}) (${statsField})`);
         console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
+        
+        // ========== DECREMENT MATCH COUNT FOR BOOSTERS ==========
+        if (activeBoosters.length > 0) {
+          for (const booster of activeBoosters) {
+            // Decrement remainingMatches if it has a count
+            if (booster.remainingMatches !== null && booster.remainingMatches > 0) {
+              const newRemainingMatches = booster.remainingMatches - 1;
+              
+              await ItemUsage.findByIdAndUpdate(booster._id, {
+                $set: {
+                  remainingMatches: newRemainingMatches,
+                  inMatch: false,
+                  matchStartTime: null,
+                  isActive: newRemainingMatches > 0 // Deactivate if no matches left
+                },
+                $inc: {
+                  totalMatchesUsed: 1
+                }
+              });
+              
+              console.log(`[RANKED REWARDS]   └─ 🎯 Booster ${booster.effectType}: ${booster.remainingMatches} → ${newRemainingMatches} matches remaining${newRemainingMatches <= 0 ? ' [EXPIRED]' : ''}`);
+            } else {
+              // Unlimited booster - just reset inMatch flag and increment counter
+              await ItemUsage.findByIdAndUpdate(booster._id, {
+                $set: {
+                  inMatch: false,
+                  matchStartTime: null
+                },
+                $inc: {
+                  totalMatchesUsed: 1
+                }
+              });
+              console.log(`[RANKED REWARDS]   └─ 🎯 Booster applied: ${booster.effectType} (unlimited)`);
+            }
+          }
+        }
         
         processedCount++;
         
@@ -962,6 +1034,38 @@ router.post('/:matchId/code', verifyToken, async (req, res) => {
     if (match.status === 'ready') {
       match.status = 'in_progress';
       match.startedAt = new Date();
+      
+      // ========== TRACK BOOSTER MATCH TIME ==========
+      // Set inMatch: true and matchStartTime for all players with active boosters
+      const playerUserIds = match.players
+        .filter(p => !p.isFake && p.user)
+        .map(p => p.user._id || p.user);
+      
+      if (playerUserIds.length > 0) {
+        const matchStartTime = new Date();
+        const boosterUpdateResult = await ItemUsage.updateMany(
+          {
+            user: { $in: playerUserIds },
+            isActive: true,
+            wasConsumed: false,
+            effectType: { $in: ['double_pts', 'double_gold', 'double_xp'] },
+            $or: [
+              { remainingMs: null },
+              { remainingMs: { $gt: 0 } }
+            ]
+          },
+          {
+            $set: {
+              inMatch: true,
+              matchStartTime: matchStartTime
+            }
+          }
+        );
+        
+        if (boosterUpdateResult.modifiedCount > 0) {
+          console.log(`[RANKED MATCH] Set inMatch=true for ${boosterUpdateResult.modifiedCount} active boosters at match start`);
+        }
+      }
     }
     await match.save();
 

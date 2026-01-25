@@ -50,7 +50,7 @@ const startServer = async () => {
   const { initGGSecureMonitoring, startGGSecureMonitoring } = await import('./services/ggsecureMonitoring.service.js');
 
   // Import Discord bot service
-  const { initDiscordBot } = await import('./services/discordBot.service.js');
+  const { initDiscordBot, setShuttingDown } = await import('./services/discordBot.service.js');
 
   const app = express();
   const httpServer = createServer(app);
@@ -331,9 +331,17 @@ const startServer = async () => {
     res.json({ status: 'ok', message: 'NoMercy API is running' });
   });
 
-  // Error handling middleware
+  // Error handling middleware (with CORS headers)
   app.use((err, req, res, next) => {
     console.error(err.stack);
+    
+    // Ensure CORS headers are set even for errors
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    
     res.status(500).json({ 
       success: false, 
       message: 'Something went wrong!',
@@ -380,6 +388,44 @@ const startServer = async () => {
       
       // Initialize Discord Arbitrage bot
       initDiscordBot().catch(err => console.error('Discord bot init error:', err));
+      
+      // Graceful shutdown handler - preserve Discord voice channels on restart
+      const gracefulShutdown = async (signal) => {
+        console.log(`\n[Server] Received ${signal}, starting graceful shutdown...`);
+        
+        // Mark as shutting down to prevent voice channel deletion
+        setShuttingDown(true);
+        console.log('[Server] Voice channel protection enabled - channels will be preserved');
+        
+        // Wait a moment to ensure any in-flight requests complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Close HTTP server
+        httpServer.close(() => {
+          console.log('[Server] HTTP server closed');
+        });
+        
+        // Close MongoDB connection
+        try {
+          await mongoose.connection.close();
+          console.log('[Server] MongoDB connection closed');
+        } catch (err) {
+          console.error('[Server] Error closing MongoDB:', err);
+        }
+        
+        console.log('[Server] Graceful shutdown complete - voice channels preserved');
+        process.exit(0);
+      };
+      
+      // Handle shutdown signals
+      process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+      process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+      
+      // Handle uncaught exceptions gracefully
+      process.on('uncaughtException', (err) => {
+        console.error('[Server] Uncaught exception:', err);
+        setShuttingDown(true); // Protect channels even on crash
+      });
     });
   } catch (err) {
     console.error('MongoDB connection error:', err);

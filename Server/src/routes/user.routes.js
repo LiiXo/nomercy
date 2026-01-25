@@ -755,7 +755,8 @@ router.get('/by-id/:id', async (req, res) => {
       _id: req.params.id,
       isProfileComplete: true,
       isBanned: false
-    });
+    }).populate('equippedTitle', 'name nameTranslations icon color rarity')
+      .populate('equippedProfileAnimation', 'name nameTranslations icon color rarity profileAnimationData');
 
     if (!user) {
       return res.status(404).json({
@@ -849,6 +850,8 @@ router.get('/by-id/:id', async (req, res) => {
           wins: totalWins,
           losses: totalLosses
         },
+        equippedTitle: user.equippedTitle,
+        equippedProfileAnimation: user.equippedProfileAnimation,
         createdAt: user.createdAt
       }
     });
@@ -1286,6 +1289,23 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
     const totalTrophies = await Trophy.countDocuments();
     const activeAnnouncements = await Announcement.countDocuments({ isActive: true });
 
+    // Gold statistics
+    const topGoldUser = await User.findOne({ isProfileComplete: true })
+      .sort({ goldCoins: -1 })
+      .select('username goldCoins avatar');
+    
+    const goldAggregation = await User.aggregate([
+      { $match: { isProfileComplete: true } },
+      { $group: { 
+        _id: null, 
+        totalGold: { $sum: '$goldCoins' },
+        avgGold: { $avg: '$goldCoins' },
+        count: { $sum: 1 }
+      }}
+    ]);
+    
+    const goldStats = goldAggregation[0] || { totalGold: 0, avgGold: 0, count: 0 };
+
     // Get registrations for the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -1326,7 +1346,17 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
         totalTrophies,
         activeAnnouncements,
         registrationsLast30Days,
-        visitorsLast30Days
+        visitorsLast30Days,
+        goldStats: {
+          topUser: topGoldUser ? {
+            username: topGoldUser.username,
+            goldCoins: topGoldUser.goldCoins,
+            avatar: topGoldUser.avatar
+          } : null,
+          totalGold: goldStats.totalGold,
+          averageGold: Math.round(goldStats.avgGold || 0),
+          usersWithGold: goldStats.count
+        }
       }
     });
   } catch (error) {

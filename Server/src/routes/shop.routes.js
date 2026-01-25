@@ -219,12 +219,103 @@ router.post('/purchase/:itemId', verifyToken, async (req, res) => {
 router.get('/my-purchases', verifyToken, async (req, res) => {
   try {
     const purchases = await Purchase.find({ user: req.user._id })
-      .populate('item', 'name image icon color category rarity')
+      .populate('item', 'name image icon color category rarity nameTranslations descriptionTranslations')
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, purchases });
+    res.json({ 
+      success: true, 
+      purchases,
+      equippedTitle: req.user.equippedTitle,
+      equippedProfileAnimation: req.user.equippedProfileAnimation
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching purchases' });
+  }
+});
+
+// Equip a title
+router.post('/equip-title/:itemId', verifyToken, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+
+    // If itemId is 'none', unequip the title
+    if (itemId === 'none') {
+      req.user.equippedTitle = null;
+      await req.user.save();
+      return res.json({ success: true, message: 'Title unequipped', equippedTitle: null });
+    }
+
+    // Check if user owns this title
+    const purchase = await Purchase.findOne({
+      user: req.user._id,
+      item: itemId,
+      status: 'completed'
+    }).populate('item');
+
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'You do not own this title' });
+    }
+
+    // Check if it's a title category
+    if (purchase.item.category !== 'title') {
+      return res.status(400).json({ success: false, message: 'This item is not a title' });
+    }
+
+    // Equip the title
+    req.user.equippedTitle = itemId;
+    await req.user.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Title equipped successfully',
+      equippedTitle: purchase.item
+    });
+  } catch (error) {
+    console.error('Equip title error:', error);
+    res.status(500).json({ success: false, message: 'Error equipping title' });
+  }
+});
+
+// Equip a profile animation
+router.post('/equip-profile-animation/:itemId', verifyToken, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+
+    // If itemId is 'none', unequip the animation
+    if (itemId === 'none') {
+      req.user.equippedProfileAnimation = null;
+      await req.user.save();
+      return res.json({ success: true, message: 'Profile animation unequipped', equippedProfileAnimation: null });
+    }
+
+    // Check if user owns this animation
+    const purchase = await Purchase.findOne({
+      user: req.user._id,
+      item: itemId,
+      status: 'completed'
+    }).populate('item');
+
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'You do not own this animation' });
+    }
+
+    // Check if it's a profile_animation category
+    if (purchase.item.category !== 'profile_animation') {
+      return res.status(400).json({ success: false, message: 'This item is not a profile animation' });
+    }
+
+    // Equip the animation
+    req.user.equippedProfileAnimation = itemId;
+    await req.user.save();
+
+    res.json({ 
+      success: true, 
+      message: 'Profile animation equipped successfully',
+      equippedProfileAnimation: purchase.item
+    });
+  } catch (error) {
+    console.error('Equip profile animation error:', error);
+    res.status(500).json({ success: false, message: 'Error equipping profile animation' });
   }
 });
 
@@ -264,7 +355,7 @@ router.post('/admin/items', verifyToken, requireStaff, async (req, res) => {
       name, description, category, price, originalPrice,
       image, icon, color, rarity, isActive, stock, mode,
       availableFrom, availableUntil, effects, sortOrder,
-      isUsable, effectType, duration, usableInMatch, allowMultiplePurchases,
+      isUsable, effectType, matchCount, usableInMatch, allowMultiplePurchases,
       nameTranslations, descriptionTranslations, ornamentData
     } = req.body;
 
@@ -294,7 +385,7 @@ router.post('/admin/items', verifyToken, requireStaff, async (req, res) => {
       sortOrder: sortOrder || 0,
       isUsable,
       effectType,
-      duration,
+      matchCount,
       usableInMatch,
       allowMultiplePurchases,
       nameTranslations,
@@ -328,7 +419,7 @@ router.put('/admin/items/:id', verifyToken, requireStaff, async (req, res) => {
       'name', 'description', 'category', 'price', 'originalPrice',
       'image', 'icon', 'color', 'rarity', 'isActive', 'stock', 'mode',
       'availableFrom', 'availableUntil', 'effects', 'sortOrder',
-      'isUsable', 'effectType', 'duration', 'usableInMatch', 'allowMultiplePurchases',
+      'isUsable', 'effectType', 'matchCount', 'usableInMatch', 'allowMultiplePurchases',
       'nameTranslations', 'descriptionTranslations', 'ornamentData'
     ];
 
@@ -405,7 +496,7 @@ router.post('/use-item/:purchaseId', verifyToken, async (req, res) => {
     }
 
     // Check if already used (for one-time use items)
-    if (item.duration === 0) {
+    if (item.matchCount === 0) {
       const existingUsage = await ItemUsage.findOne({
         purchase: purchaseId,
         isActive: true
@@ -420,11 +511,12 @@ router.post('/use-item/:purchaseId', verifyToken, async (req, res) => {
 
     switch (item.effectType) {
       case 'double_xp':
+      case 'double_pts':
       case 'double_gold':
-        // Create usage record with expiration
-        const expiresAt = item.duration > 0 
-          ? new Date(Date.now() + item.duration * 60 * 60 * 1000)
-          : null;
+        // Create usage record with remainingMatches (count-based instead of time-based)
+        const remainingMatches = item.matchCount > 0 
+          ? item.matchCount // Number of matches
+          : null; // null = unlimited
         
         await ItemUsage.create({
           user: req.user._id,
@@ -432,13 +524,27 @@ router.post('/use-item/:purchaseId', verifyToken, async (req, res) => {
           item: item._id,
           effectType: item.effectType,
           match: matchId || null,
-          expiresAt,
+          remainingMatches, // Store remaining match count
+          remainingMs: null, // Not using time-based anymore
+          expiresAt: null,
+          inMatch: false,
+          matchStartTime: null,
+          totalMatchesUsed: 0,
           isActive: true
         });
         
+        // Mark purchase as used
+        purchase.isUsed = true;
+        purchase.usedAt = new Date();
+        await purchase.save();
+        
+        const countText = item.matchCount > 0 ? `${item.matchCount} match${item.matchCount > 1 ? 'es' : ''}` : 'unlimited';
         result.message = item.effectType === 'double_xp' 
-          ? 'Double XP activated for 24h!'
-          : 'Double Gold activated for 24h!';
+          ? `Double XP activated for ${countText}!`
+          : item.effectType === 'double_pts'
+          ? `Double Points activated for ${countText}!`
+          : `Double Gold activated for ${countText}!`;
+        result.remainingMatches = remainingMatches;
         break;
 
       case 'cancel_match':
@@ -657,8 +763,8 @@ router.get('/my-usable-items', verifyToken, async (req, res) => {
       } else {
         if (isUsed) {
           itemData.usedQuantity++;
-          // For duration-based items, check if still active
-          if (purchase.item.duration > 0 && usage && (!usage.expiresAt || new Date(usage.expiresAt) > new Date())) {
+          // For match-count-based items, check if still active
+          if (purchase.item.matchCount > 0 && usage && usage.isActive && (usage.remainingMatches === null || usage.remainingMatches > 0)) {
             // Still active, so it's available
             itemData.availableQuantity++;
           }
@@ -686,13 +792,143 @@ router.get('/my-usable-items', verifyToken, async (req, res) => {
       availableQuantity: itemData.availableQuantity,
       canUse: itemData.availableQuantity > 0,
       // Get first available purchase ID for use
-      purchaseId: itemData.purchases.find(p => !p.isUsed || (itemData.item.duration > 0 && p.usage && (!p.usage.expiresAt || new Date(p.usage.expiresAt) > new Date())))?.purchaseId || itemData.purchases[0]?.purchaseId
+      purchaseId: itemData.purchases.find(p => !p.isUsed || (itemData.item.matchCount > 0 && p.usage && p.usage.isActive))?.purchaseId || itemData.purchases[0]?.purchaseId
     }));
 
     res.json({ success: true, items });
   } catch (error) {
     console.error('Get usable items error:', error);
     res.status(500).json({ success: false, message: 'Error fetching usable items' });
+  }
+});
+
+// Get user's active boosters (for ranked mode)
+router.get('/my-active-boosters', verifyToken, async (req, res) => {
+  try {
+    // Find active boosters that have remaining matches and haven't been consumed
+    // Now using match-based counting instead of time-based
+    let activeBoosters = await ItemUsage.find({
+      user: req.user._id,
+      isActive: true,
+      wasConsumed: false,
+      effectType: { $in: ['double_pts', 'double_gold', 'double_xp'] }
+    })
+      .populate('item', 'name icon color effectType matchCount nameTranslations')
+      .lean();
+
+    // Filter and process boosters
+    const validBoosters = [];
+    const toMarkConsumed = [];
+
+    for (const booster of activeBoosters) {
+      // Case 1: New system - has remainingMatches set
+      if (booster.remainingMatches !== undefined && booster.remainingMatches !== null) {
+        if (booster.remainingMatches > 0) {
+          validBoosters.push(booster);
+        } else {
+          // Depleted - mark for cleanup
+          toMarkConsumed.push(booster._id);
+        }
+      }
+      // Case 2: Legacy system - has remainingMs (convert to 1 remaining match per 5 min)
+      else if (booster.remainingMs !== undefined && booster.remainingMs !== null && booster.remainingMs > 0) {
+        // Convert legacy time-based to match-based (estimate: 1 match per 5 minutes)
+        booster.remainingMatches = Math.max(1, Math.ceil(booster.remainingMs / (5 * 60 * 1000)));
+        validBoosters.push(booster);
+      }
+      // Case 3: Legacy expiresAt
+      else if (booster.expiresAt) {
+        if (new Date(booster.expiresAt) > new Date()) {
+          // Still valid - estimate remaining matches
+          const remainingMs = new Date(booster.expiresAt).getTime() - Date.now();
+          booster.remainingMatches = Math.max(1, Math.ceil(remainingMs / (5 * 60 * 1000)));
+          validBoosters.push(booster);
+        } else {
+          // Expired - mark for cleanup
+          toMarkConsumed.push(booster._id);
+        }
+      }
+      // Case 4: No remainingMatches and no legacy fields - treat as unlimited
+      else {
+        booster.remainingMatches = null; // Unlimited
+        validBoosters.push(booster);
+      }
+    }
+
+    // Clean up depleted/expired boosters
+    if (toMarkConsumed.length > 0) {
+      await ItemUsage.updateMany(
+        { _id: { $in: toMarkConsumed } },
+        { $set: { isActive: false, wasConsumed: true } }
+      );
+    }
+
+    res.json({
+      success: true,
+      boosters: validBoosters.map(b => ({
+        usageId: b._id,
+        item: b.item,
+        effectType: b.effectType,
+        usedAt: b.usedAt,
+        remainingMatches: b.remainingMatches, // Number of matches remaining (null = unlimited)
+        inMatch: b.inMatch || false, // Whether currently in a match
+        totalMatchesUsed: b.totalMatchesUsed || 0 // Total matches used with this booster
+      }))
+    });
+  } catch (error) {
+    console.error('Get active boosters error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching active boosters' });
+  }
+});
+
+// Get user's available boosters (purchased but not yet used)
+router.get('/my-available-boosters', verifyToken, async (req, res) => {
+  try {
+    // Get all purchases of usable items that haven't been used
+    const purchases = await Purchase.find({
+      user: req.user._id,
+      status: 'completed',
+      isUsed: { $ne: true }
+    })
+      .populate({
+        path: 'item',
+        match: { 
+          isUsable: true,
+          effectType: { $in: ['double_pts', 'double_gold', 'double_xp'] }
+        }
+      })
+      .lean();
+
+    // Filter to only purchases with valid booster items
+    const availableBoosters = purchases.filter(p => p.item);
+
+    // Group by item type and count
+    const boosterMap = new Map();
+    availableBoosters.forEach(purchase => {
+      const itemId = purchase.item._id.toString();
+      if (!boosterMap.has(itemId)) {
+        boosterMap.set(itemId, {
+          item: purchase.item,
+          quantity: 0,
+          purchases: []
+        });
+      }
+      const data = boosterMap.get(itemId);
+      data.quantity++;
+      data.purchases.push(purchase._id);
+    });
+
+    res.json({
+      success: true,
+      boosters: Array.from(boosterMap.values()).map(b => ({
+        item: b.item,
+        quantity: b.quantity,
+        purchaseId: b.purchases[0] // First available purchase ID for activation
+      }))
+    });
+  } catch (error) {
+    console.error('Get available boosters error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching available boosters' });
   }
 });
 
@@ -733,6 +969,229 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error fetching stats' });
+  }
+});
+
+// Get user's purchase history - Admin only
+router.get('/admin/user-purchases/:userId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const purchases = await Purchase.find({ user: userId })
+      .populate('item', 'name category rarity nameTranslations descriptionTranslations isUsable effectType matchCount')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Get ItemUsage data for usable items
+    const itemUsages = await ItemUsage.find({ user: userId }).lean();
+    const usageByPurchase = {};
+    const usageByItem = {};
+    
+    itemUsages.forEach(usage => {
+      if (usage.purchase) {
+        usageByPurchase[usage.purchase.toString()] = usage;
+      }
+      if (usage.item) {
+        usageByItem[usage.item.toString()] = usage;
+      }
+    });
+
+    // Enrich purchases with usage data
+    const enrichedPurchases = purchases.map(purchase => {
+      const usage = usageByPurchase[purchase._id.toString()] || 
+                    (purchase.item ? usageByItem[purchase.item._id.toString()] : null);
+      
+      return {
+        ...purchase,
+        usage: usage ? {
+          isActive: usage.isActive,
+          wasConsumed: usage.wasConsumed,
+          remainingMatches: usage.remainingMatches,
+          activatedAt: usage.activatedAt
+        } : null
+      };
+    });
+
+    res.json({
+      success: true,
+      purchases: enrichedPurchases
+    });
+  } catch (error) {
+    console.error('Get user purchases error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching user purchases' });
+  }
+});
+
+// Get all shop items (for admin give item feature)
+router.get('/admin/all-items', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const items = await ShopItem.find()
+      .select('name category rarity price nameTranslations isActive')
+      .sort({ category: 1, name: 1 })
+      .lean();
+
+    res.json({
+      success: true,
+      items
+    });
+  } catch (error) {
+    console.error('Get all items error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching items' });
+  }
+});
+
+// Give item to user - Admin only
+router.post('/admin/give-item', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId, itemId } = req.body;
+
+    if (!userId || !itemId) {
+      return res.status(400).json({ success: false, message: 'userId and itemId are required' });
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const item = await ShopItem.findById(itemId);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Item not found' });
+    }
+
+    // Create purchase record (as a gift, price = 0)
+    const purchase = new Purchase({
+      user: userId,
+      item: itemId,
+      itemSnapshot: {
+        name: item.name,
+        price: item.price,
+        category: item.category,
+        rarity: item.rarity
+      },
+      pricePaid: 0, // Free gift
+      giftedBy: req.user._id, // Track who gave the item
+      isGift: true
+    });
+    await purchase.save();
+
+    // Update item stats
+    item.totalSold += 1;
+    await item.save();
+
+    // If it's a usable item, create ItemUsage record
+    if (item.isUsable) {
+      const remainingMatches = item.matchCount > 0 
+        ? item.matchCount
+        : null;
+
+      const usage = new ItemUsage({
+        user: userId,
+        item: itemId,
+        purchase: purchase._id,
+        effectType: item.effectType,
+        remainingMatches,
+        isActive: false,
+        wasConsumed: false
+      });
+      await usage.save();
+    }
+
+    console.log(`[Admin] ${req.user.username} gave ${item.name} to ${targetUser.username}`);
+
+    res.json({
+      success: true,
+      message: `${item.name} has been given to ${targetUser.username}`,
+      purchase
+    });
+  } catch (error) {
+    console.error('Give item error:', error);
+    res.status(500).json({ success: false, message: 'Error giving item' });
+  }
+});
+
+// Delete/Refund a purchase - Admin only
+router.delete('/admin/purchases/:purchaseId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { purchaseId } = req.params;
+    const { refund = true } = req.query; // Default to refund
+
+    const purchase = await Purchase.findById(purchaseId)
+      .populate('user')
+      .populate('item');
+
+    if (!purchase) {
+      return res.status(404).json({ success: false, message: 'Purchase not found' });
+    }
+
+    const user = purchase.user;
+    const item = purchase.item;
+    const pricePaid = purchase.pricePaid || 0;
+
+    // Refund gold if requested and price was paid
+    if (refund === 'true' && pricePaid > 0 && user) {
+      await User.findByIdAndUpdate(user._id, {
+        $inc: { goldCoins: pricePaid }
+      });
+      console.log(`[Admin] Refunded ${pricePaid} gold to ${user.username}`);
+    }
+
+    // Unequip item from user's profile if it's equipped
+    if (user && item) {
+      const itemId = item._id.toString();
+      const updateFields = {};
+
+      // Check if this item is equipped as a title
+      if (user.equippedTitle && user.equippedTitle.toString() === itemId) {
+        updateFields.equippedTitle = null;
+        console.log(`[Admin] Unequipped title ${item.name} from ${user.username}`);
+      }
+
+      // Check if this item is equipped as a profile animation
+      if (user.equippedProfileAnimation && user.equippedProfileAnimation.toString() === itemId) {
+        updateFields.equippedProfileAnimation = null;
+        console.log(`[Admin] Unequipped profile animation ${item.name} from ${user.username}`);
+      }
+
+      // Apply unequip updates if any
+      if (Object.keys(updateFields).length > 0) {
+        await User.findByIdAndUpdate(user._id, updateFields);
+      }
+    }
+
+    // Delete associated ItemUsage records (deactivates any active consumables)
+    const deletedUsages = await ItemUsage.deleteMany({ purchase: purchaseId });
+    if (deletedUsages.deletedCount > 0) {
+      console.log(`[Admin] Deleted ${deletedUsages.deletedCount} ItemUsage records for purchase ${purchaseId}`);
+    }
+
+    // Also delete any ItemUsage that references this item for this user (in case purchase link is missing)
+    if (user && item) {
+      await ItemUsage.deleteMany({ user: user._id, item: item._id });
+    }
+
+    // Decrement item stats if possible
+    if (item) {
+      await ShopItem.findByIdAndUpdate(item._id, {
+        $inc: { totalSold: -1 }
+      });
+    }
+
+    // Delete the purchase
+    await Purchase.findByIdAndDelete(purchaseId);
+
+    console.log(`[Admin] ${req.user.username} deleted purchase ${purchaseId} for ${user?.username || 'unknown'} (item: ${item?.name || 'unknown'}, refund: ${refund === 'true' ? pricePaid : 0})`);
+
+    res.json({
+      success: true,
+      message: refund === 'true' && pricePaid > 0 
+        ? `Achat supprimé et ${pricePaid} gold remboursés`
+        : 'Achat supprimé',
+      refundedAmount: refund === 'true' ? pricePaid : 0
+    });
+  } catch (error) {
+    console.error('Delete purchase error:', error);
+    res.status(500).json({ success: false, message: 'Error deleting purchase' });
   }
 });
 

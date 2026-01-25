@@ -37,6 +37,7 @@ import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Messages from './pages/Messages';
 import MySquad from './pages/MySquad';
+import MyPurchases from './pages/MyPurchases';
 import GameModeRulesEditor from './components/GameModeRulesEditor';
 import RecentRankedMatches from './pages/RecentRankedMatches';
 
@@ -484,6 +485,18 @@ function AppContent() {
               <AuthenticatedRoute>
                 <PageTransition>
                   <MySquad />
+                </PageTransition>
+              </AuthenticatedRoute>
+            } 
+          />
+
+          {/* My Purchases - Authenticated users only */}
+          <Route 
+            path="/my-purchases" 
+            element={
+              <AuthenticatedRoute>
+                <PageTransition>
+                  <MyPurchases />
                 </PageTransition>
               </AuthenticatedRoute>
             } 

@@ -16,7 +16,10 @@ const purchaseSchema = new mongoose.Schema({
     name: String,
     price: Number,
     category: String,
-    rarity: String
+    rarity: String,
+    isUsable: Boolean,
+    effectType: String,
+    duration: Number
   },
   pricePaid: {
     type: Number,
@@ -24,8 +27,27 @@ const purchaseSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['completed', 'refunded'],
+    enum: ['completed', 'refunded', 'used'],
     default: 'completed'
+  },
+  // For usable items
+  isUsed: {
+    type: Boolean,
+    default: false
+  },
+  usedAt: {
+    type: Date,
+    default: null
+  },
+  // For gifted items (admin give feature)
+  isGift: {
+    type: Boolean,
+    default: false
+  },
+  giftedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
   }
 }, {
   timestamps: true

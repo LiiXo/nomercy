@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
 import { getDefaultAvatar } from '../utils/avatar';
-import { Menu, X, Trophy, Home, ChevronDown, LogOut, Zap, Medal, User, Shield, Coins, Gift, Search, Loader2, Users, MessageSquare } from 'lucide-react';
+import { Menu, X, Trophy, Home, ChevronDown, LogOut, Zap, Medal, User, Shield, Coins, Gift, Search, Loader2, Users, MessageSquare, ShoppingBag } from 'lucide-react';
 import SpinWheel from './SpinWheel';
 
 const Navbar = () => {
@@ -186,6 +186,9 @@ const Navbar = () => {
     { path: `/${selectedMode}/ranked`, label: t('rankedMode'), icon: Medal },
   ];
 
+  // Check if user is admin (for admin panel access)
+  const isAdmin = user?.roles?.includes('admin');
+
   const isHardcore = selectedMode === 'hardcore';
 
   return (
@@ -226,6 +229,14 @@ const Navbar = () => {
                 <span>{label}</span>
               </Link>
             ))}
+            {/* Shop - Available to everyone */}
+            <Link
+              to={`/${selectedMode}/shop`}
+              className={`nav-link flex items-center gap-2 ${isActive(`/${selectedMode}/shop`) ? 'active' : ''}`}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span>{language === 'fr' ? 'Boutique' : 'Shop'}</span>
+            </Link>
           </div>
 
           {/* Right Side - Desktop */}
@@ -368,6 +379,11 @@ const Navbar = () => {
                         {squadRequestsCount > 0 && (
                           <span className="px-2 py-0.5 text-xs font-bold bg-neon-red text-white rounded-full">{squadRequestsCount}</span>
                         )}
+                      </Link>
+
+                      <Link to="/my-purchases" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>{language === 'fr' ? 'Mes Achats' : 'My Purchases'}</span>
                       </Link>
 
                       {hasAdminAccess() && (
@@ -542,6 +558,11 @@ const Navbar = () => {
                     )}
                   </Link>
 
+                  <Link to="/my-purchases" onClick={() => setMobileMenuOpen(false)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl glass text-gray-300 hover:text-white text-sm">
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>{language === 'fr' ? 'Mes Achats' : 'My Purchases'}</span>
+                  </Link>
+
                   <Link to="/messages" onClick={() => setMobileMenuOpen(false)} className="w-full flex items-center justify-between px-4 py-3 rounded-xl glass text-gray-300 hover:text-white text-sm">
                     <div className="flex items-center gap-3">
                       <MessageSquare className="w-4 h-4" />
@@ -559,6 +580,16 @@ const Navbar = () => {
                     <Gift className="w-4 h-4" />
                     <span>{language === 'fr' ? 'Roue quotidienne' : 'Daily Wheel'}</span>
                   </button>
+
+                  {/* Shop - Available to everyone (mobile) */}
+                  <Link 
+                    to={`/${selectedMode}/shop`}
+                    onClick={() => setMobileMenuOpen(false)} 
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-yellow-500/10 border border-yellow-500/30 text-yellow-400"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    <span>{language === 'fr' ? 'Boutique' : 'Shop'}</span>
+                  </Link>
 
                   {hasAdminAccess() && (
                     <Link 

@@ -202,6 +202,18 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+
+  // Equipped cosmetics from shop
+  equippedTitle: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ShopItem',
+    default: null
+  },
+  equippedProfileAnimation: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ShopItem',
+    default: null
+  },
   
 }, {
   timestamps: true

@@ -673,6 +673,811 @@
     pointer-events: none;
     z-index: -1;
   }
+
+  /* === TITLE GLOW ANIMATIONS (Static) === */
+  @keyframes glowPulseLegendary {
+    0%, 100% {
+      box-shadow: 
+        0 0 10px rgba(251, 191, 36, 0.4),
+        0 0 20px rgba(251, 191, 36, 0.3),
+        0 0 30px rgba(251, 191, 36, 0.2),
+        inset 0 0 10px rgba(251, 191, 36, 0.1);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 
+        0 0 15px rgba(251, 191, 36, 0.6),
+        0 0 30px rgba(251, 191, 36, 0.4),
+        0 0 45px rgba(251, 191, 36, 0.3),
+        inset 0 0 15px rgba(251, 191, 36, 0.15);
+      filter: brightness(1.15);
+    }
+  }
+
+  @keyframes glowPulseEpic {
+    0%, 100% {
+      box-shadow: 
+        0 0 10px rgba(168, 85, 247, 0.4),
+        0 0 20px rgba(168, 85, 247, 0.3),
+        0 0 30px rgba(168, 85, 247, 0.2),
+        inset 0 0 10px rgba(168, 85, 247, 0.1);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 
+        0 0 15px rgba(168, 85, 247, 0.6),
+        0 0 30px rgba(168, 85, 247, 0.4),
+        0 0 45px rgba(168, 85, 247, 0.3),
+        inset 0 0 15px rgba(168, 85, 247, 0.15);
+      filter: brightness(1.15);
+    }
+  }
+
+  @keyframes glowPulseRare {
+    0%, 100% {
+      box-shadow: 
+        0 0 8px rgba(59, 130, 246, 0.4),
+        0 0 16px rgba(59, 130, 246, 0.3),
+        0 0 24px rgba(59, 130, 246, 0.2),
+        inset 0 0 8px rgba(59, 130, 246, 0.1);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 
+        0 0 12px rgba(59, 130, 246, 0.5),
+        0 0 24px rgba(59, 130, 246, 0.35),
+        0 0 36px rgba(59, 130, 246, 0.25),
+        inset 0 0 12px rgba(59, 130, 246, 0.12);
+      filter: brightness(1.1);
+    }
+  }
+
+  @keyframes glowPulseCommon {
+    0%, 100% {
+      box-shadow: 
+        0 0 6px rgba(156, 163, 175, 0.3),
+        0 0 12px rgba(156, 163, 175, 0.2),
+        inset 0 0 6px rgba(156, 163, 175, 0.08);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 
+        0 0 10px rgba(156, 163, 175, 0.4),
+        0 0 18px rgba(156, 163, 175, 0.25),
+        inset 0 0 10px rgba(156, 163, 175, 0.1);
+      filter: brightness(1.05);
+    }
+  }
+
+  /* === PROFILE ANIMATION EFFECTS === */
+  
+  /* Base container styles for all profile animations */
+  .profile-animation-container {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .profile-animation-container::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  @keyframes profileBorderPulse {
+    0%, 100% {
+      opacity: 0.4;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+
+  @keyframes profileGlowPulse {
+    0%, 100% {
+      opacity: 0.5;
+      filter: brightness(1);
+    }
+    50% {
+      opacity: 0.8;
+      filter: brightness(1.1);
+    }
+  }
+
+  /* Inferno - Fire Effect */
+  @keyframes profile-inferno {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 60px rgba(255, 100, 0, 0.5),
+        inset 0 0 120px rgba(255, 50, 0, 0.3),
+        0 0 40px rgba(255, 100, 0, 0.6),
+        0 0 80px rgba(255, 50, 0, 0.4),
+        0 0 120px rgba(255, 30, 0, 0.2);
+      filter: brightness(1) saturate(1.2);
+    }
+    25% {
+      box-shadow: 
+        inset 0 0 80px rgba(255, 150, 0, 0.6),
+        inset 0 0 140px rgba(255, 80, 0, 0.4),
+        0 0 50px rgba(255, 120, 0, 0.7),
+        0 0 100px rgba(255, 80, 0, 0.5),
+        0 0 150px rgba(255, 50, 0, 0.3);
+      filter: brightness(1.15) saturate(1.3) hue-rotate(5deg);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 70px rgba(255, 200, 50, 0.55),
+        inset 0 0 130px rgba(255, 100, 0, 0.35),
+        0 0 45px rgba(255, 150, 0, 0.65),
+        0 0 90px rgba(255, 100, 0, 0.45),
+        0 0 140px rgba(255, 60, 0, 0.25);
+      filter: brightness(1.2) saturate(1.4) hue-rotate(-5deg);
+    }
+    75% {
+      box-shadow: 
+        inset 0 0 75px rgba(255, 120, 0, 0.58),
+        inset 0 0 135px rgba(255, 60, 0, 0.38),
+        0 0 48px rgba(255, 100, 0, 0.68),
+        0 0 95px rgba(255, 70, 0, 0.48),
+        0 0 145px rgba(255, 40, 0, 0.28);
+      filter: brightness(1.1) saturate(1.25) hue-rotate(3deg);
+    }
+  }
+
+  .profile-particles-fire {
+    background: 
+      radial-gradient(ellipse 100% 100% at 50% 100%, rgba(255, 100, 0, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse 80% 50% at 20% 100%, rgba(255, 150, 0, 0.3) 0%, transparent 40%),
+      radial-gradient(ellipse 80% 50% at 80% 100%, rgba(255, 80, 0, 0.3) 0%, transparent 40%);
+  }
+
+  .profile-particles-fire::before,
+  .profile-particles-fire::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 60%;
+    pointer-events: none;
+  }
+
+  .profile-particles-fire::before {
+    background: 
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='10' cy='90' r='3' fill='%23ff6b00' opacity='0.8'/%3E%3Ccircle cx='30' cy='85' r='2' fill='%23ff9500' opacity='0.6'/%3E%3Ccircle cx='50' cy='88' r='4' fill='%23ff4500' opacity='0.7'/%3E%3Ccircle cx='70' cy='92' r='2.5' fill='%23ff7b00' opacity='0.75'/%3E%3Ccircle cx='90' cy='87' r='3' fill='%23ffa500' opacity='0.65'/%3E%3C/svg%3E") repeat-x;
+    background-size: 200px 100px;
+    animation: fireRise 2s ease-out infinite;
+  }
+
+  .profile-particles-fire::after {
+    background: 
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='20' cy='95' r='2' fill='%23ffcc00' opacity='0.5'/%3E%3Ccircle cx='45' cy='90' r='3' fill='%23ff8800' opacity='0.6'/%3E%3Ccircle cx='75' cy='93' r='2' fill='%23ff5500' opacity='0.55'/%3E%3C/svg%3E") repeat-x;
+    background-size: 150px 100px;
+    animation: fireRise 1.5s ease-out infinite 0.5s;
+  }
+
+  @keyframes fireRise {
+    0% { transform: translateY(0) scaleY(1); opacity: 1; }
+    100% { transform: translateY(-80px) scaleY(1.5); opacity: 0; }
+  }
+
+  /* Arctic Storm - Ice Effect */
+  @keyframes profile-arctic {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 50px rgba(0, 200, 255, 0.4),
+        inset 0 0 100px rgba(100, 220, 255, 0.2),
+        0 0 30px rgba(0, 200, 255, 0.5),
+        0 0 60px rgba(50, 180, 255, 0.3),
+        0 0 100px rgba(0, 150, 255, 0.15);
+      filter: brightness(1) saturate(1.1);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 70px rgba(100, 220, 255, 0.5),
+        inset 0 0 120px rgba(150, 235, 255, 0.3),
+        0 0 45px rgba(50, 210, 255, 0.6),
+        0 0 80px rgba(100, 200, 255, 0.4),
+        0 0 120px rgba(50, 180, 255, 0.2);
+      filter: brightness(1.15) saturate(1.2);
+    }
+  }
+
+  .profile-particles-snow {
+    background: radial-gradient(ellipse 120% 60% at 50% -10%, rgba(200, 240, 255, 0.3) 0%, transparent 60%);
+  }
+
+  .profile-particles-snow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: 
+      radial-gradient(2px 2px at 10% 20%, white 50%, transparent 50%),
+      radial-gradient(3px 3px at 25% 35%, rgba(200, 230, 255, 0.9) 50%, transparent 50%),
+      radial-gradient(2px 2px at 40% 15%, white 50%, transparent 50%),
+      radial-gradient(3px 3px at 55% 45%, rgba(220, 240, 255, 0.8) 50%, transparent 50%),
+      radial-gradient(2px 2px at 70% 25%, white 50%, transparent 50%),
+      radial-gradient(2px 2px at 85% 40%, rgba(200, 230, 255, 0.9) 50%, transparent 50%),
+      radial-gradient(3px 3px at 15% 60%, white 50%, transparent 50%),
+      radial-gradient(2px 2px at 35% 75%, rgba(220, 240, 255, 0.85) 50%, transparent 50%),
+      radial-gradient(2px 2px at 60% 65%, white 50%, transparent 50%),
+      radial-gradient(3px 3px at 80% 80%, rgba(200, 235, 255, 0.9) 50%, transparent 50%),
+      radial-gradient(2px 2px at 95% 55%, white 50%, transparent 50%);
+    background-size: 100% 100%;
+    animation: snowFall 8s linear infinite;
+  }
+
+  .profile-particles-snow::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(200, 240, 255, 0.1) 0%, transparent 30%, transparent 70%, rgba(200, 240, 255, 0.15) 100%);
+    animation: iceShimmer 4s ease-in-out infinite;
+  }
+
+  @keyframes snowFall {
+    0% { transform: translateY(-20px); }
+    100% { transform: translateY(20px); }
+  }
+
+  @keyframes iceShimmer {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  /* Nuke Incoming - Radiation Effect */
+  @keyframes profile-nuke {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 50px rgba(255, 255, 0, 0.35),
+        inset 0 0 100px rgba(255, 200, 0, 0.2),
+        0 0 40px rgba(255, 255, 0, 0.5),
+        0 0 80px rgba(255, 200, 0, 0.35),
+        0 0 120px rgba(255, 150, 0, 0.2);
+      filter: brightness(1) contrast(1.05);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 80px rgba(255, 255, 100, 0.5),
+        inset 0 0 140px rgba(255, 230, 50, 0.3),
+        0 0 60px rgba(255, 255, 50, 0.7),
+        0 0 120px rgba(255, 220, 0, 0.5),
+        0 0 180px rgba(255, 180, 0, 0.3);
+      filter: brightness(1.3) contrast(1.1);
+    }
+  }
+
+  .profile-particles-radiation {
+    background: radial-gradient(circle at 50% 50%, rgba(255, 255, 0, 0.2) 0%, transparent 50%);
+  }
+
+  .profile-particles-radiation::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: conic-gradient(from 0deg at 50% 50%, 
+      transparent 0deg, 
+      rgba(255, 255, 0, 0.15) 30deg, 
+      transparent 60deg,
+      rgba(255, 200, 0, 0.1) 90deg,
+      transparent 120deg,
+      rgba(255, 255, 0, 0.12) 150deg,
+      transparent 180deg,
+      rgba(255, 200, 0, 0.15) 210deg,
+      transparent 240deg,
+      rgba(255, 255, 0, 0.1) 270deg,
+      transparent 300deg,
+      rgba(255, 200, 0, 0.12) 330deg,
+      transparent 360deg
+    );
+    animation: radiationSpin 10s linear infinite;
+  }
+
+  .profile-particles-radiation::after {
+    content: '☢';
+    position: absolute;
+    font-size: 4rem;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: rgba(255, 255, 0, 0.15);
+    animation: nukePulse 2s ease-in-out infinite;
+    text-shadow: 0 0 30px rgba(255, 255, 0, 0.5);
+  }
+
+  @keyframes radiationSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes nukePulse {
+    0%, 100% { opacity: 0.15; transform: translate(-50%, -50%) scale(1); }
+    50% { opacity: 0.35; transform: translate(-50%, -50%) scale(1.15); }
+  }
+
+  /* Dark Aether - Corruption Effect */
+  @keyframes profile-dark-aether {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 60px rgba(147, 51, 234, 0.5),
+        inset 0 0 120px rgba(88, 28, 135, 0.3),
+        0 0 40px rgba(147, 51, 234, 0.6),
+        0 0 80px rgba(109, 40, 217, 0.4),
+        0 0 120px rgba(88, 28, 135, 0.25);
+      filter: brightness(1) saturate(1.2) hue-rotate(0deg);
+    }
+    33% {
+      box-shadow: 
+        inset 0 0 80px rgba(168, 85, 247, 0.6),
+        inset 0 0 140px rgba(126, 34, 206, 0.4),
+        0 0 55px rgba(168, 85, 247, 0.7),
+        0 0 100px rgba(139, 92, 246, 0.5),
+        0 0 150px rgba(109, 40, 217, 0.35);
+      filter: brightness(1.15) saturate(1.3) hue-rotate(15deg);
+    }
+    66% {
+      box-shadow: 
+        inset 0 0 70px rgba(139, 92, 246, 0.55),
+        inset 0 0 130px rgba(91, 33, 182, 0.35),
+        0 0 48px rgba(139, 92, 246, 0.65),
+        0 0 90px rgba(126, 34, 206, 0.45),
+        0 0 140px rgba(88, 28, 135, 0.3);
+      filter: brightness(1.1) saturate(1.25) hue-rotate(-10deg);
+    }
+  }
+
+  .profile-particles-aether {
+    background: radial-gradient(ellipse 150% 80% at 50% 120%, rgba(147, 51, 234, 0.4) 0%, transparent 50%);
+  }
+
+  .profile-particles-aether::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+      radial-gradient(circle at 15% 25%, rgba(168, 85, 247, 0.5) 0%, transparent 25%),
+      radial-gradient(circle at 85% 20%, rgba(139, 92, 246, 0.4) 0%, transparent 20%),
+      radial-gradient(circle at 75% 75%, rgba(147, 51, 234, 0.45) 0%, transparent 22%),
+      radial-gradient(circle at 25% 80%, rgba(126, 34, 206, 0.35) 0%, transparent 18%);
+    animation: aetherOrbs 6s ease-in-out infinite;
+  }
+
+  .profile-particles-aether::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(45deg, 
+      transparent 0%, 
+      rgba(147, 51, 234, 0.1) 25%, 
+      transparent 50%, 
+      rgba(139, 92, 246, 0.1) 75%, 
+      transparent 100%);
+    background-size: 200% 200%;
+    animation: aetherWave 4s ease-in-out infinite;
+  }
+
+  @keyframes aetherOrbs {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.7; }
+    50% { transform: scale(1.1) rotate(5deg); opacity: 1; }
+  }
+
+  @keyframes aetherWave {
+    0% { background-position: 0% 0%; }
+    50% { background-position: 100% 100%; }
+    100% { background-position: 0% 0%; }
+  }
+
+  /* Tactical Neon - Cyber Effect */
+  @keyframes profile-tactical {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 40px rgba(0, 255, 100, 0.35),
+        inset 0 0 80px rgba(0, 200, 100, 0.2),
+        0 0 25px rgba(0, 255, 100, 0.5),
+        0 0 50px rgba(0, 220, 100, 0.3),
+        0 0 80px rgba(0, 200, 255, 0.15);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 60px rgba(50, 255, 120, 0.45),
+        inset 0 0 100px rgba(0, 230, 100, 0.3),
+        0 0 40px rgba(0, 255, 100, 0.6),
+        0 0 70px rgba(50, 240, 120, 0.4),
+        0 0 100px rgba(0, 220, 255, 0.25);
+      filter: brightness(1.15);
+    }
+  }
+
+  .profile-particles-scan {
+    background: 
+      linear-gradient(90deg, transparent 0%, rgba(0, 255, 100, 0.03) 50%, transparent 100%),
+      repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(0, 255, 100, 0.03) 2px, rgba(0, 255, 100, 0.03) 4px);
+  }
+
+  .profile-particles-scan::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, 
+      transparent 0%, 
+      rgba(0, 255, 100, 0.5) 20%, 
+      rgba(0, 255, 100, 1) 50%, 
+      rgba(0, 255, 100, 0.5) 80%, 
+      transparent 100%);
+    box-shadow: 0 0 20px rgba(0, 255, 100, 0.8), 0 0 40px rgba(0, 255, 100, 0.4);
+    animation: scannerLine 3s ease-in-out infinite;
+  }
+
+  .profile-particles-scan::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    width: 80px;
+    height: 80px;
+    border: 2px solid rgba(0, 255, 100, 0.3);
+    border-radius: 50%;
+    animation: radarPing 2s ease-out infinite;
+  }
+
+  @keyframes scannerLine {
+    0%, 100% { top: 0; opacity: 0; }
+    5% { opacity: 1; }
+    95% { opacity: 1; }
+    100% { top: calc(100% - 3px); opacity: 0; }
+  }
+
+  @keyframes radarPing {
+    0% { transform: scale(0.5); opacity: 0.8; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+
+  /* Blood Moon - Dark Red Effect */
+  @keyframes profile-blood-moon {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 50px rgba(220, 38, 38, 0.45),
+        inset 0 0 100px rgba(127, 29, 29, 0.25),
+        0 0 35px rgba(220, 38, 38, 0.55),
+        0 0 70px rgba(185, 28, 28, 0.35),
+        0 0 110px rgba(127, 29, 29, 0.2);
+      filter: brightness(1) saturate(1.1);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 70px rgba(239, 68, 68, 0.55),
+        inset 0 0 120px rgba(153, 27, 27, 0.35),
+        0 0 50px rgba(239, 68, 68, 0.65),
+        0 0 90px rgba(220, 38, 38, 0.45),
+        0 0 140px rgba(153, 27, 27, 0.3);
+      filter: brightness(1.15) saturate(1.2);
+    }
+  }
+
+  .profile-particles-blood {
+    background: radial-gradient(ellipse 100% 60% at 85% 10%, rgba(220, 38, 38, 0.3) 0%, transparent 40%);
+  }
+
+  .profile-particles-blood::before {
+    content: '';
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, 
+      rgba(255, 100, 100, 0.9) 0%, 
+      rgba(220, 38, 38, 0.8) 30%, 
+      rgba(153, 27, 27, 0.6) 60%, 
+      transparent 80%);
+    box-shadow: 
+      0 0 30px rgba(220, 38, 38, 0.6),
+      0 0 60px rgba(153, 27, 27, 0.4),
+      inset 0 0 20px rgba(255, 100, 100, 0.3);
+    animation: bloodMoonPulse 4s ease-in-out infinite;
+  }
+
+  .profile-particles-blood::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 150% 100% at 85% 10%, rgba(220, 38, 38, 0.15) 0%, transparent 50%);
+    animation: bloodMist 5s ease-in-out infinite;
+  }
+
+  @keyframes bloodMoonPulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 30px rgba(220, 38, 38, 0.6), 0 0 60px rgba(153, 27, 27, 0.4); }
+    50% { transform: scale(1.1); box-shadow: 0 0 50px rgba(220, 38, 38, 0.8), 0 0 100px rgba(153, 27, 27, 0.5); }
+  }
+
+  @keyframes bloodMist {
+    0%, 100% { opacity: 0.5; transform: translateX(0); }
+    50% { opacity: 1; transform: translateX(-10px); }
+  }
+
+  /* Electric Surge - Lightning Effect */
+  @keyframes profile-electric {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 40px rgba(59, 130, 246, 0.4),
+        inset 0 0 80px rgba(37, 99, 235, 0.2),
+        0 0 30px rgba(59, 130, 246, 0.5),
+        0 0 60px rgba(37, 99, 235, 0.3),
+        0 0 90px rgba(29, 78, 216, 0.15);
+      filter: brightness(1);
+    }
+    20% {
+      box-shadow: 
+        inset 0 0 60px rgba(96, 165, 250, 0.6),
+        inset 0 0 100px rgba(59, 130, 246, 0.35),
+        0 0 50px rgba(96, 165, 250, 0.7),
+        0 0 90px rgba(59, 130, 246, 0.5),
+        0 0 130px rgba(37, 99, 235, 0.3);
+      filter: brightness(1.3);
+    }
+    25% {
+      box-shadow: 
+        inset 0 0 45px rgba(59, 130, 246, 0.45),
+        inset 0 0 85px rgba(37, 99, 235, 0.25),
+        0 0 35px rgba(59, 130, 246, 0.55),
+        0 0 65px rgba(37, 99, 235, 0.35),
+        0 0 95px rgba(29, 78, 216, 0.2);
+      filter: brightness(1.05);
+    }
+    70% {
+      box-shadow: 
+        inset 0 0 80px rgba(147, 197, 253, 0.65),
+        inset 0 0 120px rgba(96, 165, 250, 0.4),
+        0 0 60px rgba(147, 197, 253, 0.75),
+        0 0 100px rgba(96, 165, 250, 0.55),
+        0 0 150px rgba(59, 130, 246, 0.35);
+      filter: brightness(1.4);
+    }
+    75% {
+      box-shadow: 
+        inset 0 0 50px rgba(59, 130, 246, 0.5),
+        inset 0 0 90px rgba(37, 99, 235, 0.3),
+        0 0 40px rgba(59, 130, 246, 0.6),
+        0 0 70px rgba(37, 99, 235, 0.4),
+        0 0 100px rgba(29, 78, 216, 0.25);
+      filter: brightness(1.1);
+    }
+  }
+
+  .profile-particles-electric {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, transparent 50%, rgba(96, 165, 250, 0.1) 100%);
+  }
+
+  .profile-particles-electric::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M20 0 L25 30 L15 32 L30 60 L22 62 L45 100 L38 55 L48 53 L35 25 L42 23 Z' fill='rgba(147, 197, 253, 0.4)'/%3E%3C/svg%3E") no-repeat;
+    background-position: 10% 20%;
+    background-size: 40px 80px;
+    opacity: 0;
+    animation: lightningFlash 4s ease-in-out infinite;
+  }
+
+  .profile-particles-electric::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M20 0 L25 30 L15 32 L30 60 L22 62 L45 100 L38 55 L48 53 L35 25 L42 23 Z' fill='rgba(96, 165, 250, 0.5)'/%3E%3C/svg%3E") no-repeat;
+    background-position: 80% 10%;
+    background-size: 50px 100px;
+    opacity: 0;
+    animation: lightningFlash 4s ease-in-out infinite 2s;
+  }
+
+  @keyframes lightningFlash {
+    0%, 19%, 21%, 69%, 71%, 100% { opacity: 0; }
+    20%, 70% { opacity: 1; }
+  }
+
+  /* Phantom - Ghost Effect */
+  @keyframes profile-phantom {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 40px rgba(148, 163, 184, 0.3),
+        inset 0 0 80px rgba(100, 116, 139, 0.15),
+        0 0 25px rgba(148, 163, 184, 0.35),
+        0 0 50px rgba(100, 116, 139, 0.2),
+        0 0 80px rgba(71, 85, 105, 0.1);
+      filter: brightness(1) blur(0px);
+      opacity: 1;
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 60px rgba(203, 213, 225, 0.4),
+        inset 0 0 100px rgba(148, 163, 184, 0.25),
+        0 0 40px rgba(203, 213, 225, 0.45),
+        0 0 70px rgba(148, 163, 184, 0.3),
+        0 0 100px rgba(100, 116, 139, 0.15);
+      filter: brightness(1.1) blur(0.5px);
+      opacity: 0.9;
+    }
+  }
+
+  .profile-particles-smoke {
+    background: radial-gradient(ellipse 100% 80% at 50% 100%, rgba(148, 163, 184, 0.2) 0%, transparent 50%);
+  }
+
+  .profile-particles-smoke::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+      radial-gradient(ellipse 60% 40% at 20% 80%, rgba(148, 163, 184, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse 50% 35% at 80% 70%, rgba(100, 116, 139, 0.2) 0%, transparent 45%),
+      radial-gradient(ellipse 70% 50% at 50% 90%, rgba(71, 85, 105, 0.3) 0%, transparent 55%);
+    animation: smokeRise 8s ease-in-out infinite;
+  }
+
+  .profile-particles-smoke::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 0%, rgba(148, 163, 184, 0.05) 50%, transparent 100%);
+    animation: ghostFade 4s ease-in-out infinite;
+  }
+
+  @keyframes smokeRise {
+    0%, 100% { transform: translateY(0) scale(1); opacity: 0.6; }
+    50% { transform: translateY(-20px) scale(1.2); opacity: 0.9; }
+  }
+
+  @keyframes ghostFade {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Golden Prestige - Gold Shimmer Effect */
+  @keyframes profile-golden {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 50px rgba(251, 191, 36, 0.45),
+        inset 0 0 100px rgba(217, 119, 6, 0.25),
+        0 0 35px rgba(251, 191, 36, 0.55),
+        0 0 70px rgba(245, 158, 11, 0.35),
+        0 0 110px rgba(217, 119, 6, 0.2);
+      filter: brightness(1) saturate(1.1);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 70px rgba(252, 211, 77, 0.6),
+        inset 0 0 130px rgba(251, 191, 36, 0.35),
+        0 0 50px rgba(252, 211, 77, 0.7),
+        0 0 100px rgba(251, 191, 36, 0.5),
+        0 0 150px rgba(245, 158, 11, 0.3);
+      filter: brightness(1.25) saturate(1.2);
+    }
+  }
+
+  .profile-particles-sparkle {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, transparent 30%, transparent 70%, rgba(252, 211, 77, 0.1) 100%);
+  }
+
+  .profile-particles-sparkle::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: 
+      radial-gradient(2px 2px at 10% 15%, rgba(255, 255, 200, 1) 50%, transparent 50%),
+      radial-gradient(3px 3px at 25% 45%, rgba(252, 211, 77, 0.9) 50%, transparent 50%),
+      radial-gradient(2px 2px at 45% 20%, rgba(255, 255, 200, 1) 50%, transparent 50%),
+      radial-gradient(4px 4px at 60% 60%, rgba(251, 191, 36, 0.85) 50%, transparent 50%),
+      radial-gradient(2px 2px at 75% 35%, rgba(255, 255, 200, 1) 50%, transparent 50%),
+      radial-gradient(3px 3px at 90% 70%, rgba(252, 211, 77, 0.9) 50%, transparent 50%),
+      radial-gradient(2px 2px at 15% 80%, rgba(255, 255, 200, 1) 50%, transparent 50%),
+      radial-gradient(3px 3px at 85% 15%, rgba(251, 191, 36, 0.9) 50%, transparent 50%);
+    animation: sparkleGlitter 3s ease-in-out infinite;
+  }
+
+  .profile-particles-sparkle::after {
+    content: '';
+    position: absolute;
+    inset: -50%;
+    background: linear-gradient(45deg, 
+      transparent 0%, 
+      transparent 40%, 
+      rgba(255, 255, 200, 0.4) 50%, 
+      transparent 60%, 
+      transparent 100%);
+    animation: goldenShine 4s ease-in-out infinite;
+  }
+
+  @keyframes sparkleGlitter {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.05); }
+  }
+
+  @keyframes goldenShine {
+    0% { transform: translateX(-100%) rotate(45deg); }
+    100% { transform: translateX(200%) rotate(45deg); }
+  }
+
+  /* Warzone Drop - Military Effect */
+  @keyframes profile-warzone {
+    0%, 100% {
+      box-shadow: 
+        inset 0 0 35px rgba(100, 116, 139, 0.35),
+        inset 0 0 70px rgba(71, 85, 105, 0.2),
+        0 0 25px rgba(100, 116, 139, 0.4),
+        0 0 50px rgba(71, 85, 105, 0.25),
+        0 0 75px rgba(51, 65, 85, 0.15);
+      filter: brightness(1);
+    }
+    50% {
+      box-shadow: 
+        inset 0 0 50px rgba(148, 163, 184, 0.45),
+        inset 0 0 90px rgba(100, 116, 139, 0.3),
+        0 0 40px rgba(148, 163, 184, 0.5),
+        0 0 70px rgba(100, 116, 139, 0.35),
+        0 0 100px rgba(71, 85, 105, 0.2);
+      filter: brightness(1.1);
+    }
+  }
+
+  .profile-particles-dust {
+    background: 
+      linear-gradient(180deg, rgba(100, 116, 139, 0.1) 0%, transparent 20%),
+      linear-gradient(0deg, rgba(100, 116, 139, 0.15) 0%, transparent 30%);
+  }
+
+  .profile-particles-dust::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: 
+      radial-gradient(ellipse 20% 10% at 10% 95%, rgba(148, 163, 184, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse 25% 15% at 30% 90%, rgba(100, 116, 139, 0.35) 0%, transparent 45%),
+      radial-gradient(ellipse 20% 12% at 50% 92%, rgba(148, 163, 184, 0.3) 0%, transparent 50%),
+      radial-gradient(ellipse 22% 14% at 70% 88%, rgba(71, 85, 105, 0.4) 0%, transparent 48%),
+      radial-gradient(ellipse 18% 10% at 90% 94%, rgba(100, 116, 139, 0.35) 0%, transparent 45%);
+    animation: dustCloud 5s ease-in-out infinite;
+  }
+
+  .profile-particles-dust::after {
+    content: '✈';
+    position: absolute;
+    font-size: 2rem;
+    top: 15px;
+    left: 20px;
+    color: rgba(100, 116, 139, 0.4);
+    animation: planeFly 8s linear infinite;
+    text-shadow: 0 0 10px rgba(100, 116, 139, 0.5);
+  }
+
+  @keyframes dustCloud {
+    0%, 100% { opacity: 0.6; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(-10px); }
+  }
+
+  @keyframes planeFly {
+    0% { transform: translateX(-50px) translateY(0); opacity: 0; }
+    10% { opacity: 0.4; }
+    90% { opacity: 0.4; }
+    100% { transform: translateX(calc(100vw + 50px)) translateY(10px); opacity: 0; }
+  }
+
+  /* Default animation fallback */
+  @keyframes profile-default {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.95; }
+  }
+
+  .profile-particles-none {
+    /* No particles */
+  }
 }
 
 

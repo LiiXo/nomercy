@@ -4,6 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
 import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame, Link2 } from 'lucide-react';
+import ProfileAnimation from '../components/ProfileAnimation';
 
 import { getAvatarUrl, getDefaultAvatar, getUserAvatar } from '../utils/avatar';
 
@@ -581,7 +582,14 @@ const PlayerProfile = () => {
             <span>{t.back}</span>
         </button>
 
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-6`}>
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-6 relative`}>
+          {/* Profile Animation Effects with real particles */}
+          {playerData.equippedProfileAnimation && (
+            <ProfileAnimation 
+              animationData={playerData.equippedProfileAnimation.profileAnimationData}
+              className="z-0"
+            />
+          )}
           {/* Banner avec avatar qui chevauche */}
           <div className="relative">
             {playerData.banner ? (
@@ -725,6 +733,44 @@ const PlayerProfile = () => {
                 )}
               </div>
               
+              {/* Equipped Title - Above Activision ID */}
+              {playerData.equippedTitle && (
+                <div className="mb-4">
+                  <span 
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-lg font-bold border-2 shadow-xl
+                      ${
+                        playerData.equippedTitle.rarity === 'legendary' 
+                          ? 'bg-gradient-to-r from-yellow-500/30 via-amber-400/30 to-yellow-500/30 border-yellow-400/60 text-yellow-300' 
+                          : playerData.equippedTitle.rarity === 'epic' 
+                            ? 'bg-gradient-to-r from-purple-500/30 via-pink-400/30 to-purple-500/30 border-purple-400/60 text-purple-300' 
+                            : playerData.equippedTitle.rarity === 'rare' 
+                              ? 'bg-gradient-to-r from-blue-500/30 via-cyan-400/30 to-blue-500/30 border-blue-400/60 text-blue-300' 
+                              : 'bg-gradient-to-r from-gray-500/30 via-slate-400/30 to-gray-500/30 border-gray-400/60 text-gray-300'
+                      }
+                    `}
+                    style={{
+                      animation: playerData.equippedTitle.rarity === 'legendary' 
+                        ? 'glowPulseLegendary 2s ease-in-out infinite' 
+                        : playerData.equippedTitle.rarity === 'epic' 
+                          ? 'glowPulseEpic 2s ease-in-out infinite' 
+                          : playerData.equippedTitle.rarity === 'rare'
+                            ? 'glowPulseRare 2s ease-in-out infinite'
+                            : 'glowPulseCommon 2s ease-in-out infinite',
+                      textShadow: playerData.equippedTitle.rarity === 'legendary' 
+                        ? '0 0 20px rgba(251, 191, 36, 0.8), 0 0 40px rgba(251, 191, 36, 0.4)' 
+                        : playerData.equippedTitle.rarity === 'epic' 
+                          ? '0 0 20px rgba(168, 85, 247, 0.8), 0 0 40px rgba(168, 85, 247, 0.4)' 
+                          : playerData.equippedTitle.rarity === 'rare'
+                            ? '0 0 15px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.3)'
+                            : '0 0 10px rgba(156, 163, 175, 0.4)'
+                    }}
+                  >
+                    <Star className="w-5 h-5" />
+                    {playerData.equippedTitle.nameTranslations?.[language] || playerData.equippedTitle.name}
+                  </span>
+                </div>
+              )}
+
               {/* Activision ID */}
               {playerData.activisionId && (
                 <div className="flex items-center justify-center gap-2 mb-4">

@@ -3,6 +3,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
 import { getDefaultAvatar } from '../utils/avatar';
+import ProfileAnimation from '../components/ProfileAnimation';
 import { 
   Coins, 
   Crown, 
@@ -28,7 +29,8 @@ import {
   Gift,
   Eye,
   X,
-  CircleDot
+  CircleDot,
+  Palette
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -44,8 +46,12 @@ const Shop = () => {
   const [purchasing, setPurchasing] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [previewItem, setPreviewItem] = useState(null);
+  const [confirmItem, setConfirmItem] = useState(null); // Item awaiting purchase confirmation
 
   const isHardcore = selectedMode === 'hardcore';
+  
+  // Check if user is admin (for admin-only features)
+  const isAdmin = user?.roles?.includes('admin');
   
   const colors = {
     primary: isHardcore ? 'red' : 'cyan',
@@ -78,13 +84,15 @@ const Shop = () => {
 
   const categories = [
     { id: 'all', icon: ShoppingBag, label: { fr: 'Tout', en: 'All', it: 'Tutto', de: 'Alles' } },
+    { id: 'usable_item', icon: Zap, label: { fr: 'Objets', en: 'Items', it: 'Oggetti', de: 'Gegenstände' } },
+    { id: 'profile_animation', icon: Palette, label: { fr: 'Animations', en: 'Animations', it: 'Animazioni', de: 'Animationen' } },
     { id: 'ornament', icon: CircleDot, label: { fr: 'Ornements', en: 'Ornaments', it: 'Ornamenti', de: 'Ornamente' } },
     { id: 'avatar_frame', icon: Crown, label: { fr: 'Cadres', en: 'Frames', it: 'Cornici', de: 'Rahmen' } },
     { id: 'title', icon: Star, label: { fr: 'Titres', en: 'Titles', it: 'Titoli', de: 'Titel' } },
     { id: 'badge', icon: Award, label: { fr: 'Badges', en: 'Badges', it: 'Badge', de: 'Abzeichen' } },
     { id: 'emote', icon: MessageSquare, label: { fr: 'Emotes', en: 'Emotes', it: 'Emote', de: 'Emotes' } },
-    { id: 'boost', icon: Zap, label: { fr: 'Boosts', en: 'Boosts', it: 'Boost', de: 'Boosts' } },
-    { id: 'cosmetic', icon: Sparkles, label: { fr: 'Cosmétiques', en: 'Cosmetics', it: 'Cosmetici', de: 'Kosmetik' } },
+    { id: 'boost', icon: Sparkles, label: { fr: 'Boosts', en: 'Boosts', it: 'Boost', de: 'Boosts' } },
+    { id: 'cosmetic', icon: Diamond, label: { fr: 'Cosmétiques', en: 'Cosmetics', it: 'Cosmetici', de: 'Kosmetik' } },
     { id: 'other', icon: Package, label: { fr: 'Services', en: 'Services', it: 'Servizi', de: 'Dienste' } },
   ];
 
@@ -166,7 +174,8 @@ const Shop = () => {
     }
   };
 
-  const handlePurchase = async (item) => {
+  // Open confirmation dialog
+  const openConfirmPurchase = (item) => {
     if (!isAuthenticated) {
       setMessage({ type: 'error', text: language === 'fr' ? 'Connecte-toi pour acheter' : 'Login to purchase' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
@@ -179,6 +188,13 @@ const Shop = () => {
       return;
     }
 
+    setConfirmItem(item);
+  };
+
+  // Execute the actual purchase
+  const handlePurchase = async (item) => {
+    setConfirmItem(null); // Close confirmation dialog
+    
     setPurchasing(item._id);
     try {
       const response = await fetch(`${API_URL}/shop/purchase/${item._id}`, {
@@ -211,35 +227,37 @@ const Shop = () => {
     return iconMap[iconName] || Package;
   };
 
-  const filteredItems = activeCategory === 'all' 
+  const rarityOrder = { legendary: 0, epic: 1, rare: 2, common: 3 };
+
+  // Sort by price (most expensive first), then by rarity
+  const sortedFilteredItems = (activeCategory === 'all' 
     ? items 
-    : items.filter(item => item.category === activeCategory);
+    : items.filter(item => item.category === activeCategory)
+  ).sort((a, b) => {
+    // First sort by price (descending)
+    if (b.price !== a.price) return b.price - a.price;
+    // Then by rarity
+    return (rarityOrder[a.rarity] || 3) - (rarityOrder[b.rarity] || 3);
+  });
 
   const userCoins = user?.goldCoins || 0;
 
+  // Category labels for "All" view
+  const categoryLabels = {
+    usable_item: { fr: 'Objet', en: 'Item', it: 'Oggetto', de: 'Gegenstand' },
+    profile_animation: { fr: 'Animation', en: 'Animation', it: 'Animazione', de: 'Animation' },
+    ornament: { fr: 'Ornement', en: 'Ornament', it: 'Ornamento', de: 'Ornament' },
+    avatar_frame: { fr: 'Cadre', en: 'Frame', it: 'Cornice', de: 'Rahmen' },
+    title: { fr: 'Titre', en: 'Title', it: 'Titolo', de: 'Titel' },
+    badge: { fr: 'Badge', en: 'Badge', it: 'Badge', de: 'Abzeichen' },
+    emote: { fr: 'Emote', en: 'Emote', it: 'Emote', de: 'Emote' },
+    boost: { fr: 'Boost', en: 'Boost', it: 'Boost', de: 'Boost' },
+    cosmetic: { fr: 'Cosmétique', en: 'Cosmetic', it: 'Cosmetico', de: 'Kosmetik' },
+    other: { fr: 'Service', en: 'Service', it: 'Servizio', de: 'Dienst' },
+  };
+
   return (
     <div className="min-h-screen bg-dark-950 relative overflow-hidden">
-      {/* Coming Soon Overlay */}
-      <div className="absolute inset-0 z-50 bg-dark-950/95 backdrop-blur-md flex items-center justify-center">
-        <div className="text-center max-w-lg mx-auto px-6">
-          <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/50 flex items-center justify-center animate-pulse">
-            <ShoppingBag className="w-12 h-12 text-yellow-400" />
-          </div>
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-            {language === 'fr' ? 'Bientôt disponible' : language === 'de' ? 'Bald verfügbar' : language === 'it' ? 'Prossimamente' : 'Coming Soon'}
-          </h2>
-          <p className="text-gray-400 text-lg">
-            {language === 'fr' 
-              ? 'La boutique arrive bientôt ! Préparez vos gold coins pour des objets exclusifs.'
-              : language === 'de'
-                ? 'Der Shop kommt bald! Bereiten Sie Ihre Gold Coins für exklusive Gegenstände vor.'
-                : language === 'it'
-                  ? 'Il negozio arriva presto! Prepara le tue Gold Coins per oggetti esclusivi.'
-                  : 'The shop is coming soon! Get your gold coins ready for exclusive items.'}
-          </p>
-        </div>
-      </div>
-
       {/* Background Effects */}
       <div className="absolute inset-0 grid-pattern pointer-events-none opacity-20"></div>
       {isHardcore ? (
@@ -313,7 +331,7 @@ const Shop = () => {
             <div className="flex items-center justify-center py-20">
               <Loader2 className={`w-8 h-8 ${colors.text} animate-spin`} />
             </div>
-          ) : filteredItems.length === 0 ? (
+          ) : sortedFilteredItems.length === 0 ? (
             <div className="text-center py-20">
               <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
               <p className="text-gray-500 text-lg">
@@ -323,12 +341,13 @@ const Shop = () => {
           ) : (
             /* Grille d'items */
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredItems.map((item) => {
+              {sortedFilteredItems.map((item) => {
                 const rarity = rarityColors[item.rarity] || rarityColors.common;
                 const Icon = getItemIcon(item.icon);
                 const owned = isOwned(item._id);
                 const canAfford = userCoins >= item.price;
                 const isPurchasing = purchasing === item._id;
+                const isAnimation = item.category === 'profile_animation';
                 
                 return (
                   <div
@@ -339,6 +358,13 @@ const Shop = () => {
                     <div className={`absolute top-3 right-3 px-2 py-1 rounded-md text-xs font-semibold ${rarity.bg} ${rarity.text}`}>
                       {rarity.label[language]}
                     </div>
+
+                    {/* Badge catégorie (only when viewing 'All') */}
+                    {activeCategory === 'all' && categoryLabels[item.category] && (
+                      <div className="absolute top-12 right-3 px-2 py-1 rounded-md text-xs font-medium bg-white/10 text-gray-300">
+                        {categoryLabels[item.category][language]}
+                      </div>
+                    )}
 
                     {/* Badge possédé / Quantité */}
                     {isAuthenticated && item.ownedQuantity > 0 && (
@@ -384,7 +410,7 @@ const Shop = () => {
                       <h3 className="text-lg font-bold text-white mb-1 text-center">
                         {item.nameTranslations?.[language] || item.name}
                       </h3>
-                      <p className="text-sm text-gray-500 mb-4 text-center line-clamp-2">
+                      <p className="text-sm text-gray-500 mb-4 text-center">
                         {item.descriptionTranslations?.[language] || item.description}
                       </p>
 
@@ -413,9 +439,53 @@ const Shop = () => {
                           </button>
                         )}
                         
+                        {/* Preview button for profile animations */}
+                        {isAnimation && (
+                          <button
+                            onClick={() => setPreviewItem(item)}
+                            className="w-full py-2 rounded-lg font-medium text-sm transition-all duration-300 flex items-center justify-center gap-2 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/40"
+                          >
+                            <Eye className="w-4 h-4" />
+                            {previewLabel[language]}
+                          </button>
+                        )}
+
+                        {/* Preview button for titles */}
+                        {item.category === 'title' && (
+                          <button
+                            onClick={() => setPreviewItem(item)}
+                            className="w-full py-2 rounded-lg font-medium text-sm transition-all duration-300 flex items-center justify-center gap-2 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20 border border-yellow-500/20 hover:border-yellow-500/40"
+                          >
+                            <Eye className="w-4 h-4" />
+                            {previewLabel[language]}
+                          </button>
+                        )}
+
+                        {/* Preview button for badges */}
+                        {item.category === 'badge' && (
+                          <button
+                            onClick={() => setPreviewItem(item)}
+                            className="w-full py-2 rounded-lg font-medium text-sm transition-all duration-300 flex items-center justify-center gap-2 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40"
+                          >
+                            <Eye className="w-4 h-4" />
+                            {previewLabel[language]}
+                          </button>
+                        )}
+
+                        {/* Preview button for avatar frames */}
+                        {item.category === 'avatar_frame' && (
+                          <button
+                            onClick={() => setPreviewItem(item)}
+                            className="w-full py-2 rounded-lg font-medium text-sm transition-all duration-300 flex items-center justify-center gap-2 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 border border-cyan-500/20 hover:border-cyan-500/40"
+                          >
+                            <Eye className="w-4 h-4" />
+                            {previewLabel[language]}
+                          </button>
+                        )}
+                        
                         {(!owned || item.allowMultiplePurchases) && (
                           <button 
-                            onClick={() => handlePurchase(item)}
+                            onClick={() => openConfirmPurchase(item)}
                             disabled={!canAfford || isPurchasing || !isAuthenticated}
                             className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 ${
                               !isAuthenticated
@@ -449,32 +519,6 @@ const Shop = () => {
             </div>
           )}
 
-          {/* Info en bas */}
-          {!loading && items.length > 0 && (
-            <div className={`mt-10 p-6 rounded-xl bg-gradient-to-r from-yellow-500/10 to-amber-500/10 border border-yellow-500/30`}>
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center shadow-lg">
-                    <Award className="w-6 h-6 text-green-900" />
-                  </div>
-                  <div>
-                    <h4 className="text-white font-bold">
-                      {language === 'fr' ? 'Gagne des pièces gratuitement !' : language === 'it' ? 'Guadagna monete gratis!' : language === 'de' ? 'Verdiene Münzen kostenlos!' : 'Earn coins for free!'}
-                    </h4>
-                    <p className="text-gray-400 text-sm">
-                      {language === 'fr' ? 'Chaque victoire te rapporte des pièces bonus' : language === 'it' ? 'Ogni vittoria ti fa guadagnare monete bonus' : language === 'de' ? 'Jeder Sieg bringt dir Bonusmünzen' : 'Every victory earns you bonus coins'}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 border border-green-500/30">
-                  <Trophy className="w-5 h-5 text-green-400" />
-                  <span className="text-green-400 font-bold">+50</span>
-                  <Coins className="w-4 h-4 text-yellow-400" />
-                  <span className="text-gray-400 text-sm">/ {language === 'fr' ? 'victoire' : language === 'it' ? 'vittoria' : language === 'de' ? 'Sieg' : 'win'}</span>
-                </div>
-              </div>
-            </div>
-          )}
 
         </div>
       </div>
@@ -500,44 +544,202 @@ const Shop = () => {
             {/* Avatar Preview */}
             <div className="flex flex-col items-center mb-6">
               <p className="text-gray-400 text-sm mb-4">
-                {language === 'fr' ? 'Aperçu sur ton avatar' : language === 'it' ? 'Anteprima sul tuo avatar' : language === 'de' ? 'Vorschau auf deinem Avatar' : 'Preview on your avatar'}
+                {previewItem.category === 'profile_animation' 
+                  ? (language === 'fr' ? 'Aperçu de l\'animation' : language === 'it' ? 'Anteprima animazione' : language === 'de' ? 'Animation Vorschau' : 'Animation Preview')
+                  : previewItem.category === 'title'
+                    ? (language === 'fr' ? 'Aperçu du titre sur ton profil' : language === 'it' ? 'Anteprima del titolo sul profilo' : language === 'de' ? 'Titel-Vorschau auf deinem Profil' : 'Title preview on your profile')
+                    : previewItem.category === 'badge'
+                      ? (language === 'fr' ? 'Aperçu du badge' : language === 'it' ? 'Anteprima del badge' : language === 'de' ? 'Abzeichen-Vorschau' : 'Badge preview')
+                      : (language === 'fr' ? 'Aperçu sur ton avatar' : language === 'it' ? 'Anteprima sul tuo avatar' : language === 'de' ? 'Vorschau auf deinem Avatar' : 'Preview on your avatar')
+                }
               </p>
               
-              <div className="relative">
-                {/* Avatar with ornament preview */}
-                <div className="relative w-32 h-32">
-                  {/* Ornament border */}
-                  {previewItem.ornamentData?.borderColor && (
-                    <div 
-                      className={`absolute inset-0 rounded-full bg-gradient-to-r ${previewItem.ornamentData.borderColor} ${
-                        previewItem.ornamentData.animated && previewItem.ornamentData.animationType === 'pulse' ? 'animate-pulse' : ''
-                      } ${
-                        previewItem.ornamentData.animated && previewItem.ornamentData.animationType === 'spin' ? 'animate-spin-slow' : ''
-                      } ${
-                        previewItem.ornamentData.animated && previewItem.ornamentData.animationType === 'glow' ? 'animate-glow' : ''
-                      }`}
-                      style={{ padding: `${previewItem.ornamentData.borderWidth || 4}px` }}
-                    />
-                  )}
+              {/* Profile Animation Preview */}
+              {previewItem.category === 'profile_animation' ? (
+                <div className="w-full">
+                  {/* Animated header preview with ProfileAnimation component */}
+                  <div className="relative rounded-xl overflow-hidden h-40 bg-gradient-to-r from-dark-800 to-dark-900">
+                    {/* ProfileAnimation component for actual animation effect */}
+                    {previewItem.profileAnimationData && (
+                      <ProfileAnimation 
+                        animationData={previewItem.profileAnimationData}
+                        className="z-0"
+                      />
+                    )}
+                    {/* Content layer */}
+                    <div className="absolute inset-0 flex items-center justify-center z-10">
+                      <div className="text-center">
+                        <div className="flex items-center justify-center mb-2">
+                          <img
+                            src={user?.avatar || getDefaultAvatar(user?.username)}
+                            alt="Preview"
+                            className="w-16 h-16 rounded-full border-2 border-white/20"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = getDefaultAvatar(user?.username);
+                            }}
+                          />
+                        </div>
+                        <p className="text-white font-bold">{user?.username || 'Username'}</p>
+                      </div>
+                    </div>
+                  </div>
                   
-                  {/* User avatar */}
-                  <img
-                    src={user?.avatar || getDefaultAvatar(user?.username)}
-                    alt="Preview"
-                    className="absolute rounded-full w-full h-full object-cover"
-                    style={{ 
-                      padding: `${previewItem.ornamentData?.borderWidth || 4}px`,
-                      zIndex: 1
-                    }}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = getDefaultAvatar(user?.username);
-                    }}
-                  />
+                  {/* Animation name and effect description */}
+                  <div className="mt-4 text-center">
+                    <span className="inline-block px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm font-medium">
+                      {previewItem.nameTranslations?.[language] || previewItem.name}
+                    </span>
+                  </div>
                 </div>
-              </div>
+              ) : previewItem.category === 'title' ? (
+                /* Title Preview */
+                <div className="w-full">
+                  <div className="flex flex-col items-center">
+                    {/* Avatar */}
+                    <img
+                      src={user?.avatar || getDefaultAvatar(user?.username)}
+                      alt="Preview"
+                      className="w-20 h-20 rounded-full border-2 border-white/20 mb-3"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = getDefaultAvatar(user?.username);
+                      }}
+                    />
+                    
+                    {/* Username */}
+                    <p className="text-white font-bold text-lg mb-2">{user?.username || 'Username'}</p>
+                    
+                    {/* Title display - styled like on profile */}
+                    <span 
+                      className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-lg font-bold border-2 shadow-xl
+                        ${
+                          previewItem.rarity === 'legendary' 
+                            ? 'bg-gradient-to-r from-yellow-500/30 via-amber-400/30 to-yellow-500/30 border-yellow-400/60 text-yellow-300' 
+                            : previewItem.rarity === 'epic' 
+                              ? 'bg-gradient-to-r from-purple-500/30 via-pink-400/30 to-purple-500/30 border-purple-400/60 text-purple-300' 
+                              : previewItem.rarity === 'rare' 
+                                ? 'bg-gradient-to-r from-blue-500/30 via-cyan-400/30 to-blue-500/30 border-blue-400/60 text-blue-300' 
+                                : 'bg-gradient-to-r from-gray-500/30 via-slate-400/30 to-gray-500/30 border-gray-400/60 text-gray-300'
+                        }
+                      `}
+                    >
+                      {previewItem.nameTranslations?.[language] || previewItem.name}
+                    </span>
+                  </div>
+                </div>
+              ) : previewItem.category === 'badge' ? (
+                /* Badge Preview */
+                <div className="w-full">
+                  <div className="flex flex-col items-center">
+                    {/* Badge display */}
+                    <div className={`w-24 h-24 rounded-xl bg-gradient-to-br ${rarityColors[previewItem.rarity]?.bg || 'bg-gray-500/20'} flex items-center justify-center border-2 ${rarityColors[previewItem.rarity]?.border || 'border-gray-500/40'} mb-4`}>
+                      {previewItem.image ? (
+                        <img src={previewItem.image} alt={previewItem.name} className="w-16 h-16 object-contain" />
+                      ) : (
+                        React.createElement(getItemIcon(previewItem.icon), { className: `w-12 h-12 ${rarityColors[previewItem.rarity]?.text || 'text-gray-400'}` })
+                      )}
+                    </div>
+                    
+                    {/* Badge name */}
+                    <span className={`inline-block px-4 py-1.5 rounded-full ${rarityColors[previewItem.rarity]?.bg || 'bg-gray-500/20'} ${rarityColors[previewItem.rarity]?.text || 'text-gray-400'} text-sm font-medium`}>
+                      {previewItem.nameTranslations?.[language] || previewItem.name}
+                    </span>
+                    
+                    {/* Example on profile */}
+                    <p className="text-gray-500 text-xs mt-4 mb-2">
+                      {language === 'fr' ? 'Aperçu sur le profil' : 'Preview on profile'}
+                    </p>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-dark-800 rounded-lg">
+                      <img
+                        src={user?.avatar || getDefaultAvatar(user?.username)}
+                        alt="Preview"
+                        className="w-8 h-8 rounded-full"
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = getDefaultAvatar(user?.username);
+                        }}
+                      />
+                      <span className="text-white font-medium">{user?.username || 'Username'}</span>
+                      <div className={`w-6 h-6 rounded flex items-center justify-center ${rarityColors[previewItem.rarity]?.bg || 'bg-gray-500/20'}`}>
+                        {previewItem.image ? (
+                          <img src={previewItem.image} alt="" className="w-4 h-4 object-contain" />
+                        ) : (
+                          React.createElement(getItemIcon(previewItem.icon), { className: `w-4 h-4 ${rarityColors[previewItem.rarity]?.text || 'text-gray-400'}` })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : previewItem.category === 'avatar_frame' ? (
+                /* Avatar Frame Preview */
+                <div className="w-full">
+                  <div className="flex flex-col items-center">
+                    {/* Avatar with frame */}
+                    <div className="relative w-32 h-32 mb-4">
+                      {/* Frame effect */}
+                      <div 
+                        className={`absolute inset-0 rounded-full bg-gradient-to-r ${previewItem.ornamentData?.borderColor || 'from-cyan-400 to-blue-500'} ${previewItem.ornamentData?.animated ? 'animate-pulse' : ''}`}
+                        style={{ padding: `${previewItem.ornamentData?.borderWidth || 4}px` }}
+                      />
+                      <img
+                        src={user?.avatar || getDefaultAvatar(user?.username)}
+                        alt="Preview"
+                        className="absolute rounded-full w-full h-full object-cover"
+                        style={{ 
+                          padding: `${previewItem.ornamentData?.borderWidth || 4}px`,
+                          zIndex: 1
+                        }}
+                        onError={(e) => {
+                          e.target.onerror = null;
+                          e.target.src = getDefaultAvatar(user?.username);
+                        }}
+                      />
+                    </div>
+                    <p className="text-white font-medium">{user?.username || 'Username'}</p>
+                  </div>
+                </div>
+              ) : (
+                /* Ornament Preview */
+                <div className="relative">
+                  {/* Avatar with ornament preview */}
+                  <div className="relative w-32 h-32">
+                    {/* Ornament border */}
+                    {previewItem.ornamentData?.borderColor && (
+                      <div 
+                        className={`absolute inset-0 rounded-full bg-gradient-to-r ${previewItem.ornamentData.borderColor} ${
+                          previewItem.ornamentData.animated && previewItem.ornamentData.animationType === 'pulse' ? 'animate-pulse' : ''
+                        } ${
+                          previewItem.ornamentData.animated && previewItem.ornamentData.animationType === 'spin' ? 'animate-spin-slow' : ''
+                        } ${
+                          previewItem.ornamentData.animated && previewItem.ornamentData.animationType === 'glow' ? 'animate-glow' : ''
+                        }`}
+                        style={{ padding: `${previewItem.ornamentData.borderWidth || 4}px` }}
+                      />
+                    )}
+                    
+                    {/* User avatar */}
+                    <img
+                      src={user?.avatar || getDefaultAvatar(user?.username)}
+                      alt="Preview"
+                      className="absolute rounded-full w-full h-full object-cover"
+                      style={{ 
+                        padding: `${previewItem.ornamentData?.borderWidth || 4}px`,
+                        zIndex: 1
+                      }}
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = getDefaultAvatar(user?.username);
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
-              <p className="text-white font-medium mt-4">{user?.username || 'Username'}</p>
+              {/* Only show username for ornament preview (others include it in their display) */}
+              {previewItem.category === 'ornament' && (
+                <p className="text-white font-medium mt-4">{user?.username || 'Username'}</p>
+              )}
             </div>
 
             {/* Item Info */}
@@ -556,8 +758,8 @@ const Shop = () => {
               {!isOwned(previewItem._id) && (
                 <button
                   onClick={() => {
-                    handlePurchase(previewItem);
                     setPreviewItem(null);
+                    openConfirmPurchase(previewItem);
                   }}
                   disabled={userCoins < previewItem.price || !isAuthenticated}
                   className={`flex-1 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
@@ -570,6 +772,124 @@ const Shop = () => {
                   {buyLabel[language]} ({previewItem.price} <Coins className="w-3 h-3 inline" />)
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Purchase Confirmation Modal */}
+      {confirmItem && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setConfirmItem(null)}>
+          <div 
+            className={`bg-dark-900 border ${colors.border} rounded-2xl p-6 max-w-md w-full shadow-2xl`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-white">
+                {language === 'fr' ? 'Confirmer l\'achat' : language === 'de' ? 'Kauf bestätigen' : language === 'it' ? 'Conferma acquisto' : 'Confirm Purchase'}
+              </h3>
+              <button 
+                onClick={() => setConfirmItem(null)}
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Item Info */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className={`w-16 h-16 rounded-xl bg-gradient-to-br from-${confirmItem.color || colors.primary}-500/30 to-${confirmItem.color || colors.primary}-600/30 flex items-center justify-center border ${rarityColors[confirmItem.rarity]?.border || 'border-gray-500/40'}`}>
+                {confirmItem.image ? (
+                  <img src={confirmItem.image} alt={confirmItem.name} className="w-10 h-10 object-contain" />
+                ) : (
+                  React.createElement(getItemIcon(confirmItem.icon), { className: `w-8 h-8 ${rarityColors[confirmItem.rarity]?.text || 'text-gray-400'}` })
+                )}
+              </div>
+              <div className="flex-1">
+                <h4 className="text-lg font-bold text-white">
+                  {confirmItem.nameTranslations?.[language] || confirmItem.name}
+                </h4>
+                <div className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${rarityColors[confirmItem.rarity]?.bg || 'bg-gray-500/20'} ${rarityColors[confirmItem.rarity]?.text || 'text-gray-400'}`}>
+                  {rarityColors[confirmItem.rarity]?.label[language] || 'Common'}
+                </div>
+              </div>
+            </div>
+
+            {/* Price Summary */}
+            <div className="bg-dark-800/50 rounded-xl p-4 mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400">
+                  {language === 'fr' ? 'Prix' : language === 'de' ? 'Preis' : language === 'it' ? 'Prezzo' : 'Price'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center">
+                    <Coins className="w-3 h-3 text-yellow-900" />
+                  </div>
+                  <span className="text-yellow-400 font-bold">{confirmItem.price}</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400">
+                  {language === 'fr' ? 'Ton solde' : language === 'de' ? 'Dein Guthaben' : language === 'it' ? 'Il tuo saldo' : 'Your balance'}
+                </span>
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center">
+                    <Coins className="w-3 h-3 text-yellow-900" />
+                  </div>
+                  <span className="text-yellow-400 font-bold">{userCoins}</span>
+                </div>
+              </div>
+              <div className="border-t border-white/10 pt-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-300 font-medium">
+                    {language === 'fr' ? 'Après achat' : language === 'de' ? 'Nach dem Kauf' : language === 'it' ? 'Dopo l\'acquisto' : 'After purchase'}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center">
+                      <Coins className="w-3 h-3 text-yellow-900" />
+                    </div>
+                    <span className={`font-bold ${userCoins - confirmItem.price >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {userCoins - confirmItem.price}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Confirmation text */}
+            <p className="text-gray-400 text-sm text-center mb-6">
+              {language === 'fr' 
+                ? 'Êtes-vous sûr de vouloir acheter cet article ?' 
+                : language === 'de' 
+                  ? 'Möchten Sie diesen Artikel wirklich kaufen?' 
+                  : language === 'it' 
+                    ? 'Sei sicuro di voler acquistare questo articolo?' 
+                    : 'Are you sure you want to buy this item?'}
+            </p>
+
+            {/* Action buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmItem(null)}
+                className="flex-1 py-3 rounded-lg font-medium text-gray-400 bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                {language === 'fr' ? 'Annuler' : language === 'de' ? 'Abbrechen' : language === 'it' ? 'Annulla' : 'Cancel'}
+              </button>
+              <button
+                onClick={() => handlePurchase(confirmItem)}
+                disabled={purchasing === confirmItem._id}
+                className={`flex-1 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 bg-gradient-to-r ${colors.gradient} text-white hover:shadow-lg ${colors.glow} transition-all`}
+              >
+                {purchasing === confirmItem._id ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    {language === 'fr' ? 'Confirmer' : language === 'de' ? 'Bestätigen' : language === 'it' ? 'Conferma' : 'Confirm'}
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
