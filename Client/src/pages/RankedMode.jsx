@@ -285,7 +285,7 @@ const RankedMode = () => {
   const { language } = useLanguage();
   const { selectedMode } = useMode();
   const { user, isAuthenticated } = useAuth();
-  const { on, isConnected, joinPage, leavePage, emit, modeOnlineUsers, joinMode, leaveMode } = useSocket();
+  const { on, isConnected, joinPage, leavePage, emit, modeOnlineUsers, joinMode, leaveMode, joinRankedMatch, leaveRankedMatch } = useSocket();
   const navigate = useNavigate();
   
   // Player stats
@@ -364,7 +364,11 @@ const RankedMode = () => {
     team2Players: [],
     timeRemaining: 10,
     totalPlayersToSelect: 0,
-    totalPicks: 0
+    totalPicks: 0,
+    // Flags calculés par le serveur
+    isYourTurn: false,
+    isTeam1Referent: false,
+    isTeam2Referent: false
   });
   const [rosterSelectionCountdown, setRosterSelectionCountdown] = useState(10);
   
@@ -1119,6 +1123,12 @@ const RankedMode = () => {
       // Jouer le son quand le match est trouvé
       playMatchFoundSound();
       
+      // Rejoindre la room du match pour recevoir les updates (roster selection, map vote, etc.)
+      if (data.matchId) {
+        joinRankedMatch(data.matchId);
+        console.log('[RankedMode] Joined ranked match room:', data.matchId);
+      }
+      
       // Store map vote options
       if (data.mapVoteOptions) {
         setMapVoteOptions(data.mapVoteOptions);
@@ -1132,11 +1142,7 @@ const RankedMode = () => {
       // Initialize roster selection state if applicable (test matches)
       if (data.hasRosterSelection && data.rosterSelection) {
         console.log('[RankedMode] Roster selection active:', data.rosterSelection);
-        console.log('[RankedMode] Initial team1Players:', data.rosterSelection.team1Players);
-        console.log('[RankedMode] Initial team2Players:', data.rosterSelection.team2Players);
-        console.log('[RankedMode] User ID for comparison:', user?.id, typeof user?.id);
-        console.log('[RankedMode] team1Referent:', data.rosterSelection.team1Referent, typeof data.rosterSelection.team1Referent);
-        console.log('[RankedMode] team2Referent:', data.rosterSelection.team2Referent, typeof data.rosterSelection.team2Referent);
+        console.log('[RankedMode] isYourTurn from server:', data.rosterSelection.isYourTurn);
         setRosterSelection({
           isActive: true,
           currentTurn: data.rosterSelection.currentTurn || 1,
@@ -1148,7 +1154,11 @@ const RankedMode = () => {
           team2Players: data.rosterSelection.team2Players || [], // Bot référent déjà dans l'équipe 2
           timeRemaining: data.rosterSelection.timeRemaining || 10,
           totalPlayersToSelect: data.rosterSelection.totalPlayersToSelect || 0,
-          totalPicks: 0
+          totalPicks: 0,
+          // Utiliser les flags du serveur
+          isYourTurn: data.rosterSelection.isYourTurn || false,
+          isTeam1Referent: data.rosterSelection.isTeam1Referent || false,
+          isTeam2Referent: data.rosterSelection.isTeam2Referent || false
         });
         setRosterSelectionCountdown(data.rosterSelection.timeRemaining || 10);
       }
@@ -1235,18 +1245,31 @@ const RankedMode = () => {
     
     // Listen for roster selection updates (test matches)
     const unsubRosterUpdate = on('rosterSelectionUpdate', (data) => {
-      console.log('[RankedMode] Roster selection update:', data);
+      console.log('[RankedMode] Roster selection update received:', data);
+      console.log('[RankedMode] isYourTurn from server:', data.isYourTurn);
       if (data.matchId?.toString() === currentMatchIdRef.current?.toString()) {
-        setRosterSelection(prev => ({
-          ...prev,
-          currentTurn: data.currentTurn,
-          availablePlayers: data.availablePlayers || [],
-          team1Players: data.team1Players || prev.team1Players,
-          team2Players: data.team2Players || prev.team2Players,
-          timeRemaining: data.timeRemaining || 10,
-          totalPicks: data.totalPicks || prev.totalPicks
-        }));
+        setRosterSelection(prev => {
+          const newState = {
+            ...prev,
+            team1Referent: data.team1Referent || prev.team1Referent,
+            team2Referent: data.team2Referent || prev.team2Referent,
+            currentTurn: data.currentTurn,
+            availablePlayers: data.availablePlayers || [],
+            team1Players: data.team1Players || prev.team1Players,
+            team2Players: data.team2Players || prev.team2Players,
+            timeRemaining: data.timeRemaining || 10,
+            totalPicks: data.totalPicks || prev.totalPicks,
+            // IMPORTANT: Utiliser le flag isYourTurn calculé par le serveur
+            isYourTurn: data.isYourTurn || false,
+            isTeam1Referent: data.isTeam1Referent || false,
+            isTeam2Referent: data.isTeam2Referent || false
+          };
+          console.log('[RankedMode] Setting new rosterSelection state, isYourTurn:', newState.isYourTurn);
+          return newState;
+        });
         setRosterSelectionCountdown(data.timeRemaining || 10);
+      } else {
+        console.log('[RankedMode] Match ID mismatch, ignoring update');
       }
     });
     
@@ -1292,8 +1315,20 @@ const RankedMode = () => {
       }
     });
     
-    return () => { unsubQueue(); unsubMatch(); unsubMapVote(); unsubMapSelected(); unsubCancellationVote(); unsubRosterUpdate(); unsubRosterComplete(); };
-  }, [isAuthenticated, isConnected, on, navigate]);
+    return () => {
+      unsubQueue();
+      unsubMatch();
+      unsubMapVote();
+      unsubMapSelected();
+      unsubCancellationVote();
+      unsubRosterUpdate();
+      unsubRosterComplete();
+      // Quitter la room du match si on était dedans
+      if (currentMatchIdRef.current) {
+        leaveRankedMatch(currentMatchIdRef.current);
+      }
+    };
+  }, [isAuthenticated, isConnected, on, navigate, joinRankedMatch, leaveRankedMatch]);
 
   // Listen for global queue count (for all users viewing the page)
   useEffect(() => {
@@ -3992,55 +4027,98 @@ const RankedMode = () => {
                 
                 {/* Referents Display */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
-                  {/* Team 1 Referent (You) */}
-                  <div className={`rounded-xl p-3 border-2 ${rosterSelection.currentTurn === 1 ? 'border-cyan-500 bg-cyan-500/10' : 'border-cyan-500/30 bg-cyan-500/5'}`}>
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
-                      <span className="text-cyan-400 font-bold text-sm">{language === 'fr' ? 'Référent Équipe 1' : 'Team 1 Referent'}</span>
-                    </div>
-                    <div className="flex items-center gap-3 mt-2">
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-cyan-500 flex items-center justify-center">
-                        {user?.avatar ? (
-                          <img src={user.avatar} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-6 h-6 bg-cyan-500/50 rounded-full"></div>
+                  {/* Team 1 Referent */}
+                  {(() => {
+                    // Trouver le vrai référent équipe 1
+                    const team1RefId = rosterSelection.team1Referent?.toString();
+                    const team1RefPlayer = shuffleMatchData?.players?.find(p => p.id === team1RefId || (p.isReferent && p.team === 1));
+                    const isMe = team1RefId === user?.id?.toString();
+                    const team1RefUsername = team1RefPlayer?.username || (isMe ? user?.username : 'Référent 1');
+                    const team1RefAvatar = isMe ? user?.avatar : team1RefPlayer?.avatar;
+                    
+                    return (
+                      <div className={`rounded-xl p-3 border-2 ${rosterSelection.currentTurn === 1 ? 'border-cyan-500 bg-cyan-500/10' : 'border-cyan-500/30 bg-cyan-500/5'}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
+                          <span className="text-cyan-400 font-bold text-sm">{language === 'fr' ? 'Référent Équipe 1' : 'Team 1 Referent'}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-2">
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-cyan-500 flex items-center justify-center">
+                            {team1RefAvatar ? (
+                              <img src={team1RefAvatar} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-6 h-6 bg-cyan-500/50 rounded-full"></div>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-white font-medium text-sm">{team1RefUsername}</p>
+                            <p className="text-cyan-400 text-xs">
+                              {isMe ? (language === 'fr' ? '(Vous)' : '(You)') : (language === 'fr' ? '(Joueur)' : '(Player)')}
+                            </p>
+                          </div>
+                        </div>
+                        {rosterSelection.currentTurn === 1 && (
+                          <p className="text-green-400 text-xs font-bold animate-pulse mt-2">
+                            {isMe 
+                              ? (language === 'fr' ? 'À vous de choisir !' : 'Your pick!')
+                              : (language === 'fr' ? 'Leur tour de choisir...' : 'Their turn to pick...')}
+                          </p>
                         )}
                       </div>
-                      <div>
-                        <p className="text-white font-medium text-sm">{user?.username || 'Vous'}</p>
-                        <p className="text-cyan-400 text-xs">{language === 'fr' ? '(Vous)' : '(You)'}</p>
-                      </div>
-                    </div>
-                    {rosterSelection.currentTurn === 1 && (
-                      <p className="text-green-400 text-xs font-bold animate-pulse mt-2">
-                        {language === 'fr' ? 'À vous de choisir !' : 'Your pick!'}
-                      </p>
-                    )}
-                  </div>
+                    );
+                  })()}
                   
-                  {/* Team 2 Referent (Bot) */}
-                  <div className={`rounded-xl p-3 border-2 ${rosterSelection.currentTurn === 2 ? 'border-orange-500 bg-orange-500/10' : 'border-orange-500/30 bg-orange-500/5'}`}>
-                    <div className="flex items-center gap-2 justify-end">
-                      <span className="text-orange-400 font-bold text-sm">{language === 'fr' ? 'Référent Équipe 2' : 'Team 2 Referent'}</span>
-                      <div className="w-2 h-2 rounded-full bg-orange-400"></div>
-                    </div>
-                    <div className="flex items-center gap-3 mt-2 justify-end">
-                      <div className="text-right">
-                        <p className="text-white font-medium text-sm">
-                          {rosterSelection.team2ReferentInfo?.username || rosterSelection.team2Referent || 'Bot'}
-                        </p>
-                        <p className="text-orange-400 text-xs">{language === 'fr' ? '(Bot Auto)' : '(Auto Bot)'}</p>
+                  {/* Team 2 Referent (Real player or Bot) */}
+                  {(() => {
+                    // Déterminer si Team 2 référent est un vrai joueur ou un bot
+                    const team2RefId = rosterSelection.team2Referent?.toString();
+                    const isBot = !team2RefId || rosterSelection.team2ReferentInfo;
+                    const team2RefPlayer = !isBot 
+                      ? shuffleMatchData?.players?.find(p => p.id === team2RefId || (p.isReferent && p.team === 2))
+                      : null;
+                    const isMe = team2RefId === user?.id?.toString();
+                    const team2RefUsername = team2RefPlayer?.username || rosterSelection.team2ReferentInfo?.username || 'Bot';
+                    const team2RefAvatar = isMe ? user?.avatar : team2RefPlayer?.avatar;
+                    
+                    return (
+                      <div className={`rounded-xl p-3 border-2 ${rosterSelection.currentTurn === 2 ? 'border-orange-500 bg-orange-500/10' : 'border-orange-500/30 bg-orange-500/5'}`}>
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="text-orange-400 font-bold text-sm">{language === 'fr' ? 'Référent Équipe 2' : 'Team 2 Referent'}</span>
+                          <div className="w-2 h-2 rounded-full bg-orange-400"></div>
+                        </div>
+                        <div className="flex items-center gap-3 mt-2 justify-end">
+                          <div className="text-right">
+                            <p className="text-white font-medium text-sm">
+                              {team2RefUsername}
+                            </p>
+                            <p className="text-orange-400 text-xs">
+                              {isMe 
+                                ? (language === 'fr' ? '(Vous)' : '(You)')
+                                : (isBot 
+                                    ? (language === 'fr' ? '(Bot Auto)' : '(Auto Bot)')
+                                    : (language === 'fr' ? '(Joueur)' : '(Player)'))}
+                            </p>
+                          </div>
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-orange-500 flex items-center justify-center">
+                            {!isBot && team2RefAvatar ? (
+                              <img src={team2RefAvatar} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <Bot className="w-6 h-6 text-orange-400" />
+                            )}
+                          </div>
+                        </div>
+                        {rosterSelection.currentTurn === 2 && (
+                          <p className="text-orange-400 text-xs font-bold animate-pulse mt-2 text-right">
+                            {isMe
+                              ? (language === 'fr' ? 'À vous de choisir !' : 'Your pick!')
+                              : (isBot
+                                  ? (language === 'fr' ? 'Le bot choisit...' : 'Bot is picking...')
+                                  : (language === 'fr' ? 'Leur tour de choisir...' : 'Their turn to pick...'))}
+                          </p>
+                        )}
                       </div>
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-700 border-2 border-orange-500 flex items-center justify-center">
-                        <Bot className="w-6 h-6 text-orange-400" />
-                      </div>
-                    </div>
-                    {rosterSelection.currentTurn === 2 && (
-                      <p className="text-orange-400 text-xs font-bold animate-pulse mt-2 text-right">
-                        {language === 'fr' ? 'Le bot choisit...' : 'Bot is picking...'}
-                      </p>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
                 
                 {/* Timer and Turn Indicator */}
@@ -4059,7 +4137,7 @@ const RankedMode = () => {
                     <p className={`text-lg sm:text-xl font-bold ${rosterSelection.currentTurn === 1 ? 'text-cyan-400' : 'text-orange-400'}`}>
                       {rosterSelection.currentTurn === 1 
                         ? (language === 'fr' ? 'Équipe 1' : 'Team 1')
-                        : (language === 'fr' ? 'Équipe 2 (Bot)' : 'Team 2 (Bot)')}
+                        : (language === 'fr' ? 'Équipe 2' : 'Team 2')}
                     </p>
                   </div>
                 </div>
@@ -4074,18 +4152,16 @@ const RankedMode = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                     {rosterSelection.availablePlayers.map((player, index) => {
                       const playerRankInfo = getRankFromPoints(player.points || 0);
-                      // Pour les matchs de test, seul le staff est référent de l'équipe 1
-                      // L'équipe 2 est contrôlée par un bot
-                      const userId = user?.id?.toString();
-                      const team1Ref = rosterSelection.team1Referent?.toString();
-                      const isMyTurn = rosterSelection.currentTurn === 1 && team1Ref === userId;
+                      // Utiliser le flag isYourTurn calculé par le serveur
+                      const isMyTurn = rosterSelection.isYourTurn || false;
                       
                       // Debug log pour le premier joueur seulement
                       if (index === 0) {
                         console.log('[RankedMode] isMyTurn check:', {
                           currentTurn: rosterSelection.currentTurn,
-                          userId,
-                          team1Ref,
+                          isYourTurnFromServer: rosterSelection.isYourTurn,
+                          isTeam1Referent: rosterSelection.isTeam1Referent,
+                          isTeam2Referent: rosterSelection.isTeam2Referent,
                           isMyTurn
                         });
                       }

@@ -997,34 +997,32 @@ const createMatchFromQueue = async (gameMode, mode) => {
     console.log(`[Ranked Matchmaking] Full mapVoteOptions data:`, JSON.stringify(mapsForVote, null, 2));
     
     // Créer les données des joueurs pour le match
-    // ROSTER SELECTION: Les référents sont assignés à leur équipe, les autres ont team: null
+    // DISTRIBUTION ALÉATOIRE: Tous les joueurs sont assignés à leur équipe dès le départ
     const matchPlayers = [
       ...team1Players.map(p => {
         const fake = isFakePlayer(p);
         const isTeam1Ref = p.userId.toString() === team1Referent.userId.toString();
-        const isTeam2Ref = p.userId.toString() === team2Referent.userId.toString();
         return {
           user: fake ? null : p.userId, // null pour les faux joueurs
           username: p.username,
           rank: p.rank,
           points: p.points,
-          team: isTeam1Ref ? 1 : (isTeam2Ref ? 2 : null), // Seulement les référents ont une équipe
-          isReferent: isTeam1Ref || isTeam2Ref,
+          team: 1, // Tous les joueurs team1 sont dans l'équipe 1
+          isReferent: isTeam1Ref,
           isFake: fake,
           queueJoinedAt: p.joinedAt
         };
       }),
       ...team2Players.map(p => {
         const fake = isFakePlayer(p);
-        const isTeam1Ref = p.userId.toString() === team1Referent.userId.toString();
         const isTeam2Ref = p.userId.toString() === team2Referent.userId.toString();
         return {
           user: fake ? null : p.userId, // null pour les faux joueurs
           username: p.username,
           rank: p.rank,
           points: p.points,
-          team: isTeam1Ref ? 1 : (isTeam2Ref ? 2 : null), // Seulement les référents ont une équipe
-          isReferent: isTeam1Ref || isTeam2Ref,
+          team: 2, // Tous les joueurs team2 sont dans l'équipe 2
+          isReferent: isTeam2Ref,
           isFake: fake,
           queueJoinedAt: p.joinedAt
         };
@@ -1035,7 +1033,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const team1ReferentId = !isFakePlayer(team1Referent) ? team1Referent.userId : null;
     const team2ReferentId = !isFakePlayer(team2Referent) ? team2Referent.userId : null;
     
-    // Créer le match avec roster selection activé
+    // Créer le match SANS roster selection (distribution aléatoire directe)
     const match = await RankedMatch.create({
       gameMode,
       mode,
@@ -1044,17 +1042,17 @@ const createMatchFromQueue = async (gameMode, mode) => {
       team1Referent: team1ReferentId,
       team2Referent: team2ReferentId,
       hostTeam,
-      status: 'pending', // En attente de la sélection de roster puis du vote de map
+      status: 'pending', // En attente du vote de map
       maps: selectedMaps,
       mapVoteOptions: mapsForVote,
       matchmakingStartedAt: new Date(),
       rosterSelection: {
-        isActive: true,
+        isActive: false, // Pas de sélection de roster - distribution aléatoire
         currentTurn: 1,
-        turnStartedAt: new Date(),
+        turnStartedAt: null,
         pickOrder: [],
         totalPicks: 0,
-        startedAt: new Date(),
+        startedAt: null,
         completedAt: null
       }
     });
@@ -1073,7 +1071,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
       isSystem: true,
       messageType: 'match_created',
       messageParams: { teamSize },
-      message: `Match ${teamSize}v${teamSize} créé ! ${team1Referent.username} et ${team2Referent.username} sont les référents. Sélection des joueurs en cours...`
+      message: `Match ${teamSize}v${teamSize} créé ! ${team1Referent.username} et ${team2Referent.username} sont les référents. Vote de map en cours...`
     });
     await match.save();
     
@@ -1106,32 +1104,32 @@ const createMatchFromQueue = async (gameMode, mode) => {
     console.log(`[Ranked Matchmaking] Sending mapVoteOptions to clients:`, JSON.stringify(mapVoteOptionsForClient));
     
     // Notifier tous les vrais joueurs du match
+    const matchIdStr = match._id.toString();
+    
     for (const player of matchPlayers) {
       if (io && player.user) { // Ne notifier que les vrais joueurs
-        console.log(`[Ranked Matchmaking] Sending rankedMatchFound to user-${player.user} (${player.username}) with ${mapVoteOptionsForClient.length} map options, hasRosterSelection: true`);
+        console.log(`[Ranked Matchmaking] Sending rankedMatchFound to user-${player.user} (${player.username}), team: ${player.team}, matchId: ${matchIdStr}`);
         io.to(`user-${player.user}`).emit('rankedMatchFound', {
-          matchId: match._id,
+          matchId: matchIdStr,
           gameMode,
           mode,
           format,
           teamSize,
-          yourTeam: player.team, // null pour les non-référents, 1 ou 2 pour les référents
+          yourTeam: player.team, // 1 ou 2
           isReferent: player.isReferent,
           isHost: player.team === hostTeam && player.isReferent,
-          isTestMatch: false, // Ce n'est pas un match de test
-          hasRosterSelection: true, // Indique que la sélection de roster est active
-          players: playersForAnimation, // Inclure tous les joueurs pour l'animation
+          isTestMatch: false,
+          hasRosterSelection: false, // Pas de sélection de roster - équipes aléatoires
+          players: playersForAnimation, // Tous les joueurs avec leurs équipes assignées
           mapVoteOptions: mapVoteOptionsForClient // Maps pour le vote
         });
       }
     }
     
-    // NE PAS démarrer le timer de vote de map tout de suite
-    // Le timer sera démarré après la sélection de roster (completeRosterSelection)
-    // startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    // Démarrer le timer de vote de map DIRECTEMENT (pas de roster selection)
+    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
     
     // Vérifier immédiatement le statut GGSecure des joueurs PC et notifier sur la feuille de match
-    // Cette vérification envoie un message dans le chat du match si un joueur n'a pas GGSecure activé
     checkRankedMatchGGSecureStatus(match).catch(err => {
       console.error('[Ranked Matchmaking] Error in immediate GGSecure check:', err);
     });
@@ -1749,8 +1747,9 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     
     // Notifier le staff du match trouvé avec la phase de sélection de roster
     if (io) {
+      const testMatchIdStr = match._id.toString();
       io.to(`user-${userId}`).emit('rankedMatchFound', {
-        matchId: match._id,
+        matchId: testMatchIdStr, // Envoyer comme string pour cohérence avec les rooms
         gameMode,
         mode,
         format: `${teamSize}v${teamSize}`,
@@ -1772,7 +1771,11 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
           team1Players: staffForTeam1 ? [staffForTeam1] : [], // Staff déjà dans l'équipe 1
           team2Players: botForTeam2 ? [botForTeam2] : [], // Bot référent déjà dans l'équipe 2
           timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
-          totalPlayersToSelect: matchPlayers.filter(p => p.team === null).length
+          totalPlayersToSelect: matchPlayers.filter(p => p.team === null).length,
+          // Flags personnalisés pour le staff - c'est lui le référent team 1 et c'est son tour
+          isYourTurn: true, // C'est le tour de l'équipe 1 (le staff)
+          isTeam1Referent: true,
+          isTeam2Referent: false
         }
       });
     }
@@ -2094,11 +2097,13 @@ const forceRandomRosterPick = async (matchId, team) => {
     }
     
     // Trouver les joueurs disponibles (pas encore assignés à une équipe)
-    // Exclure le staff référent (team1Referent) de la liste
+    // Exclure les deux référents de la liste
     const team1ReferentId = match.team1Referent?.toString();
+    const team2ReferentId = match.team2Referent?.toString();
     const availablePlayers = match.players.filter(p => 
       p.team === null && 
-      p.user?.toString() !== team1ReferentId
+      p.user?.toString() !== team1ReferentId &&
+      p.user?.toString() !== team2ReferentId
     );
     
     if (availablePlayers.length === 0) {
@@ -2170,11 +2175,13 @@ const processRosterPick = async (matchId, team, playerId, isRandom = false) => {
     });
     match.rosterSelection.totalPicks += 1;
     
-    // Vérifier combien de joueurs restent à assigner (exclure le staff référent)
+    // Vérifier combien de joueurs restent à assigner (exclure les deux référents)
     const team1ReferentId = match.team1Referent?.toString();
+    const team2ReferentId = match.team2Referent?.toString();
     const remainingPlayers = match.players.filter(p => 
       p.team === null && 
-      p.user?.toString() !== team1ReferentId
+      p.user?.toString() !== team1ReferentId &&
+      p.user?.toString() !== team2ReferentId
     );
     const allPlayersAssigned = remainingPlayers.length === 0;
     
@@ -2207,52 +2214,80 @@ const processRosterPick = async (matchId, team, playerId, isRandom = false) => {
     };
     
     if (io) {
+      console.log(`[Roster Selection] Emitting rosterSelectionUpdate to all players...`);
+      
+      const matchIdStr = match._id.toString();
+      const team1RefId = match.team1Referent?.toString() || null;
+      const team2RefId = match.team2Referent?.toString() || null;
+      
+      // Préparer les données communes
+      const baseUpdateData = {
+        matchId: matchIdStr,
+        team1Referent: team1RefId,
+        team2Referent: team2RefId,
+        pickedPlayer: {
+          id: selectedPlayer.user?.toString(),
+          username: selectedPlayer.username,
+          team: team
+        },
+        isRandom,
+        currentTurn: nextTurn,
+        availablePlayers: remainingPlayers
+          .map(p => {
+            const populatedPlayer = match.players.find(mp => mp.username === p.username);
+            return {
+              id: p.user?.toString() || p.username,
+              username: p.username,
+              points: p.points,
+              rank: p.rank,
+              isFake: p.isFake,
+              avatar: populatedPlayer ? getPlayerAvatar(populatedPlayer) : null
+            };
+          }),
+        team1Players: match.players.filter(p => p.team === 1).map(p => ({
+          id: p.user?._id?.toString() || p.user?.toString(),
+          username: p.username,
+          points: p.points,
+          rank: p.rank,
+          isFake: p.isFake,
+          avatar: getPlayerAvatar(p)
+        })),
+        team2Players: match.players.filter(p => p.team === 2).map(p => ({
+          id: p.user?._id?.toString() || p.user?.toString(),
+          username: p.username,
+          points: p.points,
+          rank: p.rank,
+          isFake: p.isFake,
+          avatar: getPlayerAvatar(p)
+        })),
+        timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
+        totalPicks: match.rosterSelection.totalPicks
+      };
+      
+      // Émettre INDIVIDUELLEMENT à chaque joueur avec son flag isYourTurn personnalisé
       for (const player of match.players) {
         if (player.user) {
-          const userId = player.user._id || player.user;
-          io.to(`user-${userId}`).emit('rosterSelectionUpdate', {
-            matchId: match._id,
-            pickedPlayer: {
-              id: selectedPlayer.user?.toString(),
-              username: selectedPlayer.username,
-              team: team
-            },
-            isRandom,
-            currentTurn: nextTurn,
-            availablePlayers: remainingPlayers
-              .filter(p => p.user?.toString() !== team1ReferentId) // Exclure le staff
-              .map(p => {
-              const populatedPlayer = match.players.find(mp => mp.username === p.username);
-              return {
-                id: p.user?.toString() || p.username,
-                username: p.username,
-                points: p.points,
-                rank: p.rank,
-                isFake: p.isFake,
-                avatar: populatedPlayer ? getPlayerAvatar(populatedPlayer) : null
-              };
-            }),
-            team1Players: match.players.filter(p => p.team === 1).map(p => ({
-              id: p.user?._id?.toString() || p.user?.toString(),
-              username: p.username,
-              points: p.points,
-              rank: p.rank,
-              isFake: p.isFake,
-              avatar: getPlayerAvatar(p)
-            })),
-            team2Players: match.players.filter(p => p.team === 2).map(p => ({
-              id: p.user?._id?.toString() || p.user?.toString(),
-              username: p.username,
-              points: p.points,
-              rank: p.rank,
-              isFake: p.isFake,
-              avatar: getPlayerAvatar(p)
-            })),
-            timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
-            totalPicks: match.rosterSelection.totalPicks
-          });
+          const playerId = player.user._id?.toString() || player.user.toString();
+          
+          // Calculer si c'est le tour de ce joueur
+          const isTeam1Referent = playerId === team1RefId;
+          const isTeam2Referent = playerId === team2RefId;
+          const isYourTurn = (nextTurn === 1 && isTeam1Referent) || (nextTurn === 2 && isTeam2Referent);
+          
+          // Créer les données personnalisées pour ce joueur
+          const playerUpdateData = {
+            ...baseUpdateData,
+            isYourTurn, // Flag personnalisé calculé côté serveur
+            isTeam1Referent,
+            isTeam2Referent
+          };
+          
+          console.log(`[Roster Selection] Emitting to user-${playerId} (${player.username}), isYourTurn: ${isYourTurn}, nextTurn: ${nextTurn}`);
+          io.to(`user-${playerId}`).emit('rosterSelectionUpdate', playerUpdateData);
         }
       }
+      
+      console.log(`[Roster Selection] Finished emitting to all players, availablePlayers: ${baseUpdateData.availablePlayers.length}, team1: ${baseUpdateData.team1Players.length}, team2: ${baseUpdateData.team2Players.length}`);
     }
     
     // Démarrer le timer pour le prochain tour

@@ -196,11 +196,15 @@ const startServer = async () => {
     });
 
     socket.on('joinRankedMatch', (matchId) => {
-      socket.join(`ranked-match-${matchId}`);
+      const roomName = `ranked-match-${matchId}`;
+      socket.join(roomName);
+      console.log(`[Socket] ${socket.userId || socket.id} joined ranked match room: ${roomName}`);
     });
 
     socket.on('leaveRankedMatch', (matchId) => {
-      socket.leave(`ranked-match-${matchId}`);
+      const roomName = `ranked-match-${matchId}`;
+      socket.leave(roomName);
+      console.log(`[Socket] ${socket.userId || socket.id} left ranked match room: ${roomName}`);
     });
 
     // Map vote for ranked matches

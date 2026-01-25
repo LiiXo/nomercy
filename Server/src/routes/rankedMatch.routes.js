@@ -45,10 +45,18 @@ async function distributeRankedRewards(match) {
     
     // Vérifier les événements actifs (Double XP, Double Gold)
     const now = new Date();
-    const isDoubleXP = appSettings?.events?.doubleXP?.enabled && 
-                       (!appSettings?.events?.doubleXP?.expiresAt || new Date(appSettings.events.doubleXP.expiresAt) > now);
-    const isDoubleGold = appSettings?.events?.doubleGold?.enabled && 
-                         (!appSettings?.events?.doubleGold?.expiresAt || new Date(appSettings.events.doubleGold.expiresAt) > now);
+    const doubleXPEnabled = appSettings?.events?.doubleXP?.enabled;
+    const doubleXPExpired = appSettings?.events?.doubleXP?.expiresAt && new Date(appSettings.events.doubleXP.expiresAt) <= now;
+    const isDoubleXP = doubleXPEnabled && !doubleXPExpired;
+    
+    const doubleGoldEnabled = appSettings?.events?.doubleGold?.enabled;
+    const doubleGoldExpired = appSettings?.events?.doubleGold?.expiresAt && new Date(appSettings.events.doubleGold.expiresAt) <= now;
+    const isDoubleGold = doubleGoldEnabled && !doubleGoldExpired;
+    
+    // Log détaillé des événements pour debug
+    console.log(`[RANKED REWARDS] EVENT STATUS:`);
+    console.log(`  Double XP - enabled: ${doubleXPEnabled}, expired: ${doubleXPExpired}, ACTIVE: ${isDoubleXP}`);
+    console.log(`  Double Gold - enabled: ${doubleGoldEnabled}, expired: ${doubleGoldExpired}, ACTIVE: ${isDoubleGold}`);
     
     if (isDoubleXP) {
       console.log(`[RANKED REWARDS] 🌟 EVENT ACTIF: Double XP !`);
@@ -152,22 +160,29 @@ async function distributeRankedRewards(match) {
         
         // ========== CHECK FOR ACTIVE BOOSTERS ==========
         // Now using match-count-based boosters (count decrements after each match)
+        // Rechercher les boosters actifs pour ce joueur
+        // IMPORTANT: Ne PAS traiter remainingMatches: null comme illimité
+        // Seuls les boosters avec remainingMatches > 0 sont valides
         const activeBoosters = await ItemUsage.find({
           user: userId,
           isActive: true,
           wasConsumed: false,
           effectType: { $in: ['double_pts', 'double_gold'] },
-          $or: [
-            { remainingMatches: null }, // Unlimited
-            { remainingMatches: { $gt: 0 } } // Has matches remaining
-          ]
+          remainingMatches: { $gt: 0 } // SEULEMENT les boosters avec des matchs restants
         });
         
         const hasDoublePts = activeBoosters.some(b => b.effectType === 'double_pts');
         const hasDoubleGold = activeBoosters.some(b => b.effectType === 'double_gold');
         
-        if (hasDoublePts || hasDoubleGold) {
-          console.log(`[RANKED REWARDS] Player ${i}: Active boosters - Double PTS: ${hasDoublePts}, Double Gold: ${hasDoubleGold}`);
+        // Log détaillé des boosters pour debug
+        if (activeBoosters.length > 0) {
+          console.log(`[RANKED REWARDS] Player ${i} (${user.username}): BOOSTERS FOUND:`);
+          activeBoosters.forEach(b => {
+            console.log(`  - ${b.effectType}: isActive=${b.isActive}, wasConsumed=${b.wasConsumed}, remainingMatches=${b.remainingMatches}`);
+          });
+          console.log(`  Double PTS: ${hasDoublePts}, Double Gold: ${hasDoubleGold}`);
+        } else {
+          console.log(`[RANKED REWARDS] Player ${i} (${user.username}): No active boosters`);
         }
         
         // ========== CALCULER LES RÉCOMPENSES ==========
@@ -278,15 +293,27 @@ async function distributeRankedRewards(match) {
         
         // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
         // Mettre à jour directement via l'index (plus fiable)
+        // Stocker les flags pour afficher x2 dans le rapport de match:
+        // - doublePts: true si EVENT Double XP actif OU si BOOSTER double_pts actif
+        // - doubleGold: true si EVENT Double Gold actif OU si BOOSTER double_gold actif
         match.players[i].rewards = {
           pointsChange: rankedPointsChange, // Points pour le ladder classé
           goldEarned: goldChange,
           xpEarned: xpChange,
           oldPoints: oldRankedPoints,
           newPoints: newRankedPoints,
+          // Flags pour l'affichage x2 dans le rapport (EVENT ou BOOSTER)
+          doublePts: (isDoubleXP || hasDoublePts) && isWinner,
+          doubleGold: (isDoubleGold || hasDoubleGold) && isWinner,
+          // Détail des boosters utilisés (pour référence)
           boostersUsed: {
             doublePts: hasDoublePts && isWinner,
             doubleGold: hasDoubleGold && isWinner
+          },
+          // Events actifs au moment du match
+          eventsActive: {
+            doubleXP: isDoubleXP,
+            doubleGold: isDoubleGold
           }
         };
         // Stocker aussi les points actuels du joueur pour calculer l'ancien/nouveau rang

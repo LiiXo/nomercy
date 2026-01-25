@@ -514,9 +514,12 @@ router.post('/use-item/:purchaseId', verifyToken, async (req, res) => {
       case 'double_pts':
       case 'double_gold':
         // Create usage record with remainingMatches (count-based instead of time-based)
+        // IMPORTANT: matchCount doit être > 0 sinon le booster ne fonctionne pas
         const remainingMatches = item.matchCount > 0 
           ? item.matchCount // Number of matches
-          : null; // null = unlimited
+          : 1; // Par défaut 1 match si non configuré (au lieu de null/unlimited)
+        
+        console.log(`[SHOP] Creating booster: effectType=${item.effectType}, matchCount=${item.matchCount}, remainingMatches=${remainingMatches}`);
         
         await ItemUsage.create({
           user: req.user._id,
@@ -1081,9 +1084,12 @@ router.post('/admin/give-item', verifyToken, requireAdmin, async (req, res) => {
 
     // If it's a usable item, create ItemUsage record
     if (item.isUsable) {
+      // IMPORTANT: matchCount doit être > 0 sinon le booster ne fonctionne pas
       const remainingMatches = item.matchCount > 0 
         ? item.matchCount
-        : null;
+        : 1; // Par défaut 1 match si non configuré
+      
+      console.log(`[SHOP GIFT] Creating booster: effectType=${item.effectType}, matchCount=${item.matchCount}, remainingMatches=${remainingMatches}`);
 
       const usage = new ItemUsage({
         user: userId,
