@@ -20,13 +20,26 @@ import { checkRankedMatchGGSecureStatus } from './ggsecureMonitoring.service.js'
 // Structure: { 'Search & Destroy_hardcore': [{ userId, username, rank, points, platform, joinedAt }] }
 const queues = {};
 
-// Configuration des seuils de joueurs pour S&D (format dynamique)
+// Configuration des seuils de joueurs pour le mode classé (format dynamique)
 // Le format est déterminé par le nombre de joueurs dans la file
-// Minimum 8 joueurs pour un 4v4
-const PLAYER_THRESHOLDS = [
+// CDL: uniquement 4v4 (8 joueurs)
+// Hardcore: 4v4 ou 5v5 (8-10 joueurs)
+const PLAYER_THRESHOLDS_HARDCORE = [
   { players: 8, format: '4v4', teamSize: 4 },
   { players: 10, format: '5v5', teamSize: 5 }
 ];
+
+// CDL: uniquement format 4v4
+const PLAYER_THRESHOLDS_CDL = [
+  { players: 8, format: '4v4', teamSize: 4 }
+];
+
+/**
+ * Obtient les seuils de joueurs selon le mode
+ */
+const getPlayerThresholds = (mode) => {
+  return mode === 'cdl' ? PLAYER_THRESHOLDS_CDL : PLAYER_THRESHOLDS_HARDCORE;
+};
 
 // Timer de 120 secondes (2 minutes) pour lancer le match
 const MATCHMAKING_TIMER_SECONDS = 120;
@@ -128,28 +141,30 @@ const getQueue = (gameMode, mode) => {
 };
 
 /**
- * Détermine le format optimal basé sur le nombre de joueurs
+ * Détermine le format optimal basé sur le nombre de joueurs et le mode
  */
-const getOptimalFormat = (playerCount) => {
+const getOptimalFormat = (playerCount, mode = 'hardcore') => {
+  const thresholds = getPlayerThresholds(mode);
   // Trouver le plus grand format possible avec le nombre de joueurs
-  for (let i = PLAYER_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (playerCount >= PLAYER_THRESHOLDS[i].players) {
-      return PLAYER_THRESHOLDS[i];
+  for (let i = thresholds.length - 1; i >= 0; i--) {
+    if (playerCount >= thresholds[i].players) {
+      return thresholds[i];
     }
   }
   return null; // Pas assez de joueurs
 };
 
 /**
- * Détermine le prochain seuil de joueurs
+ * Détermine le prochain seuil de joueurs selon le mode
  */
-const getNextThreshold = (currentCount) => {
-  for (const threshold of PLAYER_THRESHOLDS) {
+const getNextThreshold = (currentCount, mode = 'hardcore') => {
+  const thresholds = getPlayerThresholds(mode);
+  for (const threshold of thresholds) {
     if (currentCount < threshold.players) {
       return threshold;
     }
   }
-  return PLAYER_THRESHOLDS[PLAYER_THRESHOLDS.length - 1]; // Max atteint
+  return thresholds[thresholds.length - 1]; // Max atteint
 };
 
 /**
@@ -404,6 +419,14 @@ export const joinQueue = async (userId, gameMode, mode) => {
     // Vérifier que le mode est activé
     const settings = await AppSettings.getSettings();
     
+    // Vérifier si le serveur est en maintenance
+    if (settings.maintenance?.enabled) {
+      return { 
+        success: false, 
+        message: settings.maintenance.message || 'Le serveur est en maintenance. Veuillez réessayer plus tard.'
+      };
+    }
+    
     // Définir les settings par défaut si rankedSettings n'existe pas
     const defaultSettings = {
       searchAndDestroy: {
@@ -589,9 +612,12 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
     const timerKey = getQueueKey(gameMode, mode);
     const timerInfo = queueTimers[timerKey];
     
-    // Déterminer le format actuel basé sur le nombre de joueurs
-    const optimalFormat = getOptimalFormat(queue.length);
-    const nextThreshold = getNextThreshold(queue.length);
+    // Déterminer le format actuel basé sur le nombre de joueurs et le mode
+    const optimalFormat = getOptimalFormat(queue.length, mode);
+    const nextThreshold = getNextThreshold(queue.length, mode);
+    
+    // CDL: uniquement 4v4 (8 joueurs max), Hardcore: jusqu'à 5v5 (10 joueurs max)
+    const maxPlayers = mode === 'cdl' ? 8 : 10;
     
     return {
       success: true,
@@ -604,7 +630,7 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
       nextFormat: nextThreshold?.format || null,
       playersNeeded: nextThreshold ? nextThreshold.players - queue.length : 0,
       minPlayers: 8,
-      maxPlayers: 10
+      maxPlayers: maxPlayers
     };
   } catch (error) {
     console.error('[Ranked Matchmaking] Get queue status error:', error);
@@ -613,34 +639,39 @@ export const getQueueStatus = async (userId, gameMode, mode) => {
 };
 
 /**
- * Vérifie si on peut démarrer le matchmaking (timer de 2 min)
- * Logique: À 8 joueurs, on lance un timer de 2 min pour un 4v4
- * Si 10 joueurs, match immédiat en 5v5 (sauf CDL qui est toujours 4v4)
+ * Vérifie si on peut démarrer le matchmaking
+ * CDL: Match immédiat dès 8 joueurs (4v4 uniquement)
+ * Hardcore: Timer 2 min à 8 joueurs, match immédiat à 10 joueurs (5v5)
  */
 const checkMatchmakingStart = async (gameMode, mode) => {
   const queue = getQueue(gameMode, mode);
   const timerKey = getQueueKey(gameMode, mode);
   
-  // CDL mode: toujours 4v4 (8 joueurs), jamais 5v5
-  const isCDL = mode === 'cdl';
-  const maxPlayers = isCDL ? 8 : 10;
+  // CDL: uniquement 4v4 (8 joueurs max), Hardcore: jusqu'à 5v5 (10 joueurs max)
+  const maxPlayers = mode === 'cdl' ? 8 : 10;
+  const minPlayers = 8; // Minimum pour un 4v4
   
-  // Si on a atteint le max de joueurs, match immédiat
-  if (queue.length >= maxPlayers) {
-    console.log(`[Ranked Matchmaking] ${maxPlayers} players reached for ${gameMode} ${mode}, creating ${isCDL ? '4v4' : '5v5'} match now`);
+  // CDL: Match immédiat dès qu'on a 8 joueurs (pas de timer)
+  if (mode === 'cdl' && queue.length >= minPlayers) {
+    console.log(`[Ranked Matchmaking] CDL mode: ${queue.length} players reached for ${gameMode}, creating 4v4 match immediately`);
     cancelMatchmakingTimer(gameMode, mode);
     createMatchFromQueue(gameMode, mode);
     return;
   }
   
-  // Trouver le format optimal pour le nombre actuel de joueurs
-  // Pour CDL, le format optimal est toujours 4v4 si on a 8+ joueurs
-  const optimalFormat = isCDL 
-    ? (queue.length >= 8 ? { players: 8, format: '4v4', teamSize: 4 } : null)
-    : getOptimalFormat(queue.length);
+  // Hardcore: Si on a atteint le max de joueurs (10), match immédiat en 5v5
+  if (mode === 'hardcore' && queue.length >= maxPlayers) {
+    console.log(`[Ranked Matchmaking] Hardcore mode: ${maxPlayers} players reached for ${gameMode}, creating 5v5 match now`);
+    cancelMatchmakingTimer(gameMode, mode);
+    createMatchFromQueue(gameMode, mode);
+    return;
+  }
   
-  // Si on a assez de joueurs pour au moins un format (8 pour 4v4)
-  if (optimalFormat && !queueTimers[timerKey]) {
+  // Hardcore: Trouver le format optimal pour le nombre actuel de joueurs
+  const optimalFormat = getOptimalFormat(queue.length, mode);
+  
+  // Hardcore: Si on a assez de joueurs pour au moins un format (8 pour 4v4), lancer le timer
+  if (mode === 'hardcore' && optimalFormat && !queueTimers[timerKey]) {
     const endTime = Date.now() + (MATCHMAKING_TIMER_SECONDS * 1000);
     
     console.log(`[Ranked Matchmaking] Starting ${MATCHMAKING_TIMER_SECONDS}s timer for ${gameMode} ${mode} (current format: ${optimalFormat.format})`);
@@ -672,7 +703,9 @@ const cancelMatchmakingTimer = (gameMode, mode) => {
 
 /**
  * Crée un match à partir de la file d'attente
- * Le format est déterminé dynamiquement selon le nombre de joueurs
+ * Le format est déterminé dynamiquement selon le nombre de joueurs et le mode
+ * CDL: uniquement 4v4 (8 joueurs max)
+ * Hardcore: jusqu'à 5v5 (10 joueurs max)
  * Si nombre impair, le dernier arrivé est éjecté
  */
 const createMatchFromQueue = async (gameMode, mode) => {
@@ -702,32 +735,28 @@ const createMatchFromQueue = async (gameMode, mode) => {
     console.log(`[Ranked Matchmaking] Ejecting ${ejected.username} (odd number of players)`);
   }
   
-  // CDL mode: toujours 4v4 (8 joueurs max)
-  const isCDL = mode === 'cdl';
-  const maxPlayers = isCDL ? 8 : 10;
+  // CDL: uniquement 4v4 (8 joueurs max), Hardcore: jusqu'à 5v5 (10 joueurs max)
+  const maxPlayers = mode === 'cdl' ? 8 : 10;
   
   // Maintenant on a un nombre pair, trouver le format optimal
-  // Pour CDL, forcer 4v4
-  const optimalFormat = isCDL 
-    ? { players: 8, format: '4v4', teamSize: 4 }
-    : getOptimalFormat(playerCount);
+  const optimalFormat = getOptimalFormat(playerCount, mode);
     
   if (!optimalFormat) {
-    console.log(`[Ranked Matchmaking] No valid format for ${playerCount} players`);
+    console.log(`[Ranked Matchmaking] No valid format for ${playerCount} players in ${mode} mode`);
     return;
   }
   
-  // Si on a plus de joueurs que le format max, on prend les premiers (8 pour CDL, 10 pour Hardcore)
+  // Si on a plus de joueurs que le format max, on prend les premiers
   if (playerCount > maxPlayers) {
     const excess = sortedQueue.splice(maxPlayers);
     ejectedPlayers.push(...excess);
     playerCount = maxPlayers;
-    console.log(`[Ranked Matchmaking] Capping to ${maxPlayers} players${isCDL ? ' (CDL 4v4)' : ''}, ${excess.length} players stay in queue`);
+    console.log(`[Ranked Matchmaking] Capping to ${maxPlayers} players for ${mode} mode, ${excess.length} players stay in queue`);
   }
   
   const playersForMatch = sortedQueue.slice(0, playerCount);
-  const format = isCDL ? '4v4' : getOptimalFormat(playerCount).format;
-  let teamSize = isCDL ? 4 : playerCount / 2;
+  const format = getOptimalFormat(playerCount, mode).format;
+  let teamSize = playerCount / 2;
   
   // Retirer les joueurs du match ET les joueurs éjectés de la file
   const playerIdsForMatch = playersForMatch.map(p => p.userId.toString());
@@ -830,7 +859,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
       playerCount = remainingPlayers.length;
       
       // IMPORTANT: Recalculer teamSize après retrait de joueurs
-      teamSize = isCDL ? 4 : playerCount / 2;
+      teamSize = playerCount / 2;
       
       console.log(`[Ranked Matchmaking] Continuing with ${playerCount} players after GGSecure check (teamSize: ${teamSize})`);
     }
@@ -1204,8 +1233,11 @@ const broadcastQueueUpdate = (gameMode, mode) => {
   const queue = getQueue(gameMode, mode);
   const timerKey = getQueueKey(gameMode, mode);
   const timerInfo = queueTimers[timerKey];
-  const optimalFormat = getOptimalFormat(queue.length);
-  const nextThreshold = getNextThreshold(queue.length);
+  const optimalFormat = getOptimalFormat(queue.length, mode);
+  const nextThreshold = getNextThreshold(queue.length, mode);
+  
+  // CDL: uniquement 4v4 (8 joueurs max), Hardcore: jusqu'à 5v5 (10 joueurs max)
+  const maxPlayers = mode === 'cdl' ? 8 : 10;
   
   for (let i = 0; i < queue.length; i++) {
     const player = queue[i];
@@ -1219,7 +1251,7 @@ const broadcastQueueUpdate = (gameMode, mode) => {
       nextFormat: nextThreshold?.format || null,
       playersNeeded: nextThreshold ? nextThreshold.players - queue.length : 0,
       minPlayers: 8,
-      maxPlayers: 10
+      maxPlayers: maxPlayers
     });
   }
   
@@ -2484,6 +2516,540 @@ export const handleRosterPick = async (userId, matchId, playerId) => {
   }
 };
 
+// ==================== STAFF TEST QUEUE ====================
+
+// File d'attente de test staff séparée
+// Structure: { 'Search & Destroy_hardcore_staff': [{ userId, username, rank, points, platform, joinedAt, isFake }] }
+const staffQueues = {};
+const staffQueueTimers = {};
+
+/**
+ * Génère la clé pour la file staff
+ */
+const getStaffQueueKey = (gameMode, mode) => `${gameMode}_${mode}_staff`;
+
+/**
+ * Obtient la file d'attente staff pour un mode
+ */
+const getStaffQueue = (gameMode, mode) => {
+  const key = getStaffQueueKey(gameMode, mode);
+  if (!staffQueues[key]) {
+    staffQueues[key] = [];
+  }
+  return staffQueues[key];
+};
+
+/**
+ * Rejoint la file d'attente staff (admin uniquement)
+ */
+export const joinStaffQueue = async (userId, gameMode, mode) => {
+  try {
+    const user = await User.findById(userId).select('username platform roles');
+    if (!user) {
+      return { success: false, message: 'Utilisateur non trouvé.' };
+    }
+    
+    // Vérifier que c'est un admin
+    const isAdmin = user.roles?.includes('admin');
+    if (!isAdmin) {
+      return { success: false, message: 'Accès réservé aux administrateurs.' };
+    }
+    
+    const queue = getStaffQueue(gameMode, mode);
+    
+    // Vérifier si déjà dans la file staff
+    if (queue.some(p => p.userId?.toString() === userId.toString())) {
+      return { success: false, message: 'Vous êtes déjà dans la file staff.' };
+    }
+    
+    // Vérifier si pas déjà dans un match actif
+    const activeMatch = await RankedMatch.findOne({
+      'players.user': userId,
+      status: { $in: ['pending', 'ready', 'in_progress'] }
+    });
+    
+    if (activeMatch) {
+      return { 
+        success: false, 
+        message: 'Vous avez déjà un match en cours.',
+        activeMatchId: activeMatch._id
+      };
+    }
+    
+    // Récupérer ou créer le ranking
+    let ranking = await Ranking.findOne({ user: userId, mode });
+    if (!ranking) {
+      ranking = await Ranking.create({
+        user: userId,
+        mode,
+        points: 0,
+        wins: 0,
+        losses: 0,
+        rank: 1
+      });
+    }
+    
+    // Ajouter le joueur à la file staff
+    const playerData = {
+      userId: userId,
+      username: user.username,
+      rank: await getRankFromPoints(ranking.points),
+      points: ranking.points,
+      platform: user.platform || 'PC',
+      joinedAt: new Date(),
+      isFake: false
+    };
+    
+    queue.push(playerData);
+    console.log(`[Staff Queue] ${user.username} joined ${gameMode} ${mode} staff queue. Queue size: ${queue.length}`);
+    
+    // Broadcast staff queue update
+    broadcastStaffQueueUpdate(gameMode, mode);
+    
+    // Vérifier si on peut démarrer le matchmaking
+    checkStaffMatchmakingStart(gameMode, mode);
+    
+    return { 
+      success: true, 
+      message: 'Vous avez rejoint la file staff.',
+      queueSize: queue.length,
+      position: queue.length
+    };
+  } catch (error) {
+    console.error('[Staff Queue] Join error:', error);
+    return { success: false, message: 'Erreur serveur.' };
+  }
+};
+
+/**
+ * Quitte la file d'attente staff
+ */
+export const leaveStaffQueue = async (userId, gameMode, mode) => {
+  try {
+    const queue = getStaffQueue(gameMode, mode);
+    const playerIndex = queue.findIndex(p => p.userId?.toString() === userId.toString());
+    
+    if (playerIndex === -1) {
+      return { success: false, message: 'Vous n\'êtes pas dans la file staff.' };
+    }
+    
+    queue.splice(playerIndex, 1);
+    console.log(`[Staff Queue] Player left ${gameMode} ${mode} staff queue. Queue size: ${queue.length}`);
+    
+    // Vérifier si on doit annuler le timer
+    const timerKey = getStaffQueueKey(gameMode, mode);
+    if (queue.length < 8 && staffQueueTimers[timerKey]) {
+      clearTimeout(staffQueueTimers[timerKey].timer);
+      delete staffQueueTimers[timerKey];
+      console.log(`[Staff Queue] Timer cancelled for ${gameMode} ${mode}`);
+    }
+    
+    // Broadcast update
+    broadcastStaffQueueUpdate(gameMode, mode);
+    
+    return { success: true, message: 'Vous avez quitté la file staff.' };
+  } catch (error) {
+    console.error('[Staff Queue] Leave error:', error);
+    return { success: false, message: 'Erreur serveur.' };
+  }
+};
+
+/**
+ * Obtient le statut de la file staff
+ */
+export const getStaffQueueStatus = async (userId, gameMode, mode) => {
+  try {
+    const queue = getStaffQueue(gameMode, mode);
+    const timerKey = getStaffQueueKey(gameMode, mode);
+    const timerInfo = staffQueueTimers[timerKey];
+    const playerInQueue = queue.find(p => p.userId?.toString() === userId.toString());
+    
+    return {
+      success: true,
+      inQueue: !!playerInQueue,
+      queueSize: queue.length,
+      position: playerInQueue ? queue.findIndex(p => p.userId?.toString() === userId.toString()) + 1 : null,
+      timerActive: !!timerInfo,
+      timerEndTime: timerInfo?.endTime || null,
+      players: queue.map(p => ({
+        username: p.username,
+        rank: p.rank,
+        isFake: p.isFake
+      }))
+    };
+  } catch (error) {
+    console.error('[Staff Queue] Get status error:', error);
+    return { success: false, message: 'Erreur serveur.' };
+  }
+};
+
+/**
+ * Ajoute des bots à la file staff
+ */
+export const addBotsToStaffQueue = async (gameMode, mode, count = 1) => {
+  try {
+    const queue = getStaffQueue(gameMode, mode);
+    
+    const botNames = [
+      'Bot_Alpha', 'Bot_Bravo', 'Bot_Charlie', 'Bot_Delta', 
+      'Bot_Echo', 'Bot_Foxtrot', 'Bot_Golf', 'Bot_Hotel', 
+      'Bot_India', 'Bot_Juliet', 'Bot_Kilo', 'Bot_Lima'
+    ];
+    const botRanks = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
+    
+    let addedCount = 0;
+    for (let i = 0; i < count && queue.length < 10; i++) {
+      const botId = `bot-staff-${Date.now()}-${i}-${Math.random().toString(36).substring(7)}`;
+      const randomPoints = Math.floor(Math.random() * 2000);
+      
+      const botData = {
+        userId: botId,
+        username: botNames[queue.length % botNames.length] + '_' + Math.floor(Math.random() * 1000),
+        rank: botRanks[Math.floor(Math.random() * botRanks.length)],
+        points: randomPoints,
+        platform: 'PC',
+        joinedAt: new Date(),
+        isFake: true
+      };
+      
+      queue.push(botData);
+      addedCount++;
+      console.log(`[Staff Queue] Added bot: ${botData.username}`);
+    }
+    
+    // Broadcast update
+    broadcastStaffQueueUpdate(gameMode, mode);
+    
+    // Vérifier si on peut démarrer le matchmaking
+    checkStaffMatchmakingStart(gameMode, mode);
+    
+    return {
+      success: true,
+      message: `${addedCount} bot(s) ajouté(s).`,
+      queueSize: queue.length,
+      addedCount
+    };
+  } catch (error) {
+    console.error('[Staff Queue] Add bots error:', error);
+    return { success: false, message: 'Erreur lors de l\'ajout des bots.' };
+  }
+};
+
+/**
+ * Supprime tous les bots de la file staff
+ */
+export const clearStaffQueueBots = async (gameMode, mode) => {
+  try {
+    const key = getStaffQueueKey(gameMode, mode);
+    const queue = getStaffQueue(gameMode, mode);
+    const originalLength = queue.length;
+    
+    staffQueues[key] = queue.filter(p => !p.isFake);
+    
+    const newQueue = getStaffQueue(gameMode, mode);
+    const removedCount = originalLength - newQueue.length;
+    
+    console.log(`[Staff Queue] Removed ${removedCount} bots from ${gameMode} ${mode}`);
+    
+    // Broadcast update
+    broadcastStaffQueueUpdate(gameMode, mode);
+    
+    return {
+      success: true,
+      message: `${removedCount} bot(s) supprimé(s).`,
+      queueSize: newQueue.length,
+      removedCount
+    };
+  } catch (error) {
+    console.error('[Staff Queue] Clear bots error:', error);
+    return { success: false, message: 'Erreur lors de la suppression des bots.' };
+  }
+};
+
+/**
+ * Broadcast la mise à jour de la file staff
+ */
+const broadcastStaffQueueUpdate = (gameMode, mode) => {
+  if (!io) return;
+  
+  const queue = getStaffQueue(gameMode, mode);
+  const timerKey = getStaffQueueKey(gameMode, mode);
+  const timerInfo = staffQueueTimers[timerKey];
+  
+  // Envoyer à tous les joueurs dans la file staff
+  for (let i = 0; i < queue.length; i++) {
+    const player = queue[i];
+    if (!player.isFake) {
+      io.to(`user-${player.userId}`).emit('staffQueueUpdate', {
+        type: 'queue_status',
+        queueSize: queue.length,
+        position: i + 1,
+        timerActive: !!timerInfo,
+        timerEndTime: timerInfo?.endTime || null,
+        players: queue.map(p => ({
+          username: p.username,
+          rank: p.rank,
+          isFake: p.isFake
+        }))
+      });
+    }
+  }
+};
+
+/**
+ * Vérifie si on peut démarrer le matchmaking staff
+ * CDL: Match immédiat dès 8 joueurs (4v4 uniquement)
+ * Hardcore: Timer 2 min à 8 joueurs, match immédiat à 10 joueurs (5v5)
+ */
+const checkStaffMatchmakingStart = async (gameMode, mode) => {
+  const queue = getStaffQueue(gameMode, mode);
+  const timerKey = getStaffQueueKey(gameMode, mode);
+  
+  // CDL: uniquement 4v4 (8 joueurs max), Hardcore: jusqu'à 5v5 (10 joueurs max)
+  const maxPlayers = mode === 'cdl' ? 8 : 10;
+  const minPlayers = 8;
+  
+  // CDL: Match immédiat dès qu'on a 8 joueurs (pas de timer)
+  if (mode === 'cdl' && queue.length >= minPlayers) {
+    console.log(`[Staff Queue] CDL mode: ${queue.length} players reached for ${gameMode}, creating 4v4 match immediately`);
+    if (staffQueueTimers[timerKey]) {
+      clearTimeout(staffQueueTimers[timerKey].timer);
+      delete staffQueueTimers[timerKey];
+    }
+    await createStaffMatchFromQueue(gameMode, mode);
+    return;
+  }
+  
+  // Hardcore: Si on a atteint le max de joueurs (10), match immédiat en 5v5
+  if (mode === 'hardcore' && queue.length >= maxPlayers) {
+    console.log(`[Staff Queue] Hardcore mode: ${maxPlayers} players reached for ${gameMode}, creating 5v5 match now`);
+    if (staffQueueTimers[timerKey]) {
+      clearTimeout(staffQueueTimers[timerKey].timer);
+      delete staffQueueTimers[timerKey];
+    }
+    await createStaffMatchFromQueue(gameMode, mode);
+    return;
+  }
+  
+  // Hardcore: Si on a 8+ joueurs, démarrer le timer (2 min)
+  if (mode === 'hardcore' && queue.length >= minPlayers && !staffQueueTimers[timerKey]) {
+    const endTime = Date.now() + (MATCHMAKING_TIMER_SECONDS * 1000);
+    
+    console.log(`[Staff Queue] Starting ${MATCHMAKING_TIMER_SECONDS}s timer for ${gameMode} ${mode}`);
+    
+    const timer = setTimeout(async () => {
+      await createStaffMatchFromQueue(gameMode, mode);
+    }, MATCHMAKING_TIMER_SECONDS * 1000);
+    
+    staffQueueTimers[timerKey] = { timer, endTime };
+    
+    // Broadcast update
+    broadcastStaffQueueUpdate(gameMode, mode);
+  }
+};
+
+/**
+ * Crée un match à partir de la file staff
+ */
+const createStaffMatchFromQueue = async (gameMode, mode) => {
+  const key = getStaffQueueKey(gameMode, mode);
+  const queue = getStaffQueue(gameMode, mode);
+  
+  // Supprimer le timer
+  delete staffQueueTimers[key];
+  
+  if (queue.length < 8) {
+    return { success: false, message: `Pas assez de joueurs (${queue.length}/8 minimum).` };
+  }
+  
+  // Trier par date d'arrivée
+  const sortedQueue = [...queue].sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+  
+  // Déterminer le nombre de joueurs (pair)
+  let playerCount = sortedQueue.length;
+  if (playerCount % 2 !== 0) {
+    sortedQueue.pop();
+    playerCount--;
+  }
+  
+  // CDL: Max 8 joueurs (4v4), Hardcore: Max 10 joueurs (5v5)
+  const maxPlayers = mode === 'cdl' ? 8 : 10;
+  if (playerCount > maxPlayers) {
+    sortedQueue.splice(maxPlayers);
+    playerCount = maxPlayers;
+  }
+  
+  const playersForMatch = sortedQueue.slice(0, playerCount);
+  const teamSize = playerCount / 2;
+  const format = teamSize === 5 ? '5v5' : '4v4';
+  
+  // Vider la file staff
+  staffQueues[key] = [];
+  
+  console.log(`[Staff Queue] Creating ${format} staff test match with ${playerCount} players`);
+  
+  try {
+    // Mélanger les joueurs
+    const shuffledPlayers = fisherYatesShuffle([...playersForMatch]);
+    
+    // Diviser en 2 équipes
+    const team1Players = shuffledPlayers.slice(0, teamSize);
+    const team2Players = shuffledPlayers.slice(teamSize);
+    
+    // Trouver les référents (préférer les vrais joueurs)
+    const team1Referent = team1Players.find(p => !p.isFake) || team1Players[0];
+    const team2Referent = team2Players.find(p => !p.isFake) || team2Players[0];
+    
+    // Récupérer les maps
+    const configPath = mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
+    
+    let maps = await GameMap.find({ 
+      isActive: true,
+      [`${configPath}.ranked.enabled`]: true,
+      [`${configPath}.ranked.gameModes`]: gameMode
+    });
+    
+    // Fallback: toutes les maps actives si pas assez de maps configurées
+    if (maps.length < 3) {
+      maps = await GameMap.find({ isActive: true });
+    }
+    
+    // Toujours 3 maps pour le vote (comme le mode normal)
+    const shuffledMaps = fisherYatesShuffle([...maps]);
+    const selectedMaps = shuffledMaps.slice(0, 3);
+    const mapVoteOptions = selectedMaps.map(m => ({
+      name: m.name,
+      image: m.image,
+      votes: 0,
+      votedBy: []
+    }));
+    
+    // Fallback si aucune map
+    if (mapVoteOptions.length === 0) {
+      mapVoteOptions.push({
+        name: 'Default Map',
+        image: null,
+        votes: 0,
+        votedBy: []
+      });
+    }
+    
+    // Créer les joueurs pour le match
+    const matchPlayers = [];
+    const hostTeam = 1; // Équipe 1 est toujours hôte pour les matchs de test
+    
+    for (const player of team1Players) {
+      const isReferent = player.userId === team1Referent.userId;
+      matchPlayers.push({
+        user: player.isFake ? null : player.userId,
+        username: player.username,
+        team: 1,
+        points: player.points,
+        rank: player.rank,
+        platform: player.platform,
+        isFake: player.isFake,
+        isReferent
+      });
+    }
+    
+    for (const player of team2Players) {
+      const isReferent = player.userId === team2Referent.userId;
+      matchPlayers.push({
+        user: player.isFake ? null : player.userId,
+        username: player.username,
+        team: 2,
+        points: player.points,
+        rank: player.rank,
+        platform: player.platform,
+        isFake: player.isFake,
+        isReferent
+      });
+    }
+    
+    // Créer le match
+    const newMatch = new RankedMatch({
+      gameMode,
+      mode,
+      teamSize, // 4 ou 5
+      players: matchPlayers,
+      team1Referent: team1Referent.isFake ? null : team1Referent.userId,
+      team2Referent: team2Referent.isFake ? null : team2Referent.userId,
+      hostTeam: 1,
+      mapVoteOptions,
+      status: 'pending',
+      isTestMatch: true
+    });
+    
+    await newMatch.save();
+    console.log(`[Staff Queue] Match created: ${newMatch._id}`);
+    
+    // Préparer les données des joueurs pour l'animation (format identique au mode normal)
+    const playersForAnimation = matchPlayers.map((p, index) => ({
+      id: p.user?.toString() || `fake-${index}`,
+      username: p.username,
+      avatar: null, // Les bots n'ont pas d'avatar
+      team: p.team,
+      isReferent: p.isReferent,
+      isHost: p.team === hostTeam && p.isReferent,
+      isFake: p.isFake,
+      points: p.points || 0
+    }));
+    
+    const matchIdStr = newMatch._id.toString();
+    
+    // Notifier les joueurs (identique au mode normal)
+    const realPlayers = playersForMatch.filter(p => !p.isFake);
+    
+    for (const player of realPlayers) {
+      if (io) {
+        // Trouver le joueur dans matchPlayers pour obtenir son équipe
+        const matchPlayer = matchPlayers.find(mp => mp.user?.toString() === player.userId?.toString());
+        const playerTeam = matchPlayer?.team || 1;
+        const isReferent = matchPlayer?.isReferent || false;
+        const isHost = playerTeam === hostTeam && isReferent;
+        
+        io.to(`user-${player.userId}`).emit('rankedMatchFound', {
+          matchId: matchIdStr,
+          gameMode,
+          mode,
+          format,
+          teamSize,
+          yourTeam: playerTeam,
+          isReferent,
+          isHost,
+          isTestMatch: true,
+          hasRosterSelection: false,
+          players: playersForAnimation,
+          mapVoteOptions
+        });
+      }
+    }
+    
+    // Démarrer le timer de vote de map (utiliser startMapVoteTimer comme le mode normal)
+    startMapVoteTimer(newMatch._id, matchPlayers.filter(p => p.user));
+    
+    // Broadcast queue update (queue is now empty)
+    broadcastStaffQueueUpdate(gameMode, mode);
+    
+    return { success: true, matchId: newMatch._id };
+  } catch (error) {
+    console.error('[Staff Queue] Error creating match:', error);
+    return { success: false, message: 'Erreur lors de la création du match.' };
+  }
+};
+
+/**
+ * Force le démarrage d'un match staff (admin)
+ */
+export const forceStartStaffMatch = async (gameMode, mode) => {
+  const timerKey = getStaffQueueKey(gameMode, mode);
+  if (staffQueueTimers[timerKey]) {
+    clearTimeout(staffQueueTimers[timerKey].timer);
+    delete staffQueueTimers[timerKey];
+  }
+  return await createStaffMatchFromQueue(gameMode, mode);
+};
+
 export default {
   initMatchmaking,
   joinQueue,
@@ -2495,6 +3061,13 @@ export default {
   removeFakePlayers,
   startStaffTestMatch,
   handleMapVote,
-  handleRosterPick
+  handleRosterPick,
+  // Staff test queue
+  joinStaffQueue,
+  leaveStaffQueue,
+  getStaffQueueStatus,
+  addBotsToStaffQueue,
+  clearStaffQueueBots,
+  forceStartStaffMatch
 };
 

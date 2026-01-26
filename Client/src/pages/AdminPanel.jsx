@@ -140,9 +140,39 @@ const AdminPanel = () => {
   const [loadingEvents, setLoadingEvents] = useState(false);
   
   // Update editedConfig when config changes
+  // Ensure all expected game modes are present for ranked rewards
   useEffect(() => {
     if (config) {
-      setEditedConfig(config);
+      // Deep clone the config
+      const updatedConfig = JSON.parse(JSON.stringify(config));
+      
+      // Default rewards structure for missing game modes
+      const defaultReward = { pointsWin: 30, pointsLoss: -15, coinsWin: 70, coinsLoss: 20, xpWinMin: 700, xpWinMax: 800 };
+      
+      // Expected game modes per mode
+      const expectedGameModes = {
+        hardcore: ['Duel', 'Team Deathmatch', 'Search & Destroy'],
+        cdl: ['Hardpoint', 'Search & Destroy']
+      };
+      
+      // Ensure rankedMatchRewards structure exists
+      if (!updatedConfig.rankedMatchRewards) {
+        updatedConfig.rankedMatchRewards = { hardcore: {}, cdl: {} };
+      }
+      
+      // Initialize missing modes and game modes
+      for (const [mode, gameModes] of Object.entries(expectedGameModes)) {
+        if (!updatedConfig.rankedMatchRewards[mode]) {
+          updatedConfig.rankedMatchRewards[mode] = {};
+        }
+        for (const gameMode of gameModes) {
+          if (!updatedConfig.rankedMatchRewards[mode][gameMode]) {
+            updatedConfig.rankedMatchRewards[mode][gameMode] = { ...defaultReward };
+          }
+        }
+      }
+      
+      setEditedConfig(updatedConfig);
     }
   }, [config]);
 
@@ -4837,7 +4867,15 @@ Cette action est irréversible!`)) {
                 </h4>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {Object.keys(editedConfig.rankedMatchRewards[mode]).filter(gm => ['Duel', 'Team Deathmatch', 'Search & Destroy'].includes(gm)).map((gameMode) => (
+                  {Object.keys(editedConfig.rankedMatchRewards[mode]).filter(gm => {
+                    // Hardcore: Duel, Team Deathmatch, Search & Destroy
+                    // CDL: Hardpoint (Points Stratégiques), Search & Destroy
+                    if (mode === 'hardcore') {
+                      return ['Duel', 'Team Deathmatch', 'Search & Destroy'].includes(gm);
+                    } else {
+                      return ['Hardpoint', 'Search & Destroy'].includes(gm);
+                    }
+                  }).map((gameMode) => (
                     <div key={gameMode} className="bg-dark-800/80 backdrop-blur-sm rounded-xl p-5 border border-white/10 hover:border-white/20 transition-all">
                       <p className="text-white font-semibold mb-4 text-base border-b border-white/20 pb-3 flex items-center gap-2">
                         <span className="text-lg">🎮</span>
@@ -7489,7 +7527,9 @@ Cette action est irréversible!`)) {
         const cdlRankedModes = ['Hardpoint', 'Search & Destroy'];
         
         // Available formats for ranked
-        const rankedFormats = ['4v4', '5v5'];
+        // CDL: uniquement 4v4, Hardcore: 4v4 et 5v5
+        const cdlRankedFormats = ['4v4'];
+        const hardcoreRankedFormats = ['4v4', '5v5'];
 
         // Labels for game modes
         const gameModeLabels = {
@@ -7641,7 +7681,7 @@ Cette action est irréversible!`)) {
                   <div>
                     <span className="text-xs text-gray-500 mb-2 block">Formats disponibles</span>
                     <div className="flex flex-wrap gap-2">
-                      {rankedFormats.map((format) => (
+                      {hardcoreRankedFormats.map((format) => (
                         <button
                           key={format}
                           type="button"
@@ -7739,9 +7779,9 @@ Cette action est irréversible!`)) {
                     </div>
                   </div>
                   <div>
-                    <span className="text-xs text-gray-500 mb-2 block">Formats disponibles</span>
+                    <span className="text-xs text-gray-500 mb-2 block">Formats disponibles (CDL: 4v4 uniquement)</span>
                     <div className="flex flex-wrap gap-2">
-                      {rankedFormats.map((format) => (
+                      {cdlRankedFormats.map((format) => (
                         <button
                           key={format}
                           type="button"

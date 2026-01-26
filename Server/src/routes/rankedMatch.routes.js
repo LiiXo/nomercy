@@ -7,8 +7,8 @@ import AppSettings from '../models/AppSettings.js';
 import ItemUsage from '../models/ItemUsage.js';
 import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
-import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch } from '../services/rankedMatchmaking.service.js';
-import { logArbitratorCall, deleteMatchVoiceChannels } from '../services/discordBot.service.js';
+import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch, joinStaffQueue, leaveStaffQueue, getStaffQueueStatus, addBotsToStaffQueue, clearStaffQueueBots, forceStartStaffMatch } from '../services/rankedMatchmaking.service.js';
+import { logArbitratorCall, deleteMatchVoiceChannels, createMatchVoiceChannels } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -237,7 +237,7 @@ async function distributeRankedRewards(match) {
         // XP pour le classement Top Player (expérience générale)
         const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
         if (!ranking) {
-          console.log(`[RANKED REWARDS] Player ${i}: Creating new ranking entry for ${user.username}`);
+          console.log(`[RANKED REWARDS] Player ${i}: Creating NEW ranking entry for ${user.username} in mode=${match.mode}, season=1`);
           ranking = new Ranking({ 
             user: userId, 
             mode: match.mode, 
@@ -246,6 +246,8 @@ async function distributeRankedRewards(match) {
             wins: 0, 
             losses: 0 
           });
+        } else {
+          console.log(`[RANKED REWARDS] Player ${i}: Found EXISTING ranking for ${user.username} - mode=${ranking.mode}, season=${ranking.season}, ${ranking.wins}W/${ranking.losses}L, ${ranking.points}pts`);
         }
         
         // Appliquer les changements de points ladder classé (minimum 0)
@@ -735,9 +737,11 @@ router.get('/active/me', verifyToken, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
     
+    // Ne pas inclure les matchs de test dans les matchs "actifs" qui bloquent l'utilisateur
     const match = await RankedMatch.findOne({
       'players.user': user._id,
-      status: { $in: ['pending', 'ready', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'in_progress'] },
+      isTestMatch: { $ne: true }
     })
       .populate('players.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('team1Referent', 'username avatarUrl discordAvatar discordId')
@@ -1497,6 +1501,122 @@ router.post('/matchmaking/start-test-match', verifyToken, requireStaff, async (r
   }
 });
 
+// ==================== STAFF TEST QUEUE ROUTES ====================
+
+// Middleware pour vérifier que l'utilisateur est admin
+const requireAdmin = (req, res, next) => {
+  if (!req.user?.roles?.includes('admin')) {
+    return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs.' });
+  }
+  next();
+};
+
+// Rejoindre la file d'attente staff (admin uniquement)
+router.post('/staff-queue/join', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore' } = req.body;
+    const userId = req.user._id;
+    
+    const result = await joinStaffQueue(userId, gameMode, mode);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error joining staff queue:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Quitter la file d'attente staff
+router.post('/staff-queue/leave', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore' } = req.body;
+    const userId = req.user._id;
+    
+    const result = await leaveStaffQueue(userId, gameMode, mode);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error leaving staff queue:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Obtenir le statut de la file staff
+router.get('/staff-queue/status', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore' } = req.query;
+    const userId = req.user._id;
+    
+    const result = await getStaffQueueStatus(userId, gameMode, mode);
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error getting staff queue status:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Ajouter des bots à la file staff
+router.post('/staff-queue/add-bots', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore', count = 1 } = req.body;
+    
+    const result = await addBotsToStaffQueue(gameMode, mode, Math.min(count, 10));
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error adding bots to staff queue:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Supprimer tous les bots de la file staff
+router.post('/staff-queue/clear-bots', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore' } = req.body;
+    
+    const result = await clearStaffQueueBots(gameMode, mode);
+    
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error clearing staff queue bots:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Forcer le démarrage d'un match staff
+router.post('/staff-queue/force-start', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { gameMode = 'Search & Destroy', mode = 'hardcore' } = req.body;
+    const result = await forceStartStaffMatch(gameMode, mode);
+    
+    if (result && result.success) {
+      res.json({ success: true, message: 'Match staff lancé.', matchId: result.matchId });
+    } else {
+      res.status(400).json({ success: false, message: result?.message || 'Impossible de créer le match.' });
+    }
+  } catch (error) {
+    console.error('Error force starting staff match:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Lister tous les matchs classés (admin/staff/arbitre)
 router.get('/admin/all', verifyToken, requireArbitre, async (req, res) => {
   try {
@@ -1869,6 +1989,81 @@ router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, 
   } catch (error) {
     console.error('Error updating ranked match status:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Créer manuellement les salons vocaux Discord pour un match classé (admin/staff/arbitre)
+router.post('/admin/:matchId/create-voice-channels', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    
+    const match = await RankedMatch.findById(matchId)
+      .populate('players.user', 'discordId username');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    // Vérifier que le match n'est pas terminé ou annulé
+    if (['completed', 'cancelled'].includes(match.status)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Impossible de créer des salons vocaux pour un match terminé ou annulé' 
+      });
+    }
+    
+    // Extraire les Discord IDs par équipe
+    const team1DiscordIds = match.players
+      .filter(p => p.team === 1 && p.user?.discordId && !p.isFake)
+      .map(p => p.user.discordId);
+    
+    const team2DiscordIds = match.players
+      .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
+      .map(p => p.user.discordId);
+    
+    console.log(`[RANKED ADMIN] Creating voice channels for match ${matchId}`);
+    console.log(`[RANKED ADMIN] Team1 Discord IDs: ${team1DiscordIds.length}, Team2 Discord IDs: ${team2DiscordIds.length}`);
+    
+    // Supprimer les anciens salons vocaux s'ils existent
+    if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
+      console.log(`[RANKED ADMIN] Deleting existing voice channels before creating new ones`);
+      await deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId, { force: true });
+    }
+    
+    // Créer les salons vocaux
+    const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+    
+    if (!voiceChannels) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Échec de la création des salons vocaux. Le bot Discord n\'est peut-être pas prêt ou configuré.' 
+      });
+    }
+    
+    // Mettre à jour le match avec les infos des salons vocaux
+    match.team1VoiceChannel = voiceChannels.team1;
+    match.team2VoiceChannel = voiceChannels.team2;
+    await match.save();
+    
+    console.log(`[RANKED ADMIN] ✅ Voice channels created for match ${matchId}`);
+    console.log(`[RANKED ADMIN] Team1: ${voiceChannels.team1.channelName}, Team2: ${voiceChannels.team2.channelName}`);
+    
+    // Notifier les joueurs via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+    }
+    
+    res.json({
+      success: true,
+      message: 'Salons vocaux créés avec succès',
+      team1VoiceChannel: voiceChannels.team1,
+      team2VoiceChannel: voiceChannels.team2,
+      match
+    });
+  } catch (error) {
+    console.error('Error creating voice channels:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur lors de la création des salons vocaux' });
   }
 });
 

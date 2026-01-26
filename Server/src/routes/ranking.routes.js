@@ -14,6 +14,8 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const { mode } = req.params;
     const { season = 1, limit = 100, page = 1, all = 'false' } = req.query;
 
+    console.log(`[RANKINGS] Leaderboard request - mode=${mode}, season=${season}, page=${page}`);
+
     if (!['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
@@ -28,27 +30,54 @@ router.get('/leaderboard/:mode', async (req, res) => {
       query.$or = [{ wins: { $gt: 0 } }, { losses: { $gt: 0 } }];
     }
 
-    // Sort by points (desc), then wins (desc), then _id (asc) for consistent tiebreaking
+    const parsedLimit = parseInt(limit);
+    const parsedPage = parseInt(page);
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    // First, let's check how many rankings exist for this mode (without filters)
+    const totalInDb = await Ranking.countDocuments({ mode, season: parseInt(season) });
+    const withMatchesInDb = await Ranking.countDocuments({ mode, season: parseInt(season), $or: [{ wins: { $gt: 0 } }, { losses: { $gt: 0 } }] });
+    console.log(`[RANKINGS] DB check - mode=${mode}: total=${totalInDb}, with matches=${withMatchesInDb}`);
+
+    // Fetch more than needed to account for filtered users, then slice
+    const overFetchMultiplier = 2;
     const rankings = await Ranking.find(query)
       .populate({
         path: 'user',
-        select: 'username avatar discordAvatar discordId isBanned isDeleted',
-        match: { 
-          isBanned: { $ne: true }, 
-          isDeleted: { $ne: true },
-          username: { $ne: null, $exists: true } // Exclude users with null username
-        }
+        select: 'username avatar discordAvatar discordId isBanned isDeleted'
       })
       .sort({ points: -1, wins: -1, _id: 1 })
-      .limit(parseInt(limit))
-      .skip((parseInt(page) - 1) * parseInt(limit));
+      .limit(parsedLimit * overFetchMultiplier + skip)
+      .skip(0); // Skip will be handled after filtering
 
-    // Filter out rankings with null users (banned, deleted, or no username)
-    const validRankings = rankings.filter(r => r.user !== null && r.user.username);
+    console.log(`[RANKINGS] Query returned ${rankings.length} rankings before user filter`);
+
+    // Filter out rankings with null users, banned, deleted, or no username
+    const validRankings = rankings.filter(r => {
+      if (!r.user) {
+        console.log(`[RANKINGS] Filtered: ranking ${r._id} has no user`);
+        return false;
+      }
+      if (!r.user.username) {
+        console.log(`[RANKINGS] Filtered: user ${r.user._id} has no username`);
+        return false;
+      }
+      if (r.user.isBanned === true) {
+        console.log(`[RANKINGS] Filtered: user ${r.user.username} is banned`);
+        return false;
+      }
+      if (r.user.isDeleted === true) {
+        console.log(`[RANKINGS] Filtered: user ${r.user.username} is deleted`);
+        return false;
+      }
+      return true;
+    });
+    
+    // Apply pagination on filtered results
+    const paginatedRankings = validRankings.slice(skip, skip + parsedLimit);
 
     // Add rank numbers and detect ties
-    const startRank = (parseInt(page) - 1) * parseInt(limit);
-    const rankedData = validRankings.map((r, index, arr) => {
+    const rankedData = paginatedRankings.map((r, index, arr) => {
       const currentPoints = r.points;
       
       // Check if tied with adjacent players
@@ -61,28 +90,24 @@ router.get('/leaderboard/:mode', async (req, res) => {
       
       return {
         ...r.toJSON(),
-        rank: startRank + index + 1,
-        hasTie // true if this player is tied with an adjacent player
+        rank: skip + index + 1,
+        hasTie
       };
     });
 
-    // Count only non-banned users (with same filter as main query)
-    const allRankings = await Ranking.find(query)
-      .populate({
-        path: 'user',
-        select: 'isBanned',
-        match: { isBanned: { $ne: true } }
-      });
-    const total = allRankings.filter(r => r.user !== null).length;
+    // Count all valid (non-banned) users
+    const total = validRankings.length;
+
+    console.log(`[RANKINGS] Found ${total} valid rankings for mode=${mode}, returning ${rankedData.length} on page ${parsedPage}`);
 
     res.json({
       success: true,
       rankings: rankedData,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parsedLimit)
       }
     });
   } catch (error) {
@@ -796,6 +821,45 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
 
 // ==================== DUPLICATE ADMIN ROUTE - REMOVED ====================
 // (The correct /admin/all route is at line 316)
+
+// ==================== DEBUG ENDPOINT ====================
+// Get all rankings for current user (for debugging)
+router.get('/debug/my-rankings', verifyToken, async (req, res) => {
+  try {
+    const rankings = await Ranking.find({ user: req.user._id });
+    
+    // Also get user flags
+    const userFlags = {
+      isBanned: req.user.isBanned,
+      isDeleted: req.user.isDeleted,
+      username: req.user.username
+    };
+    
+    console.log(`[RANKINGS DEBUG] User ${req.user.username} has ${rankings.length} ranking entries:`);
+    console.log(`[RANKINGS DEBUG] User flags: isBanned=${userFlags.isBanned}, isDeleted=${userFlags.isDeleted}`);
+    rankings.forEach(r => {
+      console.log(`  - mode=${r.mode}, season=${r.season}, ${r.wins}W/${r.losses}L, ${r.points}pts`);
+    });
+    
+    res.json({
+      success: true,
+      userId: req.user._id,
+      username: req.user.username,
+      userFlags,
+      rankings: rankings.map(r => ({
+        mode: r.mode,
+        season: r.season,
+        points: r.points,
+        wins: r.wins,
+        losses: r.losses,
+        division: r.division
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching debug rankings:', error);
+    res.status(500).json({ success: false, message: 'Error' });
+  }
+});
 
 export default router;
 

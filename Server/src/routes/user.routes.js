@@ -897,14 +897,14 @@ router.get('/by-id/:id/squad', async (req, res) => {
   try {
     const { mode } = req.query;
     
-    // Determine which squad field to use based on mode
-    const squadField = mode === 'cdl' ? 'squadCdl' : mode === 'hardcore' ? 'squadHardcore' : 'squad';
+    // Import Squad model for checking legacy squad mode
+    const Squad = (await import('../models/Squad.js')).default;
     
     const user = await User.findOne({ 
       _id: req.params.id,
       isProfileComplete: true,
       isBanned: false
-    }).populate(squadField);
+    }).populate('squad').populate('squadHardcore').populate('squadCdl');
 
     if (!user) {
       return res.status(404).json({
@@ -913,7 +913,30 @@ router.get('/by-id/:id/squad', async (req, res) => {
       });
     }
 
-    const squad = user[squadField];
+    // Determine which squad to return based on mode
+    let squad = null;
+    
+    if (mode === 'hardcore') {
+      // First check mode-specific field
+      squad = user.squadHardcore;
+      
+      // If no hardcore-specific squad, check legacy field for compatible squads
+      if (!squad && user.squad && (user.squad.mode === 'both' || user.squad.mode === 'hardcore')) {
+        squad = user.squad;
+      }
+    } else if (mode === 'cdl') {
+      // First check mode-specific field
+      squad = user.squadCdl;
+      
+      // If no cdl-specific squad, check legacy field for compatible squads
+      if (!squad && user.squad && (user.squad.mode === 'both' || user.squad.mode === 'cdl')) {
+        squad = user.squad;
+      }
+    } else {
+      // Fallback: try legacy field first, then mode-specific fields
+      squad = user.squad || user.squadHardcore || user.squadCdl;
+    }
+    
     if (!squad) {
       return res.json({
         success: true,

@@ -1,6 +1,7 @@
 import express from 'express';
 import AppSettings from '../models/AppSettings.js';
 import Ranking from '../models/Ranking.js';
+import RankedMatch from '../models/RankedMatch.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 import { logAdminAction } from '../services/discordBot.service.js';
 
@@ -336,6 +337,55 @@ router.patch('/admin/maintenance', verifyToken, requireStaff, async (req, res) =
     res.json({ success: true, maintenance: settings.maintenance });
   } catch (error) {
     console.error('Error toggling maintenance:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Prepare for API restart - cancel all pending pre-match matches (admin only)
+router.post('/admin/prepare-restart', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    // 1. Enable maintenance mode
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    settings.maintenance.enabled = true;
+    settings.maintenance.message = 'Redémarrage du serveur en cours. Veuillez patienter...';
+    settings.markModified('maintenance');
+    await settings.save();
+    
+    // 2. Cancel all pending/ready matches (pre-match phase)
+    const cancelledMatches = await RankedMatch.updateMany(
+      { status: { $in: ['pending', 'ready'] } },
+      { 
+        $set: { 
+          status: 'cancelled',
+          'result.isForfeit': true,
+          'result.forfeitReason': 'Match annulé - Redémarrage serveur'
+        }
+      }
+    );
+    
+    // 3. Get count of in_progress matches (these can't be cancelled)
+    const inProgressCount = await RankedMatch.countDocuments({ status: 'in_progress' });
+    
+    // Log to Discord
+    await logAdminAction(req.user, 'Prepare Restart', 'API', {
+      fields: [
+        { name: 'Matchs annulés', value: cancelledMatches.modifiedCount.toString() },
+        { name: 'Matchs en cours', value: inProgressCount.toString() }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Prêt pour le redémarrage',
+      cancelledMatches: cancelledMatches.modifiedCount,
+      inProgressMatches: inProgressCount,
+      warning: inProgressCount > 0 ? `Attention: ${inProgressCount} match(s) sont encore en cours` : null
+    });
+  } catch (error) {
+    console.error('Error preparing restart:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

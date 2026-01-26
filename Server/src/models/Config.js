@@ -94,18 +94,10 @@ const configSchema = new mongoose.Schema({
         }
       },
       cdl: {
-        Duel: { 
-          pointsWin: 25, 
-          pointsLoss: -12, 
-          coinsWin: 60, 
-          coinsLoss: 20, 
-          xpWinMin: 700, 
-          xpWinMax: 800 
-        },
-        'Team Deathmatch': { 
-          pointsWin: 30, 
-          pointsLoss: -15, 
-          coinsWin: 75, 
+        Hardpoint: { 
+          pointsWin: 35, 
+          pointsLoss: -18, 
+          coinsWin: 80, 
           coinsLoss: 25, 
           xpWinMin: 700, 
           xpWinMax: 800 

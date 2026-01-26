@@ -20,6 +20,8 @@ const CDL_LADDER_MODES = ['Hardpoint', 'Search & Destroy', 'Variant'];
 const CDL_RANKED_MODES = ['Hardpoint', 'Search & Destroy'];
 
 // Enable all modes and formats by default
+// CDL ranked: uniquement 4v4
+// Hardcore ranked: 4v4 et 5v5
 function getDefaultConfig() {
   return {
     hardcoreConfig: {
@@ -41,7 +43,7 @@ function getDefaultConfig() {
       ranked: {
         enabled: true,
         gameModes: ['Hardpoint', 'Search & Destroy'],
-        formats: ['4v4', '5v5']
+        formats: ['4v4'] // CDL ranked: uniquement format 4v4
       }
     }
   };

@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
 import { useData } from '../DataContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
-import { Trophy, Users, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight } from 'lucide-react';
+import { Trophy, Users, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight, Lock } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
@@ -1671,49 +1671,52 @@ const CDLDashboard = () => {
             </div>
           )}
 
-          {/* Ranked Mode Banner */}
-          <Link
-            to="/cdl/ranked"
-            className="group relative block mb-8 overflow-hidden rounded-2xl"
-          >
-            {/* Animated background gradient */}
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/30 via-blue-500/20 to-cyan-600/30 animate-pulse" />
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJIMjR2LTJoMTJ6bTAtNHYySDI0di0yaDEyem0wLTR2Mkg0djJIMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-20" />
-            
-            {/* Glow effect on hover */}
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-blue-500/30 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            
-            {/* Border animation */}
-            <div className="absolute inset-0 rounded-2xl border-2 border-cyan-500/30 group-hover:border-cyan-500/60 transition-colors duration-300" />
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50 group-hover:opacity-100 transition-opacity" style={{ animation: 'shimmer 2s linear infinite' }} />
-            
-            <div className="relative flex items-center justify-between p-4 sm:p-6">
-              <div className="flex items-center gap-4">
-                {/* Animated icon */}
-                <div className="relative">
-                  <div className="absolute inset-0 bg-cyan-500/30 rounded-xl blur-xl animate-pulse" />
-                  <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                    <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-white" style={{ animation: 'bounce 2s ease-in-out infinite' }} />
+          {/* Mode Selection Banners */}
+          <div className="grid md:grid-cols-2 gap-4 mb-8">
+            {/* Ranked Mode Banner */}
+            <Link
+              to="/cdl/ranked"
+              className="group relative block overflow-hidden rounded-2xl h-full"
+            >
+              {/* Animated background gradient */}
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-600/30 via-blue-500/20 to-cyan-600/30 animate-pulse" />
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJIMjR2LTJoMTJ6bTAtNHYySDI0di0yaDEyem0wLTR2Mkg0djJIMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-20" />
+              
+              {/* Glow effect on hover */}
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-blue-500/30 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              
+              {/* Border animation */}
+              <div className="absolute inset-0 rounded-2xl border-2 border-cyan-500/30 group-hover:border-cyan-500/60 transition-colors duration-300" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50 group-hover:opacity-100 transition-opacity" style={{ animation: 'shimmer 2s linear infinite' }} />
+              
+              <div className="relative flex flex-col p-4 sm:p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  {/* Animated icon */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-cyan-500/30 rounded-xl blur-xl animate-pulse" />
+                    <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/30">
+                      <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-white" style={{ animation: 'bounce 2s ease-in-out infinite' }} />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg sm:text-xl font-bold text-white group-hover:text-cyan-400 transition-colors">
+                        {language === 'fr' ? 'Mode Classé' : 'Ranked Mode'}
+                      </h3>
+                    </div>
+                    <p className="text-gray-400 text-sm sm:text-base">
+                      {language === 'fr' 
+                        ? 'Affronte les meilleurs joueurs et grimpe les échelons !' 
+                        : 'Face the best players and climb the ranks!'}
+                    </p>
                   </div>
                 </div>
                 
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg sm:text-xl font-bold text-white group-hover:text-cyan-400 transition-colors">
-                      {language === 'fr' ? 'Mode Classé' : 'Ranked Mode'}
-                    </h3>
-                    <span className="px-2 py-0.5 bg-cyan-500/20 border border-cyan-500/40 rounded-full text-cyan-400 text-xs font-semibold animate-pulse">
-                      {language === 'fr' ? 'NOUVEAU' : 'NEW'}
-                    </span>
-                  </div>
-                  <p className="text-gray-400 text-sm sm:text-base">
-                    {language === 'fr' 
-                      ? 'Affronte les meilleurs joueurs et grimpe les échelons !' 
-                      : 'Face the best players and climb the ranks!'}
-                  </p>
-                  {/* Ranked matches stats */}
-                  {rankedMatchesStats.totalMatches > 0 && (
-                    <div className="flex items-center gap-3 mt-2">
+                {/* Ranked matches stats */}
+                <div className="flex items-center gap-3 mb-4 min-h-[26px]">
+                  {rankedMatchesStats.totalMatches > 0 ? (
+                    <>
                       <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-green-500/20 border border-green-500/30">
                         <Swords className="w-3 h-3 text-green-400" />
                         <span className="text-green-400 text-xs font-semibold">
@@ -1726,19 +1729,74 @@ const CDLDashboard = () => {
                           {rankedMatchesStats.totalPlayers} {language === 'fr' ? 'joueurs en match' : 'players in match'}
                         </span>
                       </div>
-                    </div>
+                    </>
+                  ) : (
+                    <span className="text-gray-500 text-xs">
+                      {language === 'fr' ? 'Aucun match en cours actuellement' : 'No active matches currently'}
+                    </span>
                   )}
                 </div>
+                
+                {/* CTA Button */}
+                <div className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-400 to-blue-600 rounded-xl text-white font-semibold group-hover:scale-105 transition-transform shadow-lg shadow-cyan-500/30">
+                  <span>{language === 'fr' ? 'Jouer' : 'Play'}</span>
+                  <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
+            </Link>
+
+            {/* Mode Stricker Banner - Coming Soon */}
+            <div className="group relative block overflow-hidden rounded-2xl cursor-not-allowed h-full">
+              {/* Animated background gradient - Yellow-Green (Apple) */}
+              <div className="absolute inset-0 bg-gradient-to-r from-lime-500/30 via-yellow-500/20 to-lime-500/30 animate-pulse" />
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJIMjR2LTJoMTJ6bTAtNHYySDI0di0yaDEyem0wLTR2Mkg0djJIMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-20" />
               
-              {/* CTA Button */}
-              <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-400 to-blue-600 rounded-xl text-white font-semibold group-hover:scale-105 transition-transform shadow-lg shadow-cyan-500/30">
-                <span>{language === 'fr' ? 'Jouer' : 'Play'}</span>
-                <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              {/* Border animation */}
+              <div className="absolute inset-0 rounded-2xl border-2 border-lime-500/30 transition-colors duration-300" />
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-lime-400 to-transparent opacity-50" style={{ animation: 'shimmer 2s linear infinite' }} />
+              
+              <div className="relative flex flex-col p-4 sm:p-6">
+                <div className="flex items-center gap-4 mb-4">
+                  {/* Animated icon */}
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-lime-500/30 rounded-xl blur-xl animate-pulse" />
+                    <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-lime-400 to-yellow-500 rounded-xl flex items-center justify-center shadow-lg shadow-lime-500/30">
+                      <Users className="w-6 h-6 sm:w-8 sm:h-8 text-white" style={{ animation: 'bounce 2s ease-in-out infinite' }} />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg sm:text-xl font-bold text-white">
+                        Mode Stricker
+                      </h3>
+                      <span className="px-2 py-0.5 bg-lime-500/20 border border-lime-500/40 rounded-full text-lime-400 text-xs font-semibold animate-pulse">
+                        {language === 'fr' ? 'TRÈS BIENTÔT' : 'VERY SOON'}
+                      </span>
+                    </div>
+                    <p className="text-gray-400 text-sm sm:text-base">
+                      {language === 'fr' 
+                        ? "L'élite contre l'élite - Ranked 5v5 en équipe !" 
+                        : 'Elite vs Elite - Ranked 5v5 Team Mode!'}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Placeholder for consistent height */}
+                <div className="flex items-center gap-3 mb-4 min-h-[26px]">
+                  <span className="text-gray-500 text-xs">
+                    {language === 'fr' ? 'Préparez-vous pour le lancement !' : 'Get ready for launch!'}
+                  </span>
+                </div>
+                
+                {/* Locked indicator */}
+                <div className="flex items-center justify-center gap-2 px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-gray-400 font-semibold">
+                  <Lock className="w-4 h-4" />
+                  <span>{language === 'fr' ? 'Bientôt' : 'Soon'}</span>
+                </div>
               </div>
-              <ChevronRight className="sm:hidden w-6 h-6 text-cyan-400 group-hover:translate-x-1 transition-transform" />
             </div>
-          </Link>
+          </div>
 
           {/* Tournaments - Coming Soon */}
           <section className="mb-12">

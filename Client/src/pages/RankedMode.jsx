@@ -13,16 +13,22 @@ import {
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
-// Audio pour le matchmaking - Web Audio API avec fichier sound.mp3
+// Audio pour le matchmaking - Web Audio API avec plusieurs sons aléatoires
 let audioContext = null;
-let audioBuffer = null;
+let audioBuffers = []; // Array of audio buffers for random selection
 let audioLoaded = false;
 
-// URL du son - hébergé sur le serveur API
-const SOUND_URL = 'https://api-nomercy.ggsecure.io/public/sounds/sound.mp3';
+// URLs des sons - dans le dossier public du client
+const SOUND_URLS = [
+  '/sound.mp3',
+  '/sound2.mp3',
+  '/sound3.mp3',
+  '/sound4.mp3',
+  '/sound5.mp3'
+];
 
 const initAudioContext = async () => {
-  if (audioContext && audioBuffer) return;
+  if (audioContext && audioBuffers.length > 0) return;
   
   try {
     // Créer le contexte audio
@@ -31,24 +37,35 @@ const initAudioContext = async () => {
       console.log('[Audio] AudioContext créé');
     }
     
-    // Charger le fichier audio depuis l'API
-    if (!audioBuffer) {
-      console.log('[Audio] Chargement depuis:', SOUND_URL);
+    // Charger tous les fichiers audio depuis l'API
+    if (audioBuffers.length === 0) {
+      console.log('[Audio] Chargement de', SOUND_URLS.length, 'sons...');
       
-      const response = await fetch(SOUND_URL);
-      console.log('[Audio] Réponse:', response.status);
-      
-      if (response.ok) {
-        const arrayBuffer = await response.arrayBuffer();
-        console.log('[Audio] Taille:', arrayBuffer.byteLength, 'bytes');
-        
-        if (arrayBuffer.byteLength > 0) {
-          audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-          audioLoaded = true;
-          console.log('[Audio] ✓ Audio chargé!');
+      const loadPromises = SOUND_URLS.map(async (url, index) => {
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer();
+            if (arrayBuffer.byteLength > 0) {
+              const buffer = await audioContext.decodeAudioData(arrayBuffer);
+              console.log(`[Audio] ✓ Son ${index + 1} chargé!`);
+              return buffer;
+            }
+          } else {
+            console.error(`[Audio] ✗ Son ${index + 1} non trouvé:`, response.status);
+          }
+        } catch (err) {
+          console.error(`[Audio] Erreur chargement son ${index + 1}:`, err);
         }
-      } else {
-        console.error('[Audio] ✗ Fichier non trouvé:', response.status);
+        return null;
+      });
+      
+      const loadedBuffers = await Promise.all(loadPromises);
+      audioBuffers = loadedBuffers.filter(buffer => buffer !== null);
+      
+      if (audioBuffers.length > 0) {
+        audioLoaded = true;
+        console.log(`[Audio] ✓ ${audioBuffers.length}/${SOUND_URLS.length} sons chargés!`);
       }
     }
   } catch (err) {
@@ -59,9 +76,9 @@ const initAudioContext = async () => {
 let currentAudioSource = null;
 
 const playMatchFoundSound = () => {
-  console.log('[Audio] Tentative de lecture...', { hasContext: !!audioContext, hasBuffer: !!audioBuffer, loaded: audioLoaded });
+  console.log('[Audio] Tentative de lecture...', { hasContext: !!audioContext, bufferCount: audioBuffers.length, loaded: audioLoaded });
   
-  if (!audioContext || !audioBuffer) {
+  if (!audioContext || audioBuffers.length === 0) {
     console.warn('[Audio] Audio non prêt, tentative de lecture avec fallback...');
     playFallbackBeep();
     return;
@@ -80,10 +97,15 @@ const playMatchFoundSound = () => {
       currentGainNode = null;
     }
     
+    // Sélectionner un son aléatoire parmi les buffers chargés
+    const randomIndex = Math.floor(Math.random() * audioBuffers.length);
+    const selectedBuffer = audioBuffers[randomIndex];
+    console.log(`[Audio] Son sélectionné: ${randomIndex + 1}/${audioBuffers.length}`);
+    
     const source = audioContext.createBufferSource();
     const gainNode = audioContext.createGain();
     
-    source.buffer = audioBuffer;
+    source.buffer = selectedBuffer;
     source.connect(gainNode);
     gainNode.connect(audioContext.destination);
     gainNode.gain.value = 0.15;
@@ -334,6 +356,19 @@ const RankedMode = () => {
   const [testMatchTeamSize, setTestMatchTeamSize] = useState(4);
   const [testMatchGameMode, setTestMatchGameMode] = useState('Search & Destroy');
   
+  // Staff test queue (admin only)
+  const [staffQueueMode, setStaffQueueMode] = useState(false); // Toggle between normal queue and staff queue
+  const [inStaffQueue, setInStaffQueue] = useState(false);
+  const [staffQueueSize, setStaffQueueSize] = useState(0);
+  const [staffQueuePlayers, setStaffQueuePlayers] = useState([]);
+  const [staffQueueTimerActive, setStaffQueueTimerActive] = useState(false);
+  const [staffQueueTimerEndTime, setStaffQueueTimerEndTime] = useState(null);
+  const [joiningStaffQueue, setJoiningStaffQueue] = useState(false);
+  const [leavingStaffQueue, setLeavingStaffQueue] = useState(false);
+  const [addingStaffBots, setAddingStaffBots] = useState(false);
+  const [clearingStaffBots, setClearingStaffBots] = useState(false);
+  const [forcingStaffMatch, setForcingStaffMatch] = useState(false);
+  
   // Rules modal
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [rules, setRules] = useState(null);
@@ -454,17 +489,11 @@ const RankedMode = () => {
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
   
-  // Update default game mode when switching between hardcore/cdl
+  // Update default game mode when switching modes - both modes use Search & Destroy
   useEffect(() => {
-    if (isHardcore) {
-      setSelectedGameMode('Search & Destroy');
-      setTestMatchGameMode('Search & Destroy');
-    } else {
-      // CDL defaults to Hardpoint
-      setSelectedGameMode('Hardpoint');
-      setTestMatchGameMode('Hardpoint');
-    }
-  }, [selectedMode, isHardcore]);
+    setSelectedGameMode('Search & Destroy');
+    setTestMatchGameMode('Search & Destroy');
+  }, [selectedMode]);
   
   // Rank animation effect
   useEffect(() => {
@@ -605,10 +634,12 @@ const RankedMode = () => {
   // Fetch ranked rewards for all game modes
   const fetchRankedRewards = async () => {
     try {
-      // Get game modes based on current mode (hardcore or cdl)
+      // Get game modes based on mode
+      // Hardcore: Duel, Team Deathmatch, Search & Destroy
+      // CDL: Hardpoint, Search & Destroy
       const gameModes = isHardcore 
-        ? ['Search & Destroy']
-        : ['Duel', 'Team Deathmatch', 'Search & Destroy', 'Hardpoint'];
+        ? ['Duel', 'Team Deathmatch', 'Search & Destroy']
+        : ['Hardpoint', 'Search & Destroy'];
       
       const rewards = {};
       
@@ -781,11 +812,19 @@ const RankedMode = () => {
   const fetchLeaderboard = async (page = 1) => {
     setLoadingLeaderboard(true);
     try {
-      const response = await fetch(
-        `${API_URL}/rankings/leaderboard/${selectedMode}?limit=${LEADERBOARD_PER_PAGE}&page=${page}`, 
-        { credentials: 'include' }
-      );
+      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?limit=${LEADERBOARD_PER_PAGE}&page=${page}`;
+      console.log('[Leaderboard] Fetching:', url);
+      
+      const response = await fetch(url, { credentials: 'include' });
       const data = await response.json();
+      
+      console.log('[Leaderboard] Response:', {
+        success: data.success,
+        rankingsCount: data.rankings?.length,
+        pagination: data.pagination,
+        selectedMode
+      });
+      
       if (data.success) {
         setLeaderboard(data.rankings);
         // Calculate total pages based on total players (max 100)
@@ -1126,6 +1165,149 @@ const RankedMode = () => {
   
   // Check if user is staff or admin
   const isStaffOrAdmin = user?.roles?.includes('staff') || user?.roles?.includes('admin');
+  const isAdmin = user?.roles?.includes('admin');
+
+  // ==================== STAFF TEST QUEUE FUNCTIONS (Admin only) ====================
+  
+  // Fetch staff queue status
+  const fetchStaffQueueStatus = async () => {
+    if (!isAdmin) return;
+    try {
+      const response = await fetch(
+        `${API_URL}/ranked-matches/staff-queue/status?gameMode=${encodeURIComponent(selectedGameMode)}&mode=${selectedMode}`,
+        { credentials: 'include' }
+      );
+      const data = await response.json();
+      if (data.success) {
+        setInStaffQueue(data.inQueue);
+        setStaffQueueSize(data.queueSize);
+        setStaffQueuePlayers(data.players || []);
+        setStaffQueueTimerActive(data.timerActive);
+        setStaffQueueTimerEndTime(data.timerEndTime);
+      }
+    } catch (err) {
+      console.error('Error fetching staff queue status:', err);
+    }
+  };
+  
+  // Join staff queue
+  const joinStaffQueue = async () => {
+    unlockAudio();
+    setMatchmakingError(null);
+    setJoiningStaffQueue(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/staff-queue/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ gameMode: selectedGameMode, mode: selectedMode })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setInStaffQueue(true);
+        setStaffQueueSize(data.queueSize);
+      } else {
+        setMatchmakingError(data.message);
+        if (data.activeMatchId) setActiveMatch({ _id: data.activeMatchId });
+      }
+    } catch (err) {
+      setMatchmakingError(language === 'fr' ? 'Erreur de connexion' : 'Connection error');
+    } finally {
+      setJoiningStaffQueue(false);
+    }
+  };
+  
+  // Leave staff queue
+  const leaveStaffQueue = async () => {
+    setLeavingStaffQueue(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/staff-queue/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ gameMode: selectedGameMode, mode: selectedMode })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setInStaffQueue(false);
+        setStaffQueueSize(0);
+        setStaffQueuePlayers([]);
+        setStaffQueueTimerActive(false);
+        setStaffQueueTimerEndTime(null);
+      }
+    } catch (err) {
+      console.error('Error leaving staff queue:', err);
+    } finally {
+      setLeavingStaffQueue(false);
+    }
+  };
+  
+  // Add bots to staff queue
+  const addBotsToStaffQueue = async (count = 1) => {
+    setAddingStaffBots(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/staff-queue/add-bots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ gameMode: selectedGameMode, mode: selectedMode, count })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setStaffQueueSize(data.queueSize);
+        await fetchStaffQueueStatus();
+      } else {
+        setMatchmakingError(data.message);
+      }
+    } catch (err) {
+      console.error('Error adding bots:', err);
+    } finally {
+      setAddingStaffBots(false);
+    }
+  };
+  
+  // Clear all bots from staff queue
+  const clearStaffQueueBots = async () => {
+    setClearingStaffBots(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/staff-queue/clear-bots`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ gameMode: selectedGameMode, mode: selectedMode })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setStaffQueueSize(data.queueSize);
+        await fetchStaffQueueStatus();
+      }
+    } catch (err) {
+      console.error('Error clearing bots:', err);
+    } finally {
+      setClearingStaffBots(false);
+    }
+  };
+  
+  // Force start staff match
+  const forceStartStaffMatch = async () => {
+    setForcingStaffMatch(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/staff-queue/force-start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ gameMode: selectedGameMode, mode: selectedMode })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setMatchmakingError(data.message);
+      }
+    } catch (err) {
+      console.error('Error force starting match:', err);
+    } finally {
+      setForcingStaffMatch(false);
+    }
+  };
 
   // Page tracking for socket (optional, for analytics)
   useEffect(() => {
@@ -1204,6 +1386,7 @@ const RankedMode = () => {
     const unsubMatch = on('rankedMatchFound', (data) => {
       console.log('[RankedMode] Match trouvé!', data);
       setInQueue(false);
+      setInStaffQueue(false); // Reset staff queue state too
       
       // Jouer le son quand le match est trouvé
       playMatchFoundSound();
@@ -1449,6 +1632,29 @@ const RankedMode = () => {
     
     return () => { unsubGlobalQueue(); };
   }, [isConnected, selectedMode, on]);
+
+  // Listen for staff queue updates (admin only)
+  useEffect(() => {
+    if (!isConnected || !isAdmin) return;
+    
+    const unsubStaffQueue = on('staffQueueUpdate', (data) => {
+      if (data.type === 'queue_status') {
+        setStaffQueueSize(data.queueSize);
+        setStaffQueuePlayers(data.players || []);
+        setStaffQueueTimerActive(data.timerActive);
+        setStaffQueueTimerEndTime(data.timerEndTime);
+      }
+    });
+    
+    return () => { unsubStaffQueue(); };
+  }, [isConnected, isAdmin, on]);
+  
+  // Fetch staff queue status when admin enables staff mode
+  useEffect(() => {
+    if (staffQueueMode && isAdmin) {
+      fetchStaffQueueStatus();
+    }
+  }, [staffQueueMode, isAdmin, selectedGameMode, selectedMode]);
 
   // Timer countdown
   useEffect(() => {
@@ -1749,6 +1955,17 @@ const RankedMode = () => {
       addFakePlayers: 'Ajouter des joueurs test',
       startTestMatch: 'Lancer un match de test',
       testMatchInfo: 'Match solo avec bots (file séparée)',
+      // Staff test queue translations
+      staffTestQueue: 'File de test Admin',
+      staffQueueMode: 'Mode file test',
+      normalQueueMode: 'File normale',
+      joinStaffQueue: 'Rejoindre la file',
+      addBot: 'Ajouter un bot',
+      addBots: 'Ajouter des bots',
+      clearBots: 'Supprimer les bots',
+      forceStart: 'Forcer le démarrage',
+      botsInQueue: 'bot(s) dans la file',
+      staffQueueInfo: 'File test pour tester le matchmaking avec des bots',
       searchingPlayers: 'Recherche de joueurs',
       loginToPlay: 'Connecte-toi pour jouer',
       loginRequired: 'Tu dois être connecté pour accéder au mode classé.',
@@ -1835,6 +2052,17 @@ const RankedMode = () => {
       addFakePlayers: 'Add test players',
       startTestMatch: 'Start test match',
       testMatchInfo: 'Solo match with bots (separate queue)',
+      // Staff test queue translations
+      staffTestQueue: 'Admin Test Queue',
+      staffQueueMode: 'Test queue mode',
+      normalQueueMode: 'Normal queue',
+      joinStaffQueue: 'Join queue',
+      addBot: 'Add a bot',
+      addBots: 'Add bots',
+      clearBots: 'Clear bots',
+      forceStart: 'Force start',
+      botsInQueue: 'bot(s) in queue',
+      staffQueueInfo: 'Test queue to test matchmaking with bots',
       searchingPlayers: 'Searching for players',
       loginToPlay: 'Login to Play',
       loginRequired: 'You must be logged in to access ranked mode.',
@@ -2429,6 +2657,73 @@ const RankedMode = () => {
                   </div>
                 )}
                 
+                {/* Récompenses pour le mode sélectionné - Compact */}
+                {rankedRewardsPerMode[selectedGameMode] && (
+                  <div className="mt-4">
+                    {/* Active boosters indicator */}
+                    {activeBoosters.length > 0 && (
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <Zap className="w-3 h-3 text-purple-400" />
+                        <span className="text-[10px] text-purple-400 font-medium">
+                          {language === 'fr' ? 'Boost actif :' : 'Active boost:'}
+                        </span>
+                        {activeBoosters.map((b, i) => (
+                          <span key={i} className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold">
+                            {b.effectType === 'double_gold' ? '💰 x2 Gold' : b.effectType === 'double_pts' ? '⚡ x2 Pts' : '✨ x2 XP'}
+                            <span className="text-purple-400/70 ml-1">({b.remainingMatches} match{b.remainingMatches > 1 ? 's' : ''})</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Rewards row */}
+                    <div className="flex items-center justify-between px-3 py-2.5 rounded-xl bg-dark-800/80 border border-white/5">
+                      <span className="text-gray-400 text-xs font-medium">
+                        {language === 'fr' ? 'Victoire' : 'Win'}
+                      </span>
+                      <div className="flex items-center gap-4">
+                        {/* Points */}
+                        <div className="flex items-center gap-1.5">
+                          <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+                          <span className={`text-sm font-bold ${(activeEvents.doubleXP || activeBoosters.some(b => b.effectType === 'double_pts')) ? 'text-green-300' : 'text-green-400'}`}>
+                            +{(activeEvents.doubleXP || activeBoosters.some(b => b.effectType === 'double_pts')) 
+                              ? (rankedRewardsPerMode[selectedGameMode]?.pointsWin ?? 0) * 2 
+                              : (rankedRewardsPerMode[selectedGameMode]?.pointsWin ?? 0)}
+                          </span>
+                          {(activeEvents.doubleXP || activeBoosters.some(b => b.effectType === 'double_pts')) && (
+                            <span className="text-[9px] text-green-400 font-bold">x2</span>
+                          )}
+                        </div>
+                        
+                        <div className="w-px h-4 bg-white/10" />
+                        
+                        {/* Gold */}
+                        <div className="flex items-center gap-1.5">
+                          <Coins className="w-3.5 h-3.5 text-yellow-400" />
+                          <span className={`text-sm font-bold ${(activeEvents.doubleGold || activeBoosters.some(b => b.effectType === 'double_gold')) ? 'text-yellow-300' : 'text-yellow-400'}`}>
+                            +{(activeEvents.doubleGold || activeBoosters.some(b => b.effectType === 'double_gold')) 
+                              ? (rankedRewardsPerMode[selectedGameMode]?.coinsWin ?? 0) * 2 
+                              : (rankedRewardsPerMode[selectedGameMode]?.coinsWin ?? 0)}
+                          </span>
+                          {(activeEvents.doubleGold || activeBoosters.some(b => b.effectType === 'double_gold')) && (
+                            <span className="text-[9px] text-yellow-400 font-bold">x2</span>
+                          )}
+                        </div>
+                        
+                        <div className="w-px h-4 bg-white/10" />
+                        
+                        {/* XP */}
+                        <div className="flex items-center gap-1.5">
+                          <Star className="w-3.5 h-3.5 text-cyan-400" />
+                          <span className="text-sm font-bold text-cyan-400">
+                            {rankedRewardsPerMode[selectedGameMode]?.xpWinMin ?? 0}-{rankedRewardsPerMode[selectedGameMode]?.xpWinMax ?? 0}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Bouton Règles du mode */}
                 <button
                   onClick={() => {
@@ -2582,7 +2877,7 @@ const RankedMode = () => {
                           
                           {/* Animated player icons */}
                           <div className="flex justify-center flex-wrap gap-1.5 sm:gap-2 mb-4">
-                            {[...Array(isHardcore ? 10 : 8)].map((_, i) => (
+                            {[...Array(10)].map((_, i) => (
                               <div 
                                 key={i}
                                 className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
@@ -2601,7 +2896,7 @@ const RankedMode = () => {
                           </div>
                           
                           <p className={`text-2xl sm:text-3xl font-black ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
-                            {queueSize}<span className="text-gray-500 text-lg sm:text-xl">/{isHardcore ? 10 : 8}</span>
+                            {queueSize}<span className="text-gray-500 text-lg sm:text-xl">/10</span>
                           </p>
                           <p className="text-gray-500 text-xs sm:text-sm">{t.playersInQueue}</p>
                         </div>
@@ -2630,18 +2925,16 @@ const RankedMode = () => {
                         <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
                           <div 
                             className={`h-full bg-gradient-to-r ${isHardcore ? 'from-red-500 to-orange-500' : 'from-cyan-400 to-blue-500'} transition-all duration-500 relative`}
-                            style={{ width: `${(queueSize / (isHardcore ? 10 : 8)) * 100}%` }}
+                            style={{ width: `${(queueSize / 10) * 100}%` }}
                           >
                             {/* Shimmer effect */}
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
                           </div>
                         </div>
-                        {/* Milestone markers - 4v4 at 80% for Hardcore (8/10), 100% for CDL (8/8) */}
-                        {isHardcore && (
-                          <div className="absolute top-0 left-0 w-full h-3 flex items-center">
-                            <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
-                          </div>
-                        )}
+                        {/* Milestone markers - 4v4 at 80% (8/10) */}
+                        <div className="absolute top-0 left-0 w-full h-3 flex items-center">
+                          <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
+                        </div>
                       </div>
 
                       {/* Staff/Admin: Add fake players button */}
@@ -2734,44 +3027,60 @@ const RankedMode = () => {
                           {/* Available Boosters */}
                           {availableBoosters.length > 0 && (
                             <div className="space-y-2">
-                              {availableBoosters.map((booster) => (
-                                <div 
-                                  key={booster.item._id}
-                                  className="flex items-center justify-between p-3 rounded-xl bg-dark-700/50 border border-white/5 hover:border-purple-500/30 transition-all"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-lg bg-${booster.item.color || 'purple'}-500/20 flex items-center justify-center`}>
-                                      {booster.item.effectType === 'double_pts' ? (
-                                        <Zap className="w-5 h-5 text-yellow-400" />
-                                      ) : (
-                                        <Coins className="w-5 h-5 text-amber-400" />
-                                      )}
-                                    </div>
-                                    <div>
-                                      <p className="text-white font-semibold text-sm">
-                                        {booster.item?.nameTranslations?.[language] || booster.item?.name}
-                                      </p>
-                                      <p className="text-gray-400 text-xs">
-                                        x{booster.quantity} • {booster.item.matchCount} match{booster.item.matchCount > 1 ? 's' : ''}
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={() => activateBooster(booster.purchaseId)}
-                                    disabled={activatingBooster === booster.purchaseId || activeBoosters.some(ab => ab.effectType === booster.item.effectType) || !!activeMatch}
-                                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                              {availableBoosters.map((booster) => {
+                                const isAlreadyActive = activeBoosters.some(ab => ab.effectType === booster.item.effectType);
+                                const isInMatch = activeMatch && !activeMatch.isTestMatch;
+                                const isDisabled = activatingBooster === booster.purchaseId || isAlreadyActive || isInMatch;
+                                
+                                return (
+                                  <div 
+                                    key={booster.item._id}
+                                    className={`flex items-center justify-between p-3 rounded-xl bg-dark-700/50 border transition-all ${
+                                      isAlreadyActive 
+                                        ? 'border-orange-500/30 opacity-60' 
+                                        : 'border-white/5 hover:border-purple-500/30'
+                                    }`}
                                   >
-                                    {activatingBooster === booster.purchaseId ? (
-                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    <div className="flex items-center gap-3">
+                                      <div className={`w-10 h-10 rounded-lg bg-${booster.item.color || 'purple'}-500/20 flex items-center justify-center`}>
+                                        {booster.item.effectType === 'double_pts' ? (
+                                          <Zap className="w-5 h-5 text-yellow-400" />
+                                        ) : (
+                                          <Coins className="w-5 h-5 text-amber-400" />
+                                        )}
+                                      </div>
+                                      <div>
+                                        <p className="text-white font-semibold text-sm">
+                                          {booster.item?.nameTranslations?.[language] || booster.item?.name}
+                                        </p>
+                                        <p className="text-gray-400 text-xs">
+                                          x{booster.quantity} • {booster.item.matchCount} match{booster.item.matchCount > 1 ? 's' : ''}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {isAlreadyActive ? (
+                                      <span className="px-3 py-2 rounded-lg bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-medium">
+                                        {language === 'fr' ? 'Déjà actif' : 'Already active'}
+                                      </span>
                                     ) : (
-                                      <>
-                                        <Zap className="w-3 h-3" />
-                                        {t.activate}
-                                      </>
+                                      <button
+                                        onClick={() => activateBooster(booster.purchaseId)}
+                                        disabled={isDisabled}
+                                        className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                                      >
+                                        {activatingBooster === booster.purchaseId ? (
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                          <>
+                                            <Zap className="w-3 h-3" />
+                                            {t.activate}
+                                          </>
+                                        )}
+                                      </button>
                                     )}
-                                  </button>
-                                </div>
-                              ))}
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -2796,23 +3105,164 @@ const RankedMode = () => {
                         </span>
                       </div>
 
-                      {/* Find Match Button */}
-                      <button
-                        onClick={joinQueue}
-                        disabled={joiningQueue || !!activeMatch || (user?.platform === 'PC' && ggsecureConnected === false) || (!matchmakingEnabled && !isStaffOrAdmin)}
-                        className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
-                          isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'
-                        } text-white font-bold text-lg shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group`}
-                      >
-                        {joiningQueue ? (
-                          <Loader2 className="w-6 h-6 animate-spin" />
-                        ) : (
-                          <>
-                            <Play className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                            {t.findMatch}
-                          </>
-                        )}
-                      </button>
+                      {/* Admin Staff Queue Toggle */}
+                      {isAdmin && (
+                        <div className="mb-4">
+                          <div className="flex items-center justify-center gap-2 mb-3">
+                            <button
+                              onClick={() => setStaffQueueMode(false)}
+                              className={`px-4 py-2 rounded-l-xl text-sm font-medium transition-all ${
+                                !staffQueueMode
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
+                              }`}
+                            >
+                              {t.normalQueueMode}
+                            </button>
+                            <button
+                              onClick={() => setStaffQueueMode(true)}
+                              className={`px-4 py-2 rounded-r-xl text-sm font-medium transition-all ${
+                                staffQueueMode
+                                  ? 'bg-purple-500 text-white'
+                                  : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
+                              }`}
+                            >
+                              {t.staffQueueMode}
+                            </button>
+                          </div>
+                          
+                          {staffQueueMode && (
+                            <div className="p-4 rounded-2xl bg-purple-500/10 border border-purple-500/30 space-y-3">
+                              <div className="flex items-center gap-2 text-purple-400">
+                                <Bot className="w-5 h-5" />
+                                <span className="font-semibold">{t.staffTestQueue}</span>
+                              </div>
+                              <p className="text-gray-400 text-xs">{t.staffQueueInfo}</p>
+                              
+                              {/* Staff Queue Status */}
+                              <div className="flex items-center justify-between p-3 rounded-xl bg-dark-800/50">
+                                <span className="text-gray-300 text-sm">
+                                  <span className="text-purple-400 font-bold">{staffQueueSize}</span>/10 {t.playersInQueue}
+                                </span>
+                                {staffQueueTimerActive && staffQueueTimerEndTime && (
+                                  <span className="text-green-400 text-sm font-medium animate-pulse">
+                                    {t.matchIn} {Math.max(0, Math.ceil((staffQueueTimerEndTime - Date.now()) / 1000))}s
+                                  </span>
+                                )}
+                              </div>
+                              
+                              {/* Staff Queue Players List */}
+                              {staffQueuePlayers.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {staffQueuePlayers.map((player, idx) => (
+                                    <div 
+                                      key={idx}
+                                      className={`px-2 py-1 rounded-lg text-xs font-medium ${
+                                        player.isFake 
+                                          ? 'bg-gray-700 text-gray-400'
+                                          : 'bg-purple-500/30 text-purple-300'
+                                      }`}
+                                    >
+                                      {player.isFake && <Bot className="w-3 h-3 inline mr-1" />}
+                                      {player.username}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              {/* Staff Queue Actions */}
+                              {!inStaffQueue ? (
+                                <button
+                                  onClick={joinStaffQueue}
+                                  disabled={joiningStaffQueue || !!activeMatch}
+                                  className="w-full py-3 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-semibold transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                  {joiningStaffQueue ? (
+                                    <Loader2 className="w-5 h-5 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Play className="w-5 h-5" />
+                                      {t.joinStaffQueue}
+                                    </>
+                                  )}
+                                </button>
+                              ) : (
+                                <div className="space-y-2">
+                                  {/* Add Bots Buttons */}
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={() => addBotsToStaffQueue(1)}
+                                      disabled={addingStaffBots || staffQueueSize >= 10}
+                                      className="flex-1 py-2 rounded-xl bg-blue-500/20 border border-blue-500/30 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                                    >
+                                      {addingStaffBots ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                                      +1 Bot
+                                    </button>
+                                    <button
+                                      onClick={() => addBotsToStaffQueue(5)}
+                                      disabled={addingStaffBots || staffQueueSize >= 10}
+                                      className="flex-1 py-2 rounded-xl bg-blue-500/20 border border-blue-500/30 text-blue-400 text-sm font-medium hover:bg-blue-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                                    >
+                                      {addingStaffBots ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                                      +5 Bots
+                                    </button>
+                                  </div>
+                                  
+                                  {/* Clear Bots & Force Start */}
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={clearStaffQueueBots}
+                                      disabled={clearingStaffBots}
+                                      className="flex-1 py-2 rounded-xl bg-orange-500/20 border border-orange-500/30 text-orange-400 text-sm font-medium hover:bg-orange-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                                    >
+                                      {clearingStaffBots ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                                      {t.clearBots}
+                                    </button>
+                                    <button
+                                      onClick={forceStartStaffMatch}
+                                      disabled={forcingStaffMatch || staffQueueSize < 8}
+                                      className="flex-1 py-2 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-medium hover:bg-green-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-1"
+                                    >
+                                      {forcingStaffMatch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                                      {t.forceStart}
+                                    </button>
+                                  </div>
+                                  
+                                  {/* Leave Queue */}
+                                  <button
+                                    onClick={leaveStaffQueue}
+                                    disabled={leavingStaffQueue}
+                                    className="w-full py-3 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 font-semibold hover:bg-red-500/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                  >
+                                    {leavingStaffQueue ? <Loader2 className="w-5 h-5 animate-spin" /> : <Square className="w-5 h-5" />}
+                                    {t.cancel}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Find Match Button - Only show if not in staff queue mode */}
+                      {(!isAdmin || !staffQueueMode) && (
+                        <button
+                          onClick={joinQueue}
+                          disabled={joiningQueue || (activeMatch && !activeMatch.isTestMatch) || (user?.platform === 'PC' && ggsecureConnected === false) || (!matchmakingEnabled && !isStaffOrAdmin)}
+                          className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
+                            isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'
+                          } text-white font-bold text-lg shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group`}
+                        >
+                          {joiningQueue ? (
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                          ) : (
+                            <>
+                              <Play className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                              {t.findMatch}
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3024,108 +3474,6 @@ const RankedMode = () => {
 
             </div>
           </div>
-
-          {/* Points Won Per Game Mode */}
-          {Object.keys(rankedRewardsPerMode).length > 0 && (
-            <div className={`rounded-2xl bg-dark-800/50 backdrop-blur-xl border ${isHardcore ? 'border-green-500/20' : 'border-green-500/20'} overflow-hidden mb-6`}>
-              <div className={`px-4 py-3 bg-gradient-to-r from-green-500/10 to-emerald-500/5 border-b border-white/10`}>
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-green-400" />
-                    {{ fr: 'Récompenses en cas de victoire (par mode)', en: 'Rewards on victory (by mode)', de: 'Belohnungen bei Sieg (pro Modus)', it: 'Ricompense in caso di vittoria (per modalità)' }[language] || 'Rewards on victory (by mode)'}
-                  </h4>
-                  {/* Active events badges */}
-                  <div className="flex items-center gap-2">
-                    {activeEvents.doubleXP && (
-                      <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-400 text-[10px] font-bold animate-pulse flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" />
-                        x2 XP
-                      </span>
-                    )}
-                    {activeEvents.doubleGold && (
-                      <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-[10px] font-bold animate-pulse flex items-center gap-1">
-                        <Coins className="w-3 h-3" />
-                        x2 Gold
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="p-4">
-                <div className={`grid gap-3 ${isHardcore ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
-                  {(isHardcore 
-                    ? ['Duel', 'Team Deathmatch', 'Search & Destroy']
-                    : ['Duel', 'Team Deathmatch', 'Search & Destroy', 'Hardpoint']
-                  ).map((gameMode) => {
-                    const rewards = rankedRewardsPerMode[gameMode];
-                    const pointsWin = rewards?.pointsWin ?? 0;
-                    const coinsWin = rewards?.coinsWin ?? 0;
-                    const xpWinMin = rewards?.xpWinMin ?? 0;
-                    const xpWinMax = rewards?.xpWinMax ?? 0;
-                    const gameModeLabel = gameMode === 'Search & Destroy' ? (language === 'fr' ? 'S&D' : 'S&D')
-                      : gameMode === 'Team Deathmatch' ? (language === 'fr' ? 'Mêlée' : 'TDM')
-                      : gameMode === 'Hardpoint' ? (language === 'fr' ? 'HP' : 'HP')
-                      : 'Duel';
-                    const gameModeIcon = gameMode === 'Search & Destroy' ? '💣'
-                      : gameMode === 'Team Deathmatch' ? '⚔️'
-                      : gameMode === 'Hardpoint' ? '📍'
-                      : '🎯';
-                    return (
-                      <div 
-                        key={gameMode}
-                        className="flex flex-col items-center p-3 rounded-xl bg-dark-900/50 border border-white/5 hover:border-green-500/30 transition-all"
-                      >
-                        <span className="text-lg mb-1">{gameModeIcon}</span>
-                        <span className="text-xs text-gray-400 font-medium mb-2">{gameModeLabel}</span>
-                        
-                        {/* Points */}
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className={`text-sm font-bold ${activeEvents.doubleXP ? 'text-purple-400' : 'text-green-400'}`}>
-                            +{activeEvents.doubleXP ? pointsWin * 2 : pointsWin}
-                          </span>
-                          <span className="text-[10px] text-gray-500">pts</span>
-                          {activeEvents.doubleXP && <Sparkles className="w-3 h-3 text-purple-400" />}
-                        </div>
-                        
-                        {/* Gold */}
-                        <div className="flex items-center gap-1 mb-1">
-                          <Coins className="w-3 h-3 text-yellow-400" />
-                          <span className={`text-xs font-semibold ${activeEvents.doubleGold ? 'text-yellow-300' : 'text-yellow-400'}`}>
-                            +{activeEvents.doubleGold ? coinsWin * 2 : coinsWin}
-                          </span>
-                          {activeEvents.doubleGold && <span className="text-[8px] text-yellow-400">x2</span>}
-                        </div>
-                        
-                        {/* XP */}
-                        <div className="flex items-center gap-1">
-                          <Star className="w-3 h-3 text-blue-400" />
-                          <span className="text-[10px] text-blue-400">
-                            {xpWinMin}-{xpWinMax}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-gray-500 mt-3 text-center">
-                  {{ 
-                    fr: activeEvents.doubleXP || activeEvents.doubleGold 
-                      ? '🎉 Événement actif ! Les récompenses doublées sont appliquées automatiquement.' 
-                      : 'Récompenses attribuées en cas de victoire selon le mode de jeu.', 
-                    en: activeEvents.doubleXP || activeEvents.doubleGold 
-                      ? '🎉 Event active! Doubled rewards are applied automatically.' 
-                      : 'Rewards granted on victory based on game mode.',
-                    de: activeEvents.doubleXP || activeEvents.doubleGold 
-                      ? '🎉 Event aktiv! Verdoppelte Belohnungen werden automatisch angewendet.' 
-                      : 'Belohnungen bei Sieg je nach Spielmodus.',
-                    it: activeEvents.doubleXP || activeEvents.doubleGold 
-                      ? '🎉 Evento attivo! Le ricompense raddoppiate vengono applicate automaticamente.' 
-                      : 'Ricompense assegnate in caso di vittoria in base alla modalità di gioco.'
-                  }[language] || 'Rewards granted on victory based on game mode.'}
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* Points Loss Per Rank Info */}
           {(pointsLossPerRank || DEFAULT_POINTS_LOSS_PER_RANK) && (
@@ -3373,14 +3721,16 @@ const RankedMode = () => {
                 
                 {leaderboard
                   .filter((_, idx) => {
-                    // Skip first 3 players on page 1 (they're shown in the podium)
-                    if (leaderboardPage === 1 && idx < 3) return false;
+                    // Skip first 3 players on page 1 ONLY if podium is shown (>= 3 players)
+                    if (leaderboardPage === 1 && leaderboard.length >= 3 && idx < 3) return false;
                     return true;
                   })
                   .map((player, idx) => {
                   // Calculate actual position based on current page
-                  // On page 1, skip first 3 (podium), so position starts at 4
-                  const actualIdx = leaderboardPage === 1 ? idx + 3 : idx;
+                  // On page 1 with podium (>= 3 players), skip first 3, so position starts at 4
+                  // On page 1 without podium (< 3 players), position starts at 1
+                  const hasPodium = leaderboardPage === 1 && leaderboard.length >= 3;
+                  const actualIdx = hasPodium ? idx + 3 : idx;
                   const position = (leaderboardPage - 1) * LEADERBOARD_PER_PAGE + actualIdx + 1;
                   const rank = getRankFromPoints(player.points);
                   const winRate = player.wins + player.losses > 0 

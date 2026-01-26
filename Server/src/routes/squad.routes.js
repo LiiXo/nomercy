@@ -114,9 +114,29 @@ router.get('/my-squad', verifyToken, async (req, res) => {
     // Determine which squad field to use based on mode
     let squadId = null;
     if (mode === 'hardcore') {
+      // First check mode-specific field, then legacy field for squads with mode 'both' or 'hardcore'
       squadId = user.squadHardcore;
+      
+      // If no hardcore-specific squad, check legacy field
+      if (!squadId && user.squad) {
+        // Verify the legacy squad is compatible with hardcore mode
+        const legacySquad = await Squad.findById(user.squad).select('mode');
+        if (legacySquad && (legacySquad.mode === 'both' || legacySquad.mode === 'hardcore')) {
+          squadId = user.squad;
+        }
+      }
     } else if (mode === 'cdl') {
+      // First check mode-specific field, then legacy field for squads with mode 'both' or 'cdl'
       squadId = user.squadCdl;
+      
+      // If no cdl-specific squad, check legacy field
+      if (!squadId && user.squad) {
+        // Verify the legacy squad is compatible with cdl mode
+        const legacySquad = await Squad.findById(user.squad).select('mode');
+        if (legacySquad && (legacySquad.mode === 'both' || legacySquad.mode === 'cdl')) {
+          squadId = user.squad;
+        }
+      }
     } else {
       // Fallback: try legacy field first, then check both mode-specific fields
       squadId = user.squad || user.squadHardcore || user.squadCdl;
@@ -147,9 +167,27 @@ router.get('/my-squad/requests-count', verifyToken, async (req, res) => {
     // Determine which squad field to use based on mode
     let squadId = null;
     if (mode === 'hardcore') {
+      // First check mode-specific field, then legacy field for squads with mode 'both' or 'hardcore'
       squadId = user.squadHardcore;
+      
+      // If no hardcore-specific squad, check legacy field
+      if (!squadId && user.squad) {
+        const legacySquad = await Squad.findById(user.squad).select('mode');
+        if (legacySquad && (legacySquad.mode === 'both' || legacySquad.mode === 'hardcore')) {
+          squadId = user.squad;
+        }
+      }
     } else if (mode === 'cdl') {
+      // First check mode-specific field, then legacy field for squads with mode 'both' or 'cdl'
       squadId = user.squadCdl;
+      
+      // If no cdl-specific squad, check legacy field
+      if (!squadId && user.squad) {
+        const legacySquad = await Squad.findById(user.squad).select('mode');
+        if (legacySquad && (legacySquad.mode === 'both' || legacySquad.mode === 'cdl')) {
+          squadId = user.squad;
+        }
+      }
     } else {
       squadId = user.squad || user.squadHardcore || user.squadCdl;
     }
@@ -515,11 +553,31 @@ router.post('/leave', verifyToken, async (req, res) => {
     let squadField = null;
     
     if (mode === 'hardcore') {
+      // First check mode-specific field
       squadId = user.squadHardcore;
       squadField = 'squadHardcore';
+      
+      // If no hardcore-specific squad, check legacy field for squads with mode 'both' or 'hardcore'
+      if (!squadId && user.squad) {
+        const legacySquad = await Squad.findById(user.squad).select('mode');
+        if (legacySquad && (legacySquad.mode === 'both' || legacySquad.mode === 'hardcore')) {
+          squadId = user.squad;
+          squadField = 'squad';
+        }
+      }
     } else if (mode === 'cdl') {
+      // First check mode-specific field
       squadId = user.squadCdl;
       squadField = 'squadCdl';
+      
+      // If no cdl-specific squad, check legacy field for squads with mode 'both' or 'cdl'
+      if (!squadId && user.squad) {
+        const legacySquad = await Squad.findById(user.squad).select('mode');
+        if (legacySquad && (legacySquad.mode === 'both' || legacySquad.mode === 'cdl')) {
+          squadId = user.squad;
+          squadField = 'squad';
+        }
+      }
     } else {
       // Fallback: check legacy field or find any squad
       squadId = user.squad || user.squadHardcore || user.squadCdl;
@@ -527,7 +585,7 @@ router.post('/leave', verifyToken, async (req, res) => {
     }
     
     if (!squadId) {
-      return res.status(400).json({ success: false, message: 'Vous n\'\u00eates dans aucune escouade' });
+      return res.status(400).json({ success: false, message: 'Vous n\'êtes dans aucune escouade' });
     }
     
     const squad = await Squad.findById(squadId);

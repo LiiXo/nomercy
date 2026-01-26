@@ -399,6 +399,8 @@ router.delete('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
 });
 
 // Enable all maps in all modes and formats by default (admin)
+// CDL ranked: uniquement 4v4
+// Hardcore ranked: 4v4 et 5v5
 router.post('/admin/enable-all', verifyToken, requireStaff, async (req, res) => {
   try {
     // Default configuration - all modes enabled with all game modes and formats
@@ -422,7 +424,7 @@ router.post('/admin/enable-all', verifyToken, requireStaff, async (req, res) => 
       ranked: {
         enabled: true,
         gameModes: ['Hardpoint', 'Search & Destroy'],
-        formats: ['4v4', '5v5']
+        formats: ['4v4'] // CDL ranked: uniquement format 4v4
       }
     };
     
