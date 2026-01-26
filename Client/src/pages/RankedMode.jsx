@@ -607,7 +607,7 @@ const RankedMode = () => {
     try {
       // Get game modes based on current mode (hardcore or cdl)
       const gameModes = isHardcore 
-        ? ['Duel', 'Team Deathmatch', 'Search & Destroy']
+        ? ['Search & Destroy']
         : ['Duel', 'Team Deathmatch', 'Search & Destroy', 'Hardpoint'];
       
       const rewards = {};
@@ -2344,12 +2344,12 @@ const RankedMode = () => {
                 
                 {/* Different game modes for Hardcore vs CDL */}
                 {isHardcore ? (
-                  // HARDCORE: S&D, TDM (soon), Duel (soon)
-                  <div className="grid grid-cols-3 gap-3">
+                  // HARDCORE: S&D only
+                  <div className="flex justify-center">
                     {/* Search & Destroy - Available */}
                     <button
                       onClick={() => setSelectedGameMode('Search & Destroy')}
-                      className={`relative p-4 rounded-2xl border-2 transition-all ${
+                      className={`relative p-4 rounded-2xl border-2 transition-all w-full max-w-xs ${
                         selectedGameMode === 'Search & Destroy'
                           ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
                           : 'border-white/10 bg-dark-800/30 hover:border-white/20'
@@ -2369,86 +2369,6 @@ const RankedMode = () => {
                           : 'bg-green-500/10 text-green-400/70'
                       }`}>
                         {t.available}
-                      </span>
-                    </button>
-
-                    {/* Mêlée générale - Staff only or Coming Soon */}
-                    <button
-                      onClick={() => isStaffOrAdmin && setSelectedGameMode('Team Deathmatch')}
-                      disabled={!isStaffOrAdmin}
-                      className={`relative p-4 rounded-2xl border-2 transition-all ${
-                        isStaffOrAdmin
-                          ? selectedGameMode === 'Team Deathmatch'
-                            ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
-                            : 'border-white/10 bg-dark-800/30 hover:border-white/20 cursor-pointer'
-                          : 'border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50'
-                      }`}
-                    >
-                      <div className="absolute top-2 right-2">
-                        {isStaffOrAdmin ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/30 text-purple-300 border border-purple-500/50">STAFF</span>
-                        ) : (
-                          <Lock className="w-4 h-4 text-gray-500" />
-                        )}
-                      </div>
-                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
-                        isStaffOrAdmin && selectedGameMode === 'Team Deathmatch'
-                          ? 'bg-gradient-to-br from-orange-500 to-red-600'
-                          : isStaffOrAdmin
-                            ? 'bg-dark-700'
-                            : 'bg-dark-700/50'
-                      }`}>
-                        <Swords className={`w-6 h-6 ${isStaffOrAdmin ? 'text-white' : 'text-gray-500'}`} />
-                      </div>
-                      <p className={`font-semibold text-sm ${isStaffOrAdmin ? 'text-white' : 'text-gray-500'}`}>{t.teamDeathmatch}</p>
-                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        isStaffOrAdmin
-                          ? selectedGameMode === 'Team Deathmatch'
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-purple-500/20 text-purple-400'
-                          : 'bg-gray-500/10 text-gray-500'
-                      }`}>
-                        {isStaffOrAdmin ? (language === 'fr' ? 'Staff uniquement' : 'Staff only') : t.comingSoon}
-                      </span>
-                    </button>
-
-                    {/* Duel - Staff only or Coming Soon */}
-                    <button
-                      onClick={() => isStaffOrAdmin && setSelectedGameMode('Duel')}
-                      disabled={!isStaffOrAdmin}
-                      className={`relative p-4 rounded-2xl border-2 transition-all ${
-                        isStaffOrAdmin
-                          ? selectedGameMode === 'Duel'
-                            ? `border-${accent}-500 bg-${accent}-500/10 shadow-lg shadow-${accent}-500/20`
-                            : 'border-white/10 bg-dark-800/30 hover:border-white/20 cursor-pointer'
-                          : 'border-white/5 bg-dark-800/20 cursor-not-allowed opacity-50'
-                      }`}
-                    >
-                      <div className="absolute top-2 right-2">
-                        {isStaffOrAdmin ? (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/30 text-purple-300 border border-purple-500/50">STAFF</span>
-                        ) : (
-                          <Lock className="w-4 h-4 text-gray-500" />
-                        )}
-                      </div>
-                      <div className={`w-12 h-12 mx-auto mb-3 rounded-xl flex items-center justify-center ${
-                        isStaffOrAdmin && selectedGameMode === 'Duel'
-                          ? 'bg-gradient-to-br from-yellow-500 to-orange-600'
-                          : isStaffOrAdmin
-                            ? 'bg-dark-700'
-                            : 'bg-dark-700/50'
-                      }`}>
-                        <Target className={`w-6 h-6 ${isStaffOrAdmin ? 'text-white' : 'text-gray-500'}`} />
-                      </div>
-                      <p className={`font-semibold text-sm ${isStaffOrAdmin ? 'text-white' : 'text-gray-500'}`}>{t.duel}</p>
-                      <span className={`inline-block mt-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
-                        isStaffOrAdmin
-                          ? selectedGameMode === 'Duel'
-                            ? 'bg-green-500/20 text-green-400'
-                            : 'bg-purple-500/20 text-purple-400'
-                          : 'bg-gray-500/10 text-gray-500'
-                      }`}>
-                        {isStaffOrAdmin ? (language === 'fr' ? 'Staff uniquement' : 'Staff only') : t.comingSoon}
                       </span>
                     </button>
                   </div>

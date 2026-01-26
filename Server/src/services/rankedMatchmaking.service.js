@@ -276,43 +276,22 @@ const calculateTeamPointsDifference = (team1, team2) => {
 };
 
 /**
- * Génère des équipes équilibrées basées sur les rangs/points des joueurs
- * Utilise un algorithme de "snake draft" pour une distribution équitable
+ * Génère des équipes de manière totalement aléatoire
+ * Mélange les joueurs avec Fisher-Yates puis divise en deux équipes
  */
 const generateBalancedTeams = (players, teamSize) => {
-  // Trier les joueurs par points (du plus haut au plus bas)
-  const sortedPlayers = [...players].sort((a, b) => (b.points || 0) - (a.points || 0));
+  // Mélanger les joueurs de manière aléatoire avec Fisher-Yates
+  const shuffledPlayers = fisherYatesShuffle([...players]);
   
   const team1 = [];
   const team2 = [];
   
-  // Snake draft: alternance inversée pour équilibrer
-  // Round 1: Team1 prend le 1er, Team2 prend le 2ème
-  // Round 2: Team2 prend le 3ème, Team1 prend le 4ème
-  // etc.
-  for (let i = 0; i < sortedPlayers.length; i++) {
-    const round = Math.floor(i / 2);
-    const isEvenRound = round % 2 === 0;
-    const isFirstPick = i % 2 === 0;
-    
-    if (team1.length >= teamSize) {
-      team2.push(sortedPlayers[i]);
-    } else if (team2.length >= teamSize) {
-      team1.push(sortedPlayers[i]);
-    } else if (isEvenRound) {
-      // Rounds pairs: T1, T2
-      if (isFirstPick) {
-        team1.push(sortedPlayers[i]);
-      } else {
-        team2.push(sortedPlayers[i]);
-      }
+  // Répartition simple: premiers joueurs en team1, reste en team2
+  for (let i = 0; i < shuffledPlayers.length; i++) {
+    if (team1.length < teamSize) {
+      team1.push(shuffledPlayers[i]);
     } else {
-      // Rounds impairs: T2, T1
-      if (isFirstPick) {
-        team2.push(sortedPlayers[i]);
-      } else {
-        team1.push(sortedPlayers[i]);
-      }
+      team2.push(shuffledPlayers[i]);
     }
   }
   
@@ -320,67 +299,22 @@ const generateBalancedTeams = (players, teamSize) => {
 };
 
 /**
- * Génère plusieurs compositions d'équipes équilibrées et choisit la meilleure
- * Combine l'équilibrage par rang et la diversité pour éviter les répétitions
+ * Génère des équipes de manière totalement aléatoire
+ * Plus d'équilibrage par rang - distribution purement aléatoire
  */
 const generateDiverseTeams = (players, teamSize, gameMode, mode) => {
-  const ATTEMPTS = 20; // Nombre de compositions à essayer
-  let bestTeam1 = null;
-  let bestTeam2 = null;
-  let bestScore = Infinity;
+  // Mélanger les joueurs de manière aléatoire
+  const shuffledPlayers = fisherYatesShuffle([...players]);
   
-  // Générer la composition équilibrée de base (snake draft)
-  const balanced = generateBalancedTeams(players, teamSize);
-  const balancedDiff = calculateTeamPointsDifference(balanced.team1, balanced.team2);
+  const team1 = shuffledPlayers.slice(0, teamSize);
+  const team2 = shuffledPlayers.slice(teamSize, teamSize * 2);
   
-  // Évaluer la composition équilibrée
-  const balancedTeam1Ids = balanced.team1.map(p => p.userId?.toString() || p.oduserId);
-  const balancedTeam2Ids = balanced.team2.map(p => p.userId?.toString() || p.oduserId);
-  const balancedSimilarity = calculateTeamSimilarityScore(gameMode, mode, balancedTeam1Ids, balancedTeam2Ids);
+  const team1TotalPoints = team1.reduce((sum, p) => sum + (p.points || 0), 0);
+  const team2TotalPoints = team2.reduce((sum, p) => sum + (p.points || 0), 0);
   
-  // Score combiné: priorité à l'équilibrage (différence de points normalisée) + similarité
-  const avgPoints = players.reduce((sum, p) => sum + (p.points || 0), 0) / players.length || 1;
-  const normalizedBalancedDiff = balancedDiff / avgPoints;
-  const balancedScore = normalizedBalancedDiff * 10 + balancedSimilarity;
+  console.log(`[Ranked Matchmaking] Random teams: Team1=${team1TotalPoints}pts, Team2=${team2TotalPoints}pts (no balancing)`);
   
-  bestTeam1 = balanced.team1;
-  bestTeam2 = balanced.team2;
-  bestScore = balancedScore;
-  
-  console.log(`[Ranked Matchmaking] Balanced teams: diff=${balancedDiff} pts, similarity=${balancedSimilarity.toFixed(2)}, score=${balancedScore.toFixed(2)}`);
-  
-  // Essayer des variations aléatoires qui maintiennent un bon équilibre
-  for (let i = 0; i < ATTEMPTS; i++) {
-    // Mélanger les joueurs
-    const shuffled = fisherYatesShuffle(players);
-    
-    // Générer des équipes équilibrées à partir du mélange
-    const variant = generateBalancedTeams(shuffled, teamSize);
-    
-    const team1Ids = variant.team1.map(p => p.userId?.toString() || p.oduserId);
-    const team2Ids = variant.team2.map(p => p.userId?.toString() || p.oduserId);
-    
-    const pointsDiff = calculateTeamPointsDifference(variant.team1, variant.team2);
-    const similarityScore = calculateTeamSimilarityScore(gameMode, mode, team1Ids, team2Ids);
-    
-    // Score combiné
-    const normalizedDiff = pointsDiff / avgPoints;
-    const combinedScore = normalizedDiff * 10 + similarityScore + (Math.random() * 0.3); // Petit aléatoire
-    
-    if (combinedScore < bestScore) {
-      bestScore = combinedScore;
-      bestTeam1 = variant.team1;
-      bestTeam2 = variant.team2;
-    }
-  }
-  
-  const finalDiff = calculateTeamPointsDifference(bestTeam1, bestTeam2);
-  const team1TotalPoints = bestTeam1.reduce((sum, p) => sum + (p.points || 0), 0);
-  const team2TotalPoints = bestTeam2.reduce((sum, p) => sum + (p.points || 0), 0);
-  
-  console.log(`[Ranked Matchmaking] Final balanced teams: Team1=${team1TotalPoints}pts, Team2=${team2TotalPoints}pts, diff=${finalDiff}pts, score=${bestScore.toFixed(2)}`);
-  
-  return { team1: bestTeam1, team2: bestTeam2 };
+  return { team1, team2 };
 };
 
 /**
