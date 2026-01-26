@@ -683,6 +683,11 @@ const MatchSheet = () => {
           } else {
             console.log('[MatchSheet] Aucune map reçue pour ce match classé');
           }
+          
+          // Vérifier si c'est un match de test spécial (Duel/Team Deathmatch) - pas de sélection de roster ni d'animation
+          if (data.match.isSpecialTestMatch) {
+            console.log('[MatchSheet] Special test match detected - hiding roster selection and shuffle animation');
+          }
         } else {
           // Debug pour les matchs ladder
           if (data.match.randomMaps) {
@@ -1847,141 +1852,144 @@ const MatchSheet = () => {
           </div>
         </div>
 
-        {/* Teams Display */}
-        <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
-          <div className="flex items-center justify-center gap-3 sm:gap-8">
-            {isRankedMatch ? (
-              <>
-                {/* Équipe 1 */}
-                <div className={`flex-1 text-center ${myTeam === 1 ? 'relative' : ''}`}>
-                  {myTeam === 1 && (
-                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
-                      {t.yourTeam}
-                    </span>
-                  )}
-                  <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center border-2 border-blue-500/50">
-                    <span className="text-white font-black text-lg sm:text-3xl">1</span>
+        {/* Teams Display - Hide for special test matches (Team Deathmatch/Duel) */}
+        {isRankedMatch && !(match.isSpecialTestMatch && (match.gameMode === 'Team Deathmatch' || match.gameMode === 'Duel')) && (
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
+            <div className="flex items-center justify-center gap-3 sm:gap-8">
+              {isRankedMatch ? (
+                <>
+                  {/* Équipe 1 */}
+                  <div className={`flex-1 text-center ${myTeam === 1 ? 'relative' : ''}`}>
+                    {myTeam === 1 && (
+                      <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                        {t.yourTeam}
+                      </span>
+                    )}
+                    <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center border-2 border-blue-500/50">
+                      <span className="text-white font-black text-lg sm:text-3xl">1</span>
+                    </div>
+                    <h3 className={`text-sm sm:text-xl font-bold transition-colors truncate ${myTeam === 1 ? 'text-yellow-400' : 'text-blue-400'}`}>
+                      {t.team} 1
+                    </h3>
+                    {match.hostTeam === 1 && (
+                      <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
+                        <Crown className="w-3 h-3" /> ({t.host})
+                      </span>
+                    )}
                   </div>
-                  <h3 className={`text-sm sm:text-xl font-bold transition-colors truncate ${myTeam === 1 ? 'text-yellow-400' : 'text-blue-400'}`}>
-                    {t.team} 1
-                  </h3>
-                  {match.hostTeam === 1 && (
-                    <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
-                      <Crown className="w-3 h-3" /> ({t.host})
-                    </span>
-                  )}
-                </div>
 
-                {/* VS */}
-                <div className="flex flex-col items-center flex-shrink-0">
-                  <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
-                    <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
+                  {/* VS */}
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
+                      <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Équipe 2 */}
-                <div className={`flex-1 text-center ${myTeam === 2 ? 'relative' : ''}`}>
-                  {myTeam === 2 && (
-                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
-                      {t.yourTeam}
-                    </span>
-                  )}
-                  <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center border-2 border-purple-500/50">
-                    <span className="text-white font-black text-lg sm:text-3xl">2</span>
+                  {/* Équipe 2 */}
+                  <div className={`flex-1 text-center ${myTeam === 2 ? 'relative' : ''}`}>
+                    {myTeam === 2 && (
+                      <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                        {t.yourTeam}
+                      </span>
+                    )}
+                    <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center border-2 border-purple-500/50">
+                      <span className="text-white font-black text-lg sm:text-3xl">2</span>
+                    </div>
+                    <h3 className={`text-sm sm:text-xl font-bold transition-colors truncate ${myTeam === 2 ? 'text-yellow-400' : 'text-purple-400'}`}>
+                      {t.team} 2
+                    </h3>
+                    {match.hostTeam === 2 && (
+                      <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
+                        <Crown className="w-3 h-3" /> ({t.host})
+                      </span>
+                    )}
                   </div>
-                  <h3 className={`text-sm sm:text-xl font-bold transition-colors truncate ${myTeam === 2 ? 'text-yellow-400' : 'text-purple-400'}`}>
-                    {t.team} 2
-                  </h3>
-                  {match.hostTeam === 2 && (
-                    <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
-                      <Crown className="w-3 h-3" /> ({t.host})
-                    </span>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Challenger - Ladder */}
-                <div className={`flex-1 text-center ${isMyTeamChallenger ? 'relative' : ''}`}>
-                  {isMyTeamChallenger && (
-                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
-                      {t.yourTeam}
-                    </span>
-                  )}
-                  <Link to={`/squad/${match.challenger?._id}`} className="group">
-                    {match.challenger?.logo ? (
-                      <img 
-                        src={match.challenger.logo} 
-                        alt={match.challenger.name}
-                        className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
-                      />
+                </>
+              ) : (
+                // ... ladder mode code (keeping existing logic)
+                <>
+                  {/* Challenger - Ladder */}
+                  <div className={`flex-1 text-center ${isMyTeamChallenger ? 'relative' : ''}`}>
+                    {isMyTeamChallenger && (
+                      <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                        {t.yourTeam}
+                      </span>
+                    )}
+                    <Link to={`/squad/${match.challenger?._id}`} className="group">
+                      {match.challenger?.logo ? (
+                        <img 
+                          src={match.challenger.logo} 
+                          alt={match.challenger.name}
+                          className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
+                          <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+                        </div>
+                      )}
+                      <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamChallenger ? 'text-yellow-400' : 'text-white'}`}>
+                        {match.challenger?.name}
+                      </h3>
+                    </Link>
+                    {match.hostTeam?._id === match.challenger?._id && (
+                      <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
+                        <Crown className="w-3 h-3" /> ({t.host})
+                      </span>
+                    )}
+                  </div>
+
+                  {/* VS */}
+                  <div className="flex flex-col items-center flex-shrink-0">
+                    <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
+                      <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
+                    </div>
+                  </div>
+
+                  {/* Opponent - Ladder */}
+                  <div className={`flex-1 text-center ${isMyTeamOpponent ? 'relative' : ''}`}>
+                    {isMyTeamOpponent && (
+                      <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
+                        {t.yourTeam}
+                      </span>
+                    )}
+                    {match.opponent ? (
+                      <>
+                        <Link to={`/squad/${match.opponent?._id}`} className="group">
+                          {match.opponent?.logo ? (
+                            <img 
+                              src={match.opponent.logo} 
+                              alt={match.opponent.name}
+                              className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
+                              <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+                            </div>
+                          )}
+                          <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamOpponent ? 'text-yellow-400' : 'text-white'}`}>
+                            {match.opponent?.name}
+                          </h3>
+                        </Link>
+                        {match.hostTeam?._id === match.opponent?._id && (
+                          <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
+                            <Crown className="w-3 h-3" /> ({t.host})
+                          </span>
+                        )}
+                      </>
                     ) : (
-                      <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
-                        <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
+                      <div className="opacity-50">
+                        <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-dark-800 flex items-center justify-center border-2 border-dashed border-white/20">
+                          <span className="text-xl sm:text-3xl">?</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-500">...</h3>
                       </div>
                     )}
-                    <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamChallenger ? 'text-yellow-400' : 'text-white'}`}>
-                      {match.challenger?.name}
-                    </h3>
-                  </Link>
-                  {match.hostTeam?._id === match.challenger?._id && (
-                    <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
-                      <Crown className="w-3 h-3" /> ({t.host})
-                    </span>
-                  )}
-                </div>
-
-                {/* VS */}
-                <div className="flex flex-col items-center flex-shrink-0">
-                  <div className={`w-10 h-10 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg shadow-${accentColor}-500/30`}>
-                    <span className="text-white font-black text-sm sm:text-xl">{t.vs}</span>
                   </div>
-                </div>
-
-                {/* Opponent - Ladder */}
-                <div className={`flex-1 text-center ${isMyTeamOpponent ? 'relative' : ''}`}>
-                  {isMyTeamOpponent && (
-                    <span className="absolute -top-1 sm:-top-2 left-1/2 -translate-x-1/2 px-1.5 sm:px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-[10px] sm:text-xs rounded-full whitespace-nowrap">
-                      {t.yourTeam}
-                    </span>
-                  )}
-                  {match.opponent ? (
-                    <>
-                      <Link to={`/squad/${match.opponent?._id}`} className="group">
-                        {match.opponent?.logo ? (
-                          <img 
-                            src={match.opponent.logo} 
-                            alt={match.opponent.name}
-                            className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 border-2 border-white/20 group-hover:border-white/40 transition-colors object-cover"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border-2 border-white/20 group-hover:border-white/40 transition-colors">
-                            <Shield className="w-6 h-6 sm:w-10 sm:h-10 text-gray-500" />
-                          </div>
-                        )}
-                        <h3 className={`text-sm sm:text-xl font-bold group-hover:text-${accentColor}-400 transition-colors truncate ${isMyTeamOpponent ? 'text-yellow-400' : 'text-white'}`}>
-                          {match.opponent?.name}
-                        </h3>
-                      </Link>
-                      {match.hostTeam?._id === match.opponent?._id && (
-                        <span className="text-green-400 text-xs flex items-center justify-center gap-1 mt-1">
-                          <Crown className="w-3 h-3" /> ({t.host})
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <div className="opacity-50">
-                      <div className="w-12 h-12 sm:w-20 sm:h-20 rounded-lg sm:rounded-xl mx-auto mb-2 sm:mb-3 bg-dark-800 flex items-center justify-center border-2 border-dashed border-white/20">
-                        <span className="text-xl sm:text-3xl">?</span>
-                      </div>
-                      <h3 className="text-xl font-bold text-gray-500">...</h3>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Active Boosters Section - Only for ranked matches when user has active boosters */}
         {isRankedMatch && activeBoosters.length > 0 && (          <div className="bg-gradient-to-r from-purple-500/20 via-indigo-500/20 to-purple-500/20 border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6">
@@ -2003,8 +2011,8 @@ const MatchSheet = () => {
           </div>
         )}
 
-        {/* Voice Channel Section - Only for ranked matches that are not completed */}
-        {isRankedMatch && !['completed', 'cancelled'].includes(match.status) && (
+        {/* Voice Channel Section - Only for ranked matches that are not completed AND not special test matches (Team Deathmatch/Duel) */}
+        {isRankedMatch && !['completed', 'cancelled'].includes(match.status) && !(match.isSpecialTestMatch && (match.gameMode === 'Team Deathmatch' || match.gameMode === 'Duel')) && (
           <div className="bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl sm:rounded-2xl p-4 sm:p-5 mb-4 sm:mb-6">
             <div className="flex items-start gap-3 sm:gap-4">
               <div className="p-2 sm:p-3 bg-purple-500/20 rounded-xl flex-shrink-0">
@@ -2017,7 +2025,7 @@ const MatchSheet = () => {
                 {(match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) ? (
                   <>
                     <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-white font-bold text-sm sm:text-base">{t.voiceChannelTitle}</h3>
+                      <h3 className="text-white font-bold text-sm sm:text-base">🎙️ {t.voiceChannelTitle}</h3>
                       <span className="px-2 py-0.5 bg-red-500/30 border border-red-500/50 text-red-400 text-[10px] font-bold rounded animate-pulse">
                         {t.voiceMandatory}
                       </span>
@@ -2082,7 +2090,7 @@ const MatchSheet = () => {
                 ) : (
                   /* Si pas de salons vocaux, afficher le message par défaut */
                   <>
-                    <h3 className="text-white font-bold text-sm sm:text-base mb-1">{t.voiceChannelRequired}</h3>
+                    <h3 className="text-white font-bold text-sm sm:text-base mb-1">🎙️ {t.voiceChannelRequired}</h3>
                     <p className="text-gray-300 text-xs sm:text-sm">{t.voiceChannelMessage}</p>
                   </>
                 )}
@@ -2178,7 +2186,11 @@ const MatchSheet = () => {
                 
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">
                   <span className="text-gray-500 text-sm">{t.format}</span>
-                  <span className="text-white font-semibold text-sm">{match.teamSize}v{match.teamSize}</span>
+                  <span className="text-white font-semibold text-sm">
+                    {isRankedMatch && match.gameMode === 'Team Deathmatch' 
+                      ? (language === 'fr' ? 'Mélée' : 'Melee')
+                      : `${match.teamSize}v${match.teamSize}`}
+                  </span>
                 </div>
                 
                 {(match.acceptedAt || match.scheduledAt || match.startedAt || match.createdAt) && (
@@ -2851,223 +2863,181 @@ const MatchSheet = () => {
               )}
             </div>
 
-            {/* Rosters */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {isRankedMatch ? (
-                <>
-                  {/* Équipe 1 - Mode classé */}
-                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-blue-500/20 p-3 sm:p-4`}>
-                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-blue-400" />
-                      {t.team} 1
-                      {match.hostTeam === 1 && (
-                        <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
-                      )}
-                    </h3>
-                    <div className="space-y-2">
-                      {match.players?.filter(p => p.team === 1).map((p, idx) => {
-                        const player = p.user || { username: p.username, isFake: p.isFake };
-                        const avatar = player.avatarUrl || (player.discordAvatar 
-                          ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` 
-                          : 'https://cdn.discordapp.com/embed/avatars/0.png');
-                        // Le référent doit être un vrai joueur et correspondre à l'ID du référent de l'équipe
-                        const isRef = !p.isFake && player._id && match.team1Referent?._id && 
-                                     (match.team1Referent._id.toString() === player._id.toString() || 
-                                      match.team1Referent.toString() === player._id.toString());
-                        // Obtenir le rang du joueur
-                        const playerRank = getRankFromPoints(p.points || 0, language);
-                        return (
-                          <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
-                            <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                            <div className="flex-1 min-w-0">
-                              {!p.isFake && player._id ? (
-                                <Link to={`/player/${player._id}`} className="hover:text-cyan-400 transition-colors">
-                                  <p className="text-white text-sm font-medium truncate hover:underline">{player.username || p.username}</p>
-                                </Link>
-                              ) : (
-                                <p className="text-white text-sm font-medium truncate">{player.username || p.username}</p>
-                              )}
-                              {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {/* Badge de rang */}
-                              <div 
-                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
-                                title={`${playerRank.name} - ${p.points || 0} pts`}
-                              >
-                                <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
-                                <span className="text-white text-[10px] font-bold">{playerRank.name}</span>
-                              </div>
-                              {player.platform && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                                  {player.platform}
-                                </span>
-                              )}
-                              {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Bouton pour rejoindre le salon vocal - Équipe 1 */}
-                    {match.team1VoiceChannel?.channelId && !['completed', 'cancelled'].includes(match.status) && (
-                      <a
-                        href={`https://discord.com/channels/1448744757261070467/${match.team1VoiceChannel.channelId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border transition-all hover:scale-[1.02] ${
-                          myTeam === 1 
-                            ? 'bg-blue-500/30 border-blue-400 text-blue-300 hover:bg-blue-500/40' 
-                            : 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
-                        }`}
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                        <span className="font-semibold text-sm">{match.team1VoiceChannel.channelName}</span>
-                        {myTeam === 1 && (
-                          <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] font-bold rounded">{t.voiceMandatory}</span>
+            {/* Rosters - Masquer pour Team Deathmatch (mélée générale) */}
+            {isRankedMatch && !(match.isSpecialTestMatch && match.gameMode === 'Team Deathmatch') && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {isRankedMatch ? (
+                  <>
+                    {/* Équipe 1 - Mode classé */}
+                    <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-blue-500/20 p-3 sm:p-4`}>
+                      <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-blue-400" />
+                        {t.team} 1
+                        {match.hostTeam === 1 && (
+                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
                         )}
-                      </a>
-                    )}
-                  </div>
-
-                  {/* Équipe 2 - Mode classé */}
-                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-3 sm:p-4`}>
-                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-purple-400" />
-                      {t.team} 2
-                      {match.hostTeam === 2 && (
-                        <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
-                      )}
-                    </h3>
-                    <div className="space-y-2">
-                      {match.players?.filter(p => p.team === 2).map((p, idx) => {
-                        const player = p.user || { username: p.username, isFake: p.isFake };
-                        const avatar = player.avatarUrl || (player.discordAvatar 
-                          ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` 
-                          : 'https://cdn.discordapp.com/embed/avatars/0.png');
-                        // Le référent doit être un vrai joueur et correspondre à l'ID du référent de l'équipe
-                        const isRef = !p.isFake && player._id && match.team2Referent?._id && 
-                                     (match.team2Referent._id.toString() === player._id.toString() || 
-                                      match.team2Referent.toString() === player._id.toString());
-                        // Obtenir le rang du joueur
-                        const playerRank = getRankFromPoints(p.points || 0, language);
-                        return (
-                          <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
-                            <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
-                            <div className="flex-1 min-w-0">
-                              {!p.isFake && player._id ? (
-                                <Link to={`/player/${player._id}`} className="hover:text-cyan-400 transition-colors">
-                                  <p className="text-white text-sm font-medium truncate hover:underline">{player.username || p.username}</p>
-                                </Link>
-                              ) : (
-                                <p className="text-white text-sm font-medium truncate">{player.username || p.username}</p>
-                              )}
-                              {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {/* Badge de rang */}
-                              <div 
-                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
-                                title={`${playerRank.name} - ${p.points || 0} pts`}
-                              >
-                                <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
-                                <span className="text-white text-[10px] font-bold">{playerRank.name}</span>
-                              </div>
-                              {player.platform && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                                  {player.platform}
-                                </span>
-                              )}
-                              {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    
-                    {/* Bouton pour rejoindre le salon vocal - Équipe 2 */}
-                    {match.team2VoiceChannel?.channelId && !['completed', 'cancelled'].includes(match.status) && (
-                      <a
-                        href={`https://discord.com/channels/1448744757261070467/${match.team2VoiceChannel.channelId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border transition-all hover:scale-[1.02] ${
-                          myTeam === 2 
-                            ? 'bg-purple-500/30 border-purple-400 text-purple-300 hover:bg-purple-500/40' 
-                            : 'bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20'
-                        }`}
-                      >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                        <span className="font-semibold text-sm">{match.team2VoiceChannel.channelName}</span>
-                        {myTeam === 2 && (
-                          <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] font-bold rounded">{t.voiceMandatory}</span>
-                        )}
-                      </a>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* Challenger Roster - Ladder */}
-                  <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-blue-500/20 p-3 sm:p-4`}>
-                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                      <Users className="w-4 h-4 text-blue-400" />
-                      {match.challenger?.name}
-                      {match.hostTeam?._id === match.challenger?._id && (
-                        <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
-                      )}
-                    </h3>
-                    {match.challengerRoster?.length > 0 ? (
+                      </h3>
                       <div className="space-y-2">
-                        {match.challengerRoster.map((p, idx) => {
-                          const player = p.user;
-                          if (!player) return null;
-                          const avatar = player.avatarUrl || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png');
+                        {match.players?.filter(p => p.team === 1).map((p, idx) => {
+                          const player = p.user || { username: p.username, isFake: p.isFake };
+                          const avatar = player.avatarUrl || (player.discordAvatar 
+                            ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` 
+                            : 'https://cdn.discordapp.com/embed/avatars/0.png');
+                          // Le référent doit être un vrai joueur et correspondre à l'ID du référent de l'équipe
+                          const isRef = !p.isFake && player._id && match.team1Referent?._id && 
+                                       (match.team1Referent._id.toString() === player._id.toString() || 
+                                        match.team1Referent.toString() === player._id.toString());
+                          // Obtenir le rang du joueur
+                          const playerRank = getRankFromPoints(p.points || 0, language);
                           return (
-                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg bg-dark-800/50`}>
+                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                               <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
                               <div className="flex-1 min-w-0">
-                                {player._id ? (
+                                {!p.isFake && player._id ? (
                                   <Link to={`/player/${player._id}`} className="hover:text-cyan-400 transition-colors">
-                                    <p className="text-white text-sm font-medium truncate hover:underline">{player.username}</p>
+                                    <p className="text-white text-sm font-medium truncate hover:underline">{player.username || p.username}</p>
                                   </Link>
                                 ) : (
-                                  <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                                  <p className="text-white text-sm font-medium truncate">{player.username || p.username}</p>
                                 )}
                                 {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
                               </div>
-                              {player.platform && (
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
-                                  {player.platform}
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1">
+                                {/* Badge de rang */}
+                                <div 
+                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
+                                  title={`${playerRank.name} - ${p.points || 0} pts`}
+                                >
+                                  <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
+                                  <span className="text-white text-[10px] font-bold">{playerRank.name}</span>
+                                </div>
+                                {player.platform && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                                    {player.platform}
+                                  </span>
+                                )}
+                                {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
-                    ) : (
-                      <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
-                    )}
-                  </div>
+                      
+                      {/* Bouton pour rejoindre le salon vocal - Équipe 1 */}
+                      {match.team1VoiceChannel?.channelId && !['completed', 'cancelled'].includes(match.status) && (
+                        <a
+                          href={`https://discord.com/channels/1448744757261070467/${match.team1VoiceChannel.channelId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border transition-all hover:scale-[1.02] ${
+                            myTeam === 1 
+                              ? 'bg-blue-500/30 border-blue-400 text-blue-300 hover:bg-blue-500/40' 
+                              : 'bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20'
+                          }`}
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                          <span className="font-semibold text-sm">{match.team1VoiceChannel.channelName}</span>
+                          {myTeam === 1 && (
+                            <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] font-bold rounded">{t.voiceMandatory}</span>
+                          )}
+                        </a>
+                      )}
+                    </div>
 
-                  {/* Opponent Roster - Ladder */}
-                  {match.opponent && (
+                    {/* Équipe 2 - Mode classé */}
                     <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-3 sm:p-4`}>
                       <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
                         <Users className="w-4 h-4 text-purple-400" />
-                        {match.opponent?.name}
-                        {match.hostTeam?._id === match.opponent?._id && (
+                        {t.team} 2
+                        {match.hostTeam === 2 && (
                           <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
                         )}
                       </h3>
-                      {match.opponentRoster?.length > 0 ? (
+                      <div className="space-y-2">
+                        {match.players?.filter(p => p.team === 2).map((p, idx) => {
+                          const player = p.user || { username: p.username, isFake: p.isFake };
+                          const avatar = player.avatarUrl || (player.discordAvatar 
+                            ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` 
+                            : 'https://cdn.discordapp.com/embed/avatars/0.png');
+                          // Le référent doit être un vrai joueur et correspondre à l'ID du référent de l'équipe
+                          const isRef = !p.isFake && player._id && match.team2Referent?._id && 
+                                       (match.team2Referent._id.toString() === player._id.toString() || 
+                                        match.team2Referent.toString() === player._id.toString());
+                          // Obtenir le rang du joueur
+                          const playerRank = getRankFromPoints(p.points || 0, language);
+                          return (
+                            <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                              <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              <div className="flex-1 min-w-0">
+                                {!p.isFake && player._id ? (
+                                  <Link to={`/player/${player._id}`} className="hover:text-cyan-400 transition-colors">
+                                    <p className="text-white text-sm font-medium truncate hover:underline">{player.username || p.username}</p>
+                                  </Link>
+                                ) : (
+                                  <p className="text-white text-sm font-medium truncate">{player.username || p.username}</p>
+                                )}
+                                {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                {/* Badge de rang */}
+                                <div 
+                                  className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
+                                  title={`${playerRank.name} - ${p.points || 0} pts`}
+                                >
+                                  <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
+                                  <span className="text-white text-[10px] font-bold">{playerRank.name}</span>
+                                </div>
+                                {player.platform && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                                    {player.platform}
+                                  </span>
+                                )}
+                                {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Bouton pour rejoindre le salon vocal - Équipe 2 */}
+                      {match.team2VoiceChannel?.channelId && !['completed', 'cancelled'].includes(match.status) && (
+                        <a
+                          href={`https://discord.com/channels/1448744757261070467/${match.team2VoiceChannel.channelId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border transition-all hover:scale-[1.02] ${
+                            myTeam === 2 
+                              ? 'bg-purple-500/30 border-purple-400 text-purple-300 hover:bg-purple-500/40' 
+                              : 'bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20'
+                          }`}
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                          </svg>
+                          <span className="font-semibold text-sm">{match.team2VoiceChannel.channelName}</span>
+                          {myTeam === 2 && (
+                            <span className="px-1.5 py-0.5 bg-red-500/30 text-red-400 text-[10px] font-bold rounded">{t.voiceMandatory}</span>
+                          )}
+                        </a>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Challenger Roster - Ladder */}
+                    <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-blue-500/20 p-3 sm:p-4`}>
+                      <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-blue-400" />
+                        {match.challenger?.name}
+                        {match.hostTeam?._id === match.challenger?._id && (
+                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
+                        )}
+                      </h3>
+                      {match.challengerRoster?.length > 0 ? (
                         <div className="space-y-2">
-                          {match.opponentRoster.map((p, idx) => {
+                          {match.challengerRoster.map((p, idx) => {
                             const player = p.user;
                             if (!player) return null;
                             const avatar = player.avatarUrl || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png');
@@ -3097,10 +3067,54 @@ const MatchSheet = () => {
                         <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
                       )}
                     </div>
-                  )}
-                </>
-              )}
-            </div>
+
+                    {/* Opponent Roster - Ladder */}
+                    {match.opponent && (
+                      <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-3 sm:p-4`}>
+                        <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                          <Users className="w-4 h-4 text-purple-400" />
+                          {match.opponent?.name}
+                          {match.hostTeam?._id === match.opponent?._id && (
+                            <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
+                          )}
+                        </h3>
+                        {match.opponentRoster?.length > 0 ? (
+                          <div className="space-y-2">
+                            {match.opponentRoster.map((p, idx) => {
+                              const player = p.user;
+                              if (!player) return null;
+                              const avatar = player.avatarUrl || (player.discordAvatar ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png');
+                              return (
+                                <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg bg-dark-800/50`}>
+                                  <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                  <div className="flex-1 min-w-0">
+                                    {player._id ? (
+                                      <Link to={`/player/${player._id}`} className="hover:text-cyan-400 transition-colors">
+                                        <p className="text-white text-sm font-medium truncate hover:underline">{player.username}</p>
+                                      </Link>
+                                    ) : (
+                                      <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                                    )}
+                                    {player.activisionId && <p className="text-gray-500 text-xs truncate">{player.activisionId}</p>}
+                                  </div>
+                                  {player.platform && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                                      {player.platform}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 text-xs text-center py-4">{t.noRoster}</p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -3435,6 +3449,84 @@ const MatchSheet = () => {
           matchId={matchId}
           canDispute={canManageMatch()}
         />
+      )}
+      
+      {/* All Players Grid - Only for Team Deathmatch special test matches */}
+      {isRankedMatch && match.isSpecialTestMatch && match.gameMode === 'Team Deathmatch' && (
+        <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-red-500/20 p-4 sm:p-5 mb-4 sm:mb-6">
+          <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+            <Users className="w-5 h-5 text-red-400" />
+            {language === 'fr' ? 'Joueurs de la Mélée' : 'Melee Players'}
+            {match.hostTeam && (
+              <span className="px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded font-medium">
+                {language === 'fr' ? 'Hôte: ' : 'Host: '} 
+                {match.players?.find(p => p.team === match.hostTeam)?.username || 'N/A'}
+              </span>
+            )}
+          </h2>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {match.players?.map((p, idx) => {
+              const player = p.user || { username: p.username, isFake: p.isFake };
+              const avatar = player.avatarUrl || (player.discordAvatar 
+                ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png` 
+                : 'https://cdn.discordapp.com/embed/avatars/0.png');
+              
+              // Host indicator
+              const isHost = p.team === match.hostTeam;
+              // Get player rank
+              const playerRank = getRankFromPoints(p.points || 0, language);
+              
+              return (
+                <div key={idx} className={`flex flex-col items-center p-3 rounded-lg border transition-all ${
+                  isHost 
+                    ? 'bg-green-500/10 border-green-500/30 ring-2 ring-green-500/20' 
+                    : 'bg-dark-800/50 border-white/10 hover:bg-dark-700/50'
+                }`}>
+                  <div className="relative mb-2">
+                    <img 
+                      src={avatar} 
+                      alt="" 
+                      className="w-12 h-12 rounded-full object-cover border-2 border-white/20"
+                    />
+                    {isHost && (
+                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border border-white">
+                        <Crown className="w-3 h-3 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="text-center min-w-0 w-full">
+                    {!p.isFake && player._id ? (
+                      <Link to={`/player/${player._id}`} className="hover:text-cyan-400 transition-colors block">
+                        <p className="text-white text-xs font-medium truncate hover:underline">{player.username || p.username}</p>
+                      </Link>
+                    ) : (
+                      <p className="text-white text-xs font-medium truncate">{player.username || p.username}</p>
+                    )}
+                    
+                    <div className="flex items-center justify-center gap-1 mt-1">
+                      {/* Rank badge */}
+                      <div 
+                        className={`flex items-center gap-0.5 px-1 py-0.5 rounded bg-gradient-to-r ${playerRank.gradient} border border-white/20`}
+                        title={`${playerRank.name} - ${p.points || 0} pts`}
+                      >
+                        <img src={playerRank.image} alt={playerRank.name} className="w-3 h-3 object-contain" />
+                        <span className="text-white text-[8px] font-bold">{playerRank.name}</span>
+                      </div>
+                      
+                      {player.platform && (
+                        <span className={`text-[8px] px-1 py-0.5 rounded ${player.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                          {player.platform}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

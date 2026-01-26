@@ -1480,17 +1480,38 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       });
     }
     
-    console.log(`[Ranked Matchmaking] Starting staff test match for ${user.username} (${teamSize}v${teamSize})`);
+    // Déterminer le format en fonction du mode de jeu
+    let actualTeamSize;
+    let totalPlayers;
+    
+    if (gameMode === 'Team Deathmatch') {
+      // Mêlée générale: 8 joueurs (moi + 7 bots)
+      actualTeamSize = 4; // 4v4
+      totalPlayers = 8;
+      console.log(`[Ranked Matchmaking] Team Deathmatch test: 8 players (4v4 format)`);
+    } else if (gameMode === 'Duel') {
+      // Duel: 2 joueurs (moi + 1 bot)
+      actualTeamSize = 1; // 1v1
+      totalPlayers = 2;
+      console.log(`[Ranked Matchmaking] Duel test: 2 players (1v1 format)`);
+    } else {
+      // Autres modes: 4v4 ou 5v5 selon teamSize
+      actualTeamSize = teamSize;
+      totalPlayers = teamSize * 2;
+      console.log(`[Ranked Matchmaking] ${gameMode} test: ${totalPlayers} players (${teamSize}v${teamSize} format)`);
+    }
+    
+    console.log(`[Ranked Matchmaking] Starting staff test match for ${user.username} (${actualTeamSize}v${actualTeamSize}, ${totalPlayers} total players)`);
     
     // Créer les faux joueurs pour remplir le match
     const fakeNames = [
       'Bot_Alpha', 'Bot_Bravo', 'Bot_Charlie', 'Bot_Delta', 
       'Bot_Echo', 'Bot_Foxtrot', 'Bot_Golf', 'Bot_Hotel', 
-      'Bot_India'
+      'Bot_India', 'Bot_Juliet', 'Bot_Kilo', 'Bot_Lima',
+      'Bot_Mike', 'Bot_November', 'Bot_Oscar', 'Bot_Papa'
     ];
     const fakeRanks = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'];
     
-    const totalPlayers = teamSize * 2;
     const fakePlayers = [];
     
     // Créer totalPlayers - 1 bots (le staff prend une place)
@@ -1524,8 +1545,8 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const allPlayers = fisherYatesShuffle([staffPlayer, ...fakePlayers]);
     
     // Diviser en 2 équipes
-    const team1Players = allPlayers.slice(0, teamSize);
-    const team2Players = allPlayers.slice(teamSize);
+    const team1Players = allPlayers.slice(0, actualTeamSize);
+    const team2Players = allPlayers.slice(actualTeamSize);
     
     // Trouver le référent (de préférence le staff non banni référent, sinon le premier de chaque équipe)
     const team1HasStaff = team1Players.some(p => !p.isFake);
@@ -1542,6 +1563,9 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     // Tirer au sort l'équipe hôte (mettre le staff hôte pour faciliter les tests)
     const staffTeam = team1HasStaff ? 1 : 2;
     const hostTeam = staffTeam; // Le staff est toujours hôte pour les tests
+    
+    // Pour Duel et Team Deathmatch, pas de sélection de roster ni d'animation de mélange
+    const isSpecialMode = gameMode === 'Team Deathmatch' || gameMode === 'Duel';
     
     // Récupérer le format BO1 ou BO3 depuis les paramètres
     const settings = await AppSettings.getSettings();
@@ -1736,7 +1760,7 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     const match = await RankedMatch.create({
       gameMode,
       mode,
-      teamSize,
+      teamSize: actualTeamSize, // Utiliser la taille d'équipe réelle
       players: matchPlayers,
       team1Referent: team1ReferentId,
       team2Referent: team2ReferentId,
@@ -1746,6 +1770,7 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       mapVoteOptions: mapsForVoteTest,
       matchmakingStartedAt: new Date(),
       isTestMatch: true, // Flag pour identifier un match de test
+      isSpecialTestMatch: isSpecialMode, // Flag pour Duel/Team Deathmatch (pas de roster selection, pas d'animation)
       rosterSelection: {
         isActive: false, // PAS DE SÉLECTION DE ROSTER - mélange automatique
         currentTurn: 1,
@@ -1762,13 +1787,16 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     if (team1ReferentId) await match.populate('team1Referent', 'username');
     if (team2ReferentId) await match.populate('team2Referent', 'username');
     
-    console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${teamSize}v${teamSize}) - Mélange automatique activé`);
+    console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${actualTeamSize}v${actualTeamSize}) - ${isSpecialMode ? 'Mode spécial (pas de mélange)' : 'Mélange automatique activé'}`);
     
     // Ajouter un message système
+    const formatLabel = gameMode === 'Team Deathmatch' ? 'Mêlée générale (8 joueurs)' : 
+                       gameMode === 'Duel' ? 'Duel (2 joueurs)' : 
+                       `${actualTeamSize}v${actualTeamSize}`;
     match.chat.push({
       isSystem: true,
       messageType: 'test_match_created',
-      message: `⚡ Match de test ${teamSize}v${teamSize} créé ! Ce match n'affecte pas les statistiques.`
+      message: `⚡ Match de test ${formatLabel} créé ! Ce match n'affecte pas les statistiques.${isSpecialMode ? ' Pas de sélection de roster ni d\'animation de mélange.' : ''}`
     });
     await match.save();
     
@@ -1806,24 +1834,38 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         matchId: testMatchIdStr,
         gameMode,
         mode,
-        format: `${teamSize}v${teamSize}`,
-        teamSize,
+        format: `${actualTeamSize}v${actualTeamSize}`,
+        teamSize: actualTeamSize,
+        totalPlayers: totalPlayers, // Nombre total de joueurs
         yourTeam: staffTeamNum, // Équipe du staff (1 ou 2 selon le mélange)
         isReferent: staffInMatch?.isReferent || false,
         isHost: staffTeamNum === hostTeam && (staffInMatch?.isReferent || false),
         isTestMatch: true,
+        isSpecialTestMatch: isSpecialMode, // Indicateur pour Duel/Team Deathmatch
         hasRosterSelection: false, // PAS de sélection de roster - mélange automatique
         players: playersForAnimation, // Tous les joueurs avec leur équipe assignée
         mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 }))
       });
     }
     
-    // Démarrer le timer de vote de map DIRECTEMENT (pas de sélection de roster)
-    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    // Pour les modes spéciaux (Duel/Team Deathmatch), pas de sélection de roster
+    // Pour Team Deathmatch, aller directement au vote de map
+    // Pour Duel, démarrer le timer de vote de map normalement
+    if (gameMode === 'Team Deathmatch') {
+      // Team Deathmatch: aller directement au vote de map sans délai
+      console.log(`[Ranked Matchmaking] Team Deathmatch: starting immediate map vote`);
+      startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    } else if (gameMode === 'Duel') {
+      // Duel: pas de sélection de roster mais délai normal pour le vote
+      console.log(`[Ranked Matchmaking] Duel: skipping roster selection, going to map vote`);
+    } else if (!isSpecialMode) {
+      // Modes normaux: démarrer le timer de vote de map
+      startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
+    }
     
     return {
       success: true,
-      message: `Match de test ${teamSize}v${teamSize} créé avec succès !`,
+      message: `Match de test ${formatLabel} créé avec succès !`,
       matchId: match._id,
       match
     };
