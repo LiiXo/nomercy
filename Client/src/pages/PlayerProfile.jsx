@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame, Link2 } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame, Link2, Award, Calendar } from 'lucide-react';
 import ProfileAnimation from '../components/ProfileAnimation';
 
 import { getAvatarUrl, getDefaultAvatar, getUserAvatar } from '../utils/avatar';
@@ -84,6 +84,8 @@ const PlayerProfile = () => {
       memberSince: 'Membre depuis le',
       statistics: 'Statistiques',
       totalStatistics: 'Statistiques Totales',
+      trophies: 'Trophées',
+      noTrophies: 'Aucun trophée pour le moment',
       points: 'Points',
       xp: 'Expérience',
       wins: 'Victoires',
@@ -123,6 +125,8 @@ const PlayerProfile = () => {
       memberSince: 'Member since',
       statistics: 'Statistics',
       totalStatistics: 'Total Statistics',
+      trophies: 'Trophies',
+      noTrophies: 'No trophies yet',
       points: 'Points',
       xp: 'Experience',
       wins: 'Wins',
@@ -162,6 +166,8 @@ const PlayerProfile = () => {
       memberSince: 'Mitglied seit',
       statistics: 'Statistiken',
       totalStatistics: 'Gesamtstatistiken',
+      trophies: 'Trophäen',
+      noTrophies: 'Noch keine Trophäen',
       points: 'Punkte',
       xp: 'Erfahrung',
       wins: 'Siege',
@@ -201,6 +207,8 @@ const PlayerProfile = () => {
       memberSince: 'Membro dal',
       statistics: 'Statistiche',
       totalStatistics: 'Statistiche Totali',
+      trophies: 'Trofei',
+      noTrophies: 'Nessun trofeo per ora',
       points: 'Punti',
       xp: 'Esperienza',
       wins: 'Vittorie',
@@ -802,6 +810,141 @@ const PlayerProfile = () => {
           </div>
         </div>
 
+          {/* Earned Season Trophies - Displayed above stats */}
+          {playerData?.trophies && playerData.trophies.length > 0 && (
+            <div className="bg-gradient-to-br from-dark-900/90 via-dark-900/80 to-amber-950/20 backdrop-blur-xl rounded-2xl border border-amber-500/30 p-5 sm:p-6 mb-4 sm:mb-5 shadow-lg shadow-amber-500/5">
+              <h2 className="text-lg sm:text-xl font-bold text-white mb-5 flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-br from-amber-500/20 to-yellow-600/10 rounded-xl border border-amber-500/30">
+                  <Award className="w-5 sm:w-6 h-5 sm:h-6 text-amber-400" />
+                </div>
+                <span className="bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-200 bg-clip-text text-transparent">
+                  {language === 'fr' ? 'Trophées de Saison' : language === 'de' ? 'Saison-Trophäen' : language === 'it' ? 'Trofei Stagionali' : 'Season Trophies'}
+                </span>
+                <span className="ml-auto px-3 py-1 bg-amber-500/10 border border-amber-500/30 rounded-full text-amber-400 text-sm font-medium">
+                  {playerData.trophies.length}
+                </span>
+              </h2>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                {playerData.trophies.map((trophyEntry, index) => {
+                  const trophy = trophyEntry.trophy;
+                  if (!trophy || typeof trophy === 'string' || !trophy.name) return null;
+                  
+                  const localizedName = trophy.translations?.[language]?.name || trophy.name;
+                  
+                  // Map trophy name to rank config with enhanced visuals
+                  const getRankConfig = (name) => {
+                    const lowerName = name.toLowerCase();
+                    if (lowerName.includes('champion')) return { 
+                      image: '/8.png', 
+                      hex: '#F1C40F', 
+                      gradient: 'from-yellow-500/30 via-amber-500/20 to-orange-600/30',
+                      border: 'border-yellow-400/50',
+                      glow: 'shadow-yellow-500/30',
+                      shine: true
+                    };
+                    if (lowerName.includes('grand') || lowerName.includes('groß')) return { 
+                      image: '/7.png', 
+                      hex: '#E74C3C', 
+                      gradient: 'from-red-500/30 via-rose-500/20 to-red-600/30',
+                      border: 'border-red-400/50',
+                      glow: 'shadow-red-500/30',
+                      shine: true
+                    };
+                    if (lowerName.includes('master') || lowerName.includes('maître') || lowerName.includes('meister') || lowerName.includes('maestro')) return { 
+                      image: '/6.png', 
+                      hex: '#9B59B6', 
+                      gradient: 'from-purple-500/30 via-violet-500/20 to-purple-600/30',
+                      border: 'border-purple-400/50',
+                      glow: 'shadow-purple-500/30',
+                      shine: false
+                    };
+                    if (lowerName.includes('diamond') || lowerName.includes('diamant') || lowerName.includes('diamante')) return { 
+                      image: '/5.png', 
+                      hex: '#22D3EE', 
+                      gradient: 'from-cyan-500/30 via-blue-500/20 to-cyan-600/30',
+                      border: 'border-cyan-400/50',
+                      glow: 'shadow-cyan-500/30',
+                      shine: false
+                    };
+                    if (lowerName.includes('platin') || lowerName.includes('platino')) return { 
+                      image: '/4.png', 
+                      hex: '#5EEAD4', 
+                      gradient: 'from-teal-500/30 via-emerald-500/20 to-teal-600/30',
+                      border: 'border-teal-400/50',
+                      glow: 'shadow-teal-500/30',
+                      shine: false
+                    };
+                    return { 
+                      image: '/4.png', 
+                      hex: '#5EEAD4', 
+                      gradient: 'from-teal-500/30 via-emerald-500/20 to-teal-600/30',
+                      border: 'border-teal-400/50',
+                      glow: 'shadow-teal-500/30',
+                      shine: false
+                    };
+                  };
+                  
+                  const config = getRankConfig(trophy.name);
+                  
+                  return (
+                    <div 
+                      key={`trophy-${trophyEntry._id || index}`}
+                      className={`group relative bg-gradient-to-br ${config.gradient} rounded-2xl border-2 ${config.border} p-4 hover:scale-105 hover:-translate-y-1 transition-all duration-300 cursor-default shadow-lg ${config.glow} overflow-hidden`}
+                    >
+                      {/* Animated shine effect for top ranks */}
+                      {config.shine && (
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+                          <div className="absolute inset-0 animate-[shine_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12" />
+                        </div>
+                      )}
+                      
+                      {/* Background glow */}
+                      <div 
+                        className="absolute inset-0 opacity-20 group-hover:opacity-40 blur-2xl transition-opacity"
+                        style={{ background: `radial-gradient(circle at center, ${config.hex}, transparent 70%)` }}
+                      />
+                      
+                      <div className="relative flex flex-col items-center">
+                        {/* Rank image with enhanced styling */}
+                        <div className="relative mb-3">
+                          <div 
+                            className="absolute inset-0 blur-xl opacity-50 scale-110"
+                            style={{ background: config.hex }}
+                          />
+                          <img 
+                            src={config.image} 
+                            alt={localizedName}
+                            className="relative w-14 h-14 sm:w-16 sm:h-16 object-contain drop-shadow-2xl group-hover:scale-110 transition-transform"
+                            style={{ filter: `drop-shadow(0 8px 20px ${config.hex}60)` }}
+                          />
+                        </div>
+                        
+                        {/* Trophy name */}
+                        <p 
+                          className="text-xs sm:text-sm font-bold text-center leading-tight mb-2"
+                          style={{ color: config.hex, textShadow: `0 0 20px ${config.hex}40` }}
+                        >
+                          {localizedName}
+                        </p>
+                        
+                        {/* Season badge */}
+                        {trophyEntry.season && (
+                          <span 
+                            className="px-3 py-1 rounded-full text-[11px] font-bold bg-dark-900/80 border backdrop-blur-sm"
+                            style={{ color: config.hex, borderColor: `${config.hex}40` }}
+                          >
+                            Saison {trophyEntry.season}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Total Stats (ladder + ranked combined) */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
             <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">
@@ -849,6 +992,100 @@ const PlayerProfile = () => {
               </div>
             </div>
           )}
+
+          {/* Trophies Section */}
+          {(() => {
+            // Build trophies based on rankings in both modes
+            const trophyRanks = ['platinum', 'diamond', 'master', 'grandmaster', 'champion'];
+            const trophies = [];
+            
+            // Check Hardcore ranking
+            if (rankingHardcore && rankingHardcore.points > 0) {
+              const hcDivision = getDivision(rankingHardcore.points);
+              if (hcDivision && trophyRanks.includes(hcDivision.key)) {
+                trophies.push({
+                  key: `hc-${hcDivision.key}`,
+                  rank: hcDivision,
+                  mode: 'Hardcore',
+                  points: rankingHardcore.points
+                });
+              }
+            }
+            
+            // Check CDL ranking
+            if (rankingCdl && rankingCdl.points > 0) {
+              const cdlDivision = getDivision(rankingCdl.points);
+              if (cdlDivision && trophyRanks.includes(cdlDivision.key)) {
+                trophies.push({
+                  key: `cdl-${cdlDivision.key}`,
+                  rank: cdlDivision,
+                  mode: 'CDL',
+                  points: rankingCdl.points
+                });
+              }
+            }
+            
+            if (trophies.length === 0) return null;
+            
+            return (
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-amber-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
+                <h2 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center space-x-2">
+                  <Trophy className="w-4 sm:w-5 h-4 sm:h-5 text-amber-400" />
+                  <span>{t.trophies}</span>
+                </h2>
+                
+                <div className="flex flex-wrap justify-center gap-4 sm:gap-6">
+                  {trophies.map((trophy) => (
+                    <div 
+                      key={trophy.key}
+                      className="flex flex-col items-center group"
+                    >
+                      <div className="relative">
+                        {/* Glow effect */}
+                        <div 
+                          className="absolute -inset-3 rounded-full opacity-30 blur-xl group-hover:opacity-50 transition-opacity"
+                          style={{ background: trophy.rank.hexColor }}
+                        />
+                        {/* Trophy shine effect for top ranks */}
+                        {trophy.rank.isTop && (
+                          <div 
+                            className="absolute -inset-3 rounded-full opacity-40 blur-xl animate-pulse"
+                            style={{ background: `linear-gradient(135deg, ${trophy.rank.hexColor}, transparent)` }}
+                          />
+                        )}
+                        <img 
+                          src={trophy.rank.image} 
+                          alt={trophy.rank.name}
+                          className="w-16 h-16 sm:w-20 sm:h-20 object-contain transition-transform group-hover:scale-110 relative z-10" 
+                          style={{ filter: `drop-shadow(0 4px 12px ${trophy.rank.hexColor}50)` }}
+                        />
+                      </div>
+                      <div className="mt-2 text-center">
+                        <span 
+                          className="block text-sm sm:text-base font-bold"
+                          style={{ color: trophy.rank.hexColor }}
+                        >
+                          {trophy.rank.name}
+                        </span>
+                        <span className="block text-[10px] sm:text-xs text-gray-400 mt-0.5">
+                          {trophy.mode}
+                        </span>
+                        <span 
+                          className="inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full mt-1"
+                          style={{ 
+                            background: `${trophy.rank.hexColor}20`,
+                            color: trophy.rank.hexColor
+                          }}
+                        >
+                          {trophy.points} pts
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Ranked Match History */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-6`}>

@@ -293,6 +293,9 @@ const RankedMode = () => {
   const [loadingRanking, setLoadingRanking] = useState(true);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  
+  // Calculated stats from match history (for accurate display)
+  const [calculatedStats, setCalculatedStats] = useState({ wins: 0, losses: 0, total: 0 });
   const [leaderboardPage, setLeaderboardPage] = useState(1);
   const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(1);
   const LEADERBOARD_PER_PAGE = 10;
@@ -420,6 +423,14 @@ const RankedMode = () => {
   
   // Matchmaking enabled/disabled
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
+  
+  // Current season from config
+  const [currentSeason, setCurrentSeason] = useState(1);
+  
+  // Season rewards and countdown
+  const [seasonRewardsInfo, setSeasonRewardsInfo] = useState(null);
+  const [nextResetDate, setNextResetDate] = useState(null);
+  const [countdownText, setCountdownText] = useState('');
   
   // Rank animation state
   const [rankAnimationPhase, setRankAnimationPhase] = useState(0);
@@ -566,6 +577,11 @@ const RankedMode = () => {
         setRanks(buildRanksFromThresholds(thresholds, language));
       }
       
+      // Fetch current season
+      if (appSettingsData.success && appSettingsData.rankedSettings?.currentSeason) {
+        setCurrentSeason(appSettingsData.rankedSettings.currentSeason);
+      }
+      
       // Fetch main config for points loss per rank (configured in admin panel)
       const configRes = await fetch(`${API_URL}/config`);
       const configData = await configRes.json();
@@ -623,6 +639,55 @@ const RankedMode = () => {
       console.error('Error fetching ranked rewards:', err);
     }
   };
+
+  // Fetch season rewards info and countdown
+  const fetchSeasonRewardsInfo = async () => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/ranked/rewards-info`);
+      const data = await response.json();
+      if (data.success) {
+        setSeasonRewardsInfo(data.rewards);
+        setNextResetDate(new Date(data.nextResetDate));
+        setCurrentSeason(data.currentSeason);
+      }
+    } catch (err) {
+      console.error('Error fetching season rewards info:', err);
+    }
+  };
+
+  // Update countdown every second
+  useEffect(() => {
+    if (!nextResetDate) return;
+    
+    const updateCountdown = () => {
+      const now = new Date();
+      const diff = nextResetDate.getTime() - now.getTime();
+      
+      if (diff <= 0) {
+        setCountdownText(language === 'fr' ? 'Reset imminent' : 'Reset imminent');
+        return;
+      }
+      
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      if (language === 'fr') {
+        setCountdownText(`${days}j ${hours}h ${minutes}m ${seconds}s`);
+      } else if (language === 'de') {
+        setCountdownText(`${days}T ${hours}Std ${minutes}Min ${seconds}Sek`);
+      } else if (language === 'it') {
+        setCountdownText(`${days}g ${hours}h ${minutes}m ${seconds}s`);
+      } else {
+        setCountdownText(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+      }
+    };
+    
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [nextResetDate, language]);
 
   // Get rank from points (using dynamic ranks)
   const getRankFromPoints = (points) => {
@@ -688,6 +753,27 @@ const RankedMode = () => {
       console.error('Error fetching ranking:', err);
     } finally {
       setLoadingRanking(false);
+    }
+  };
+
+  // Fetch ranked match history and calculate accurate stats
+  const fetchCalculatedStats = async () => {
+    if (!isAuthenticated || !user?.id) return;
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/player-history/${user.id}?limit=500&mode=${selectedMode}`, { credentials: 'include' });
+      const data = await response.json();
+      if (data.success && data.matches) {
+        // Calculate wins/losses from actual match history
+        let wins = 0;
+        let losses = 0;
+        data.matches.forEach(match => {
+          if (match.isWinner) wins++;
+          else losses++;
+        });
+        setCalculatedStats({ wins, losses, total: wins + losses });
+      }
+    } catch (err) {
+      console.error('Error fetching ranked match history for stats:', err);
     }
   };
 
@@ -1126,6 +1212,28 @@ const RankedMode = () => {
       if (data.matchId) {
         joinRankedMatch(data.matchId);
         console.log('[RankedMode] Joined ranked match room:', data.matchId);
+      }
+      
+      // Reset pre-match states for new match (important for consecutive matches)
+      setShowCancellationButton(true);
+      setMapVoteCancellation({
+        currentVotes: 0,
+        requiredVotes: 0,
+        hasVoted: false,
+        isActive: false
+      });
+      setVotingCancellation(false);
+      setShufflePhase(0);
+      setShuffleCountdown(10);
+      
+      // Clear any existing timeouts from previous match
+      if (cancellationTimeoutId) {
+        clearTimeout(cancellationTimeoutId);
+        setCancellationTimeoutId(null);
+      }
+      if (fallbackRedirectTimeoutRef.current) {
+        clearTimeout(fallbackRedirectTimeoutRef.current);
+        fallbackRedirectTimeoutRef.current = null;
       }
       
       // Store map vote options
@@ -1570,10 +1678,12 @@ const RankedMode = () => {
   // Initial load
   useEffect(() => {
     fetchMyRanking();
+    fetchCalculatedStats(); // Fetch accurate stats from match history
     fetchActiveMatchesStats();
     fetchMatchmakingStatus();
     fetchRankThresholds(); // Fetch dynamic rank thresholds from config
     fetchRankedRewards(); // Fetch ranked rewards per game mode
+    fetchSeasonRewardsInfo(); // Fetch season rewards info and countdown
     if (isAuthenticated) {
       checkActiveMatch();
       fetchQueueStatus();
@@ -1680,7 +1790,13 @@ const RankedMode = () => {
       lossRewards: 'En cas de défaite',
       goldReward: 'Gold',
       xpReward: 'XP',
-      ptsReward: 'Points'
+      ptsReward: 'Points',
+      seasonTrophies: 'Trophées de fin de saison',
+      seasonEndsIn: 'Fin de saison dans',
+      seasonRewards: 'Récompenses de fin de saison',
+      goldRewardsTop5: 'Récompenses Gold (Top 5)',
+      trophyRewards: 'Trophées de rang',
+      andAbove: 'et plus'
     },
     en: {
       title: 'Ranked Mode',
@@ -1760,7 +1876,13 @@ const RankedMode = () => {
       lossRewards: 'On defeat',
       goldReward: 'Gold',
       xpReward: 'XP',
-      ptsReward: 'Points'
+      ptsReward: 'Points',
+      seasonTrophies: 'End of Season Trophies',
+      seasonEndsIn: 'Season ends in',
+      seasonRewards: 'Season End Rewards',
+      goldRewardsTop5: 'Gold Rewards (Top 5)',
+      trophyRewards: 'Rank Trophies',
+      andAbove: 'and above'
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -1840,7 +1962,13 @@ const RankedMode = () => {
       lossRewards: 'Bei Niederlage',
       goldReward: 'Gold',
       xpReward: 'XP',
-      ptsReward: 'Punkte'
+      ptsReward: 'Punkte',
+      seasonTrophies: 'Saisonende-Trophäen',
+      seasonEndsIn: 'Saison endet in',
+      seasonRewards: 'Saisonende-Belohnungen',
+      goldRewardsTop5: 'Gold-Belohnungen (Top 5)',
+      trophyRewards: 'Rang-Trophäen',
+      andAbove: 'und höher'
     },
     it: {
       title: 'Modalità Classificata',
@@ -1920,7 +2048,13 @@ const RankedMode = () => {
       lossRewards: 'In caso di sconfitta',
       goldReward: 'Gold',
       xpReward: 'XP',
-      ptsReward: 'Punti'
+      ptsReward: 'Punti',
+      seasonTrophies: 'Trofei di fine stagione',
+      seasonEndsIn: 'Stagione termina tra',
+      seasonRewards: 'Ricompense di fine stagione',
+      goldRewardsTop5: 'Ricompense Gold (Top 5)',
+      trophyRewards: 'Trofei di grado',
+      andAbove: 'e superiori'
     }
   };
   
@@ -1960,15 +2094,27 @@ const RankedMode = () => {
                     <span 
                       className={`text-2xl sm:text-4xl font-black tracking-tight bg-gradient-to-r ${isHardcore ? 'from-orange-400 via-yellow-200 via-white to-red-400' : 'from-cyan-400 via-white via-cyan-200 to-blue-400'} bg-clip-text text-transparent animate-text-shimmer`}
                     >
-                      {language === 'fr' ? 'Saison 1' : language === 'en' ? 'Season 1' : language === 'de' ? 'Staffel 1' : 'Stagione 1'}
+                      {language === 'fr' ? `Saison ${currentSeason}` : language === 'en' ? `Season ${currentSeason}` : language === 'de' ? `Staffel ${currentSeason}` : `Stagione ${currentSeason}`}
                     </span>
-                    <span className="text-sm sm:text-lg font-medium text-white/70">{t.seasonLaunch}</span>
                   </div>
                   <span className={`text-[10px] sm:text-xs uppercase tracking-widest ${isHardcore ? 'text-orange-400/70' : 'text-cyan-400/70'} font-semibold`}>
                     {language === 'fr' ? 'En cours' : language === 'en' ? 'In Progress' : language === 'it' ? 'In Corso' : 'Läuft'}
                   </span>
                 </div>
               </div>
+              
+              {/* Season Countdown */}
+              {countdownText && (
+                <div className="mt-3">
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-dark-800/60 border ${isHardcore ? 'border-orange-500/20' : 'border-cyan-500/20'} backdrop-blur-sm`}>
+                    <Clock className={`w-4 h-4 ${isHardcore ? 'text-orange-400' : 'text-cyan-400'}`} />
+                    <span className="text-gray-400 text-xs sm:text-sm">{t.seasonEndsIn}:</span>
+                    <span className={`font-mono font-bold text-sm sm:text-base ${isHardcore ? 'text-orange-400' : 'text-cyan-400'}`}>
+                      {countdownText}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Active Event Banner */}
@@ -2089,17 +2235,17 @@ const RankedMode = () => {
                       {/* Right: Stats */}
                       <div className="flex items-center gap-6 sm:gap-8">
                         <div className="text-center">
-                          <p className="text-2xl sm:text-3xl font-black text-green-400">{myRanking.wins}</p>
+                          <p className="text-2xl sm:text-3xl font-black text-green-400">{calculatedStats.wins}</p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.wins}</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-2xl sm:text-3xl font-black text-red-400">{myRanking.losses}</p>
+                          <p className="text-2xl sm:text-3xl font-black text-red-400">{calculatedStats.losses}</p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.losses}</p>
                         </div>
                         <div className="text-center">
                           <p className="text-2xl sm:text-3xl font-black text-yellow-400">
-                            {myRanking.wins + myRanking.losses > 0 
-                              ? Math.round((myRanking.wins / (myRanking.wins + myRanking.losses)) * 100) 
+                            {calculatedStats.total > 0 
+                              ? Math.round((calculatedStats.wins / calculatedStats.total) * 100) 
                               : 0}%
                           </p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.winRate}</p>
@@ -2402,86 +2548,6 @@ const RankedMode = () => {
                   </span>
                 </button>
               </div>
-
-              {/* Match Rewards Section */}
-              {rankedRewardsPerMode[selectedGameMode] && (
-                <div className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-6">
-                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Trophy className={`w-5 h-5 text-${accent}-500`} />
-                    {t.matchRewards}
-                  </h3>
-                  
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Victory Rewards */}
-                    <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
-                      <p className="text-green-400 font-semibold text-sm mb-3 flex items-center gap-2">
-                        <Medal className="w-4 h-4" />
-                        {t.winRewards}
-                      </p>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">{t.ptsReward}</span>
-                          <span className="text-green-400 font-bold">+{rankedRewardsPerMode[selectedGameMode].pointsWin}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">{t.goldReward}</span>
-                          <div className="flex items-center gap-1">
-                            <Coins className="w-3 h-3 text-yellow-400" />
-                            <span className="text-yellow-400 font-bold">+{rankedRewardsPerMode[selectedGameMode].coinsWin}</span>
-                            {activeEvents.doubleGold && <span className="text-[10px] text-yellow-300 bg-yellow-500/20 px-1 rounded">x2</span>}
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">{t.xpReward}</span>
-                          <div className="flex items-center gap-1">
-                            <Zap className="w-3 h-3 text-cyan-400" />
-                            <span className="text-cyan-400 font-bold">+{rankedRewardsPerMode[selectedGameMode].xpWinMin}-{rankedRewardsPerMode[selectedGameMode].xpWinMax}</span>
-                            {activeEvents.doubleXP && <span className="text-[10px] text-cyan-300 bg-cyan-500/20 px-1 rounded">x2</span>}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Defeat Rewards */}
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                      <p className="text-red-400 font-semibold text-sm mb-3 flex items-center gap-2">
-                        <Target className="w-4 h-4" />
-                        {t.lossRewards}
-                      </p>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">{t.ptsReward}</span>
-                          <span className="text-red-400 font-bold">{rankedRewardsPerMode[selectedGameMode].pointsLoss}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">{t.goldReward}</span>
-                          <div className="flex items-center gap-1">
-                            <Coins className="w-3 h-3 text-yellow-400" />
-                            <span className="text-yellow-400/70 font-bold">+{rankedRewardsPerMode[selectedGameMode].coinsLoss}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-400 text-xs">{t.xpReward}</span>
-                          <span className="text-gray-500 font-bold">0</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Active Events Banner */}
-                  {(activeEvents.doubleXP || activeEvents.doubleGold) && (
-                    <div className="mt-4 p-3 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                        <span className="text-purple-300 text-sm font-semibold">
-                          {language === 'fr' ? 'Événement actif : ' : 'Active event: '}
-                          {activeEvents.doubleXP && activeEvents.doubleGold ? 'Double XP & Gold!' : activeEvents.doubleXP ? 'Double XP!' : 'Double Gold!'}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* Matchmaking Section */}
               {isAuthenticated && (
@@ -3072,6 +3138,93 @@ const RankedMode = () => {
                 </div>
               </div>
 
+              {/* Season End Rewards */}
+              {seasonRewardsInfo && (
+                <div className="rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-900/20 via-dark-800/50 to-dark-800/50 backdrop-blur-xl border border-amber-500/20 p-4 sm:p-6 relative overflow-hidden">
+                  {/* Background glow */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
+                  
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2 relative z-10">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                    {t.seasonRewards}
+                  </h3>
+                  
+                  {/* Gold Rewards for Top 5 */}
+                  <div className="mb-4 relative z-10">
+                    <p className="text-sm font-medium text-amber-400/80 mb-2 flex items-center gap-2">
+                      <Coins className="w-4 h-4" />
+                      {t.goldRewardsTop5}
+                    </p>
+                    <div className="space-y-1.5">
+                      {seasonRewardsInfo.gold && Object.entries(seasonRewardsInfo.gold).map(([position, gold]) => (
+                        <div key={position} className="flex items-center justify-between px-3 py-2 rounded-lg bg-dark-900/50">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
+                              position === '1' ? 'bg-yellow-500/20 text-yellow-400' :
+                              position === '2' ? 'bg-gray-400/20 text-gray-300' :
+                              position === '3' ? 'bg-orange-600/20 text-orange-400' :
+                              'bg-dark-700 text-gray-400'
+                            }`}>
+                              {position}
+                            </span>
+                            <span className="text-sm text-gray-300">
+                              {position === '1' ? (language === 'fr' ? '1er' : '1st') :
+                               position === '2' ? (language === 'fr' ? '2ème' : '2nd') :
+                               position === '3' ? (language === 'fr' ? '3ème' : '3rd') :
+                               `${position}${language === 'fr' ? 'ème' : 'th'}`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Coins className="w-4 h-4 text-yellow-400" />
+                            <span className="text-yellow-400 font-bold">{gold.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Trophy Rewards */}
+                  <div className="relative z-10">
+                    <p className="text-sm font-medium text-purple-400/80 mb-2 flex items-center gap-2">
+                      <Medal className="w-4 h-4" />
+                      {t.trophyRewards}
+                    </p>
+                    <div className="p-3 rounded-lg bg-dark-900/50 border border-purple-500/10">
+                      <div className="flex flex-wrap gap-2">
+                        {seasonRewardsInfo.trophyDivisions && seasonRewardsInfo.trophyDivisions.map((division) => {
+                          const divisionConfig = {
+                            platinum: { color: '#5EEAD4', image: '/4.png', name: language === 'fr' ? 'Platine' : 'Platinum' },
+                            diamond: { color: '#22D3EE', image: '/5.png', name: language === 'fr' ? 'Diamant' : 'Diamond' },
+                            master: { color: '#9B59B6', image: '/6.png', name: language === 'fr' ? 'Maître' : 'Master' },
+                            grandmaster: { color: '#E74C3C', image: '/7.png', name: language === 'fr' ? 'Grand Maître' : 'Grandmaster' },
+                            champion: { color: '#F1C40F', image: '/8.png', name: 'Champion' }
+                          }[division] || { color: '#666', image: '/1.png', name: division };
+                          
+                          return (
+                            <div 
+                              key={division}
+                              className="flex items-center gap-1.5 px-2 py-1 rounded-lg"
+                              style={{ background: `${divisionConfig.color}15`, border: `1px solid ${divisionConfig.color}30` }}
+                            >
+                              <img src={divisionConfig.image} alt={divisionConfig.name} className="w-5 h-5 object-contain" />
+                              <span className="text-xs font-medium" style={{ color: divisionConfig.color }}>
+                                {divisionConfig.name}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-2 text-center">
+                        {language === 'fr' ? 'Trophée de saison attribué à chaque joueur atteignant ces rangs' :
+                         language === 'de' ? 'Saisontrophäe für jeden Spieler, der diese Ränge erreicht' :
+                         language === 'it' ? 'Trofeo stagionale assegnato a ogni giocatore che raggiunge questi gradi' :
+                         'Season trophy awarded to each player reaching these ranks'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
 
@@ -3602,9 +3755,9 @@ const RankedMode = () => {
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{myRanking.points} pts</p>
                         <p className="text-xs text-gray-500">
-                          <span className="text-green-400">{myRanking.wins}V</span>
+                          <span className="text-green-400">{calculatedStats.wins}V</span>
                           <span className="mx-1">/</span>
-                          <span className="text-red-400">{myRanking.losses}D</span>
+                          <span className="text-red-400">{calculatedStats.losses}D</span>
                         </p>
                       </div>
                     </button>
@@ -3661,9 +3814,9 @@ const RankedMode = () => {
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{myRanking.points} pts</p>
                         <p className="text-xs text-gray-500">
-                          <span className="text-green-400">{myRanking.wins}V</span>
+                          <span className="text-green-400">{calculatedStats.wins}V</span>
                           <span className="mx-1">/</span>
-                          <span className="text-red-400">{myRanking.losses}D</span>
+                          <span className="text-red-400">{calculatedStats.losses}D</span>
                         </p>
                       </div>
                     </button>

@@ -3,8 +3,10 @@ import Season from '../models/Season.js';
 import Ranking from '../models/Ranking.js';
 import User from '../models/User.js';
 import LadderSeasonHistory from '../models/LadderSeasonHistory.js';
+import AppSettings from '../models/AppSettings.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 import { resetLadderSeason, resetAllLadderSeasons, getPreviousSeasonWinners, REWARD_POINTS } from '../services/ladderSeasonReset.service.js';
+import { resetRankedSeason, createAndAssignTrophyToUser, RANKED_REWARD_GOLD, ELIGIBLE_DIVISIONS } from '../services/rankedSeasonReset.service.js';
 
 const router = express.Router();
 
@@ -634,6 +636,173 @@ router.delete('/admin/ladder/history/:historyId', verifyToken, requireAdmin, asy
     });
   } catch (error) {
     console.error('Delete ladder history error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== RANKED SEASON ROUTES ====================
+
+// Get public ranked season rewards info (no auth required)
+router.get('/ranked/rewards-info', async (req, res) => {
+  try {
+    // Get current season number from AppSettings
+    const settings = await AppSettings.getSettings();
+    const currentSeason = settings?.rankedSettings?.currentSeason || 1;
+    
+    // Calculate next season reset date (1st of next month)
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+    
+    res.json({
+      success: true,
+      currentSeason,
+      nextResetDate: nextMonth.toISOString(),
+      rewards: {
+        gold: RANKED_REWARD_GOLD,
+        trophyDivisions: ELIGIBLE_DIVISIONS
+      }
+    });
+  } catch (error) {
+    console.error('Get ranked rewards info error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reset ranked season - distribute trophies and gold, reset all rankings (admin only)
+router.post('/admin/ranked/reset', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await resetRankedSeason(req.user._id);
+    
+    res.json({
+      success: true,
+      message: `Saison ${result.seasonNumber} du mode classé terminée`,
+      result
+    });
+  } catch (error) {
+    console.error('Reset ranked season error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur serveur' });
+  }
+});
+
+// Get ranked season info (for admin display)
+router.get('/admin/ranked/info', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    // Get current season number from AppSettings
+    const settings = await AppSettings.getSettings();
+    const currentSeason = settings?.rankedSettings?.currentSeason || 1;
+    
+    // Get stats about current ranked season - include isBanned field
+    const rankings = await Ranking.find({})
+      .populate('user', 'username avatar isBanned')
+      .sort({ points: -1 });
+    
+    // Filter out rankings with banned users or no user
+    const activeRankings = rankings.filter(r => r.user && !r.user.isBanned && (r.wins > 0 || r.losses > 0));
+    
+    const divisionCounts = {};
+    ELIGIBLE_DIVISIONS.forEach(d => divisionCounts[d] = 0);
+    
+    activeRankings.forEach(r => {
+      if (ELIGIBLE_DIVISIONS.includes(r.division)) {
+        divisionCounts[r.division]++;
+      }
+    });
+    
+    const top5 = activeRankings.slice(0, 5).map((r, i) => ({
+      position: i + 1,
+      username: r.user?.username || 'Unknown',
+      points: r.points,
+      division: r.division,
+      potentialGold: RANKED_REWARD_GOLD[i + 1]
+    }));
+    
+    // Also count total non-banned players
+    const totalNonBannedPlayers = rankings.filter(r => r.user && !r.user.isBanned).length;
+    
+    res.json({
+      success: true,
+      currentSeason,
+      totalPlayers: totalNonBannedPlayers,
+      activePlayers: activeRankings.length,
+      divisionCounts,
+      top5,
+      rewardGold: RANKED_REWARD_GOLD,
+      eligibleDivisions: ELIGIBLE_DIVISIONS
+    });
+  } catch (error) {
+    console.error('Get ranked info error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Test trophy distribution to a specific user (admin only)
+router.post('/admin/ranked/test-trophy/:userId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { division = 'diamond' } = req.body;
+    
+    console.log(`[Test Trophy] Assigning ${division} trophy to user ${userId}`);
+    
+    const result = await createAndAssignTrophyToUser(userId, division);
+    
+    console.log(`[Test Trophy] Result:`, {
+      trophyId: result.trophy._id,
+      trophyName: result.trophy.name,
+      userId: result.user._id,
+      userTrophiesCount: result.user.trophies?.length,
+      alreadyHad: result.alreadyHad
+    });
+    
+    if (result.alreadyHad) {
+      return res.json({
+        success: true,
+        message: 'L\'utilisateur possède déjà ce trophée',
+        trophy: result.trophy,
+        alreadyHad: true
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: `Trophée "${result.trophy.name}" attribué à ${result.user.username}`,
+      trophy: result.trophy,
+      user: {
+        id: result.user._id,
+        username: result.user.username
+      }
+    });
+  } catch (error) {
+    console.error('Test trophy distribution error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur serveur' });
+  }
+});
+
+// Update ranked season number (admin only)
+router.put('/admin/ranked/season-number', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { seasonNumber } = req.body;
+    
+    if (!seasonNumber || seasonNumber < 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le numéro de saison doit être supérieur à 0'
+      });
+    }
+    
+    // Update AppSettings
+    await AppSettings.updateOne(
+      {},
+      { $set: { 'rankedSettings.currentSeason': seasonNumber } },
+      { upsert: true }
+    );
+    
+    res.json({
+      success: true,
+      message: `Numéro de saison mis à jour: ${seasonNumber}`,
+      seasonNumber
+    });
+  } catch (error) {
+    console.error('Update season number error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

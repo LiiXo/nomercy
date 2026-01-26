@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { Zap, Shield, ExternalLink, Settings, Skull, Trophy, Crosshair, Users, MessageSquare, BookOpen } from 'lucide-react';
+import { Zap, Shield, ExternalLink, Settings, Skull, Crosshair, Users, MessageSquare, BookOpen } from 'lucide-react';
 
 const Footer = () => {
   const { t, language } = useLanguage();
@@ -15,7 +15,6 @@ const Footer = () => {
   // Build quick links - ranked mode visible to everyone
   const quickLinks = [
     { label: t('home'), href: '/', icon: <Zap className="w-3.5 h-3.5" /> },
-    { label: t('rankings'), href: `/${selectedMode}/rankings`, icon: <Trophy className="w-3.5 h-3.5" /> },
     { label: t('rankedMode'), href: `/${selectedMode}/ranked`, icon: <Crosshair className="w-3.5 h-3.5" /> },
   ];
 

@@ -38,6 +38,7 @@ const getPublicSettings = async (req, res) => {
         duoTrioTimeRestriction: { enabled: true, startHour: 0, endHour: 20 }
       },
       rankedSettings: {
+        currentSeason: settings.rankedSettings?.currentSeason || 1,
         bestOf: settings.rankedSettings?.bestOf || 3,
         // Important: inclure les seuils de rang pour le calcul des rangs côté client
         rankPointsThresholds: settings.rankedSettings?.rankPointsThresholds || DEFAULT_RANK_THRESHOLDS,
@@ -133,6 +134,11 @@ router.put('/admin', verifyToken, requireStaff, async (req, res) => {
     if (rankedSettings) {
       if (!settings.rankedSettings) {
         settings.rankedSettings = {};
+      }
+      
+      // Update current season
+      if (typeof rankedSettings.currentSeason === 'number' && rankedSettings.currentSeason >= 1) {
+        settings.rankedSettings.currentSeason = rankedSettings.currentSeason;
       }
       
       // Update bestOf format (BO1 or BO3)

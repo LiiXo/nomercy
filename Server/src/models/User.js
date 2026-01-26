@@ -231,6 +231,23 @@ const userSchema = new mongoose.Schema({
     default: null
   },
   
+  // Trophies earned (ranked mode seasons, achievements, etc.)
+  trophies: [{
+    trophy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Trophy'
+    },
+    earnedAt: {
+      type: Date,
+      default: Date.now
+    },
+    season: {
+      type: Number,
+      default: null
+    },
+    reason: String
+  }],
+  
 }, {
   timestamps: true
 });

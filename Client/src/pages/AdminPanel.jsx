@@ -106,6 +106,17 @@ const AdminPanel = () => {
   const [selectedItemToGive, setSelectedItemToGive] = useState(null);
   const [givingItem, setGivingItem] = useState(false);
   
+  // User trophy management states (admin only)
+  const [showUserTrophies, setShowUserTrophies] = useState(false);
+  const [selectedUserForTrophies, setSelectedUserForTrophies] = useState(null);
+  const [userTrophiesList, setUserTrophiesList] = useState([]);
+  const [loadingUserTrophies, setLoadingUserTrophies] = useState(false);
+  const [showAddTrophyModal, setShowAddTrophyModal] = useState(false);
+  const [userTrophyToAdd, setUserTrophyToAdd] = useState(null);
+  const [selectedSeasonForTrophy, setSelectedSeasonForTrophy] = useState(1);
+  const [addingTrophy, setAddingTrophy] = useState(false);
+  const [removingTrophyId, setRemovingTrophyId] = useState(null);
+  
   // System reset states
   const [confirmText, setConfirmText] = useState('');
   const [resetting, setResetting] = useState(false);
@@ -1511,6 +1522,85 @@ const AdminPanel = () => {
     }
   };
 
+  // ==================== USER TROPHY MANAGEMENT ====================
+  
+  // Open user trophy management modal
+  const openUserTrophiesModal = (user) => {
+    setSelectedUserForTrophies(user);
+    setUserTrophiesList(user.trophies || []);
+    setShowUserTrophies(true);
+  };
+
+  // Add trophy to user
+  const handleAddTrophyToUser = async () => {
+    if (!userTrophyToAdd || !selectedUserForTrophies) {
+      setError('Veuillez sélectionner un trophée');
+      return;
+    }
+
+    setAddingTrophy(true);
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${selectedUserForTrophies._id}/trophies`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          trophyId: userTrophyToAdd._id,
+          season: selectedSeasonForTrophy
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`Trophée "${userTrophyToAdd.name}" ajouté à ${selectedUserForTrophies.username}`);
+        setUserTrophiesList(data.trophies || []);
+        setShowAddTrophyModal(false);
+        setUserTrophyToAdd(null);
+        // Update user in list
+        setUsers(prev => prev.map(u => u._id === selectedUserForTrophies._id ? { ...u, trophies: data.trophies } : u));
+      } else {
+        setError(data.message || 'Erreur lors de l\'ajout du trophée');
+      }
+    } catch (err) {
+      console.error('Add trophy error:', err);
+      setError('Erreur lors de l\'ajout du trophée');
+    } finally {
+      setAddingTrophy(false);
+    }
+  };
+
+  // Remove trophy from user
+  const handleRemoveTrophyFromUser = async (trophyEntryId) => {
+    if (!window.confirm('Retirer ce trophée de l\'utilisateur ?')) {
+      return;
+    }
+
+    setRemovingTrophyId(trophyEntryId);
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${selectedUserForTrophies._id}/trophies/${trophyEntryId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess('Trophée retiré');
+        setUserTrophiesList(data.trophies || []);
+        // Update user in list
+        setUsers(prev => prev.map(u => u._id === selectedUserForTrophies._id ? { ...u, trophies: data.trophies } : u));
+      } else {
+        setError(data.message || 'Erreur lors de la suppression du trophée');
+      }
+    } catch (err) {
+      console.error('Remove trophy error:', err);
+      setError('Erreur lors de la suppression du trophée');
+    } finally {
+      setRemovingTrophyId(null);
+    }
+  };
+
   // Open warn modal
   const openWarnModal = (user) => {
     setWarnData({
@@ -1982,8 +2072,9 @@ const AdminPanel = () => {
                     </div>
                   )}
                   <div className="flex items-center gap-1 ml-auto">
-                    {/* Admin only: Purchase history and give item */}
+                    {/* Admin only: Purchase history, trophies and give item */}
                     {userIsAdmin && <button onClick={() => openUserPurchasesModal(user)} className="p-1.5 text-amber-400 hover:bg-amber-500/20 rounded-lg" title="Historique achats"><History className="w-4 h-4" /></button>}
+                    {userIsAdmin && <button onClick={() => openUserTrophiesModal(user)} className="p-1.5 text-yellow-400 hover:bg-yellow-500/20 rounded-lg" title="Gérer trophées"><Trophy className="w-4 h-4" /></button>}
                     {userIsAdmin && <button onClick={() => openGiveItemModal(user)} className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg" title="Donner objet"><Gift className="w-4 h-4" /></button>}
                     {/* Arbitre only sees block referent and ban buttons */}
                     {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg"><Edit2 className="w-4 h-4" /></button>}
@@ -2085,8 +2176,9 @@ const AdminPanel = () => {
                       </td>
                       <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
-                          {/* Admin only: Purchase history and give item */}
+                          {/* Admin only: Purchase history, trophies and give item */}
                           {userIsAdmin && <button onClick={() => openUserPurchasesModal(user)} className="p-1.5 text-amber-400 hover:bg-amber-500/20 rounded-lg transition-colors" title="Historique achats"><History className="w-4 h-4" /></button>}
+                          {userIsAdmin && <button onClick={() => openUserTrophiesModal(user)} className="p-1.5 text-yellow-400 hover:bg-yellow-500/20 rounded-lg transition-colors" title="Gérer trophées"><Trophy className="w-4 h-4" /></button>}
                           {userIsAdmin && <button onClick={() => openGiveItemModal(user)} className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors" title="Donner objet"><Gift className="w-4 h-4" /></button>}
                           {/* Arbitre only sees block referent and ban buttons */}
                           {!userIsArbitre && <button onClick={() => openEditModal('user', user)} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title="Modifier"><Edit2 className="w-4 h-4" /></button>}
@@ -4434,6 +4526,97 @@ Cette action est irréversible!`)) {
         {/* BO1/BO3 Format Toggle */}
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-purple-400" />
+            📅 Saison Actuelle (Mode Classé)
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Définir la saison en cours pour l'affichage des trophées de fin de saison.
+          </p>
+          
+          <div className="flex items-center gap-4">
+            <div className="flex-1 max-w-xs">
+              <label className="text-white/80 text-xs block mb-2">Numéro de saison</label>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={async () => {
+                    const current = appSettings?.rankedSettings?.currentSeason || 1;
+                    if (current <= 1) return;
+                    try {
+                      const response = await fetch(`${API_URL}/app-settings/admin`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                          rankedSettings: {
+                            ...appSettings?.rankedSettings,
+                            currentSeason: current - 1
+                          }
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        setSuccess('Saison mise à jour');
+                        fetchAppSettings();
+                      }
+                    } catch (err) {
+                      setError('Erreur lors de la mise à jour');
+                    }
+                  }}
+                  className="p-2 bg-dark-800 hover:bg-dark-700 rounded-lg text-white border border-white/10 transition-colors"
+                  disabled={(appSettings?.rankedSettings?.currentSeason || 1) <= 1}
+                >
+                  -
+                </button>
+                <div className="flex-1 text-center">
+                  <span className="text-3xl font-black text-purple-400">
+                    {appSettings?.rankedSettings?.currentSeason || 1}
+                  </span>
+                </div>
+                <button
+                  onClick={async () => {
+                    const current = appSettings?.rankedSettings?.currentSeason || 1;
+                    try {
+                      const response = await fetch(`${API_URL}/app-settings/admin`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                          rankedSettings: {
+                            ...appSettings?.rankedSettings,
+                            currentSeason: current + 1
+                          }
+                        })
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        setSuccess('Saison mise à jour');
+                        fetchAppSettings();
+                      }
+                    } catch (err) {
+                      setError('Erreur lors de la mise à jour');
+                    }
+                  }}
+                  className="p-2 bg-dark-800 hover:bg-dark-700 rounded-lg text-white border border-white/10 transition-colors"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            
+            <div className="flex-1 bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+              <p className="text-purple-400 text-sm">
+                <strong>Saison actuelle:</strong> Saison {appSettings?.rankedSettings?.currentSeason || 1}
+              </p>
+              <p className="text-gray-400 text-xs mt-1">
+                Les trophées affichés seront: "Champion Saison {appSettings?.rankedSettings?.currentSeason || 1}", etc.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* BO1/BO3 Format Toggle */}
+        <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
             <Swords className="w-5 h-5 text-purple-400" />
             🗺️ Format de Match (Mode Classé)
           </h3>
@@ -5489,6 +5672,12 @@ Cette action est irréversible!`)) {
   const [ladderSeasonHistory, setLadderSeasonHistory] = useState({ duoTrio: [], squadTeam: [] });
   const [seasonsLoading, setSeasonsLoading] = useState(false);
   const [seasonToDelete, setSeasonToDelete] = useState(null);
+  const [rankedSeasonInfo, setRankedSeasonInfo] = useState(null);
+  const [rankedResetLoading, setRankedResetLoading] = useState(false);
+  const [showRankedResetConfirm, setShowRankedResetConfirm] = useState(false);
+  const [testTrophyLoading, setTestTrophyLoading] = useState(null);
+  const [editingSeasonNumber, setEditingSeasonNumber] = useState(null);
+  const [savingSeasonNumber, setSavingSeasonNumber] = useState(false);
 
   const fetchLadderSeasonHistory = async () => {
     setSeasonsLoading(true);
@@ -5511,6 +5700,42 @@ Cette action est irréversible!`)) {
     }
   };
 
+  const fetchRankedSeasonInfo = async () => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/ranked/info`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRankedSeasonInfo(data);
+      }
+    } catch (err) {
+      console.error('Error fetching ranked season info:', err);
+    }
+  };
+
+  const handleRankedSeasonReset = async () => {
+    setRankedResetLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/ranked/reset`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(`Saison ${data.result.seasonNumber} terminée ! ${data.result.trophiesDistributed} trophées distribués, ${data.result.goldDistributed.toLocaleString()} gold distribué`);
+        setShowRankedResetConfirm(false);
+        fetchRankedSeasonInfo();
+      } else {
+        setError(data.message || 'Erreur lors du reset');
+      }
+    } catch (err) {
+      setError('Erreur lors du reset de la saison');
+    } finally {
+      setRankedResetLoading(false);
+    }
+  };
+
   const handleDeleteSeasonHistory = async (seasonId) => {
     try {
       const response = await fetch(`${API_URL}/seasons/admin/ladder/history/${seasonId}`, {
@@ -5530,19 +5755,93 @@ Cette action est irréversible!`)) {
     }
   };
 
+  // Test trophy distribution to a specific user
+  const handleTestTrophyDistribution = async (user) => {
+    if (!user?._id) return;
+    
+    setTestTrophyLoading(user._id);
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/ranked/test-trophy/${user._id}`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(`Trophée test distribué à ${user.username || user.discordUsername} !`);
+      } else {
+        setError(data.message || 'Erreur lors de la distribution du trophée test');
+      }
+    } catch (err) {
+      setError('Erreur lors de la distribution du trophée test');
+    } finally {
+      setTestTrophyLoading(null);
+    }
+  };
+
+  // Update season number in AppSettings
+  const handleUpdateSeasonNumber = async (newSeasonNumber) => {
+    if (!newSeasonNumber || newSeasonNumber < 1) {
+      setError('Le numéro de saison doit être supérieur à 0');
+      return;
+    }
+    
+    setSavingSeasonNumber(true);
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/ranked/season-number`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ seasonNumber: newSeasonNumber })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(`Numéro de saison mis à jour: Saison ${newSeasonNumber}`);
+        setEditingSeasonNumber(null);
+        fetchRankedSeasonInfo();
+      } else {
+        setError(data.message || 'Erreur lors de la mise à jour');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour du numéro de saison');
+    } finally {
+      setSavingSeasonNumber(false);
+    }
+  };
+
   const renderSeasons = () => {
+    // Fetch ranked info on first load
+    if (!rankedSeasonInfo && !seasonsLoading) {
+      fetchRankedSeasonInfo();
+    }
+
+    const divisionColors = {
+      platinum: { bg: 'bg-teal-500/20', text: 'text-teal-400', border: 'border-teal-500/30' },
+      diamond: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', border: 'border-cyan-500/30' },
+      master: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30' },
+      grandmaster: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30' },
+      champion: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30' }
+    };
+
+    const divisionNames = {
+      platinum: 'Platine',
+      diamond: 'Diamant',
+      master: 'Maître',
+      grandmaster: 'Grand Maître',
+      champion: 'Champion'
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-white flex items-center gap-3">
               <Calendar className="w-7 h-7 text-purple-400" />
-              Gestion des Saisons Ladder
+              Gestion des Saisons Mode Classé
             </h2>
-            <p className="text-gray-400 mt-1">Historique des saisons et gagnants passés</p>
+            <p className="text-gray-400 mt-1">RAZ de saison et distribution des récompenses</p>
           </div>
           <button
-            onClick={fetchLadderSeasonHistory}
+            onClick={fetchRankedSeasonInfo}
             className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
@@ -5550,164 +5849,222 @@ Cette action est irréversible!`)) {
           </button>
         </div>
 
-        {seasonsLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        {/* Season Number Configuration */}
+        <div className="bg-dark-800/50 border border-cyan-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+            <Calendar className="w-5 h-5 text-cyan-400" />
+            Numéro de Saison Actuelle
+          </h3>
+          <div className="flex items-center gap-4">
+            {editingSeasonNumber !== null ? (
+              <>
+                <input
+                  type="number"
+                  value={editingSeasonNumber}
+                  onChange={(e) => setEditingSeasonNumber(parseInt(e.target.value) || 1)}
+                  min="1"
+                  className="w-24 px-3 py-2 bg-dark-900 border border-cyan-500/30 rounded-lg text-white text-center text-xl font-bold focus:outline-none focus:border-cyan-500"
+                />
+                <button
+                  onClick={() => handleUpdateSeasonNumber(editingSeasonNumber)}
+                  disabled={savingSeasonNumber}
+                  className="px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  {savingSeasonNumber ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Sauvegarder
+                </button>
+                <button
+                  onClick={() => setEditingSeasonNumber(null)}
+                  disabled={savingSeasonNumber}
+                  className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg transition-colors"
+                >
+                  Annuler
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl font-bold text-cyan-400">
+                    {rankedSeasonInfo?.currentSeason || 1}
+                  </span>
+                  <span className="text-gray-400">Saison en cours</span>
+                </div>
+                <button
+                  onClick={() => setEditingSeasonNumber(rankedSeasonInfo?.currentSeason || 1)}
+                  className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Modifier
+                </button>
+              </>
+            )}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Chill History */}
-            <div className="bg-dark-800/50 border border-amber-500/30 rounded-xl overflow-hidden">
-              <div className="p-4 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-b border-white/10">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-amber-400" />
-                  Chill - Historique
-                </h3>
+          <p className="text-gray-500 text-sm mt-3">
+            Ce numéro sera utilisé pour nommer les trophées lors de la RAZ (ex: "Diamant - Saison {rankedSeasonInfo?.currentSeason || 1}")
+          </p>
+        </div>
+
+        {/* RAZ Season Button */}
+        <div className="bg-dark-800/50 border border-purple-500/30 rounded-xl overflow-hidden">
+          <div className="p-6 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-b border-white/10">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <RotateCcw className="w-5 h-5 text-purple-400" />
+              RAZ Saison Mode Classé
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">
+              Cette action va terminer la saison actuelle et distribuer les récompenses
+            </p>
+          </div>
+          
+          <div className="p-6">
+            {/* What will happen */}
+            <div className="mb-6 space-y-4">
+              <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  Distribution des trophées
+                </h4>
+                <p className="text-gray-400 text-sm mb-3">
+                  Un trophée unique sera créé et distribué aux joueurs du rang Platine à Champion :
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {['platinum', 'diamond', 'master', 'grandmaster', 'champion'].map(div => (
+                    <span 
+                      key={div} 
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium ${divisionColors[div]?.bg} ${divisionColors[div]?.text} ${divisionColors[div]?.border} border`}
+                    >
+                      {divisionNames[div]}
+                      {rankedSeasonInfo?.divisionCounts?.[div] > 0 && (
+                        <span className="ml-1">({rankedSeasonInfo.divisionCounts[div]})</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="p-4 max-h-[500px] overflow-y-auto">
-                {ladderSeasonHistory.duoTrio.length > 0 ? (
-                  <div className="space-y-4">
-                    {ladderSeasonHistory.duoTrio.map((season) => (
-                      <div key={season._id} className="bg-dark-900/50 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h4 className="text-white font-medium">{season.seasonName}</h4>
-                            <p className="text-gray-500 text-xs">
-                              Reset: {new Date(season.resetAt).toLocaleDateString('fr-FR')}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setSeasonToDelete(season)}
-                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+
+              <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <Coins className="w-4 h-4 text-yellow-400" />
+                  Distribution des Golds - Top 5
+                </h4>
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map(pos => {
+                    const goldAmount = pos === 1 ? 100000 : pos === 2 ? 80000 : pos === 3 ? 60000 : pos === 4 ? 40000 : 20000;
+                    const topPlayer = rankedSeasonInfo?.top5?.find(p => p.position === pos);
+                    return (
+                      <div key={pos} className={`flex items-center justify-between p-2 rounded-lg ${
+                        pos === 1 ? 'bg-yellow-500/10' : pos === 2 ? 'bg-gray-500/10' : pos === 3 ? 'bg-orange-500/10' : 'bg-dark-800/50'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                            pos === 1 ? 'bg-yellow-500/30 text-yellow-400' :
+                            pos === 2 ? 'bg-gray-500/30 text-gray-300' :
+                            pos === 3 ? 'bg-orange-500/30 text-orange-400' :
+                            'bg-dark-700 text-gray-400'
+                          }`}>
+                            {pos}
+                          </span>
+                          <span className="text-white">
+                            {topPlayer?.username || `Top ${pos}`}
+                          </span>
+                          {topPlayer && (
+                            <span className="text-gray-500 text-xs">({topPlayer.points} pts)</span>
+                          )}
                         </div>
-                        <div className="space-y-2">
-                          {season.winners?.map((winner) => (
-                            <div key={winner.rank} className={`flex items-center justify-between p-2 rounded-lg ${
-                              winner.rank === 1 ? 'bg-yellow-500/10' :
-                              winner.rank === 2 ? 'bg-gray-500/10' :
-                              'bg-orange-500/10'
-                            }`}>
-                              <div className="flex items-center gap-2">
-                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                  winner.rank === 1 ? 'bg-yellow-500/30 text-yellow-400' :
-                                  winner.rank === 2 ? 'bg-gray-500/30 text-gray-300' :
-                                  'bg-orange-500/30 text-orange-400'
-                                }`}>
-                                  {winner.rank}
-                                </span>
-                                <span className="text-white text-sm">{winner.squadName}</span>
-                                <span className="text-gray-500 text-xs">[{winner.squadTag}]</span>
-                              </div>
-                              <span className="text-green-400 text-sm">+{winner.rewardPoints} pts</span>
-                            </div>
-                          ))}
-                        </div>
+                        <span className="flex items-center gap-1 text-yellow-400 font-semibold">
+                          <Coins className="w-4 h-4" />
+                          {goldAmount.toLocaleString()}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 text-center py-8">Aucun historique</p>
-                )}
+                    );
+                  })}
+                </div>
               </div>
+
+              <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-red-400" />
+                  Remise à zéro
+                </h4>
+                <ul className="text-gray-400 text-sm space-y-1">
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                    Points classés de tous les joueurs remis à 0
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                    Victoires/Défaites remises à 0
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                    Tous les rangs redescendent à Bronze
+                  </li>
+                </ul>
+              </div>
+
+              {/* Stats */}
+              {rankedSeasonInfo && (
+                <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-cyan-400" />
+                    Statistiques actuelles
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-3 bg-dark-800 rounded-lg">
+                      <div className="text-2xl font-bold text-white">{rankedSeasonInfo.totalPlayers}</div>
+                      <div className="text-gray-500 text-xs">Joueurs total</div>
+                    </div>
+                    <div className="text-center p-3 bg-dark-800 rounded-lg">
+                      <div className="text-2xl font-bold text-cyan-400">{rankedSeasonInfo.activePlayers}</div>
+                      <div className="text-gray-500 text-xs">Joueurs actifs</div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Compétitif History */}
-            <div className="bg-dark-800/50 border border-emerald-500/30 rounded-xl overflow-hidden">
-              <div className="p-4 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 border-b border-white/10">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-emerald-400" />
-                  Compétitif - Historique
-                </h3>
-              </div>
-              <div className="p-4 max-h-[500px] overflow-y-auto">
-                {ladderSeasonHistory.squadTeam.length > 0 ? (
-                  <div className="space-y-4">
-                    {ladderSeasonHistory.squadTeam.map((season) => (
-                      <div key={season._id} className="bg-dark-900/50 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <h4 className="text-white font-medium">{season.seasonName}</h4>
-                            <p className="text-gray-500 text-xs">
-                              Reset: {new Date(season.resetAt).toLocaleDateString('fr-FR')}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setSeasonToDelete(season)}
-                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <div className="space-y-2">
-                          {season.winners?.map((winner) => (
-                            <div key={winner.rank} className={`flex items-center justify-between p-2 rounded-lg ${
-                              winner.rank === 1 ? 'bg-yellow-500/10' :
-                              winner.rank === 2 ? 'bg-gray-500/10' :
-                              'bg-orange-500/10'
-                            }`}>
-                              <div className="flex items-center gap-2">
-                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                                  winner.rank === 1 ? 'bg-yellow-500/30 text-yellow-400' :
-                                  winner.rank === 2 ? 'bg-gray-500/30 text-gray-300' :
-                                  'bg-orange-500/30 text-orange-400'
-                                }`}>
-                                  {winner.rank}
-                                </span>
-                                <span className="text-white text-sm">{winner.squadName}</span>
-                                <span className="text-gray-500 text-xs">[{winner.squadTag}]</span>
-                              </div>
-                              <span className="text-green-400 text-sm">+{winner.rewardPoints} pts</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 text-center py-8">Aucun historique</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* No history message */}
-        {!seasonsLoading && ladderSeasonHistory.duoTrio.length === 0 && ladderSeasonHistory.squadTeam.length === 0 && (
-          <div className="text-center py-10">
-            <Calendar className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-            <p className="text-gray-400 mb-4">Aucun historique de saison disponible</p>
+            {/* Reset Button */}
             <button
-              onClick={fetchLadderSeasonHistory}
-              className="px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
+              onClick={() => setShowRankedResetConfirm(true)}
+              className="w-full py-4 px-6 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-purple-500/30"
             >
-              Charger l'historique
+              <RotateCcw className="w-5 h-5" />
+              RAZ Saison Mode Classé
             </button>
           </div>
-        )}
+        </div>
 
-        {/* Delete Season Modal */}
-        {seasonToDelete && (
+        {/* Confirmation Modal */}
+        {showRankedResetConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-            <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
-              <h3 className="text-lg font-bold text-white mb-4">Supprimer l'historique de saison ?</h3>
-              <p className="text-gray-400 mb-6">
-                Cette action est irréversible. L'historique de la saison "{seasonToDelete.seasonName}" sera définitivement supprimé.
-              </p>
+            <div className="bg-dark-900 rounded-xl border border-purple-500/30 p-6 max-w-md w-full">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="w-8 h-8 text-purple-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Confirmer la RAZ de saison</h3>
+                <p className="text-gray-400 text-sm">
+                  Cette action est irréversible. Les trophées seront distribués aux joueurs éligibles, les golds seront donnés au top 5, et tous les classements seront remis à zéro.
+                </p>
+              </div>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setSeasonToDelete(null)}
+                  onClick={() => setShowRankedResetConfirm(false)}
+                  disabled={rankedResetLoading}
                   className="flex-1 py-3 bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors"
                 >
                   Annuler
                 </button>
                 <button
-                  onClick={() => handleDeleteSeasonHistory(seasonToDelete._id)}
-                  className="flex-1 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors"
+                  onClick={handleRankedSeasonReset}
+                  disabled={rankedResetLoading}
+                  className="flex-1 py-3 bg-purple-500 text-white font-bold rounded-lg hover:bg-purple-600 transition-colors flex items-center justify-center gap-2"
                 >
-                  Supprimer
+                  {rankedResetLoading ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> En cours...</>
+                  ) : (
+                    <><RotateCcw className="w-5 h-5" /> Confirmer RAZ</>
+                  )}
                 </button>
               </div>
             </div>
@@ -7471,6 +7828,8 @@ Cette action est irréversible!`)) {
             userIsAdmin={userIsAdmin}
             openUserPurchasesModal={openUserPurchasesModal}
             openGiveItemModal={openGiveItemModal}
+            handleTestTrophyDistribution={handleTestTrophyDistribution}
+            testTrophyLoading={testTrophyLoading}
           />
         );
       case 'squads':
@@ -8216,6 +8575,185 @@ Cette action est irréversible!`)) {
                   <>
                     <Gift className="w-5 h-5" />
                     Donner l'objet
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Trophy Management Modal (Admin only) */}
+      {showUserTrophies && selectedUserForTrophies && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowUserTrophies(false)}></div>
+          <div className="relative bg-dark-900 border-t sm:border border-yellow-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-3 bg-yellow-500/20 rounded-xl">
+                <Trophy className="w-5 sm:w-6 h-5 sm:h-6 text-yellow-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">
+                  Gestion des Trophées
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm">
+                  {selectedUserForTrophies.username}
+                </p>
+              </div>
+              <button onClick={() => setShowUserTrophies(false)} className="p-2 hover:bg-white/10 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            {/* Current Trophies */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-white font-medium">Trophées actuels ({userTrophiesList.length})</h4>
+                <button
+                  onClick={() => {
+                    setShowAddTrophyModal(true);
+                    setSelectedTrophyToAdd(null);
+                    setSelectedSeasonForTrophy(1);
+                  }}
+                  className="px-3 py-1.5 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm font-medium hover:bg-yellow-500/30 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  Ajouter
+                </button>
+              </div>
+              
+              {userTrophiesList.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {userTrophiesList.map((trophyEntry, index) => {
+                    const trophy = trophyEntry.trophy;
+                    // Handle case where trophy is not populated
+                    const trophyName = typeof trophy === 'object' 
+                      ? (trophy?.translations?.fr?.name || trophy?.name || 'Trophée')
+                      : 'Trophée';
+                    
+                    return (
+                      <div 
+                        key={trophyEntry._id || index} 
+                        className="flex items-center justify-between p-3 bg-dark-800/50 rounded-xl border border-white/5"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                            <Trophy className="w-5 h-5 text-yellow-400" />
+                          </div>
+                          <div>
+                            <p className="text-white font-medium text-sm">{trophyName}</p>
+                            {trophyEntry.season && (
+                              <p className="text-gray-500 text-xs">Saison {trophyEntry.season}</p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveTrophyFromUser(trophyEntry._id)}
+                          disabled={removingTrophyId === trophyEntry._id}
+                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {removingTrophyId === trophyEntry._id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                  <p className="text-gray-400">Aucun trophée</p>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowUserTrophies(false)}
+              className="w-full py-3 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Add Trophy to User Modal */}
+      {showAddTrophyModal && selectedUserForTrophies && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowAddTrophyModal(false)}></div>
+          <div className="relative bg-dark-900 border border-yellow-500/20 rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-400" />
+              Ajouter un trophée
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Trophée</label>
+                <select
+                  value={userTrophyToAdd?._id || ''}
+                  onChange={(e) => {
+                    const trophy = trophies.find(t => t._id === e.target.value);
+                    setUserTrophyToAdd(trophy || null);
+                  }}
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-yellow-500/50"
+                >
+                  <option value="">Sélectionner un trophée...</option>
+                  {trophies.map((trophy) => (
+                    <option key={trophy._id} value={trophy._id}>
+                      {trophy.translations?.fr?.name || trophy.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Saison</label>
+                <input
+                  type="number"
+                  value={selectedSeasonForTrophy}
+                  onChange={(e) => setSelectedSeasonForTrophy(parseInt(e.target.value) || 1)}
+                  min="1"
+                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-yellow-500/50"
+                />
+              </div>
+
+              {userTrophyToAdd && (
+                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                      <Trophy className="w-6 h-6 text-yellow-400" />
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">{userTrophyToAdd.translations?.fr?.name || userTrophyToAdd.name}</p>
+                      <p className="text-yellow-400 text-sm">Saison {selectedSeasonForTrophy}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowAddTrophyModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleAddTrophyToUser}
+                disabled={!userTrophyToAdd || addingTrophy}
+                className="flex-1 py-3 px-4 bg-yellow-500 text-black font-medium rounded-xl hover:bg-yellow-400 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {addingTrophy ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Trophy className="w-5 h-5" />
+                    Ajouter
                   </>
                 )}
               </button>

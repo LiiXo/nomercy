@@ -129,6 +129,9 @@ const appSettingsSchema = new mongoose.Schema({
   
   // Ranked mode settings (récompenses configurées dans Config.rankedMatchRewards)
   rankedSettings: {
+    // Saison en cours
+    currentSeason: { type: Number, default: 1, min: 1 },
+    
     // Format de match: BO1 = 1 map, BO3 = 3 maps
     bestOf: { type: Number, enum: [1, 3], default: 3 },
     

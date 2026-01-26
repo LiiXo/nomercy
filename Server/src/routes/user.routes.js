@@ -778,7 +778,12 @@ router.get('/by-id/:id', async (req, res) => {
       isProfileComplete: true,
       isBanned: false
     }).populate('equippedTitle', 'name nameTranslations icon color rarity')
-      .populate('equippedProfileAnimation', 'name nameTranslations icon color rarity profileAnimationData');
+      .populate('equippedProfileAnimation', 'name nameTranslations icon color rarity profileAnimationData')
+      .populate({
+        path: 'trophies.trophy',
+        model: 'Trophy',
+        select: 'name translations icon color rarity rarityName'
+      });
 
     if (!user) {
       return res.status(404).json({
@@ -874,6 +879,7 @@ router.get('/by-id/:id', async (req, res) => {
         },
         equippedTitle: user.equippedTitle,
         equippedProfileAnimation: user.equippedProfileAnimation,
+        trophies: (user.trophies || []).filter(t => t.trophy != null),
         createdAt: user.createdAt
       }
     });
@@ -2326,6 +2332,99 @@ router.put('/admin/:userId/ranked-ban', verifyToken, requireArbitre, async (req,
       success: false,
       message: 'Erreur serveur.'
     });
+  }
+});
+
+// ==================== USER TROPHY MANAGEMENT ====================
+
+// Add trophy to user (admin only)
+router.post('/admin/:userId/trophies', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { trophyId, season } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé.' });
+    }
+
+    // Check if trophy exists
+    const Trophy = (await import('../models/Trophy.js')).default;
+    const trophy = await Trophy.findById(trophyId);
+    if (!trophy) {
+      return res.status(404).json({ success: false, message: 'Trophée non trouvé.' });
+    }
+
+    // Check if user already has this trophy for this season
+    const alreadyHas = user.trophies?.some(t => 
+      t.trophy?.toString() === trophyId && t.season === season
+    );
+    if (alreadyHas) {
+      return res.status(400).json({ success: false, message: 'L\'utilisateur possède déjà ce trophée pour cette saison.' });
+    }
+
+    // Add trophy
+    if (!user.trophies) user.trophies = [];
+    user.trophies.push({
+      trophy: trophyId,
+      earnedAt: new Date(),
+      season: season || 1
+    });
+
+    await user.save();
+
+    // Populate trophies for response
+    await user.populate({
+      path: 'trophies.trophy',
+      model: 'Trophy',
+      select: 'name translations icon color rarity rarityName'
+    });
+
+    res.json({
+      success: true,
+      message: 'Trophée ajouté.',
+      trophies: user.trophies
+    });
+  } catch (error) {
+    console.error('Add trophy to user error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur.' });
+  }
+});
+
+// Remove trophy from user (admin only)
+router.delete('/admin/:userId/trophies/:trophyEntryId', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId, trophyEntryId } = req.params;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé.' });
+    }
+
+    // Find and remove the trophy entry
+    const trophyIndex = user.trophies?.findIndex(t => t._id?.toString() === trophyEntryId);
+    if (trophyIndex === -1 || trophyIndex === undefined) {
+      return res.status(404).json({ success: false, message: 'Trophée non trouvé chez cet utilisateur.' });
+    }
+
+    user.trophies.splice(trophyIndex, 1);
+    await user.save();
+
+    // Populate trophies for response
+    await user.populate({
+      path: 'trophies.trophy',
+      model: 'Trophy',
+      select: 'name translations icon color rarity rarityName'
+    });
+
+    res.json({
+      success: true,
+      message: 'Trophée retiré.',
+      trophies: user.trophies
+    });
+  } catch (error) {
+    console.error('Remove trophy from user error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur.' });
   }
 });
 

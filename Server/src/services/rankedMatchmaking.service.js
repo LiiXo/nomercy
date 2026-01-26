@@ -267,41 +267,118 @@ const calculateTeamSimilarityScore = (gameMode, mode, team1PlayerIds, team2Playe
 };
 
 /**
- * Génère plusieurs compositions d'équipes possibles et choisit la plus diversifiée
+ * Calcule la différence de points totaux entre deux équipes
  */
-const generateDiverseTeams = (players, teamSize, gameMode, mode) => {
-  const ATTEMPTS = 15; // Nombre de compositions à essayer
-  let bestTeam1 = null;
-  let bestTeam2 = null;
-  let lowestSimilarityScore = Infinity;
+const calculateTeamPointsDifference = (team1, team2) => {
+  const team1Points = team1.reduce((sum, p) => sum + (p.points || 0), 0);
+  const team2Points = team2.reduce((sum, p) => sum + (p.points || 0), 0);
+  return Math.abs(team1Points - team2Points);
+};
+
+/**
+ * Génère des équipes équilibrées basées sur les rangs/points des joueurs
+ * Utilise un algorithme de "snake draft" pour une distribution équitable
+ */
+const generateBalancedTeams = (players, teamSize) => {
+  // Trier les joueurs par points (du plus haut au plus bas)
+  const sortedPlayers = [...players].sort((a, b) => (b.points || 0) - (a.points || 0));
   
-  for (let i = 0; i < ATTEMPTS; i++) {
-    // Mélanger avec Fisher-Yates
-    const shuffled = fisherYatesShuffle(players);
+  const team1 = [];
+  const team2 = [];
+  
+  // Snake draft: alternance inversée pour équilibrer
+  // Round 1: Team1 prend le 1er, Team2 prend le 2ème
+  // Round 2: Team2 prend le 3ème, Team1 prend le 4ème
+  // etc.
+  for (let i = 0; i < sortedPlayers.length; i++) {
+    const round = Math.floor(i / 2);
+    const isEvenRound = round % 2 === 0;
+    const isFirstPick = i % 2 === 0;
     
-    // Diviser en équipes
-    const team1 = shuffled.slice(0, teamSize);
-    const team2 = shuffled.slice(teamSize, teamSize * 2);
-    
-    // Extraire les IDs pour le calcul de similarité
-    const team1Ids = team1.map(p => p.userId?.toString() || p.oduserId);
-    const team2Ids = team2.map(p => p.userId?.toString() || p.oduserId);
-    
-    // Calculer le score de similarité avec l'historique
-    const similarityScore = calculateTeamSimilarityScore(gameMode, mode, team1Ids, team2Ids);
-    
-    // Ajouter un peu d'aléatoire pour éviter les patterns prévisibles
-    const randomFactor = Math.random() * 0.5;
-    const adjustedScore = similarityScore + randomFactor;
-    
-    if (adjustedScore < lowestSimilarityScore) {
-      lowestSimilarityScore = adjustedScore;
-      bestTeam1 = team1;
-      bestTeam2 = team2;
+    if (team1.length >= teamSize) {
+      team2.push(sortedPlayers[i]);
+    } else if (team2.length >= teamSize) {
+      team1.push(sortedPlayers[i]);
+    } else if (isEvenRound) {
+      // Rounds pairs: T1, T2
+      if (isFirstPick) {
+        team1.push(sortedPlayers[i]);
+      } else {
+        team2.push(sortedPlayers[i]);
+      }
+    } else {
+      // Rounds impairs: T2, T1
+      if (isFirstPick) {
+        team2.push(sortedPlayers[i]);
+      } else {
+        team1.push(sortedPlayers[i]);
+      }
     }
   }
   
-  console.log(`[Ranked Matchmaking] Team diversity: best similarity score = ${lowestSimilarityScore.toFixed(2)} after ${ATTEMPTS} attempts`);
+  return { team1, team2 };
+};
+
+/**
+ * Génère plusieurs compositions d'équipes équilibrées et choisit la meilleure
+ * Combine l'équilibrage par rang et la diversité pour éviter les répétitions
+ */
+const generateDiverseTeams = (players, teamSize, gameMode, mode) => {
+  const ATTEMPTS = 20; // Nombre de compositions à essayer
+  let bestTeam1 = null;
+  let bestTeam2 = null;
+  let bestScore = Infinity;
+  
+  // Générer la composition équilibrée de base (snake draft)
+  const balanced = generateBalancedTeams(players, teamSize);
+  const balancedDiff = calculateTeamPointsDifference(balanced.team1, balanced.team2);
+  
+  // Évaluer la composition équilibrée
+  const balancedTeam1Ids = balanced.team1.map(p => p.userId?.toString() || p.oduserId);
+  const balancedTeam2Ids = balanced.team2.map(p => p.userId?.toString() || p.oduserId);
+  const balancedSimilarity = calculateTeamSimilarityScore(gameMode, mode, balancedTeam1Ids, balancedTeam2Ids);
+  
+  // Score combiné: priorité à l'équilibrage (différence de points normalisée) + similarité
+  const avgPoints = players.reduce((sum, p) => sum + (p.points || 0), 0) / players.length || 1;
+  const normalizedBalancedDiff = balancedDiff / avgPoints;
+  const balancedScore = normalizedBalancedDiff * 10 + balancedSimilarity;
+  
+  bestTeam1 = balanced.team1;
+  bestTeam2 = balanced.team2;
+  bestScore = balancedScore;
+  
+  console.log(`[Ranked Matchmaking] Balanced teams: diff=${balancedDiff} pts, similarity=${balancedSimilarity.toFixed(2)}, score=${balancedScore.toFixed(2)}`);
+  
+  // Essayer des variations aléatoires qui maintiennent un bon équilibre
+  for (let i = 0; i < ATTEMPTS; i++) {
+    // Mélanger les joueurs
+    const shuffled = fisherYatesShuffle(players);
+    
+    // Générer des équipes équilibrées à partir du mélange
+    const variant = generateBalancedTeams(shuffled, teamSize);
+    
+    const team1Ids = variant.team1.map(p => p.userId?.toString() || p.oduserId);
+    const team2Ids = variant.team2.map(p => p.userId?.toString() || p.oduserId);
+    
+    const pointsDiff = calculateTeamPointsDifference(variant.team1, variant.team2);
+    const similarityScore = calculateTeamSimilarityScore(gameMode, mode, team1Ids, team2Ids);
+    
+    // Score combiné
+    const normalizedDiff = pointsDiff / avgPoints;
+    const combinedScore = normalizedDiff * 10 + similarityScore + (Math.random() * 0.3); // Petit aléatoire
+    
+    if (combinedScore < bestScore) {
+      bestScore = combinedScore;
+      bestTeam1 = variant.team1;
+      bestTeam2 = variant.team2;
+    }
+  }
+  
+  const finalDiff = calculateTeamPointsDifference(bestTeam1, bestTeam2);
+  const team1TotalPoints = bestTeam1.reduce((sum, p) => sum + (p.points || 0), 0);
+  const team2TotalPoints = bestTeam2.reduce((sum, p) => sum + (p.points || 0), 0);
+  
+  console.log(`[Ranked Matchmaking] Final balanced teams: Team1=${team1TotalPoints}pts, Team2=${team2TotalPoints}pts, diff=${finalDiff}pts, score=${bestScore.toFixed(2)}`);
   
   return { team1: bestTeam1, team2: bestTeam2 };
 };
@@ -1607,71 +1684,75 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     console.log(`[Ranked Matchmaking Test] Maps for vote:`, mapsForVoteTest.map(m => m.name));
     
     // Créer les données des joueurs pour le match
-    // Pour les matchs de test avec roster selection:
-    // - Le staff est automatiquement dans l'équipe 1 (il est référent)
-    // - Un bot aléatoire est automatiquement dans l'équipe 2 (il est référent)
+    // MÉLANGE AUTOMATIQUE: Tous les joueurs sont assignés directement à leur équipe (comme en matchmaking normal)
+    // - Team 1: staffPlayer + team1Players (sans le staff)
+    // - Team 2: team2Players
     
-    // Choisir un bot aléatoire pour être référent de l'équipe 2
-    const allBots = [...team1Players, ...team2Players].filter(p => p.isFake);
-    const team2ReferentBot = allBots[Math.floor(Math.random() * allBots.length)];
+    // Le référent de chaque équipe est:
+    // - Team 1: Le staff (s'il n'est pas banni référent)
+    // - Team 2: Un bot aléatoire (puisqu'il n'y a pas de vrais joueurs dans l'équipe 2)
     
+    // Trouver où est le staff
+    const staffInTeam1 = team1Players.some(p => !p.isFake);
+    const staffInTeam2 = team2Players.some(p => !p.isFake);
+    
+    // Créer les joueurs de chaque équipe avec leur team assignée
     const matchPlayers = [
-      ...team1Players.map(p => {
+      ...team1Players.map((p, index) => {
         const isStaff = !p.isFake && p.userId?.toString() === userId.toString();
-        const isTeam2Referent = p.isFake && p.username === team2ReferentBot?.username;
+        const isTeam1Ref = isStaff && !isStaffReferentBanned;
         return {
           user: p.isFake ? null : p.userId,
           username: p.username,
           rank: p.rank,
           points: p.points,
-          team: isStaff ? 1 : (isTeam2Referent ? 2 : null), // Staff en équipe 1, bot référent en équipe 2
-          isReferent: isStaff || isTeam2Referent,
+          team: 1, // Tous les joueurs team1 sont dans l'équipe 1
+          isReferent: isTeam1Ref || (!staffInTeam1 && index === 0),
           isFake: p.isFake,
           queueJoinedAt: p.joinedAt
         };
       }),
-      ...team2Players.map(p => {
+      ...team2Players.map((p, index) => {
         const isStaff = !p.isFake && p.userId?.toString() === userId.toString();
-        const isTeam2Referent = p.isFake && p.username === team2ReferentBot?.username;
+        const isTeam2Ref = isStaff && !isStaffReferentBanned;
         return {
           user: p.isFake ? null : p.userId,
           username: p.username,
           rank: p.rank,
           points: p.points,
-          team: isStaff ? 1 : (isTeam2Referent ? 2 : null), // Staff en équipe 1, bot référent en équipe 2
-          isReferent: isStaff || isTeam2Referent,
+          team: 2, // Tous les joueurs team2 sont dans l'équipe 2
+          isReferent: isTeam2Ref || (!staffInTeam2 && index === 0),
           isFake: p.isFake,
           queueJoinedAt: p.joinedAt
         };
       })
     ];
     
-    // Pour les matchs de test, le staff est référent de l'équipe 1 uniquement
-    // L'équipe 2 aura un "bot" qui sélectionne automatiquement
-    const team1ReferentId = userId;
-    const team2ReferentId = null; // Bot auto-pick pour l'équipe 2
+    // Déterminer les référents (vrais joueurs si possible, sinon premier de l'équipe)
+    const team1ReferentId = staffInTeam1 && !isStaffReferentBanned ? userId : null;
+    const team2ReferentId = staffInTeam2 && !isStaffReferentBanned ? userId : null;
     
-    // Créer le match avec le flag isTestMatch et la sélection de roster
+    // Créer le match SANS sélection de roster (mélange automatique comme en matchmaking normal)
     const match = await RankedMatch.create({
       gameMode,
       mode,
       teamSize,
       players: matchPlayers,
       team1Referent: team1ReferentId,
-      team2Referent: null, // Bot pour l'équipe 2
+      team2Referent: team2ReferentId,
       hostTeam,
-      status: 'pending', // En attente de la sélection de roster puis du vote de map
+      status: 'pending', // En attente du vote de map (plus de sélection de roster)
       maps: selectedMaps,
       mapVoteOptions: mapsForVoteTest,
       matchmakingStartedAt: new Date(),
       isTestMatch: true, // Flag pour identifier un match de test
       rosterSelection: {
-        isActive: true,
+        isActive: false, // PAS DE SÉLECTION DE ROSTER - mélange automatique
         currentTurn: 1,
-        turnStartedAt: new Date(),
+        turnStartedAt: null,
         pickOrder: [],
         totalPicks: 0,
-        startedAt: new Date(),
+        startedAt: null,
         completedAt: null
       }
     });
@@ -1679,9 +1760,9 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     // Populate pour envoyer au client
     await match.populate('players.user', 'username avatar discordId discordAvatar platform');
     if (team1ReferentId) await match.populate('team1Referent', 'username');
-    // team2Referent est null (bot), pas besoin de populate
+    if (team2ReferentId) await match.populate('team2Referent', 'username');
     
-    console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${teamSize}v${teamSize})`);
+    console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${teamSize}v${teamSize}) - Mélange automatique activé`);
     
     // Ajouter un message système
     match.chat.push({
@@ -1692,7 +1773,7 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     await match.save();
     
     // Préparer les données des joueurs pour l'animation de shuffle (test match)
-    // Inclure les joueurs non assignés (vrais joueurs) et les bots
+    // Tous les joueurs ont déjà leur équipe assignée
     const playersForAnimation = matchPlayers.map((p, index) => {
       const populatedPlayer = match.players.find(mp => mp.username === p.username);
       let avatar = null;
@@ -1706,110 +1787,39 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
         id: p.user?.toString() || `fake-${index}`,
         username: p.username,
         avatar: avatar,
-        team: p.team, // null pour tous les joueurs (sélection par référents)
+        team: p.team, // Équipe déjà assignée (1 ou 2)
         isReferent: p.isReferent,
-        isHost: false, // Sera déterminé après la sélection
+        isHost: p.team === hostTeam && p.isReferent,
         isFake: p.isFake,
         points: p.points || 0 // Points classés pour afficher le rang
       };
     });
     
-    // Préparer la liste des joueurs disponibles pour la sélection (SAUF le staff et le bot référent)
-    // Inclure les avatars pour l'affichage
-    const availablePlayersForSelection = matchPlayers
-      .filter(p => p.team === null) // Exclure ceux déjà assignés (staff en équipe 1, bot référent en équipe 2)
-      .map((p, index) => {
-        const populatedPlayer = match.players.find(mp => mp.username === p.username);
-        let avatar = null;
-        if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
-          avatar = `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
-        } else if (populatedPlayer?.user?.avatar) {
-          avatar = populatedPlayer.user.avatar;
-        }
-        
-        return {
-          id: p.user?.toString() || p.username, // Pour les bots, utiliser le username comme id
-          username: p.username,
-          points: p.points,
-          rank: p.rank,
-          isFake: p.isFake,
-          avatar: avatar
-        };
-      });
-    
-    // Préparer les données du staff pour team1Players initial
+    // Trouver l'équipe du staff
     const staffInMatch = matchPlayers.find(p => p.user?.toString() === userId.toString());
-    console.log('[Roster Selection] Staff search:', {
-      userId: userId.toString(),
-      staffInMatch: staffInMatch ? { username: staffInMatch.username, team: staffInMatch.team, user: staffInMatch.user?.toString() } : null,
-      matchPlayersCount: matchPlayers.length,
-      playersWithUser: matchPlayers.filter(p => p.user).map(p => ({ username: p.username, user: p.user?.toString(), team: p.team }))
-    });
-    const staffForTeam1 = staffInMatch ? {
-      id: userId.toString(),
-      username: staffInMatch.username,
-      points: staffInMatch.points,
-      rank: staffInMatch.rank,
-      isFake: false,
-      avatar: (() => {
-        const populatedPlayer = match.players.find(mp => mp.username === staffInMatch.username);
-        if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
-          return `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
-        } else if (populatedPlayer?.user?.avatar) {
-          return populatedPlayer.user.avatar;
-        }
-        return null;
-      })()
-    } : null;
+    const staffTeamNum = staffInMatch?.team || 1;
     
-    // Préparer les données du bot référent pour team2Players initial
-    const botReferentInMatch = matchPlayers.find(p => p.isFake && p.username === team2ReferentBot?.username);
-    const botForTeam2 = botReferentInMatch ? {
-      id: botReferentInMatch.username, // Les bots utilisent username comme id
-      username: botReferentInMatch.username,
-      points: botReferentInMatch.points,
-      rank: botReferentInMatch.rank,
-      isFake: true,
-      avatar: null // Les bots n'ont pas d'avatar
-    } : null;
-    
-    // Notifier le staff du match trouvé avec la phase de sélection de roster
+    // Notifier le staff du match trouvé - SANS sélection de roster (mélange automatique)
     if (io) {
       const testMatchIdStr = match._id.toString();
       io.to(`user-${userId}`).emit('rankedMatchFound', {
-        matchId: testMatchIdStr, // Envoyer comme string pour cohérence avec les rooms
+        matchId: testMatchIdStr,
         gameMode,
         mode,
         format: `${teamSize}v${teamSize}`,
         teamSize,
-        yourTeam: 1, // Staff est déjà dans l'équipe 1
-        isReferent: true,
-        isHost: false, // Sera déterminé après la sélection
-        isTestMatch: true, // Test match flag
-        hasRosterSelection: true, // Flag pour activer la phase de sélection de roster
-        players: playersForAnimation, // Inclure tous les joueurs pour l'animation
-        mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 })), // Maps pour le vote (après sélection)
-        rosterSelection: {
-          isActive: true,
-          currentTurn: 1,
-          team1Referent: userId.toString(),
-          team2Referent: team2ReferentBot?.username || null, // Bot référent pour l'équipe 2
-          team2ReferentInfo: botForTeam2, // Infos complètes du bot référent
-          availablePlayers: availablePlayersForSelection,
-          team1Players: staffForTeam1 ? [staffForTeam1] : [], // Staff déjà dans l'équipe 1
-          team2Players: botForTeam2 ? [botForTeam2] : [], // Bot référent déjà dans l'équipe 2
-          timeRemaining: ROSTER_SELECTION_TURN_TIME / 1000,
-          totalPlayersToSelect: matchPlayers.filter(p => p.team === null).length,
-          // Flags personnalisés pour le staff - c'est lui le référent team 1 et c'est son tour
-          isYourTurn: true, // C'est le tour de l'équipe 1 (le staff)
-          isTeam1Referent: true,
-          isTeam2Referent: false
-        }
+        yourTeam: staffTeamNum, // Équipe du staff (1 ou 2 selon le mélange)
+        isReferent: staffInMatch?.isReferent || false,
+        isHost: staffTeamNum === hostTeam && (staffInMatch?.isReferent || false),
+        isTestMatch: true,
+        hasRosterSelection: false, // PAS de sélection de roster - mélange automatique
+        players: playersForAnimation, // Tous les joueurs avec leur équipe assignée
+        mapVoteOptions: mapsForVoteTest.map(m => ({ name: m.name, image: m.image, votes: 0 }))
       });
     }
     
-    // Démarrer le timer de sélection de roster (au lieu du vote de map)
-    startRosterSelectionTurnTimer(match._id, 1);
+    // Démarrer le timer de vote de map DIRECTEMENT (pas de sélection de roster)
+    startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
     
     return {
       success: true,

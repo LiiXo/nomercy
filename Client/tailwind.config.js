@@ -87,6 +87,7 @@ export default {
         'border-glow': 'borderGlow 3s ease-in-out infinite',
         'gradient': 'gradient 3s ease infinite',
         'spin-slow': 'spin 20s linear infinite',
+        'shine': 'shine 2s ease-in-out infinite',
       },
       keyframes: {
         float: {
@@ -146,6 +147,10 @@ export default {
         gradient: {
           '0%, 100%': { backgroundPosition: '0% 50%' },
           '50%': { backgroundPosition: '100% 50%' },
+        },
+        shine: {
+          '0%': { transform: 'translateX(-100%) skewX(-12deg)' },
+          '100%': { transform: 'translateX(200%) skewX(-12deg)' },
         },
       },
       boxShadow: {
