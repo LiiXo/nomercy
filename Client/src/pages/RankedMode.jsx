@@ -849,8 +849,9 @@ const RankedMode = () => {
           return;
         }
         
-        // Sinon, rediriger vers la feuille de match
-        navigate(`/ranked/match/${match._id}`);
+        // Sinon, ne pas rediriger automatiquement - l'utilisateur peut rester sur la page
+        // et rejoindre via le bouton "Rejoindre" dans la bannière de match actif
+        console.log('[RankedMode] Active match found, displaying banner instead of redirecting');
       } else {
         setActiveMatch(null);
       }
@@ -897,10 +898,8 @@ const RankedMode = () => {
         // Si le joueur a un match en cours
         if (data.inMatch && data.match) {
           setActiveMatch(data.match);
-          // Redirection automatique vers le match au chargement initial
-          if (autoRedirect) {
-            navigate(`/ranked/match/${data.match._id}`);
-          }
+          // Ne pas rediriger automatiquement - l'utilisateur peut rester sur la page
+          // et rejoindre via le bouton "Rejoindre" dans la bannière de match actif
         } else {
           setActiveMatch(null);
         }
@@ -1675,7 +1674,13 @@ const RankedMode = () => {
       activate: 'Activer',
       active: 'Actif',
       expiresIn: 'Expire dans',
-      boosterActive: 'Booster actif !'
+      boosterActive: 'Booster actif !',
+      matchRewards: 'Récompenses par match',
+      winRewards: 'En cas de victoire',
+      lossRewards: 'En cas de défaite',
+      goldReward: 'Gold',
+      xpReward: 'XP',
+      ptsReward: 'Points'
     },
     en: {
       title: 'Ranked Mode',
@@ -1749,7 +1754,13 @@ const RankedMode = () => {
       activate: 'Activate',
       active: 'Active',
       expiresIn: 'Expires in',
-      boosterActive: 'Booster active!'
+      boosterActive: 'Booster active!',
+      matchRewards: 'Match Rewards',
+      winRewards: 'On victory',
+      lossRewards: 'On defeat',
+      goldReward: 'Gold',
+      xpReward: 'XP',
+      ptsReward: 'Points'
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -1823,7 +1834,13 @@ const RankedMode = () => {
       activate: 'Aktivieren',
       active: 'Aktiv',
       expiresIn: 'Läuft ab in',
-      boosterActive: 'Booster aktiv!'
+      boosterActive: 'Booster aktiv!',
+      matchRewards: 'Match-Belohnungen',
+      winRewards: 'Bei Sieg',
+      lossRewards: 'Bei Niederlage',
+      goldReward: 'Gold',
+      xpReward: 'XP',
+      ptsReward: 'Punkte'
     },
     it: {
       title: 'Modalità Classificata',
@@ -1897,7 +1914,13 @@ const RankedMode = () => {
       activate: 'Attiva',
       active: 'Attivo',
       expiresIn: 'Scade tra',
-      boosterActive: 'Booster attivo!'
+      boosterActive: 'Booster attivo!',
+      matchRewards: 'Ricompense partita',
+      winRewards: 'In caso di vittoria',
+      lossRewards: 'In caso di sconfitta',
+      goldReward: 'Gold',
+      xpReward: 'XP',
+      ptsReward: 'Punti'
     }
   };
   
@@ -2380,6 +2403,86 @@ const RankedMode = () => {
                 </button>
               </div>
 
+              {/* Match Rewards Section */}
+              {rankedRewardsPerMode[selectedGameMode] && (
+                <div className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-6">
+                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <Trophy className={`w-5 h-5 text-${accent}-500`} />
+                    {t.matchRewards}
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Victory Rewards */}
+                    <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+                      <p className="text-green-400 font-semibold text-sm mb-3 flex items-center gap-2">
+                        <Medal className="w-4 h-4" />
+                        {t.winRewards}
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">{t.ptsReward}</span>
+                          <span className="text-green-400 font-bold">+{rankedRewardsPerMode[selectedGameMode].pointsWin}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">{t.goldReward}</span>
+                          <div className="flex items-center gap-1">
+                            <Coins className="w-3 h-3 text-yellow-400" />
+                            <span className="text-yellow-400 font-bold">+{rankedRewardsPerMode[selectedGameMode].coinsWin}</span>
+                            {activeEvents.doubleGold && <span className="text-[10px] text-yellow-300 bg-yellow-500/20 px-1 rounded">x2</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">{t.xpReward}</span>
+                          <div className="flex items-center gap-1">
+                            <Zap className="w-3 h-3 text-cyan-400" />
+                            <span className="text-cyan-400 font-bold">+{rankedRewardsPerMode[selectedGameMode].xpWinMin}-{rankedRewardsPerMode[selectedGameMode].xpWinMax}</span>
+                            {activeEvents.doubleXP && <span className="text-[10px] text-cyan-300 bg-cyan-500/20 px-1 rounded">x2</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Defeat Rewards */}
+                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                      <p className="text-red-400 font-semibold text-sm mb-3 flex items-center gap-2">
+                        <Target className="w-4 h-4" />
+                        {t.lossRewards}
+                      </p>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">{t.ptsReward}</span>
+                          <span className="text-red-400 font-bold">{rankedRewardsPerMode[selectedGameMode].pointsLoss}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">{t.goldReward}</span>
+                          <div className="flex items-center gap-1">
+                            <Coins className="w-3 h-3 text-yellow-400" />
+                            <span className="text-yellow-400/70 font-bold">+{rankedRewardsPerMode[selectedGameMode].coinsLoss}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-400 text-xs">{t.xpReward}</span>
+                          <span className="text-gray-500 font-bold">0</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Active Events Banner */}
+                  {(activeEvents.doubleXP || activeEvents.doubleGold) && (
+                    <div className="mt-4 p-3 rounded-xl bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
+                        <span className="text-purple-300 text-sm font-semibold">
+                          {language === 'fr' ? 'Événement actif : ' : 'Active event: '}
+                          {activeEvents.doubleXP && activeEvents.doubleGold ? 'Double XP & Gold!' : activeEvents.doubleXP ? 'Double XP!' : 'Double Gold!'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Matchmaking Section */}
               {isAuthenticated && (
                 <div ref={matchmakingRef} className="rounded-2xl sm:rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 p-4 sm:p-6">
@@ -2792,7 +2895,7 @@ const RankedMode = () => {
                                   </div>
                                   <button
                                     onClick={() => activateBooster(booster.purchaseId)}
-                                    disabled={activatingBooster === booster.purchaseId || activeBoosters.some(ab => ab.effectType === booster.item.effectType)}
+                                    disabled={activatingBooster === booster.purchaseId || activeBoosters.some(ab => ab.effectType === booster.item.effectType) || !!activeMatch}
                                     className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                                   >
                                     {activatingBooster === booster.purchaseId ? (

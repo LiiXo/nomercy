@@ -324,22 +324,13 @@ const MySquad = () => {
       }
       
       try {
-        const response = await fetch(`${API_URL}/squads/my-squad`, {
+        const response = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, {
           credentials: 'include'
         });
         const data = await response.json();
         
         if (data.success && data.squad) {
-          // Filter squad by current mode - only show if mode matches or squad is 'both'
-          const squadMode = data.squad.mode;
-          const isCompatibleMode = squadMode === 'both' || squadMode === selectedMode;
-          
-          if (isCompatibleMode) {
-            setSquad(data.squad);
-          } else {
-            // Squad exists but is not for this mode
-            setSquad(null);
-          }
+          setSquad(data.squad);
         } else {
           setSquad(null);
         }
@@ -417,7 +408,9 @@ const MySquad = () => {
     try {
       const response = await fetch(`${API_URL}/squads/leave`, {
         method: 'POST',
-        credentials: 'include'
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ mode: selectedMode })
       });
       const data = await response.json();
       

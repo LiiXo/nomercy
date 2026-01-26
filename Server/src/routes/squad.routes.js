@@ -98,16 +98,35 @@ router.get('/all', async (req, res) => {
   }
 });
 
-// Get user's current squad
+// Helper function to get the squad field name for a mode
+const getSquadFieldForMode = (mode) => {
+  if (mode === 'hardcore') return 'squadHardcore';
+  if (mode === 'cdl') return 'squadCdl';
+  return 'squad'; // fallback to legacy field
+};
+
+// Get user's current squad for a specific mode
 router.get('/my-squad', verifyToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('squad');
+    const { mode } = req.query; // 'hardcore' or 'cdl'
+    const user = await User.findById(req.user._id);
     
-    if (!user.squad) {
+    // Determine which squad field to use based on mode
+    let squadId = null;
+    if (mode === 'hardcore') {
+      squadId = user.squadHardcore;
+    } else if (mode === 'cdl') {
+      squadId = user.squadCdl;
+    } else {
+      // Fallback: try legacy field first, then check both mode-specific fields
+      squadId = user.squad || user.squadHardcore || user.squadCdl;
+    }
+    
+    if (!squadId) {
       return res.json({ success: true, squad: null });
     }
     
-    const squad = await Squad.findById(user.squad)
+    const squad = await Squad.findById(squadId)
       .populate('members.user', 'username avatar avatarUrl discordAvatar discordId platform')
       .populate('leader', 'username avatar avatarUrl discordAvatar discordId platform')
       .populate('joinRequests.user', 'username avatar avatarUrl discordAvatar discordId');
@@ -122,13 +141,24 @@ router.get('/my-squad', verifyToken, async (req, res) => {
 // Get join requests count for leaders/officers
 router.get('/my-squad/requests-count', verifyToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('squad');
+    const { mode } = req.query; // 'hardcore' or 'cdl'
+    const user = await User.findById(req.user._id);
     
-    if (!user.squad) {
+    // Determine which squad field to use based on mode
+    let squadId = null;
+    if (mode === 'hardcore') {
+      squadId = user.squadHardcore;
+    } else if (mode === 'cdl') {
+      squadId = user.squadCdl;
+    } else {
+      squadId = user.squad || user.squadHardcore || user.squadCdl;
+    }
+    
+    if (!squadId) {
       return res.json({ success: true, count: 0 });
     }
     
-    const squad = await Squad.findById(user.squad);
+    const squad = await Squad.findById(squadId);
     
     // Only leader and officers can see requests count
     const isLeader = squad.leader.toString() === user._id.toString();
@@ -153,12 +183,22 @@ router.post('/create', verifyToken, async (req, res) => {
     const { name, tag, description, mode, isPublic, color } = req.body;
     const userId = req.user._id;
     
-    // Check if user already has a squad
-    const user = await User.findById(userId);
-    if (user.squad) {
+    // Validate mode
+    if (!mode || !['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Vous êtes déjà dans une escouade. Quittez-la d\'abord.' 
+        message: 'Mode invalide. Choisissez "hardcore" ou "cdl".' 
+      });
+    }
+    
+    // Check if user already has a squad FOR THIS MODE
+    const user = await User.findById(userId);
+    const squadField = mode === 'hardcore' ? 'squadHardcore' : 'squadCdl';
+    
+    if (user[squadField]) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vous êtes déjà dans une escouade en mode ${mode === 'hardcore' ? 'Hardcore' : 'CDL'}. Quittez-la d'abord.` 
       });
     }
     
@@ -207,7 +247,7 @@ router.post('/create', verifyToken, async (req, res) => {
       });
     }
     
-    // Create squad
+    // Create squad with the specified mode
     const squad = new Squad({
       name,
       tag: tag.trim(),
@@ -218,15 +258,15 @@ router.post('/create', verifyToken, async (req, res) => {
         role: 'leader',
         joinedAt: new Date()
       }],
-      mode: mode || 'both',
+      mode: mode, // Set the mode explicitly (hardcore or cdl)
       isPublic: isPublic !== false,
       color: color || '#ef4444'
     });
     
     await squad.save();
     
-    // Update user's squad reference
-    user.squad = squad._id;
+    // Update user's mode-specific squad reference
+    user[squadField] = squad._id;
     await user.save();
     
     // Populate and return
@@ -309,18 +349,31 @@ router.post('/:squadId/join-request', verifyToken, async (req, res) => {
     const userId = req.user._id;
     const squadId = req.params.squadId;
     
-    // Check if user already has a squad
+    const squad = await Squad.findById(squadId);
+    if (!squad) {
+      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
+    }
+    
+    // Check if user already has a squad FOR THIS SQUAD'S MODE
     const user = await User.findById(userId);
-    if (user.squad) {
+    const squadMode = squad.mode; // 'hardcore', 'cdl', or 'both'
+    
+    // Determine which field to check based on squad's mode
+    if (squadMode === 'hardcore' && user.squadHardcore) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade en mode Hardcore.' 
+      });
+    } else if (squadMode === 'cdl' && user.squadCdl) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade en mode CDL.' 
+      });
+    } else if (squadMode === 'both' && (user.squadHardcore || user.squadCdl || user.squad)) {
       return res.status(400).json({ 
         success: false, 
         message: 'Vous êtes déjà dans une escouade.' 
       });
-    }
-    
-    const squad = await Squad.findById(squadId);
-    if (!squad) {
-      return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
     }
     
     if (!squad.isPublic) {
@@ -398,8 +451,20 @@ router.post('/:squadId/accept/:userId', verifyToken, async (req, res) => {
     
     await squad.save();
     
-    // Update user's squad
-    await User.findByIdAndUpdate(userId, { squad: squadId });
+    // Update user's mode-specific squad field based on squad's mode
+    const squadMode = squad.mode;
+    const updateFields = {};
+    
+    if (squadMode === 'hardcore') {
+      updateFields.squadHardcore = squadId;
+    } else if (squadMode === 'cdl') {
+      updateFields.squadCdl = squadId;
+    } else {
+      // For 'both' mode, update the legacy field
+      updateFields.squad = squadId;
+    }
+    
+    await User.findByIdAndUpdate(userId, updateFields);
     
     res.json({ success: true, message: 'Membre accepté' });
   } catch (error) {
@@ -440,16 +505,35 @@ router.post('/:squadId/reject/:userId', verifyToken, async (req, res) => {
 // Leave squad
 router.post('/leave', verifyToken, async (req, res) => {
   try {
+    const { mode } = req.body; // 'hardcore' or 'cdl'
     const userId = req.user._id;
     
     const user = await User.findById(userId);
-    if (!user.squad) {
-      return res.status(400).json({ success: false, message: 'Vous n\'êtes dans aucune escouade' });
+    
+    // Determine which squad field to use based on mode
+    let squadId = null;
+    let squadField = null;
+    
+    if (mode === 'hardcore') {
+      squadId = user.squadHardcore;
+      squadField = 'squadHardcore';
+    } else if (mode === 'cdl') {
+      squadId = user.squadCdl;
+      squadField = 'squadCdl';
+    } else {
+      // Fallback: check legacy field or find any squad
+      squadId = user.squad || user.squadHardcore || user.squadCdl;
+      squadField = user.squad ? 'squad' : (user.squadHardcore ? 'squadHardcore' : 'squadCdl');
     }
     
-    const squad = await Squad.findById(user.squad);
+    if (!squadId) {
+      return res.status(400).json({ success: false, message: 'Vous n\'\u00eates dans aucune escouade' });
+    }
+    
+    const squad = await Squad.findById(squadId);
     if (!squad) {
-      user.squad = null;
+      // Squad doesn't exist, clear the field
+      user[squadField] = null;
       await user.save();
       return res.json({ success: true, message: 'Escouade quittée' });
     }
@@ -466,7 +550,7 @@ router.post('/leave', verifyToken, async (req, res) => {
         squad.isDeleted = true;
         squad.deletedAt = new Date();
         await squad.save();
-        user.squad = null;
+        user[squadField] = null;
         await user.save();
         return res.json({ success: true, message: 'Escouade dissoute' });
       }
@@ -479,7 +563,7 @@ router.post('/leave', verifyToken, async (req, res) => {
     
     await squad.save();
     
-    user.squad = null;
+    user[squadField] = null;
     await user.save();
     
     res.json({ success: true, message: 'Escouade quittée' });
@@ -753,8 +837,19 @@ router.delete('/:squadId/disband', verifyToken, async (req, res) => {
       });
     }
     
-    // Remove squad reference from the leader
-    await User.findByIdAndUpdate(leaderId, { $unset: { squad: 1 } });
+    // Clear leader's mode-specific squad field based on squad's mode
+    const squadMode = squad.mode;
+    const unsetFields = {};
+    
+    if (squadMode === 'hardcore') {
+      unsetFields.squadHardcore = 1;
+    } else if (squadMode === 'cdl') {
+      unsetFields.squadCdl = 1;
+    } else {
+      unsetFields.squad = 1;
+    }
+    
+    await User.findByIdAndUpdate(leaderId, { $unset: unsetFields });
     
     // HARD DELETE - Delete all squad data from DB (EXCEPT match history)
     // Delete squad from database completely
@@ -794,8 +889,19 @@ router.post('/:squadId/kick/:userId', verifyToken, async (req, res) => {
     
     await squad.save();
     
-    // Update user
-    await User.findByIdAndUpdate(userId, { squad: null });
+    // Clear user's mode-specific squad field based on squad's mode
+    const squadMode = squad.mode;
+    const unsetFields = {};
+    
+    if (squadMode === 'hardcore') {
+      unsetFields.squadHardcore = 1;
+    } else if (squadMode === 'cdl') {
+      unsetFields.squadCdl = 1;
+    } else {
+      unsetFields.squad = 1;
+    }
+    
+    await User.findByIdAndUpdate(userId, { $unset: unsetFields });
     
     res.json({ success: true, message: 'Membre expulsé' });
   } catch (error) {

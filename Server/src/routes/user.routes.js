@@ -886,14 +886,19 @@ router.get('/by-id/:id', async (req, res) => {
   }
 });
 
-// Get user's squad by ID (public)
+// Get user's squad by ID (public) - supports mode parameter for mode-specific squads
 router.get('/by-id/:id/squad', async (req, res) => {
   try {
+    const { mode } = req.query;
+    
+    // Determine which squad field to use based on mode
+    const squadField = mode === 'cdl' ? 'squadCdl' : mode === 'hardcore' ? 'squadHardcore' : 'squad';
+    
     const user = await User.findOne({ 
       _id: req.params.id,
       isProfileComplete: true,
       isBanned: false
-    }).populate('squad');
+    }).populate(squadField);
 
     if (!user) {
       return res.status(404).json({
@@ -902,7 +907,8 @@ router.get('/by-id/:id/squad', async (req, res) => {
       });
     }
 
-    if (!user.squad) {
+    const squad = user[squadField];
+    if (!squad) {
       return res.json({
         success: true,
         squad: null
@@ -912,12 +918,13 @@ router.get('/by-id/:id/squad', async (req, res) => {
     res.json({
       success: true,
       squad: {
-        _id: user.squad._id,
-        id: user.squad._id,
-        name: user.squad.name,
-        tag: user.squad.tag,
-        logo: user.squad.logo,
-        color: user.squad.color
+        _id: squad._id,
+        id: squad._id,
+        name: squad.name,
+        tag: squad.tag,
+        logo: squad.logo,
+        color: squad.color,
+        mode: squad.mode
       }
     });
   } catch (error) {
@@ -1889,29 +1896,22 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
     if (activisionId !== undefined) user.activisionId = activisionId;
     if (bio !== undefined) user.bio = bio;
     
-    // Update stats including XP (update both mode-specific and legacy stats)
+    // Update legacy stats field only (do NOT copy to mode-specific fields - use ladderStats for that)
+    // The legacy stats field is deprecated but kept for backward compatibility
     if (stats !== undefined) {
-      // Update legacy stats field
+      // Update legacy stats field only
       if (stats.xp !== undefined) user.stats.xp = stats.xp;
       if (stats.points !== undefined) user.stats.points = stats.points;
       if (stats.wins !== undefined) user.stats.wins = stats.wins;
       if (stats.losses !== undefined) user.stats.losses = stats.losses;
       if (stats.rank !== undefined) user.stats.rank = stats.rank;
       
-      // Also update mode-specific stats (these are actually used by the app)
-      if (stats.xp !== undefined) {
-        user.statsHardcore.xp = stats.xp;
-        user.statsCdl.xp = stats.xp;
-      }
-      if (stats.points !== undefined) {
-        user.statsHardcore.points = stats.points;
-        user.statsCdl.points = stats.points;
-      }
+      // NOTE: Do NOT copy to statsHardcore/statsCdl here!
+      // Mode-specific stats should be updated via the ladderStats parameter
+      // to keep Hardcore and CDL stats properly separated.
       
       // Mark nested objects as modified for Mongoose
       user.markModified('stats');
-      user.markModified('statsHardcore');
-      user.markModified('statsCdl');
     }
     
     // Update ladder stats (wins/losses/xp per mode) - this is separate from ranked stats

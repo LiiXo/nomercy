@@ -86,13 +86,15 @@ const Navbar = () => {
   // Fetch squad join requests count
   useEffect(() => {
     const fetchSquadRequestsCount = async () => {
-      if (!isAuthenticated || !user?.squad) {
+      // Check mode-specific squad field
+      const hasSquad = selectedMode === 'hardcore' ? user?.squadHardcore : user?.squadCdl;
+      if (!isAuthenticated || !hasSquad) {
         setSquadRequestsCount(0);
         return;
       }
       
       try {
-        const response = await fetch('https://api-nomercy.ggsecure.io/api/squads/my-squad/requests-count', {
+        const response = await fetch(`https://api-nomercy.ggsecure.io/api/squads/my-squad/requests-count?mode=${selectedMode}`, {
           credentials: 'include'
         });
         const data = await response.json();
@@ -107,7 +109,7 @@ const Navbar = () => {
     fetchSquadRequestsCount();
     const interval = setInterval(fetchSquadRequestsCount, 30000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, user?.squad]);
+  }, [isAuthenticated, selectedMode, user?.squadHardcore, user?.squadCdl]);
 
   // Fetch unread messages count
   useEffect(() => {

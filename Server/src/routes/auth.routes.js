@@ -91,6 +91,8 @@ router.get('/me', verifyToken, (req, res) => {
       goldCoins: req.user.goldCoins,
       stats: req.user.stats,
       statsResetCount: req.user.statsResetCount || 0,
+      squadHardcore: req.user.squadHardcore,
+      squadCdl: req.user.squadCdl,
       createdAt: req.user.createdAt
     }
   });
@@ -141,6 +143,8 @@ router.get('/status', async (req, res) => {
         goldCoins: user.goldCoins,
         stats: user.stats,
         statsResetCount: user.statsResetCount || 0,
+        squadHardcore: user.squadHardcore,
+        squadCdl: user.squadCdl,
         isBanned: user.isBanned,
         banReason: user.banReason,
         banExpiresAt: user.banExpiresAt,

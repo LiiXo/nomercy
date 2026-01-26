@@ -816,7 +816,7 @@ const MatchSheet = () => {
   const fetchMySquad = async () => {
     if (!isAuthenticated || isRankedMatch) return;
     try {
-      const response = await fetch(`${API_URL}/squads/my-squad`, {
+      const response = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, {
         credentials: 'include'
       });
       const data = await response.json();

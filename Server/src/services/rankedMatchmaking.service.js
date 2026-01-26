@@ -716,7 +716,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
   
   const playersForMatch = sortedQueue.slice(0, playerCount);
   const format = isCDL ? '4v4' : getOptimalFormat(playerCount).format;
-  const teamSize = isCDL ? 4 : playerCount / 2;
+  let teamSize = isCDL ? 4 : playerCount / 2;
   
   // Retirer les joueurs du match ET les joueurs éjectés de la file
   const playerIdsForMatch = playersForMatch.map(p => p.userId.toString());
@@ -769,7 +769,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     // Si des joueurs ont été retirés, vérifier si on a encore assez de joueurs
     if (playersToRemove.length > 0) {
-      const remainingPlayers = playersForMatch.filter(p => 
+      let remainingPlayers = playersForMatch.filter(p => 
         !playersToRemove.some(removed => removed.userId.toString() === p.userId.toString())
       );
       
@@ -789,11 +789,39 @@ const createMatchFromQueue = async (gameMode, mode) => {
         return;
       }
       
+      // Si nombre impair après retrait GGSecure, éjecter le dernier arrivé
+      if (remainingPlayers.length % 2 !== 0) {
+        // Trier par date d'arrivée pour éjecter le dernier
+        remainingPlayers.sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
+        const ejectedAfterGGSecure = remainingPlayers.pop();
+        console.log(`[Ranked Matchmaking] Ejecting ${ejectedAfterGGSecure.username} after GGSecure check (odd number: ${remainingPlayers.length + 1} -> ${remainingPlayers.length})`);
+        
+        // Remettre le joueur éjecté dans la file d'attente
+        const queue = getQueue(gameMode, mode);
+        if (!queue.some(p => p.userId.toString() === ejectedAfterGGSecure.userId.toString())) {
+          queue.push(ejectedAfterGGSecure);
+        }
+        
+        // Notifier le joueur éjecté
+        if (io) {
+          io.to(`user-${ejectedAfterGGSecure.userId}`).emit('rankedQueueUpdate', {
+            type: 'ejected',
+            message: 'Match lancé sans vous (nombre impair après vérification). Vous êtes toujours dans la file.',
+            queueSize: queue.length,
+            position: queue.findIndex(p => p.userId.toString() === ejectedAfterGGSecure.userId.toString()) + 1
+          });
+        }
+      }
+      
       // Continuer avec les joueurs restants (recalculer les équipes)
       playersForMatch.length = 0;
       playersForMatch.push(...remainingPlayers);
       playerCount = remainingPlayers.length;
-      console.log(`[Ranked Matchmaking] Continuing with ${playerCount} players after GGSecure check`);
+      
+      // IMPORTANT: Recalculer teamSize après retrait de joueurs
+      teamSize = isCDL ? 4 : playerCount / 2;
+      
+      console.log(`[Ranked Matchmaking] Continuing with ${playerCount} players after GGSecure check (teamSize: ${teamSize})`);
     }
     
     // Générer des équipes diversifiées en évitant les compositions récentes
@@ -1868,7 +1896,12 @@ const finalizeMapVote = async (matchId) => {
     
     // Créer les salons vocaux Discord temporaires SEULEMENT s'ils n'existent pas déjà
     // (ils peuvent avoir été créés lors de completeRosterSelection pour les matchs de test)
-    if (!match.team1VoiceChannel?.channelId && !match.team2VoiceChannel?.channelId) {
+    // Utiliser || pour être plus défensif: si UN SEUL canal existe, on ne recrée pas
+    const hasExistingTeam1Channel = match.team1VoiceChannel && match.team1VoiceChannel.channelId;
+    const hasExistingTeam2Channel = match.team2VoiceChannel && match.team2VoiceChannel.channelId;
+    console.log(`[Ranked Matchmaking] Voice channel check for ${matchId}: team1=${hasExistingTeam1Channel ? match.team1VoiceChannel.channelId : 'none'}, team2=${hasExistingTeam2Channel ? match.team2VoiceChannel.channelId : 'none'}`);
+    
+    if (!hasExistingTeam1Channel && !hasExistingTeam2Channel) {
       try {
         // Peupler les joueurs pour obtenir leurs Discord IDs
         await match.populate('players.user', 'discordId username');
@@ -1895,7 +1928,7 @@ const finalizeMapVote = async (matchId) => {
         console.error(`[Ranked Matchmaking] ❌ Failed to create voice channels:`, voiceError.message);
       }
     } else {
-      console.log(`[Ranked Matchmaking] Voice channels already exist for match ${matchId}, skipping creation`);
+      console.log(`[Ranked Matchmaking] Voice channels already exist for match ${matchId}, skipping duplicate creation`);
     }
     
     await match.save();

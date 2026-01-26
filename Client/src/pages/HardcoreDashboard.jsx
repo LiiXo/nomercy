@@ -530,7 +530,7 @@ const HardcoreDashboard = () => {
     const fetchMySquad = async () => {
       if (!isAuthenticated) return;
       try {
-        const response = await fetch(`${API_URL}/squads/my-squad`, { credentials: 'include' });
+        const response = await fetch(`${API_URL}/squads/my-squad?mode=hardcore`, { credentials: 'include' });
         const data = await response.json();
         if (data.success && data.squad) {
           setMySquad(data.squad);

@@ -2000,7 +2000,7 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
 router.get('/player-history/:playerId', async (req, res) => {
   try {
     const { playerId } = req.params;
-    const { limit = 10 } = req.query;
+    const { limit = 10, mode } = req.query;
     
     // IMPORTANT: Convertir playerId en ObjectId pour la recherche MongoDB
     let playerObjectId;
@@ -2015,13 +2015,18 @@ router.get('/player-history/:playerId', async (req, res) => {
     const user = await User.findById(playerObjectId).select('statsResetAt');
     const statsResetAt = user?.statsResetAt || null;
 
-    console.log(`[PLAYER HISTORY] Recherche matchs pour joueur: ${playerId}, statsResetAt: ${statsResetAt}`);
+    console.log(`[PLAYER HISTORY] Recherche matchs pour joueur: ${playerId}, mode: ${mode || 'all'}, statsResetAt: ${statsResetAt}`);
 
     // Build query - filter out matches before stats reset if applicable
     const query = {
       'players.user': playerObjectId,
       status: 'completed'
     };
+    
+    // Filter by mode if specified (hardcore or cdl)
+    if (mode && ['hardcore', 'cdl'].includes(mode)) {
+      query.mode = mode;
+    }
     
     // If user has reset their stats, only show matches after the reset
     if (statsResetAt) {

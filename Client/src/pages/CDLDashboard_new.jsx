@@ -483,7 +483,7 @@ const CDLDashboard = () => {
     const fetchMySquad = async () => {
       if (!isAuthenticated) return;
       try {
-        const response = await fetch(`${API_URL}/squads/my-squad`, { credentials: 'include' });
+        const response = await fetch(`${API_URL}/squads/my-squad?mode=cdl`, { credentials: 'include' });
         const data = await response.json();
         if (data.success && data.squad) {
           setMySquad(data.squad);

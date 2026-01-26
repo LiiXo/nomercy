@@ -311,15 +311,18 @@ const PlayerProfile = () => {
           console.error('Error fetching rankings:', err);
         }
         
-        // Fetch squad if user has one
+        // Fetch squad if user has one (mode-specific)
         try {
-          const squadResponse = await fetch(`${API_URL}/users/by-id/${playerId}/squad`);
+          const squadResponse = await fetch(`${API_URL}/users/by-id/${playerId}/squad?mode=${selectedMode}`);
           const squadData = await squadResponse.json();
           if (squadData.success && squadData.squad) {
             setSquad(squadData.squad);
+          } else {
+            setSquad(null); // Reset squad if not found for this mode
           }
         } catch (err) {
           console.error('Error fetching squad:', err);
+          setSquad(null);
         }
         
         // Fetch rank thresholds from admin config
@@ -375,13 +378,14 @@ const PlayerProfile = () => {
     return matchHistory.slice(startIndex, endIndex);
   };
 
-  // Fetch ranked match history when player data is loaded
+  // Fetch ranked match history when player data is loaded (mode-specific)
   useEffect(() => {
     const fetchRankedMatchHistory = async () => {
       if (!playerData?.id) return;
       setLoadingRankedHistory(true);
       try {
-        const response = await fetch(`${API_URL}/ranked-matches/player-history/${playerData.id}?limit=500`);
+        // Add mode filter to fetch only matches for the selected mode
+        const response = await fetch(`${API_URL}/ranked-matches/player-history/${playerData.id}?limit=500&mode=${selectedMode}`);
         const data = await response.json();
         if (data.success) {
           setRankedMatchHistory(data.matches);
@@ -395,7 +399,7 @@ const PlayerProfile = () => {
       }
     };
     fetchRankedMatchHistory();
-  }, [playerData?.id]);
+  }, [playerData?.id, selectedMode]);
 
   // Get paginated ranked matches
   const getPaginatedRankedMatches = () => {
@@ -522,26 +526,13 @@ const PlayerProfile = () => {
     };
   };
 
-  // Find the ranking with the highest points to display the best rank
-  // Simple logic: use whichever ranking has more points
-  const hcPoints = rankingHardcore?.points || 0;
-  const cdlPoints = rankingCdl?.points || 0;
-  const hcHasPlayed = rankingHardcore && (rankingHardcore.wins > 0 || rankingHardcore.losses > 0);
-  const cdlHasPlayed = rankingCdl && (rankingCdl.wins > 0 || rankingCdl.losses > 0);
+  // Use only the current mode's ranking for display (mode-specific)
+  // Instead of showing the "best" ranking across modes, show only the current mode's rank
+  const currentModeRanking = selectedMode === 'hardcore' ? rankingHardcore : rankingCdl;
+  const hasPlayedCurrentMode = currentModeRanking && (currentModeRanking.wins > 0 || currentModeRanking.losses > 0);
   
-  // Get the best ranking: the one with more points among those where player has played
-  let bestRanking = null;
-  if (hcHasPlayed && cdlHasPlayed) {
-    // Player has played both - use the one with more points
-    bestRanking = hcPoints >= cdlPoints ? rankingHardcore : rankingCdl;
-  } else if (hcHasPlayed) {
-    bestRanking = rankingHardcore;
-  } else if (cdlHasPlayed) {
-    bestRanking = rankingCdl;
-  }
-  
-  // Show division based on the best ranking found
-  const division = bestRanking ? getDivision(bestRanking.points || 0) : null;
+  // Show division based on the current mode's ranking only
+  const division = hasPlayedCurrentMode ? getDivision(currentModeRanking.points || 0) : null;
 
   if (loading) {
     return (
@@ -683,7 +674,7 @@ const PlayerProfile = () => {
                   >
                     {division.name}
                   </span>
-                  {bestRanking && bestRanking.points > 0 && (
+                  {currentModeRanking && currentModeRanking.points > 0 && (
                     <span 
                       className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
                       style={{ 
@@ -691,7 +682,7 @@ const PlayerProfile = () => {
                         color: division.hexColor
                       }}
                     >
-                      {bestRanking.points} pts
+                      {currentModeRanking.points} pts
                     </span>
                   )}
                 </div>

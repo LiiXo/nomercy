@@ -370,7 +370,7 @@ const SquadManagement = () => {
   const fetchSquad = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/squads/my-squad`, {
+      const response = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -808,7 +808,7 @@ const SquadManagement = () => {
         setBanner(data.bannerUrl);
         setSuccess(t.bannerUploaded || 'Banner uploaded!');
         // Refresh squad data
-        const squadResponse = await fetch(`${API_URL}/squads/my-squad`, { credentials: 'include' });
+        const squadResponse = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, { credentials: 'include' });
         const squadData = await squadResponse.json();
         if (squadData.success) {
           setSquad(squadData.squad);
@@ -838,7 +838,7 @@ const SquadManagement = () => {
         setBanner('');
         setSuccess(t.bannerDeleted || 'Banner deleted!');
         // Refresh squad data
-        const squadResponse = await fetch(`${API_URL}/squads/my-squad`, { credentials: 'include' });
+        const squadResponse = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, { credentials: 'include' });
         const squadData = await squadResponse.json();
         if (squadData.success) {
           setSquad(squadData.squad);

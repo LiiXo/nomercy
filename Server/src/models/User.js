@@ -105,7 +105,19 @@ const userSchema = new mongoose.Schema({
     default: 500
   },
 
-  // Squad
+  // Squad per mode (users can have one squad per mode)
+  squadHardcore: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Squad',
+    default: null
+  },
+  squadCdl: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Squad',
+    default: null
+  },
+  
+  // Legacy squad field (deprecated, kept for backward compatibility)
   squad: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Squad',

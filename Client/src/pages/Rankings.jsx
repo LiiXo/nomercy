@@ -299,7 +299,8 @@ const Rankings = () => {
       
       setLoadingSquad(true);
       try {
-        const response = await fetch(`${API_URL}/squads/my-squad`, {
+        const currentMode = isHardcore ? 'hardcore' : 'cdl';
+        const response = await fetch(`${API_URL}/squads/my-squad?mode=${currentMode}`, {
           credentials: 'include'
         });
         const data = await response.json();
@@ -411,7 +412,8 @@ const Rankings = () => {
 
   const fetchMyRank = async (ladderId) => {
     try {
-      const response = await fetch(`${API_URL}/squads/my-squad/ladder-rank/${ladderId}`, {
+      const currentMode = isHardcore ? 'hardcore' : 'cdl';
+      const response = await fetch(`${API_URL}/squads/my-squad/ladder-rank/${ladderId}?mode=${currentMode}`, {
         credentials: 'include'
       });
       const data = await response.json();
