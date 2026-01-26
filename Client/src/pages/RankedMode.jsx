@@ -305,7 +305,7 @@ const ActiveBoosterItem = ({ booster, language, t, onExpire }) => {
 
 const RankedMode = () => {
   const { language } = useLanguage();
-  const { selectedMode } = useMode();
+  const { selectedMode, selectMode } = useMode();
   const { user, isAuthenticated } = useAuth();
   const { on, isConnected, joinPage, leavePage, emit, modeOnlineUsers, joinMode, leaveMode, joinRankedMatch, leaveRankedMatch } = useSocket();
   const navigate = useNavigate();
@@ -2812,20 +2812,44 @@ const RankedMode = () => {
                   )}
 
                   {/* Active Match Alert */}
-                  {activeMatch && (
-                    <div className="mb-4 p-4 rounded-2xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <AlertTriangle className="w-5 h-5 text-orange-400" />
-                        <span className="text-orange-300 font-medium">{t.activeMatch}</span>
+                  {activeMatch && !activeMatch.isTestMatch && (() => {
+                    const matchMode = activeMatch.mode || 'hardcore';
+                    const isOtherMode = matchMode !== selectedMode;
+                    const modeName = matchMode === 'cdl' ? 'CDL' : 'Hardcore';
+                    
+                    return (
+                      <div className={`mb-4 p-4 rounded-2xl ${isOtherMode ? 'bg-purple-500/20 border border-purple-500/30' : 'bg-orange-500/20 border border-orange-500/30'} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3`}>
+                        <div className="flex items-center gap-3">
+                          <AlertTriangle className={`w-5 h-5 ${isOtherMode ? 'text-purple-400' : 'text-orange-400'}`} />
+                          <div>
+                            <span className={`${isOtherMode ? 'text-purple-300' : 'text-orange-300'} font-medium`}>
+                              {t.activeMatch}
+                            </span>
+                            <span className={`ml-2 px-2 py-0.5 rounded text-xs font-bold ${matchMode === 'cdl' ? 'bg-cyan-500/30 text-cyan-300' : 'bg-red-500/30 text-red-300'}`}>
+                              {modeName}
+                            </span>
+                            {isOtherMode && (
+                              <p className="text-xs text-gray-400 mt-1">
+                                {language === 'fr' ? 'Vous devez terminer ce match avant d\'en lancer un autre' : 'You must finish this match before starting another'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (isOtherMode) {
+                              // Switch to the match's mode first
+                              selectMode(matchMode);
+                            }
+                            navigate(`/ranked/match/${activeMatch._id}`);
+                          }}
+                          className={`px-4 py-2 ${isOtherMode ? 'bg-purple-500 hover:bg-purple-600' : 'bg-orange-500 hover:bg-orange-600'} rounded-xl text-white font-semibold transition-colors whitespace-nowrap`}
+                        >
+                          {t.rejoin}
+                        </button>
                       </div>
-                      <button
-                        onClick={() => navigate(`/ranked/match/${activeMatch._id}`)}
-                        className="px-4 py-2 bg-orange-500 hover:bg-orange-600 rounded-xl text-white font-semibold transition-colors"
-                      >
-                        {t.rejoin}
-                      </button>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* GGSecure Warning */}
                   {user?.platform === 'PC' && ggsecureConnected === false && (
