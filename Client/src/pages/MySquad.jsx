@@ -323,6 +323,11 @@ const MySquad = () => {
         return;
       }
       
+      // Wait for selectedMode to be defined before fetching
+      if (!selectedMode) {
+        return;
+      }
+      
       try {
         const response = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, {
           credentials: 'include'
@@ -1134,52 +1139,6 @@ const MySquad = () => {
                   </div>
                 </div>
               )}
-
-              {/* Ladders */}
-              <div className={`bg-dark-900/80 backdrop-blur-sm rounded-2xl border ${borderColor} overflow-hidden`}>
-                <div className="px-6 py-4 border-b border-white/5">
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Medal className={`w-5 h-5 text-${accentColor}-400`} />
-                    {t.ladders}
-                  </h2>
-                </div>
-                <div className="p-4">
-                  {squad.registeredLadders && squad.registeredLadders.length > 0 ? (
-                    <div className="space-y-2">
-                      {squad.registeredLadders.map((ladder, idx) => (
-                        <div
-                          key={idx}
-                          className={`flex items-center justify-between p-3 rounded-xl bg-${accentColor}-500/10 border border-${accentColor}-500/20`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-9 h-9 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center`}>
-                              <Award className={`w-4 h-4 text-${accentColor}-400`} />
-                            </div>
-                            <span className="text-white font-medium text-sm">{ladder.ladderName || ladder.ladderId}</span>
-                          </div>
-                          {ladder.rank && (
-                            <span className={`text-${accentColor}-400 font-bold text-sm`}>#{ladder.rank}</span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6">
-                      <Medal className="w-10 h-10 text-gray-700 mx-auto mb-2" />
-                      <p className="text-gray-500 text-sm">{t.noLadders}</p>
-                      {isLeaderOrOfficer && (
-                        <Link
-                          to={`/${selectedMode}/rankings`}
-                          className={`inline-flex items-center gap-1.5 mt-3 text-sm text-${accentColor}-400 hover:text-${accentColor}-300 transition-colors`}
-                        >
-                          <Plus className="w-4 h-4" />
-                          {language === 'fr' ? 'S\'inscrire' : 'Register'}
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
 
               {/* Leave Squad */}
               {!isLeader && (

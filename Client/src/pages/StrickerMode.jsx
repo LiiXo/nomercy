@@ -327,7 +327,7 @@ const StrickerMode = () => {
     if (!hasAccess) return;
     
     try {
-      const response = await fetch(`${API_URL}/squads/my-squad?mode=hardcore`, {
+      const response = await fetch(`${API_URL}/squads/my-squad?mode=stricker`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -463,12 +463,11 @@ const StrickerMode = () => {
     : 0;
   
   // Check if user is leader or officer in the squad
-  const odId = user?._id?.toString() || user?._id;
-  const leaderId = mySquad?.leader?._id?.toString() || mySquad?.leader?.toString() || mySquad?.leader;
-  const isLeader = odId && leaderId && odId === leaderId;
-  const isOfficer = odId && mySquad?.members?.some(m => {
-    const memberId = m?.user?._id?.toString() || m?.user?.toString() || m?.user;
-    return memberId === odId && m?.role === 'officer';
+  const userId = user?.id || user?._id;
+  const isLeader = mySquad?.leader?._id === userId || mySquad?.leader === userId;
+  const isOfficer = mySquad?.members?.some(m => {
+    const memberId = m?.user?._id || m?.user;
+    return memberId === userId && m?.role === 'officer';
   });
   const isLeaderOrOfficer = mySquad && user && (isLeader || isOfficer);
   

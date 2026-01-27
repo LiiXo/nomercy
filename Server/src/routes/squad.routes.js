@@ -111,7 +111,7 @@ const getSquadFieldForMode = (mode) => {
 // Get user's current squad for a specific mode
 router.get('/my-squad', verifyToken, async (req, res) => {
   try {
-    const { mode } = req.query; // 'hardcore' or 'cdl'
+    const { mode } = req.query; // 'hardcore', 'cdl', or 'stricker'
     const user = await User.findById(req.user._id);
     
     // Determine which squad field to use based on mode
@@ -140,9 +140,12 @@ router.get('/my-squad', verifyToken, async (req, res) => {
           squadId = user.squad;
         }
       }
+    } else if (mode === 'stricker') {
+      // Stricker mode uses squadStricker field, with fallback to squadHardcore
+      squadId = user.squadStricker || user.squadHardcore;
     } else {
-      // Fallback: try legacy field first, then check both mode-specific fields
-      squadId = user.squad || user.squadHardcore || user.squadCdl;
+      // Fallback: try legacy field first, then check all mode-specific fields
+      squadId = user.squad || user.squadHardcore || user.squadCdl || user.squadStricker;
     }
     
     if (!squadId) {

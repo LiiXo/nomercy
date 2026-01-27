@@ -368,6 +368,11 @@ const SquadManagement = () => {
   ];
 
   const fetchSquad = async () => {
+    // Wait for selectedMode to be defined before fetching
+    if (!selectedMode) {
+      return;
+    }
+    
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/squads/my-squad?mode=${selectedMode}`, {
@@ -410,7 +415,7 @@ const SquadManagement = () => {
 
   useEffect(() => {
     fetchSquad();
-  }, []);
+  }, [selectedMode]);
 
   // Clear messages after 3 seconds
   useEffect(() => {

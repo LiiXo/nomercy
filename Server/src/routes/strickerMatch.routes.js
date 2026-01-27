@@ -142,20 +142,24 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
 router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const odId = req.user._id.toString();
-    const user = await User.findById(req.user._id).populate({
-      path: 'squadStricker',
-      populate: { path: 'members.user', select: '_id username' }
-    });
+    const user = await User.findById(req.user._id)
+      .populate({
+        path: 'squadStricker',
+        populate: { path: 'members.user', select: '_id username' }
+      })
+      .populate({
+        path: 'squadHardcore',
+        populate: { path: 'members.user', select: '_id username' }
+      });
     
-    // Check if user has a squad
-    if (!user.squadStricker) {
+    // Check if user has a squad (stricker or hardcore fallback)
+    const squad = user.squadStricker || user.squadHardcore;
+    if (!squad) {
       return res.status(400).json({ 
         success: false, 
         message: 'Vous devez avoir une escouade pour jouer en mode Stricker' 
       });
     }
-    
-    const squad = user.squadStricker;
     
     // Check if squad has at least 5 members
     if (!squad.members || squad.members.length < 5) {
