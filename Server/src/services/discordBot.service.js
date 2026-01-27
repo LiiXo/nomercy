@@ -428,92 +428,28 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     // Generate a random number for this match's voice channels
     const channelNumber = generateRandomChannelNumber();
     
-    // Helper function to validate Discord IDs and get valid members
-    const getValidMemberIds = async (discordIds) => {
-      const validIds = [];
-      for (const discordId of discordIds) {
-        if (!discordId) continue;
-        try {
-          // Try to fetch the member to verify they exist in the guild
-          const member = await guild.members.fetch(discordId).catch(() => null);
-          if (member) {
-            validIds.push(discordId);
-          } else {
-            console.warn(`[Discord Bot] Member ${discordId} not found in guild, skipping permission`);
-          }
-        } catch (e) {
-          console.warn(`[Discord Bot] Could not fetch member ${discordId}: ${e.message}`);
-        }
-      }
-      return validIds;
-    };
-    
-    // Validate Discord IDs for both teams
-    const validTeam1Ids = await getValidMemberIds(team1DiscordIds);
-    const validTeam2Ids = await getValidMemberIds(team2DiscordIds);
-    
-    console.log(`[Discord Bot] Valid members - Team1: ${validTeam1Ids.length}/${team1DiscordIds.length}, Team2: ${validTeam2Ids.length}/${team2DiscordIds.length}`);
-    
-    // Build permission overwrites for team 1 channel
-    // Everyone can VIEW but only roster players can CONNECT
-    const team1Permissions = [
-      {
-        id: guild.id, // @everyone role
-        allow: [PermissionFlagsBits.ViewChannel],
-        deny: [PermissionFlagsBits.Connect]
-      }
-    ];
-    
-    // Allow each validated team 1 player
-    for (const discordId of validTeam1Ids) {
-      team1Permissions.push({
-        id: discordId,
-        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak]
-      });
-    }
-    
-    // Build permission overwrites for team 2 channel
-    // Everyone can VIEW but only roster players can CONNECT
-    const team2Permissions = [
-      {
-        id: guild.id, // @everyone role
-        allow: [PermissionFlagsBits.ViewChannel],
-        deny: [PermissionFlagsBits.Connect]
-      }
-    ];
-    
-    // Allow each validated team 2 player
-    for (const discordId of validTeam2Ids) {
-      team2Permissions.push({
-        id: discordId,
-        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak]
-      });
-    }
-    
     // Use last 4 characters of matchId as unique identifier
     const matchCode = matchIdStr.slice(-4).toUpperCase();
     
-    // Create team 1 voice channel with restricted permissions
+    // Create team 1 voice channel - No permission restrictions, everyone can join
     const team1ChannelName = `🔵 Blue #${matchCode}`;
     const team1Channel = await guild.channels.create({
       name: team1ChannelName,
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
-      permissionOverwrites: team1Permissions,
       reason: `Match classé ${matchIdStr}`
     });
 
-    // Create team 2 voice channel with restricted permissions
+    // Create team 2 voice channel - No permission restrictions, everyone can join
     const team2ChannelName = `🔴 Red #${matchCode}`;
     const team2Channel = await guild.channels.create({
       name: team2ChannelName,
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
-      permissionOverwrites: team2Permissions,
       reason: `Match classé ${matchIdStr}`
     });
 
-    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (Blue: ${validTeam1Ids.length} players, Red: ${validTeam2Ids.length} players)`);
+    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (open access - no permissions)`)
 
     return {
       team1: { channelId: team1Channel.id, channelName: team1ChannelName },

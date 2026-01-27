@@ -842,8 +842,10 @@ const RankedMode = () => {
   const checkActiveMatch = async () => {
     if (!isAuthenticated) return;
     try {
+      console.log('[RankedMode] Checking for active match (any mode)...');
       const response = await fetch(`${API_URL}/ranked-matches/active/me`, { credentials: 'include' });
       const data = await response.json();
+      console.log('[RankedMode] Active match response:', { hasMatch: !!data.match, matchMode: data.match?.mode, currentSelectedMode: selectedMode });
       if (data.success && data.match) {
         const match = data.match;
         setActiveMatch(match);
@@ -1020,14 +1022,15 @@ const RankedMode = () => {
         setTimerEndTime(data.timerEndTime);
         setCurrentFormat(data.currentFormat || null);
         
-        // Si le joueur a un match en cours
+        // Si le joueur a un match en cours dans CE mode
         if (data.inMatch && data.match) {
           setActiveMatch(data.match);
           // Ne pas rediriger automatiquement - l'utilisateur peut rester sur la page
           // et rejoindre via le bouton "Rejoindre" dans la bannière de match actif
-        } else {
-          setActiveMatch(null);
         }
+        // Note: Ne PAS reset activeMatch ici si !inMatch, car le joueur pourrait avoir
+        // un match actif dans l'AUTRE mode (ex: match Hardcore en cours, mais on regarde CDL)
+        // checkActiveMatch() gère la vérification cross-mode
       }
     } catch (err) {
       console.error('Error fetching queue status:', err);
