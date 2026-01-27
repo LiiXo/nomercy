@@ -1,11 +1,11 @@
 import mongoose from 'mongoose';
 
 const gameModeRulesSchema = new mongoose.Schema({
-  // Mode identifier (hardcore or cdl)
+  // Mode identifier (hardcore, cdl, or stricker)
   mode: {
     type: String,
     required: true,
-    enum: ['hardcore', 'cdl']
+    enum: ['hardcore', 'cdl', 'stricker']
   },
   
   // Location where rules will be displayed
@@ -19,10 +19,11 @@ const gameModeRulesSchema = new mongoose.Schema({
   // Sub-type for more specific targeting
   // For rankings: 'duo-trio' or 'squad-team'
   // For ranked: 'duel', 'tdm', 'domination', 'snd', 'hardpoint'
+  // For stricker: 'stricker-snd'
   subType: {
     type: String,
     required: true,
-    enum: ['duo-trio', 'squad-team', 'duel', 'tdm', 'domination', 'snd', 'hardpoint'],
+    enum: ['duo-trio', 'squad-team', 'duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd'],
     default: 'duel'
   },
   

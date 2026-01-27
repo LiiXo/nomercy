@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { 
   ArrowLeft, Users, Search, Trophy, Loader2, 
-  ChevronLeft, ChevronRight, Lock, Medal, Target, TrendingUp
+  ChevronLeft, ChevronRight, Lock, Medal, Target, TrendingUp, Shield
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -131,7 +131,7 @@ const AllSquads = () => {
 
   useEffect(() => {
     fetchSquads();
-  }, [page, search]);
+  }, [page, search, selectedMode]);
 
   const fetchSquads = async () => {
     setLoading(true);
@@ -139,7 +139,8 @@ const AllSquads = () => {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: SQUADS_PER_PAGE.toString(),
-        search: search
+        search: search,
+        mode: selectedMode
       });
       
       const response = await fetch(`${API_URL}/squads/all?${params}`);
@@ -162,9 +163,20 @@ const AllSquads = () => {
     fetchSquads();
   };
 
+  // Get mode-specific stats for a squad
+  const getModeStats = (squad) => {
+    // Use mode-specific stats based on current mode selection
+    if (isHardcore) {
+      return squad.statsHardcore || squad.stats || {};
+    } else {
+      return squad.statsCdl || squad.stats || {};
+    }
+  };
+
   const getWinRate = (squad) => {
-    const wins = squad.stats?.totalWins || 0;
-    const losses = squad.stats?.totalLosses || 0;
+    const stats = getModeStats(squad);
+    const wins = stats?.totalWins || 0;
+    const losses = stats?.totalLosses || 0;
     const total = wins + losses;
     if (total === 0) return '0%';
     return `${Math.round((wins / total) * 100)}%`;
@@ -291,8 +303,14 @@ const AllSquads = () => {
                           </span>
                           <span className="flex items-center gap-1" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }}>
                             <Trophy className="w-3 h-3" />
-                            {squad.stats?.totalPoints || 0} {t.points}
+                            {getModeStats(squad)?.totalPoints || 0} {t.points}
                           </span>
+                          {squad.statsStricker?.rank && (
+                            <span className="flex items-center gap-1 text-lime-400">
+                              <Shield className="w-3 h-3" />
+                              {squad.statsStricker.rank}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -302,11 +320,11 @@ const AllSquads = () => {
                       <div className="flex items-center gap-4 text-xs">
                         <span className="flex items-center gap-1 text-green-400">
                           <Medal className="w-3 h-3" />
-                          {squad.stats?.totalWins || 0}{t.wins}
+                          {getModeStats(squad)?.totalWins || 0}{t.wins}
                         </span>
                         <span className="flex items-center gap-1 text-red-400">
                           <Target className="w-3 h-3" />
-                          {squad.stats?.totalLosses || 0}{t.losses}
+                          {getModeStats(squad)?.totalLosses || 0}{t.losses}
                         </span>
                         <span className="flex items-center gap-1 text-yellow-400">
                           <TrendingUp className="w-3 h-3" />

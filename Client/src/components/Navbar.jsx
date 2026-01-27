@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
 import { getDefaultAvatar } from '../utils/avatar';
-import { Menu, X, Trophy, Home, ChevronDown, LogOut, Zap, Medal, User, Shield, Coins, Gift, Search, Loader2, Users, MessageSquare, ShoppingBag } from 'lucide-react';
+import { Menu, X, Trophy, Home, ChevronDown, LogOut, Zap, Medal, User, Shield, Coins, Gift, Search, Loader2, Users, MessageSquare, ShoppingBag, Target } from 'lucide-react';
 import SpinWheel from './SpinWheel';
 
 const Navbar = () => {
@@ -230,6 +230,16 @@ const Navbar = () => {
                 <span>{label}</span>
               </Link>
             ))}
+            {/* Stricker Mode - Only visible to admin/staff/arbitre */}
+            {hasAdminAccess() && (
+              <Link
+                to="/stricker"
+                className={`nav-link flex items-center gap-2 ${isActive('/stricker') ? 'active' : ''} ${location.pathname === '/stricker' ? 'text-lime-400' : 'hover:text-lime-400'}`}
+              >
+                <Target className="w-4 h-4" />
+                <span className="text-lime-400">Stricker</span>
+              </Link>
+            )}
             {/* Shop - Available to everyone */}
             <Link
               to={`/${selectedMode}/shop`}
@@ -581,6 +591,18 @@ const Navbar = () => {
                     <Gift className="w-4 h-4" />
                     <span>{language === 'fr' ? 'Roue quotidienne' : 'Daily Wheel'}</span>
                   </button>
+
+                  {/* Stricker Mode - Only visible to admin/staff/arbitre (mobile) */}
+                  {hasAdminAccess() && (
+                    <Link 
+                      to="/stricker" 
+                      onClick={() => setMobileMenuOpen(false)} 
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-lime-500/10 border border-lime-500/30 text-lime-400"
+                    >
+                      <Target className="w-4 h-4" />
+                      <span>Mode Stricker</span>
+                    </Link>
+                  )}
 
                   {/* Shop - Available to everyone (mobile) */}
                   <Link 

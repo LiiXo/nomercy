@@ -431,25 +431,27 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     // Use last 4 characters of matchId as unique identifier
     const matchCode = matchIdStr.slice(-4).toUpperCase();
     
-    // Create team 1 voice channel - No permission restrictions, everyone can join
+    // Create team 1 voice channel - No permission restrictions, everyone can join, limited to 5 users
     const team1ChannelName = `🔵 Blue #${matchCode}`;
     const team1Channel = await guild.channels.create({
       name: team1ChannelName,
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
+      userLimit: 5,
       reason: `Match classé ${matchIdStr}`
     });
 
-    // Create team 2 voice channel - No permission restrictions, everyone can join
+    // Create team 2 voice channel - No permission restrictions, everyone can join, limited to 5 users
     const team2ChannelName = `🔴 Red #${matchCode}`;
     const team2Channel = await guild.channels.create({
       name: team2ChannelName,
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
+      userLimit: 5,
       reason: `Match classé ${matchIdStr}`
     });
 
-    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (open access - no permissions)`)
+    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (open access, 5 users max)`)
 
     return {
       team1: { channelId: team1Channel.id, channelName: team1ChannelName },

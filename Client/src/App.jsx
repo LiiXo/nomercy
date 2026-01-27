@@ -40,6 +40,7 @@ import MySquad from './pages/MySquad';
 import MyPurchases from './pages/MyPurchases';
 import GameModeRulesEditor from './components/GameModeRulesEditor';
 import RecentRankedMatches from './pages/RecentRankedMatches';
+import StrickerMode from './pages/StrickerMode';
 
 // Loading component
 const LoadingScreen = () => (
@@ -116,6 +117,25 @@ const SetupProfileRoute = ({ children }) => {
 
 // Route admin (for admin, staff, and arbitre)
 const AdminRoute = ({ children }) => {
+  const { isAuthenticated, isProfileComplete, loading, hasAdminAccess } = useAuth();
+  
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!isAuthenticated || !isProfileComplete) {
+    return <Navigate to="/" replace />;
+  }
+
+  if (!hasAdminAccess()) {
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+};
+
+// Route stricker (for admin, staff, and arbitre only)
+const StrickerRoute = ({ children }) => {
   const { isAuthenticated, isProfileComplete, loading, hasAdminAccess } = useAuth();
   
   if (loading) {
@@ -499,6 +519,18 @@ function AppContent() {
                   <MyPurchases />
                 </PageTransition>
               </AuthenticatedRoute>
+            } 
+          />
+
+          {/* Stricker Mode - Admin, Staff, Arbitre only */}
+          <Route 
+            path="/stricker" 
+            element={
+              <StrickerRoute>
+                <PageTransition>
+                  <StrickerMode />
+                </PageTransition>
+              </StrickerRoute>
             } 
           />
         </Routes>

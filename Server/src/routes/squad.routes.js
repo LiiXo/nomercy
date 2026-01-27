@@ -63,7 +63,7 @@ const isValidSquadTag = (tag) => {
 // Get all squads (public, with pagination and search)
 router.get('/all', async (req, res) => {
   try {
-    const { page = 1, limit = 30, search = '' } = req.query;
+    const { page = 1, limit = 30, search = '', mode = '' } = req.query;
     
     const query = { isDeleted: { $ne: true } };
     
@@ -74,9 +74,12 @@ router.get('/all', async (req, res) => {
       ];
     }
     
+    // Determine sort field based on mode
+    const statsField = mode === 'cdl' ? 'statsCdl' : (mode === 'hardcore' ? 'statsHardcore' : 'stats');
+    
     const squads = await Squad.find(query)
-      .select('name tag color logo description members mode stats createdAt isPublic')
-      .sort({ 'stats.totalPoints': -1, 'stats.totalWins': -1, createdAt: -1 })
+      .select('name tag color logo description members mode stats statsHardcore statsCdl createdAt isPublic')
+      .sort({ [`${statsField}.totalPoints`]: -1, [`${statsField}.totalWins`]: -1, createdAt: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));
     
@@ -1993,6 +1996,64 @@ router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => 
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'
+    });
+  }
+});
+
+// Reset all squads stats (admin only)
+router.post('/admin/reset-all-squads-stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    // Reset all squads stats
+    const squadResult = await Squad.updateMany(
+      {},
+      {
+        $set: {
+          'stats.totalWins': 0,
+          'stats.totalLosses': 0,
+          'stats.totalPoints': 0,
+          'statsHardcore.totalWins': 0,
+          'statsHardcore.totalLosses': 0,
+          'statsHardcore.totalPoints': 0,
+          'statsCDL.totalWins': 0,
+          'statsCDL.totalLosses': 0,
+          'statsCDL.totalPoints': 0
+        }
+      }
+    );
+
+    // Reset all ladder registrations stats
+    await Squad.updateMany(
+      { 'registeredLadders.0': { $exists: true } },
+      {
+        $set: {
+          'registeredLadders.$[].points': 0,
+          'registeredLadders.$[].wins': 0,
+          'registeredLadders.$[].losses': 0
+        }
+      }
+    );
+
+    // Delete all completed matches (ladder matches)
+    const matchResult = await Match.deleteMany({ status: 'completed' });
+
+    console.log(`[ADMIN] All squads stats reset by ${req.user.username}. ${squadResult.modifiedCount} squads updated, ${matchResult.deletedCount} matches deleted.`);
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Reset All Squads Stats', 'GLOBAL', {
+      description: `${squadResult.modifiedCount} escouades réinitialisées, ${matchResult.deletedCount} matchs supprimés`
+    });
+
+    res.json({
+      success: true,
+      message: `Stats réinitialisées pour ${squadResult.modifiedCount} escouades, ${matchResult.deletedCount} matchs supprimés`,
+      squadsUpdated: squadResult.modifiedCount,
+      matchesDeleted: matchResult.deletedCount
+    });
+  } catch (error) {
+    console.error('Reset all squads stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la réinitialisation des stats'
     });
   }
 });

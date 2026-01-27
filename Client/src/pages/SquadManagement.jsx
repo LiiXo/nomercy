@@ -1088,19 +1088,6 @@ const SquadManagement = () => {
                 )}
               </button>
             )}
-            {canManage && (
-              <button
-                onClick={() => setActiveTab('ladders')}
-                className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all ${
-                  activeTab === 'ladders'
-                    ? `bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white`
-                    : 'text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Trophy className="w-4 h-4" />
-                {t.ladders}
-              </button>
-            )}
             {isLeader && (
               <button
                 onClick={() => setActiveTab('settings')}
@@ -1660,84 +1647,6 @@ const SquadManagement = () => {
                       {t.disbandSquad}
                     </button>
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Ladders Tab */}
-            {activeTab === 'ladders' && canManage && (
-              <div className="space-y-6">
-                {/* Link to rankings page */}
-                <Link
-                  to={`/${selectedMode}/rankings`}
-                  className={`flex items-center justify-between p-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-xl text-white hover:opacity-90 transition-opacity`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Trophy className="w-6 h-6" />
-                    <span className="font-medium">{t.viewRankings}</span>
-                  </div>
-                  <ChevronRight className="w-5 h-5" />
-                </Link>
-
-                {/* Registered ladders */}
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-4">{t.registeredLadders}</h3>
-                  
-                  {squad.registeredLadders?.length > 0 ? (
-                    <div className="space-y-3">
-                      {squad.registeredLadders.map((ladder) => (
-                        <div 
-                          key={ladder.ladderId}
-                          className={`p-4 bg-dark-800/50 rounded-xl border border-${accentColor}-500/20`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center`}>
-                                <Trophy className={`w-5 h-5 text-${accentColor}-400`} />
-                              </div>
-                              <div>
-                                <h4 className="text-white font-medium">
-                                  {ladder.ladderId === 'duo-trio' ? t.duoTrio : t.squadTeam}
-                                </h4>
-                                <p className="text-gray-500 text-xs">
-                                  {t.ladderPoints}: <span className={`text-${accentColor}-400 font-bold`}>{ladder.points || 0}</span>
-                                  {' • '}
-                                  {t.ladderWins}: <span className="text-green-400">{ladder.wins || 0}</span>
-                                  {' • '}
-                                  {t.ladderLosses}: <span className="text-red-400">{ladder.losses || 0}</span>
-                                </p>
-                              </div>
-                            </div>
-                            {isLeader && (
-                              <button
-                                onClick={() => setLadderToUnregister(ladder)}
-                                disabled={actionLoading === ladder.ladderId}
-                                className="px-3 py-1.5 bg-red-500/20 text-red-400 text-sm font-medium rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50"
-                              >
-                                {actionLoading === ladder.ladderId ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                  t.unregisterLadder
-                                )}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 bg-dark-800/50 rounded-xl border border-white/10">
-                      <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                      <p className="text-gray-500">{t.noLadders}</p>
-                      <Link
-                        to={`/${selectedMode}/rankings`}
-                        className={`inline-flex items-center gap-2 mt-4 px-4 py-2 bg-${accentColor}-500/20 text-${accentColor}-400 rounded-lg hover:bg-${accentColor}-500/30 transition-colors`}
-                      >
-                        <Trophy className="w-4 h-4" />
-                        {t.registerToLadder}
-                      </Link>
-                    </div>
-                  )}
                 </div>
               </div>
             )}

@@ -165,6 +165,55 @@ const configSchema = new mongoose.Schema({
   rankedMatchmakingEnabled: {
     type: Boolean,
     default: true
+  },
+  
+  // ==================== STRICKER MODE ====================
+  
+  // Récompenses pour le mode Stricker (Search & Destroy 5v5 uniquement)
+  strickerMatchRewards: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      'Search & Destroy': { 
+        pointsWin: 35, 
+        pointsLoss: -18, 
+        coinsWin: 80, 
+        coinsLoss: 25, 
+        xpWinMin: 700, 
+        xpWinMax: 800 
+      }
+    })
+  },
+  
+  // Seuils de rangs pour le mode Stricker (6 rangs)
+  strickerRankThresholds: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      recrues: { min: 0, max: 499 },
+      operateurs: { min: 500, max: 999 },
+      veterans: { min: 1000, max: 1499 },
+      commandants: { min: 1500, max: 1999 },
+      seigneurs: { min: 2000, max: 2499 },
+      immortel: { min: 2500, max: null }
+    })
+  },
+  
+  // Points perdus en défaite selon le rang Stricker
+  strickerPointsLossPerRank: {
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      recrues: -10,
+      operateurs: -12,
+      veterans: -15,
+      commandants: -18,
+      seigneurs: -22,
+      immortel: -25
+    })
+  },
+  
+  // Activation/désactivation du matchmaking mode Stricker
+  strickerMatchmakingEnabled: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true

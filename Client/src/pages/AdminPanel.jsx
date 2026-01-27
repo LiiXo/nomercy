@@ -75,7 +75,7 @@ const AdminPanel = () => {
   const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
   
   // Maps tab filter
-  const [mapModeFilter, setMapModeFilter] = useState('all'); // 'all', 'hardcore', 'cdl'
+  const [mapModeFilter, setMapModeFilter] = useState('all'); // 'all', 'hardcore', 'cdl', 'stricker'
   
   // Mobile menu state
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -1179,6 +1179,19 @@ const AdminPanel = () => {
         }
       };
     }
+    if (item.strickerConfig) {
+      formDataCopy.strickerConfig = {
+        ladder: { 
+          enabled: item.strickerConfig?.ladder?.enabled || false, 
+          gameModes: [...(item.strickerConfig?.ladder?.gameModes || [])] 
+        },
+        ranked: { 
+          enabled: item.strickerConfig?.ranked?.enabled || false, 
+          gameModes: [...(item.strickerConfig?.ranked?.gameModes || [])],
+          formats: [...(item.strickerConfig?.ranked?.formats || [])]
+        }
+      };
+    }
     
     // For users, fetch complete data including ranked points
     if (type === 'user' && item._id) {
@@ -1272,6 +1285,10 @@ const AdminPanel = () => {
           cdlConfig: {
             ladder: { enabled: false, gameModes: [] },
             ranked: { enabled: false, gameModes: [], formats: [] }
+          },
+          strickerConfig: {
+            ladder: { enabled: false, gameModes: [] },
+            ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['5v5'] }
           },
           isActive: true
         };
@@ -3667,6 +3684,9 @@ const AdminPanel = () => {
     // Filter maps by mode
     const filteredMaps = maps.filter(map => {
       if (mapModeFilter === 'all') return true;
+      if (mapModeFilter === 'stricker') {
+        return map.strickerConfig?.ranked?.enabled || map.strickerConfig?.ladder?.enabled;
+      }
       return map.mode === mapModeFilter || map.mode === 'both';
     });
     
@@ -3738,6 +3758,14 @@ const AdminPanel = () => {
             }`}
           >
             CDL ({maps.filter(m => m.mode === 'cdl' || m.mode === 'both').length})
+          </button>
+          <button
+            onClick={() => setMapModeFilter('stricker')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              mapModeFilter === 'stricker' ? 'bg-lime-500 text-white' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Stricker ({maps.filter(m => m.strickerConfig?.ranked?.enabled || m.strickerConfig?.ladder?.enabled).length})
           </button>
         </div>
 
@@ -3813,6 +3841,24 @@ const AdminPanel = () => {
                           {map.cdlConfig?.ranked?.enabled && map.cdlConfig?.ranked?.gameModes?.length > 0 && (
                             <span className="px-2 py-0.5 bg-cyan-500/30 text-cyan-300 rounded text-xs">
                               Ranked: {map.cdlConfig.ranked.gameModes.length} mode(s) • {(map.cdlConfig.ranked.formats || []).join('/')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {/* Stricker Config */}
+                    {(map.strickerConfig?.ladder?.enabled || map.strickerConfig?.ranked?.enabled) && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-lime-400 text-xs font-medium">STRICKER</span>
+                        <div className="flex flex-wrap gap-1">
+                          {map.strickerConfig?.ladder?.enabled && map.strickerConfig?.ladder?.gameModes?.length > 0 && (
+                            <span className="px-2 py-0.5 bg-lime-500/20 text-lime-400 rounded text-xs">
+                              Ladder: {map.strickerConfig.ladder.gameModes.length} mode(s)
+                            </span>
+                          )}
+                          {map.strickerConfig?.ranked?.enabled && map.strickerConfig?.ranked?.gameModes?.length > 0 && (
+                            <span className="px-2 py-0.5 bg-lime-500/30 text-lime-300 rounded text-xs">
+                              Ranked: {map.strickerConfig.ranked.gameModes.length} mode(s) • {(map.strickerConfig.ranked.formats || []).join('/')}
                             </span>
                           )}
                         </div>
@@ -5012,7 +5058,171 @@ Cette action est irréversible!`)) {
             </ul>
           </div>
         </div>
-
+        
+        {/* Stricker Mode Rewards */}
+        <div className="bg-gradient-to-br from-lime-500/10 to-green-500/10 border border-lime-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Swords className="w-5 h-5 text-lime-400" />
+            🔫 Récompenses Mode Stricker (5v5 Search & Destroy)
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Configuration des récompenses pour le mode Stricker. Accès réservé aux administrateurs, staff et arbitres.
+          </p>
+                  
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Points */}
+            <div>
+              <p className="text-lime-400 text-xs font-semibold mb-3 uppercase tracking-wider">🎯 Points Ladder</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-green-400 text-xs block mb-1.5 font-medium">Victoire</label>
+                  <input
+                    type="number"
+                    value={editedConfig?.strickerMatchRewards?.['Search & Destroy']?.pointsWin || 35}
+                    onChange={(e) => {
+                      const newConfig = { ...editedConfig };
+                      if (!newConfig.strickerMatchRewards) newConfig.strickerMatchRewards = {};
+                      if (!newConfig.strickerMatchRewards['Search & Destroy']) {
+                        newConfig.strickerMatchRewards['Search & Destroy'] = { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 25, xpWinMin: 700, xpWinMax: 800 };
+                      }
+                      newConfig.strickerMatchRewards['Search & Destroy'].pointsWin = parseInt(e.target.value) || 0;
+                      setEditedConfig(newConfig);
+                    }}
+                    className="w-full px-3 py-2 bg-dark-900 border border-green-500/40 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-red-400 text-xs block mb-1.5 font-medium">Défaite</label>
+                  <input
+                    type="number"
+                    value={editedConfig?.strickerMatchRewards?.['Search & Destroy']?.pointsLoss || -18}
+                    onChange={(e) => {
+                      const newConfig = { ...editedConfig };
+                      if (!newConfig.strickerMatchRewards) newConfig.strickerMatchRewards = {};
+                      if (!newConfig.strickerMatchRewards['Search & Destroy']) {
+                        newConfig.strickerMatchRewards['Search & Destroy'] = { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 25, xpWinMin: 700, xpWinMax: 800 };
+                      }
+                      newConfig.strickerMatchRewards['Search & Destroy'].pointsLoss = parseInt(e.target.value) || 0;
+                      setEditedConfig(newConfig);
+                    }}
+                    className="w-full px-3 py-2 bg-dark-900 border border-red-500/40 rounded-lg text-red-400 text-sm font-semibold focus:border-red-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+                    
+            {/* Coins */}
+            <div>
+              <p className="text-lime-400 text-xs font-semibold mb-3 uppercase tracking-wider">💰 Gold</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-green-400 text-xs block mb-1.5 font-medium">Victoire</label>
+                  <input
+                    type="number"
+                    value={editedConfig?.strickerMatchRewards?.['Search & Destroy']?.coinsWin || 80}
+                    onChange={(e) => {
+                      const newConfig = { ...editedConfig };
+                      if (!newConfig.strickerMatchRewards) newConfig.strickerMatchRewards = {};
+                      if (!newConfig.strickerMatchRewards['Search & Destroy']) {
+                        newConfig.strickerMatchRewards['Search & Destroy'] = { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 25, xpWinMin: 700, xpWinMax: 800 };
+                      }
+                      newConfig.strickerMatchRewards['Search & Destroy'].coinsWin = parseInt(e.target.value) || 0;
+                      setEditedConfig(newConfig);
+                    }}
+                    className="w-full px-3 py-2 bg-dark-900 border border-green-500/40 rounded-lg text-green-400 text-sm font-semibold focus:border-green-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-orange-400 text-xs block mb-1.5 font-medium">Consolation</label>
+                  <input
+                    type="number"
+                    value={editedConfig?.strickerMatchRewards?.['Search & Destroy']?.coinsLoss || 25}
+                    onChange={(e) => {
+                      const newConfig = { ...editedConfig };
+                      if (!newConfig.strickerMatchRewards) newConfig.strickerMatchRewards = {};
+                      if (!newConfig.strickerMatchRewards['Search & Destroy']) {
+                        newConfig.strickerMatchRewards['Search & Destroy'] = { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 25, xpWinMin: 700, xpWinMax: 800 };
+                      }
+                      newConfig.strickerMatchRewards['Search & Destroy'].coinsLoss = parseInt(e.target.value) || 0;
+                      setEditedConfig(newConfig);
+                    }}
+                    className="w-full px-3 py-2 bg-dark-900 border border-orange-500/40 rounded-lg text-orange-400 text-sm font-semibold focus:border-orange-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+                    
+            {/* XP */}
+            <div>
+              <p className="text-lime-400 text-xs font-semibold mb-3 uppercase tracking-wider">⚡ XP (Victoire)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-cyan-400 text-xs block mb-1.5 font-medium">Min</label>
+                  <input
+                    type="number"
+                    value={editedConfig?.strickerMatchRewards?.['Search & Destroy']?.xpWinMin || 700}
+                    onChange={(e) => {
+                      const newConfig = { ...editedConfig };
+                      if (!newConfig.strickerMatchRewards) newConfig.strickerMatchRewards = {};
+                      if (!newConfig.strickerMatchRewards['Search & Destroy']) {
+                        newConfig.strickerMatchRewards['Search & Destroy'] = { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 25, xpWinMin: 700, xpWinMax: 800 };
+                      }
+                      newConfig.strickerMatchRewards['Search & Destroy'].xpWinMin = parseInt(e.target.value) || 0;
+                      setEditedConfig(newConfig);
+                    }}
+                    className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/40 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-cyan-400 text-xs block mb-1.5 font-medium">Max</label>
+                  <input
+                    type="number"
+                    value={editedConfig?.strickerMatchRewards?.['Search & Destroy']?.xpWinMax || 800}
+                    onChange={(e) => {
+                      const newConfig = { ...editedConfig };
+                      if (!newConfig.strickerMatchRewards) newConfig.strickerMatchRewards = {};
+                      if (!newConfig.strickerMatchRewards['Search & Destroy']) {
+                        newConfig.strickerMatchRewards['Search & Destroy'] = { pointsWin: 35, pointsLoss: -18, coinsWin: 80, coinsLoss: 25, xpWinMin: 700, xpWinMax: 800 };
+                      }
+                      newConfig.strickerMatchRewards['Search & Destroy'].xpWinMax = parseInt(e.target.value) || 0;
+                      setEditedConfig(newConfig);
+                    }}
+                    className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/40 rounded-lg text-cyan-400 text-sm font-semibold focus:border-cyan-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+                    
+            {/* Matchmaking Toggle */}
+            <div>
+              <p className="text-lime-400 text-xs font-semibold mb-3 uppercase tracking-wider">⚙️ Matchmaking</p>
+              <div className="flex items-center justify-between p-3 bg-dark-900/50 rounded-lg border border-lime-500/20">
+                <span className="text-white text-sm">Activer le matchmaking Stricker</span>
+                <button
+                  onClick={() => {
+                    const newConfig = { ...editedConfig };
+                    newConfig.strickerMatchmakingEnabled = !(editedConfig?.strickerMatchmakingEnabled ?? true);
+                    setEditedConfig(newConfig);
+                  }}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    (editedConfig?.strickerMatchmakingEnabled ?? true) ? 'bg-lime-500' : 'bg-dark-700'
+                  }`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                    (editedConfig?.strickerMatchmakingEnabled ?? true) ? 'translate-x-7' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+            </div>
+          </div>
+                  
+          <div className="mt-4 bg-lime-500/10 border border-lime-500/30 rounded-lg p-3">
+            <p className="text-lime-400 text-sm">
+              💡 Le mode Stricker est réservé aux administrateurs, staff et arbitres. 6 rangs : Recrues, Opérateurs, Vétérans, Commandants, Seigneurs de Guerre, Immortel.
+            </p>
+          </div>
+        </div>
+        
         {/* Points Lost Per Rank */}
         <div className="bg-gradient-to-br from-red-500/10 to-orange-500/10 border border-red-500/30 rounded-xl p-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -5156,6 +5366,53 @@ Cette action est irréversible!`)) {
               </button>
                   </div>
                 </div>
+
+        {/* Reset All Squads Stats */}
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <RotateCcw className="w-5 h-5 text-red-400" />
+            RAZ Stats Escouades
+          </h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Réinitialise les stats de TOUTES les escouades : victoires, défaites et supprime l'historique des matchs escouade.
+          </p>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-4">
+            <p className="text-red-400 text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              <strong>Attention:</strong> Cette action est irréversible!
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              if (!window.confirm('Voulez-vous vraiment réinitialiser TOUTES les stats escouades et supprimer l\'historique des matchs? Cette action est irréversible!')) return;
+              try {
+                setSaving(true);
+                const response = await fetch(`${API_URL}/squads/admin/reset-all-squads-stats`, {
+                  method: 'POST',
+                  credentials: 'include'
+                });
+                const data = await response.json();
+                if (data.success) {
+                  setSuccess(`Stats réinitialisées: ${data.squadsUpdated} escouades, ${data.matchesDeleted} matchs supprimés`);
+                } else {
+                  setError(data.message || 'Erreur lors de la réinitialisation');
+                }
+              } catch (err) {
+                setError('Erreur lors de la réinitialisation');
+              } finally {
+                setSaving(false);
+              }
+            }}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg transition-all disabled:opacity-50"
+          >
+            {saving ? (
+              <><Loader2 className="w-5 h-5 animate-spin" /> En cours...</>
+            ) : (
+              <><RotateCcw className="w-5 h-5" /> RAZ Toutes les Stats Escouades</>
+            )}
+          </button>
+        </div>
       </div>
     );
   };
@@ -7795,6 +8052,67 @@ Cette action est irréversible!`)) {
                           {format}
                         </button>
                       ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* STRICKER Section */}
+            <div className="p-4 bg-lime-500/5 border border-lime-500/20 rounded-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-lime-500"></div>
+                <h4 className="text-lg font-bold text-lime-400">STRICKER</h4>
+                <span className="text-xs text-lime-400/60">(5v5 S&D uniquement)</span>
+              </div>
+
+              {/* Stricker Ranked */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-lime-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">Match Ranked Stricker</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.strickerConfig?.ranked?.enabled || false}
+                      onChange={() => toggleSectionEnabled('strickerConfig', 'ranked')}
+                      className="w-4 h-4 accent-lime-500"
+                    />
+                    <span className="text-xs text-gray-400">Activer</span>
+                  </label>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Mode de jeu (S&D uniquement)</span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleMapGameMode('strickerConfig', 'ranked', 'Search & Destroy')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                          isGameModeSelected('strickerConfig', 'ranked', 'Search & Destroy')
+                            ? 'bg-lime-500 text-white border-lime-500'
+                            : 'bg-dark-900 text-gray-400 border-white/10 hover:border-lime-500/50'
+                        }`}
+                      >
+                        Recherche & Destruction
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Format (5v5 uniquement)</span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleRankedFormat('strickerConfig', '5v5')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                          isFormatSelected('strickerConfig', '5v5')
+                            ? 'bg-lime-600 text-white border-lime-600'
+                            : 'bg-dark-900 text-gray-400 border-white/10 hover:border-lime-500/50'
+                        }`}
+                      >
+                        5v5
+                      </button>
                     </div>
                   </div>
                 </div>

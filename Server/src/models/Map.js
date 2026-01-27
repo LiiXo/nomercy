@@ -52,7 +52,7 @@ const mapSchema = new mongoose.Schema({
   // Mode principal (hardcore, cdl, ou both) - kept for backward compatibility
   mode: {
     type: String,
-    enum: ['hardcore', 'cdl', 'both'],
+    enum: ['hardcore', 'cdl', 'stricker', 'both'],
     default: 'both'
   },
   // Configuration Hardcore
@@ -73,6 +73,15 @@ const mapSchema = new mongoose.Schema({
     default: () => ({
       ladder: { enabled: false, gameModes: [] },
       ranked: { enabled: false, gameModes: [], formats: [] }
+    })
+  },
+  // Configuration Stricker
+  // Ranked uniquement: Search & Destroy en 5v5
+  strickerConfig: {
+    type: modeConfigSchema,
+    default: () => ({
+      ladder: { enabled: false, gameModes: [] },
+      ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['5v5'] }
     })
   },
   // Legacy fields - kept for backward compatibility during migration
@@ -98,7 +107,14 @@ const mapSchema = new mongoose.Schema({
 
 // Helper method to check if map is available for a specific context
 mapSchema.methods.isAvailableFor = function(mode, matchType, gameMode, format) {
-  const config = mode === 'hardcore' ? this.hardcoreConfig : this.cdlConfig;
+  let config;
+  if (mode === 'hardcore') {
+    config = this.hardcoreConfig;
+  } else if (mode === 'cdl') {
+    config = this.cdlConfig;
+  } else if (mode === 'stricker') {
+    config = this.strickerConfig;
+  }
   if (!config || !config[matchType]) return false;
   
   const matchConfig = config[matchType];
@@ -121,7 +137,17 @@ mapSchema.methods.isAvailableFor = function(mode, matchType, gameMode, format) {
 
 // Static method to find maps for a specific context
 mapSchema.statics.findForContext = function(mode, matchType, gameMode, format) {
-  const configPath = mode === 'hardcore' ? 'hardcoreConfig' : 'cdlConfig';
+  let configPath;
+  if (mode === 'hardcore') {
+    configPath = 'hardcoreConfig';
+  } else if (mode === 'cdl') {
+    configPath = 'cdlConfig';
+  } else if (mode === 'stricker') {
+    configPath = 'strickerConfig';
+  } else {
+    configPath = 'hardcoreConfig'; // default
+  }
+  
   const query = {
     isActive: true,
     [`${configPath}.${matchType}.enabled`]: true

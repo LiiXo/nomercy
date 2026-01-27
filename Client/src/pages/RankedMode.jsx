@@ -4851,7 +4851,7 @@ const RankedMode = () => {
                               : 'Get ready for the match'}
                           </p>
                           <a
-                            href="https://discord.gg/nomercy"
+                            href="https://discord.gg/JwEaKFjSVR"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full flex items-center justify-center gap-2 py-3 rounded-lg font-semibold transition-all hover:scale-[1.02] bg-indigo-600 hover:bg-indigo-500 text-white"

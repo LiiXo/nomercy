@@ -35,6 +35,7 @@ const startServer = async () => {
   const { default: appSettingsRoutes } = await import('./routes/appSettings.routes.js');
   const { default: systemRoutes } = await import('./routes/system.routes.js');
   const { default: helperConfirmationRoutes } = await import('./routes/helperConfirmation.routes.js');
+  const { default: strickerMatchRoutes } = await import('./routes/strickerMatch.routes.js');
   await import('./config/passport.js');
   
   // Import Match model for cleanup job
@@ -339,6 +340,7 @@ const startServer = async () => {
   app.use('/api/app-settings', appSettingsRoutes);
   app.use('/api/system', systemRoutes);
   app.use('/api/helper-confirmation', helperConfirmationRoutes);
+  app.use('/api/stricker', strickerMatchRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

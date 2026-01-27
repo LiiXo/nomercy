@@ -108,6 +108,14 @@ const squadSchema = new mongoose.Schema({
     totalPoints: { type: Number, default: 0 }
   },
   
+  // Stats per mode (Stricker)
+  statsStricker: {
+    points: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: String, default: 'Recrues' } // Default rank for Stricker mode
+  },
+  
   // Legacy stats field (deprecated, kept for backward compatibility)
   stats: {
     totalWins: { type: Number, default: 0 },

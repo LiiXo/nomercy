@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
     if (activeOnly === 'true') query.isActive = true;
     if (ladder) query.ladders = ladder;
     if (gameMode) query.gameModes = gameMode;
-    // Filter by mode (hardcore, cdl) - include 'both' maps as well
+    // Filter by mode (hardcore, cdl, stricker) - include 'both' maps as well
     if (mode) query.mode = { $in: [mode, 'both'] };
     
     const maps = await Map.find(query).sort({ name: 1 });
@@ -310,7 +310,7 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
 // Create map (admin)
 router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, hardcoreConfig, cdlConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, hardcoreConfig, cdlConfig, strickerConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     if (!name) {
       return res.status(400).json({ success: false, message: 'Nom requis' });
@@ -328,6 +328,10 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
       cdlConfig: cdlConfig || {
         ladder: { enabled: false, gameModes: [] },
         ranked: { enabled: false, gameModes: [] }
+      },
+      strickerConfig: strickerConfig || {
+        ladder: { enabled: false, gameModes: [] },
+        ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['5v5'] }
       },
       // Legacy fields (kept for backward compatibility)
       ladders: ladders || [],
@@ -347,7 +351,7 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
 // Update map (admin)
 router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, hardcoreConfig, cdlConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, hardcoreConfig, cdlConfig, strickerConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     const map = await Map.findById(req.params.mapId);
     if (!map) {
@@ -364,6 +368,9 @@ router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     }
     if (cdlConfig !== undefined) {
       map.cdlConfig = cdlConfig;
+    }
+    if (strickerConfig !== undefined) {
+      map.strickerConfig = strickerConfig;
     }
     
     // Legacy fields (kept for backward compatibility)

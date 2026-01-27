@@ -90,6 +90,15 @@ const userSchema = new mongoose.Schema({
     rank: { type: Number, default: 0 }
   },
   
+  // Game Stats per mode (Stricker)
+  statsStricker: {
+    points: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: Number, default: 0 }
+  },
+  
   // Legacy stats field (deprecated, kept for backward compatibility)
   stats: {
     points: { type: Number, default: 0 },
@@ -112,6 +121,11 @@ const userSchema = new mongoose.Schema({
     default: null
   },
   squadCdl: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Squad',
+    default: null
+  },
+  squadStricker: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Squad',
     default: null

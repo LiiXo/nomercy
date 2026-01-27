@@ -769,9 +769,11 @@ const MySquad = () => {
     );
   }
 
-  // Squad view
-  const totalWins = squad.stats?.totalWins || 0;
-  const totalLosses = squad.stats?.totalLosses || 0;
+  // Squad view - Use mode-specific stats
+  const modeStats = isHardcore ? squad.statsHardcore : squad.statsCdl;
+  const totalWins = modeStats?.totalWins || 0;
+  const totalLosses = modeStats?.totalLosses || 0;
+  const totalPoints = modeStats?.totalPoints || 0;
   const winRate = totalWins + totalLosses > 0 
     ? Math.round((totalWins / (totalWins + totalLosses)) * 100) 
     : 0;
@@ -952,6 +954,77 @@ const MySquad = () => {
               <p className="text-xs text-gray-500 uppercase tracking-wider">{t.winRate}</p>
             </div>
           </div>
+
+          {/* Stricker Rank Display */}
+          {squad.statsStricker?.rank && (() => {
+            const rankName = squad.statsStricker.rank;
+            const rankKey = rankName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const rankImages = {
+              'recrues': '/stricker1.png',
+              'operateurs': '/stricker2.png',
+              'veterans': '/stricker3.png',
+              'commandants': '/stricker4.png',
+              'seigneurs de guerre': '/stricker5.png',
+              'immortel': '/stricker6.png'
+            };
+            const rankImage = rankImages[rankKey] || '/stricker1.png';
+            
+            return (
+              <div className="bg-gradient-to-r from-lime-500/10 via-green-500/10 to-emerald-500/10 backdrop-blur-sm rounded-2xl border border-lime-500/30 overflow-hidden mb-6">
+                <div className="relative p-6">
+                  {/* Background glow effect */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-lime-500/5 to-emerald-500/5"></div>
+                  
+                  {/* Content */}
+                  <div className="relative flex items-center justify-between gap-6">
+                    {/* Left: Rank Icon */}
+                    <div className="flex items-center gap-4">
+                      <div className="relative group">
+                        <div className="absolute inset-0 bg-lime-400/20 blur-2xl rounded-full group-hover:bg-lime-400/30 transition-all"></div>
+                        <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-gradient-to-br from-lime-900/50 to-green-900/50 border-2 border-lime-500/30 flex items-center justify-center overflow-hidden shadow-lg">
+                          <img 
+                            src={rankImage} 
+                            alt={rankName}
+                            className="w-20 h-20 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_12px_rgba(126,211,33,0.6)]"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.innerHTML = '<svg className="w-8 h-8 text-lime-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/></svg>';
+                            }}
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Rank info */}
+                      <div>
+                        <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">
+                          {language === 'fr' ? 'Rang Stricker' : 'Stricker Rank'}
+                        </p>
+                        <h3 className="text-lime-400 font-black text-xl sm:text-2xl tracking-tight drop-shadow-[0_0_10px_rgba(126,211,33,0.3)]">
+                          {rankName}
+                        </h3>
+                      </div>
+                    </div>
+                    
+                    {/* Right: Stricker Stats */}
+                    <div className="flex items-center gap-3 sm:gap-6">
+                      <div className="text-center">
+                        <p className="text-lg sm:text-xl font-bold text-lime-400">{squad.statsStricker?.points || 0}</p>
+                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Points' : 'Points'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg sm:text-xl font-bold text-green-400">{squad.statsStricker?.wins || 0}</p>
+                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Victoires' : 'Wins'}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-lg sm:text-xl font-bold text-red-400">{squad.statsStricker?.losses || 0}</p>
+                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

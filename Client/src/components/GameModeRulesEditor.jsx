@@ -11,7 +11,8 @@ const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
 const MODES = [
   { value: 'hardcore', label: 'Hardcore', color: 'red' },
-  { value: 'cdl', label: 'CDL', color: 'cyan' }
+  { value: 'cdl', label: 'CDL', color: 'cyan' },
+  { value: 'stricker', label: 'Stricker', color: 'lime' }
 ];
 
 // Translations for locations
@@ -19,19 +20,23 @@ const getLocationLabels = (lang) => {
   const translations = {
     fr: {
       rankings: { label: '📊 Classements', sublabel: 'Dialog règles dans la page Rankings' },
-      ranked: { label: '🎮 Mode Classé', sublabel: 'Dialog règles dans la page Ranked' }
+      ranked: { label: '🎮 Mode Classé', sublabel: 'Dialog règles dans la page Ranked' },
+      stricker: { label: '🎯 Mode Stricker', sublabel: 'Dialog règles dans la page Stricker' }
     },
     en: {
       rankings: { label: '📊 Rankings', sublabel: 'Rules dialog in Rankings page' },
-      ranked: { label: '🎮 Ranked Mode', sublabel: 'Rules dialog in Ranked page' }
+      ranked: { label: '🎮 Ranked Mode', sublabel: 'Rules dialog in Ranked page' },
+      stricker: { label: '🎯 Stricker Mode', sublabel: 'Rules dialog in Stricker page' }
     },
     it: {
       rankings: { label: '📊 Classifiche', sublabel: 'Dialog regole nella pagina Classifiche' },
-      ranked: { label: '🎮 Modalità Classificata', sublabel: 'Dialog regole nella pagina Classificata' }
+      ranked: { label: '🎮 Modalità Classificata', sublabel: 'Dialog regole nella pagina Classificata' },
+      stricker: { label: '🎯 Modalità Stricker', sublabel: 'Dialog regole nella pagina Stricker' }
     },
     de: {
       rankings: { label: '📊 Rangliste', sublabel: 'Regeln-Dialog in der Rangliste-Seite' },
-      ranked: { label: '🎮 Ranglisten-Modus', sublabel: 'Regeln-Dialog in der Ranglisten-Seite' }
+      ranked: { label: '🎮 Ranglisten-Modus', sublabel: 'Regeln-Dialog in der Ranglisten-Seite' },
+      stricker: { label: '🎯 Stricker-Modus', sublabel: 'Regeln-Dialog in der Stricker-Seite' }
     }
   };
   return translations[lang] || translations.en;
@@ -40,6 +45,7 @@ const getLocationLabels = (lang) => {
 // Sub-types based on location and mode
 // Hardcore ranked: Duel, TDM (Mêlée Générale), S&D (Recherche et Destruction)
 // CDL ranked: Hardpoint (Points Stratégiques), S&D (Recherche et Destruction)
+// Stricker: S&D only (5v5)
 const getSubTypeLabels = (lang, mode = 'hardcore') => {
   const translations = {
     fr: {
@@ -55,6 +61,9 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
       ranked_cdl: [
         { value: 'hardpoint', label: '📍 Points Stratégiques', sublabel: 'Hardpoint' },
         { value: 'snd', label: '💣 Recherche & Destruction', sublabel: 'Search and Destroy' }
+      ],
+      ranked_stricker: [
+        { value: 'stricker-snd', label: '💣 Recherche & Destruction 5v5', sublabel: 'Mode Stricker S&D' }
       ]
     },
     en: {
@@ -70,6 +79,9 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
       ranked_cdl: [
         { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint Mode' },
         { value: 'snd', label: '💣 Search & Destroy', sublabel: 'Search and Destroy' }
+      ],
+      ranked_stricker: [
+        { value: 'stricker-snd', label: '💣 Search & Destroy 5v5', sublabel: 'Stricker S&D Mode' }
       ]
     },
     it: {
@@ -85,6 +97,9 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
       ranked_cdl: [
         { value: 'hardpoint', label: '📍 Punti Strategici', sublabel: 'Hardpoint' },
         { value: 'snd', label: '💣 Cerca e Distruggi', sublabel: 'Cerca e Distruggi' }
+      ],
+      ranked_stricker: [
+        { value: 'stricker-snd', label: '💣 Cerca e Distruggi 5v5', sublabel: 'Modalità Stricker S&D' }
       ]
     },
     de: {
@@ -100,6 +115,9 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
       ranked_cdl: [
         { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint-Modus' },
         { value: 'snd', label: '💣 Suchen & Zerstören', sublabel: 'Suchen & Zerstören' }
+      ],
+      ranked_stricker: [
+        { value: 'stricker-snd', label: '💣 Suchen & Zerstören 5v5', sublabel: 'Stricker S&D-Modus' }
       ]
     }
   };
@@ -107,7 +125,7 @@ const getSubTypeLabels = (lang, mode = 'hardcore') => {
   // Return the appropriate list based on location and mode
   return {
     rankings: t.rankings,
-    ranked: mode === 'cdl' ? t.ranked_cdl : t.ranked_hardcore
+    ranked: mode === 'cdl' ? t.ranked_cdl : mode === 'stricker' ? t.ranked_stricker : t.ranked_hardcore
   };
 };
 
@@ -319,6 +337,8 @@ const GameModeRulesEditor = () => {
       // For ranked, set default based on mode
       if (selectedMode === 'cdl') {
         setSelectedSubType('hardpoint');
+      } else if (selectedMode === 'stricker') {
+        setSelectedSubType('stricker-snd');
       } else {
         setSelectedSubType('duel');
       }

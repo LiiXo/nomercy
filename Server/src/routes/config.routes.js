@@ -41,6 +41,10 @@ router.put('/admin', verifyToken, requireAdmin, async (req, res) => {
     if (updates.rankedPointsLossPerRank) config.markModified('rankedPointsLossPerRank');
     if (updates.rankedMaps) config.markModified('rankedMaps');
     if (updates.rankedRules) config.markModified('rankedRules');
+    // Stricker mode config
+    if (updates.strickerMatchRewards) config.markModified('strickerMatchRewards');
+    if (updates.strickerRankThresholds) config.markModified('strickerRankThresholds');
+    if (updates.strickerPointsLossPerRank) config.markModified('strickerPointsLossPerRank');
     
     await config.save();
     
