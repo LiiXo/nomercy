@@ -471,9 +471,10 @@ const generateRandomChannelNumber = () => {
  * @param {string} matchId - The match ID for reference
  * @param {Array} team1DiscordIds - Array of Discord IDs for team 1 players
  * @param {Array} team2DiscordIds - Array of Discord IDs for team 2 players
+ * @param {string} mode - The match mode ('cdl' or 'hardcore')
  * @returns {Object} - { team1: { channelId, channelName }, team2: { channelId, channelName } }
  */
-export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], team2DiscordIds = []) => {
+export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], team2DiscordIds = [], mode = 'hardcore') => {
   if (!client || !isReady) {
     console.warn('[Discord Bot] Bot not ready, skipping voice channel creation (client:', !!client, ', isReady:', isReady, ')');
     return null;
@@ -500,27 +501,30 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     // Use last 4 characters of matchId as unique identifier
     const matchCode = matchIdStr.slice(-4).toUpperCase();
     
-    // Create team 1 voice channel - No permission restrictions, everyone can join, limited to 5 users
+    // CDL: 4 users max per channel, Hardcore: 5 users max per channel
+    const userLimit = mode === 'cdl' ? 4 : 5;
+    
+    // Create team 1 voice channel - No permission restrictions, everyone can join, limited based on mode
     const team1ChannelName = `🔵 Blue #${matchCode}`;
     const team1Channel = await guild.channels.create({
       name: team1ChannelName,
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
-      userLimit: 5,
-      reason: `Match classé ${matchIdStr}`
+      userLimit: userLimit,
+      reason: `Match classé ${matchIdStr} (${mode.toUpperCase()})`
     });
 
-    // Create team 2 voice channel - No permission restrictions, everyone can join, limited to 5 users
+    // Create team 2 voice channel - No permission restrictions, everyone can join, limited based on mode
     const team2ChannelName = `🔴 Red #${matchCode}`;
     const team2Channel = await guild.channels.create({
       name: team2ChannelName,
       type: ChannelType.GuildVoice,
       parent: RANKED_VOICE_CATEGORY_ID,
-      userLimit: 5,
-      reason: `Match classé ${matchIdStr}`
+      userLimit: userLimit,
+      reason: `Match classé ${matchIdStr} (${mode.toUpperCase()})`
     });
 
-    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (open access, 5 users max)`)
+    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (open access, ${userLimit} users max, mode: ${mode})`)
 
     return {
       team1: { channelId: team1Channel.id, channelName: team1ChannelName },

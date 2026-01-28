@@ -634,6 +634,95 @@ const AdminApplication = ({
         </div>
       </div>
 
+      {/* Mode Access Control (Admin Only) */}
+      <div className="bg-dark-800/50 border border-cyan-500/30 rounded-xl p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <Shield className="w-4 sm:w-5 h-4 sm:h-5 text-cyan-400" />
+          Accès aux Modes de Jeu
+        </h3>
+        <p className="text-gray-400 text-xs sm:text-sm mb-4">
+          Contrôlez l'accès public aux modes de jeu (Admin uniquement)
+        </p>
+        
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          {/* CDL Mode */}
+          <div className="flex items-center justify-between bg-dark-900/50 rounded-lg p-2.5 sm:p-3">
+            <div>
+              <span className="text-white text-xs sm:text-sm block">Mode CDL</span>
+              <span className="text-gray-500 text-[10px] sm:text-xs">Activer l'accès public au mode CDL</span>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const isEnabled = appSettings?.features?.cdlMode?.enabled !== false;
+                  const response = await fetch(`${API_URL}/app-settings/admin/feature/cdlMode`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ enabled: !isEnabled })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess(`Mode CDL ${!isEnabled ? 'activé' : 'désactivé'}`);
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur');
+                }
+              }}
+              className={`relative w-8 sm:w-10 h-4 sm:h-5 rounded-full transition-colors ${
+                appSettings?.features?.cdlMode?.enabled !== false ? 'bg-cyan-500' : 'bg-dark-700'
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-3 sm:w-4 h-3 sm:h-4 bg-white rounded-full transition-transform ${
+                appSettings?.features?.cdlMode?.enabled !== false ? 'translate-x-4 sm:translate-x-5' : ''
+              }`} />
+            </button>
+          </div>
+
+          {/* Hardcore Mode */}
+          <div className="flex items-center justify-between bg-dark-900/50 rounded-lg p-2.5 sm:p-3">
+            <div>
+              <span className="text-white text-xs sm:text-sm block">Mode Hardcore</span>
+              <span className="text-gray-500 text-[10px] sm:text-xs">Activer l'accès public au mode Hardcore</span>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const isEnabled = appSettings?.features?.hardcoreMode?.enabled !== false;
+                  const response = await fetch(`${API_URL}/app-settings/admin/feature/hardcoreMode`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ enabled: !isEnabled })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess(`Mode Hardcore ${!isEnabled ? 'activé' : 'désactivé'}`);
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur');
+                }
+              }}
+              className={`relative w-8 sm:w-10 h-4 sm:h-5 rounded-full transition-colors ${
+                appSettings?.features?.hardcoreMode?.enabled !== false ? 'bg-orange-500' : 'bg-dark-700'
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-3 sm:w-4 h-3 sm:h-4 bg-white rounded-full transition-transform ${
+                appSettings?.features?.hardcoreMode?.enabled !== false ? 'translate-x-4 sm:translate-x-5' : ''
+              }`} />
+            </button>
+          </div>
+        </div>
+        
+        <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+          <p className="text-blue-400 text-[10px] sm:text-xs">
+            <strong>Note:</strong> Les comptes staff ont toujours accès aux modes, même s'ils sont désactivés.
+          </p>
+        </div>
+      </div>
+
       {/* Reset Ranked Leaderboard Section */}
       <div className="bg-dark-800/50 border border-red-500/30 rounded-xl p-4 sm:p-6">
         <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">

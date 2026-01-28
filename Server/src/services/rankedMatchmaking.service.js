@@ -523,10 +523,11 @@ export const joinQueue = async (userId, gameMode, mode) => {
       return { success: false, message: 'Vous êtes déjà dans une file d\'attente.' };
     }
     
-    // Vérifier si le joueur n'est pas déjà dans un match actif
+    // Vérifier si le joueur n'est pas déjà dans un match actif (dans n'importe quel mode)
     const activeMatch = await RankedMatch.findOne({
       'players.user': userId,
       status: { $in: ['pending', 'ready', 'in_progress'] }
+      // Ne pas filtrer par mode/gameMode - on vérifie tous les modes
     });
     
     if (activeMatch) {
@@ -1934,7 +1935,7 @@ const finalizeMapVote = async (matchId) => {
         
         console.log(`[Ranked Matchmaking] Creating voice channels with Discord IDs - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
         
-        const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+        const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, mode);
         if (voiceChannels) {
           match.team1VoiceChannel = voiceChannels.team1;
           match.team2VoiceChannel = voiceChannels.team2;
@@ -2407,7 +2408,7 @@ const completeRosterSelection = async (matchId) => {
       
       console.log(`[Roster Selection] Creating voice channels - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
       
-      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, mode);
       if (voiceChannels) {
         match.team1VoiceChannel = voiceChannels.team1;
         match.team2VoiceChannel = voiceChannels.team2;

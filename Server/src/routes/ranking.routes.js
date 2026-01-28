@@ -1,12 +1,73 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import Ranking from '../models/Ranking.js';
 import User from '../models/User.js';
 import Squad from '../models/Squad.js';
+import RankedMatch from '../models/RankedMatch.js';
 import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
+// Cache for leaderboard with 15-minute expiration
+const leaderboardCache = new Map();
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes in milliseconds
+
+// Helper to get cache key
+function getLeaderboardCacheKey(mode, season, limit, page, all) {
+  return `${mode}_${season}_${limit}_${page}_${all}`;
+}
+
+// Helper to check if cache is valid
+function isCacheValid(cachedData) {
+  return cachedData && (Date.now() - cachedData.timestamp) < CACHE_DURATION;
+}
+
 // ==================== PUBLIC ROUTES ====================
+
+// Helper function to calculate wins/losses from RankedMatch history
+async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null) {
+  try {
+    const query = {
+      'players.user': userId,
+      status: 'completed',
+      'result.winner': { $exists: true, $ne: null },
+      mode: mode
+    };
+    
+    // If user has reset their stats, only count matches after the reset
+    if (statsResetAt) {
+      query.completedAt = { $gt: statsResetAt };
+    }
+    
+    const matches = await RankedMatch.find(query).select('players result');
+    
+    let wins = 0;
+    let losses = 0;
+    
+    for (const match of matches) {
+      const player = match.players.find(p => {
+        const pUserId = p.user?._id?.toString() || p.user?.toString();
+        return pUserId === userId.toString();
+      });
+      
+      if (!player || player.isFake) continue;
+      
+      const winningTeam = Number(match.result.winner);
+      const playerTeam = Number(player.team);
+      
+      if (playerTeam === winningTeam) {
+        wins++;
+      } else {
+        losses++;
+      }
+    }
+    
+    return { wins, losses };
+  } catch (error) {
+    console.error(`Error calculating wins/losses for user ${userId}:`, error);
+    return { wins: 0, losses: 0 };
+  }
+}
 
 // Get leaderboard
 router.get('/leaderboard/:mode', async (req, res) => {
@@ -18,6 +79,15 @@ router.get('/leaderboard/:mode', async (req, res) => {
 
     if (!['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
+    }
+
+    // Check cache first
+    const cacheKey = getLeaderboardCacheKey(mode, season, limit, page, all);
+    const cachedData = leaderboardCache.get(cacheKey);
+    
+    if (isCacheValid(cachedData)) {
+      console.log(`[RANKINGS] Returning cached leaderboard for ${cacheKey}`);
+      return res.json(cachedData.data);
     }
 
     // Build query - if all=true, show all players including 0 points
@@ -44,7 +114,7 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const rankings = await Ranking.find(query)
       .populate({
         path: 'user',
-        select: 'username avatar discordAvatar discordId isBanned isDeleted'
+        select: 'username avatar discordAvatar discordId isBanned isDeleted statsResetAt'
       })
       .sort({ points: -1, wins: -1, _id: 1 })
       .limit(parsedLimit * overFetchMultiplier + skip)
@@ -76,8 +146,8 @@ router.get('/leaderboard/:mode', async (req, res) => {
     // Apply pagination on filtered results
     const paginatedRankings = validRankings.slice(skip, skip + parsedLimit);
 
-    // Add rank numbers and detect ties
-    const rankedData = paginatedRankings.map((r, index, arr) => {
+    // Calculate accurate wins/losses from match history for each player
+    const rankedDataPromises = paginatedRankings.map(async (r, index, arr) => {
       const currentPoints = r.points;
       
       // Check if tied with adjacent players
@@ -88,19 +158,28 @@ router.get('/leaderboard/:mode', async (req, res) => {
       const isTiedWithNext = nextPoints !== null && nextPoints === currentPoints;
       const hasTie = isTiedWithPrev || isTiedWithNext;
       
+      // Calculate actual wins/losses from RankedMatch history
+      const statsResetAt = r.user?.statsResetAt || null;
+      const { wins, losses } = await calculateWinsLossesFromHistory(r.user._id, mode, statsResetAt);
+      
+      const jsonData = r.toJSON();
       return {
-        ...r.toJSON(),
+        ...jsonData,
+        wins,  // Override with calculated wins from match history
+        losses,  // Override with calculated losses from match history
         rank: skip + index + 1,
         hasTie
       };
     });
+    
+    const rankedData = await Promise.all(rankedDataPromises);
 
     // Count all valid (non-banned) users
     const total = validRankings.length;
 
     console.log(`[RANKINGS] Found ${total} valid rankings for mode=${mode}, returning ${rankedData.length} on page ${parsedPage}`);
 
-    res.json({
+    const responseData = {
       success: true,
       rankings: rankedData,
       pagination: {
@@ -108,8 +187,19 @@ router.get('/leaderboard/:mode', async (req, res) => {
         limit: parsedLimit,
         total,
         pages: Math.ceil(total / parsedLimit)
-      }
+      },
+      cached: false,
+      cacheTimestamp: Date.now()
+    };
+
+    // Store in cache
+    leaderboardCache.set(cacheKey, {
+      data: responseData,
+      timestamp: Date.now()
     });
+    console.log(`[RANKINGS] Cached leaderboard for ${cacheKey}`);
+
+    res.json(responseData);
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ success: false, message: 'Error fetching leaderboard' });
@@ -326,7 +416,7 @@ router.get('/user/:userId/:mode', async (req, res) => {
       user: userId, 
       mode, 
       season: parseInt(season) 
-    }).populate('user', 'username avatar discordAvatar discordId isBanned');
+    }).populate('user', 'username avatar discordAvatar discordId isBanned statsResetAt');
 
     if (!ranking || !ranking.user) {
       return res.status(404).json({ success: false, message: 'Ranking not found' });
@@ -336,6 +426,10 @@ router.get('/user/:userId/:mode', async (req, res) => {
     if (ranking.user.isBanned) {
       return res.status(403).json({ success: false, message: 'User is banned' });
     }
+
+    // Calculate accurate wins/losses from RankedMatch history
+    const statsResetAt = ranking.user.statsResetAt || null;
+    const { wins, losses } = await calculateWinsLossesFromHistory(userId, mode, statsResetAt);
 
     // Get user's position - count only non-banned users with better stats
     const allHigherRankings = await Ranking.find({
@@ -380,6 +474,8 @@ router.get('/user/:userId/:mode', async (req, res) => {
       success: true,
       ranking: {
         ...ranking.toJSON(),
+        wins,  // Override with calculated wins from match history
+        losses,  // Override with calculated losses from match history
         rank: higherRanked + 1,
         hasTie // true if another player has the same points
       }
@@ -411,6 +507,10 @@ router.get('/me/:mode', verifyToken, async (req, res) => {
       await ranking.save();
     }
 
+    // Calculate accurate wins/losses from RankedMatch history
+    const statsResetAt = req.user.statsResetAt || null;
+    const { wins, losses } = await calculateWinsLossesFromHistory(req.user._id, mode, statsResetAt);
+
     // Get position - with tiebreakers, excluding banned users
     const allHigherRankings = await Ranking.find({
       mode,
@@ -436,8 +536,8 @@ router.get('/me/:mode', verifyToken, async (req, res) => {
     // Count only those with valid (non-banned) users
     const higherRanked = allHigherRankings.filter(r => r.user !== null).length;
 
-    // Check if player has played any matches
-    const hasPlayed = ranking.wins > 0 || ranking.losses > 0;
+    // Check if player has played any matches (from actual history)
+    const hasPlayed = wins > 0 || losses > 0;
 
     // Check if tied with adjacent players
     let hasTie = false;
@@ -463,6 +563,8 @@ router.get('/me/:mode', verifyToken, async (req, res) => {
       success: true,
       ranking: {
         ...ranking.toJSON(),
+        wins,  // Override with calculated wins from match history
+        losses,  // Override with calculated losses from match history
         rank: hasPlayed ? higherRanked + 1 : null,  // null rank if not played yet
         hasPlayed,
         hasTie // true if tied with another player at same points

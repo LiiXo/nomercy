@@ -338,6 +338,8 @@ const RankedMode = () => {
   const [matchmakingError, setMatchmakingError] = useState(null);
   const [ggsecureConnected, setGgsecureConnected] = useState(null);
   const [activeMatch, setActiveMatch] = useState(null);
+  const [showActiveMatchDialog, setShowActiveMatchDialog] = useState(false);
+  const [savedActiveMatch, setSavedActiveMatch] = useState(null); // Save match info for dialog
   
   // Note: Using totalOnlineUsers from SocketContext for global online count
   
@@ -488,6 +490,9 @@ const RankedMode = () => {
 
   const isHardcore = selectedMode === 'hardcore';
   const accent = isHardcore ? 'red' : 'cyan';
+  
+  // CDL: 8 players max (4v4), Hardcore: 10 players max (5v5)
+  const maxPlayers = selectedMode === 'cdl' ? 8 : 10;
   
   // Update default game mode when switching modes - both modes use Search & Destroy
   useEffect(() => {
@@ -1905,6 +1910,32 @@ const RankedMode = () => {
     return () => clearInterval(statsInterval);
   }, [isAuthenticated, selectedMode, selectedGameMode]);
 
+  // Check active match when user becomes available (after login or page load)
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      checkActiveMatch();
+    }
+  }, [user, isAuthenticated]);
+
+  // Show dialog when active match is detected
+  useEffect(() => {
+    if (activeMatch && activeMatch._id) {
+      // Check if we've already shown the dialog for this match in this session
+      const shownMatchId = sessionStorage.getItem('shownMatchDialog');
+      
+      if (shownMatchId !== activeMatch._id) {
+        // Save the match info and show dialog
+        setSavedActiveMatch(activeMatch);
+        setShowActiveMatchDialog(true);
+        // Mark this match as shown in session
+        sessionStorage.setItem('shownMatchDialog', activeMatch._id);
+      }
+    } else if (!activeMatch) {
+      // Clear the session storage when there's no active match
+      sessionStorage.removeItem('shownMatchDialog');
+    }
+  }, [activeMatch]);
+
   // Join mode room for mode-specific online users tracking
   useEffect(() => {
     if (selectedMode) {
@@ -2016,7 +2047,13 @@ const RankedMode = () => {
       seasonRewards: 'Récompenses de fin de saison',
       goldRewardsTop5: 'Récompenses Gold (Top 5)',
       trophyRewards: 'Trophées de rang',
-      andAbove: 'et plus'
+      andAbove: 'et plus',
+      leaderboardUpdateNotice: 'Le classement est mis à jour toutes les 15 minutes',
+      activeMatchFound: 'Match en cours détecté',
+      activeMatchFoundDesc: 'Vous avez un match en cours. Voulez-vous rejoindre la feuille de match ?',
+      joinMatchSheet: 'Rejoindre le match',
+      stayOnPage: 'Rester sur la page',
+      matchMode: 'Mode'
     },
     en: {
       title: 'Ranked Mode',
@@ -2113,7 +2150,13 @@ const RankedMode = () => {
       seasonRewards: 'Season End Rewards',
       goldRewardsTop5: 'Gold Rewards (Top 5)',
       trophyRewards: 'Rank Trophies',
-      andAbove: 'and above'
+      andAbove: 'and above',
+      leaderboardUpdateNotice: 'Leaderboard is updated every 15 minutes',
+      activeMatchFound: 'Active Match Detected',
+      activeMatchFoundDesc: 'You have an active match. Do you want to join the match sheet?',
+      joinMatchSheet: 'Join Match',
+      stayOnPage: 'Stay on Page',
+      matchMode: 'Mode'
     },
     de: {
       title: 'Ranglisten-Modus',
@@ -2199,7 +2242,13 @@ const RankedMode = () => {
       seasonRewards: 'Saisonende-Belohnungen',
       goldRewardsTop5: 'Gold-Belohnungen (Top 5)',
       trophyRewards: 'Rang-Trophäen',
-      andAbove: 'und höher'
+      andAbove: 'und höher',
+      leaderboardUpdateNotice: 'Die Bestenliste wird alle 15 Minuten aktualisiert',
+      activeMatchFound: 'Aktives Spiel erkannt',
+      activeMatchFoundDesc: 'Sie haben ein aktives Spiel. Möchten Sie dem Match-Blatt beitreten?',
+      joinMatchSheet: 'Spiel beitreten',
+      stayOnPage: 'Auf der Seite bleiben',
+      matchMode: 'Modus'
     },
     it: {
       title: 'Modalità Classificata',
@@ -2285,7 +2334,13 @@ const RankedMode = () => {
       seasonRewards: 'Ricompense di fine stagione',
       goldRewardsTop5: 'Ricompense Gold (Top 5)',
       trophyRewards: 'Trofei di grado',
-      andAbove: 'e superiori'
+      andAbove: 'e superiori',
+      leaderboardUpdateNotice: 'La classifica viene aggiornata ogni 15 minuti',
+      activeMatchFound: 'Partita attiva rilevata',
+      activeMatchFoundDesc: 'Hai una partita in corso. Vuoi unirti al foglio partita?',
+      joinMatchSheet: 'Unisciti alla partita',
+      stayOnPage: 'Rimani sulla pagina',
+      matchMode: 'Modalità'
     }
   };
   
@@ -2904,7 +2959,7 @@ const RankedMode = () => {
                           
                           {/* Animated player icons */}
                           <div className="flex justify-center flex-wrap gap-1.5 sm:gap-2 mb-4">
-                            {[...Array(10)].map((_, i) => (
+                            {[...Array(maxPlayers)].map((_, i) => (
                               <div 
                                 key={i}
                                 className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
@@ -2923,7 +2978,7 @@ const RankedMode = () => {
                           </div>
                           
                           <p className={`text-2xl sm:text-3xl font-black ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
-                            {queueSize}<span className="text-gray-500 text-lg sm:text-xl">/10</span>
+                            {queueSize}<span className="text-gray-500 text-lg sm:text-xl">/{maxPlayers}</span>
                           </p>
                           <p className="text-gray-500 text-xs sm:text-sm">{t.playersInQueue}</p>
                         </div>
@@ -2952,15 +3007,17 @@ const RankedMode = () => {
                         <div className="h-3 bg-dark-700 rounded-full overflow-hidden">
                           <div 
                             className={`h-full bg-gradient-to-r ${isHardcore ? 'from-red-500 to-orange-500' : 'from-cyan-400 to-blue-500'} transition-all duration-500 relative`}
-                            style={{ width: `${(queueSize / 10) * 100}%` }}
+                            style={{ width: `${(queueSize / maxPlayers) * 100}%` }}
                           >
                             {/* Shimmer effect */}
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
                           </div>
                         </div>
-                        {/* Milestone markers - 4v4 at 80% (8/10) */}
+                        {/* Milestone markers - 4v4 at 80% for Hardcore (8/10), 100% for CDL (8/8) */}
                         <div className="absolute top-0 left-0 w-full h-3 flex items-center">
-                          <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
+                          {selectedMode === 'hardcore' && (
+                            <div className="absolute left-[80%] w-0.5 h-full bg-white/20" title="4v4" />
+                          )}
                         </div>
                       </div>
 
@@ -3169,7 +3226,7 @@ const RankedMode = () => {
                               {/* Staff Queue Status */}
                               <div className="flex items-center justify-between p-3 rounded-xl bg-dark-800/50">
                                 <span className="text-gray-300 text-sm">
-                                  <span className="text-purple-400 font-bold">{staffQueueSize}</span>/10 {t.playersInQueue}
+                                  <span className="text-purple-400 font-bold">{staffQueueSize}</span>/{maxPlayers} {t.playersInQueue}
                                 </span>
                                 {staffQueueTimerActive && staffQueueTimerEndTime && (
                                   <span className="text-green-400 text-sm font-medium animate-pulse">
@@ -3557,6 +3614,11 @@ const RankedMode = () => {
                 </div>
                 {t.leaderboard} - Top 100
               </h3>
+              {/* Update notice */}
+              <p className="text-xs text-gray-400 mt-2 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5" />
+                {t.leaderboardUpdateNotice}
+              </p>
             </div>
             
             {loadingLeaderboard ? (
@@ -4868,6 +4930,55 @@ const RankedMode = () => {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Active Match Dialog */}
+      {showActiveMatchDialog && savedActiveMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className={`bg-dark-900 rounded-2xl border ${isHardcore ? 'border-red-500/30' : 'border-cyan-500/30'} p-6 max-w-md w-full shadow-2xl`}>
+            <div className="text-center mb-6">
+              <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
+                <Swords className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2">
+                {t.activeMatchFound}
+              </h3>
+              <p className="text-gray-400 text-sm mb-1">
+                {t.activeMatchFoundDesc}
+              </p>
+              {savedActiveMatch.mode && (
+                <p className="text-xs text-gray-500 mt-2">
+                  {t.matchMode}: <span className={`font-semibold ${savedActiveMatch.mode === 'hardcore' ? 'text-red-400' : 'text-cyan-400'}`}>
+                    {savedActiveMatch.mode === 'hardcore' ? 'Hardcore' : 'CDL'}
+                  </span>
+                </p>
+              )}
+            </div>
+            
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => {
+                  if (savedActiveMatch.mode && savedActiveMatch.mode !== selectedMode) {
+                    selectMode(savedActiveMatch.mode);
+                  }
+                  navigate(`/ranked/match/${savedActiveMatch._id}`);
+                  setShowActiveMatchDialog(false);
+                }}
+                className={`w-full py-4 rounded-xl bg-gradient-to-r ${isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'} text-white font-bold text-lg shadow-xl transition-all flex items-center justify-center gap-3 group`}
+              >
+                <Play className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                {t.joinMatchSheet}
+              </button>
+              
+              <button
+                onClick={() => setShowActiveMatchDialog(false)}
+                className="w-full py-3 rounded-xl bg-dark-800 hover:bg-dark-700 text-gray-400 hover:text-white font-medium transition-all"
+              >
+                {t.stayOnPage}
+              </button>
+            </div>
           </div>
         </div>
       )}

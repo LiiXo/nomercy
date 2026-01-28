@@ -25,8 +25,8 @@ const ModeSelection = () => {
   const { requestPlay } = useBackgroundAudio();
 
   const currentLanguage = languages.find(lang => lang.code === language);
-  // CDL accessible si staff OU si le mode est activé
-  const canAccessCDL = isStaff() || isCdlModeEnabled;
+  // CDL accessible si le mode est activé OU si staff (staff garde toujours l'accès)
+  const canAccessCDL = isCdlModeEnabled || isStaff();
   // Hardcore accessible uniquement si le mode est activé
   const canAccessHardcore = isHardcoreModeEnabled;
 
@@ -260,9 +260,15 @@ const ModeSelection = () => {
                     <Shield className="w-10 h-10 text-white" />
                   </div>
                   {canAccessCDL ? (
-                    <div className="px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-400 text-sm font-bold">
-                      STAFF ACCESS
-                    </div>
+                    isCdlModeEnabled ? (
+                      <div className="px-4 py-2 rounded-full bg-green-500/20 border border-green-500/30 text-green-400 text-sm font-bold">
+                        {language === 'fr' ? 'DISPONIBLE' : language === 'de' ? 'VERFÜGBAR' : language === 'it' ? 'DISPONIBILE' : 'AVAILABLE'}
+                      </div>
+                    ) : (
+                      <div className="px-4 py-2 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-400 text-sm font-bold">
+                        STAFF ACCESS
+                      </div>
+                    )
                   ) : (
                     <div className="px-4 py-2 rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 text-sm font-bold animate-pulse">
                       {getText('comingSoon')}

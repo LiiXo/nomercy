@@ -2031,7 +2031,7 @@ router.post('/admin/:matchId/create-voice-channels', verifyToken, requireArbitre
     }
     
     // Créer les salons vocaux
-    const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds);
+    const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, match.mode);
     
     if (!voiceChannels) {
       return res.status(500).json({ 
