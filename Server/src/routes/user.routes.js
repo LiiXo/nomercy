@@ -742,7 +742,10 @@ router.get('/profile/:username', async (req, res) => {
           wins: totalWins,
           losses: totalLosses
         },
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        // MVP counts per mode
+        mvpCountHardcore: user.mvpCountHardcore || 0,
+        mvpCountCdl: user.mvpCountCdl || 0
       }
     });
   } catch (error) {
@@ -873,7 +876,10 @@ router.get('/by-id/:id', async (req, res) => {
         equippedTitle: user.equippedTitle,
         equippedProfileAnimation: user.equippedProfileAnimation,
         trophies: (user.trophies || []).filter(t => t.trophy != null),
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        // MVP counts per mode
+        mvpCountHardcore: user.mvpCountHardcore || 0,
+        mvpCountCdl: user.mvpCountCdl || 0
       }
     });
   } catch (error) {
@@ -1381,6 +1387,28 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
     // For now, we'll return empty array and let frontend handle it
     const visitorsLast30Days = [];
 
+    // Get ranked matches per day for the last 10 days
+    const rankedMatchesLast10Days = [];
+    for (let i = 9; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      
+      const count = await RankedMatch.countDocuments({
+        status: 'completed',
+        completedAt: { $gte: startOfDay, $lte: endOfDay }
+      });
+      
+      rankedMatchesLast10Days.push({
+        date: startOfDay.toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit' }),
+        fullDate: startOfDay.toISOString().split('T')[0],
+        value: count
+      });
+    }
+
     res.json({
       success: true,
       stats: {
@@ -1397,6 +1425,7 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
         activeAnnouncements,
         registrationsLast30Days,
         visitorsLast30Days,
+        rankedMatchesLast10Days,
         goldStats: {
           topUser: topGoldUser ? {
             username: topGoldUser.username,

@@ -245,6 +245,16 @@ const userSchema = new mongoose.Schema({
     default: null
   },
   
+  // MVP count per mode (voted by players after ranked matches)
+  mvpCountHardcore: {
+    type: Number,
+    default: 0
+  },
+  mvpCountCdl: {
+    type: Number,
+    default: 0
+  },
+  
   // Trophies earned (ranked mode seasons, achievements, etc.)
   trophies: [{
     trophy: {

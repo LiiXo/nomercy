@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Shield, Swords, Eye, Activity, UserPlus, Target, Coins } from 'lucide-react';
+import { Users, Shield, Swords, Eye, Activity, UserPlus, Target, Coins, Calendar, TrendingUp } from 'lucide-react';
 
 const AdminOverview = ({ stats }) => {
   if (!stats) return <div className="text-gray-400">Chargement des statistiques...</div>;
@@ -123,6 +123,112 @@ const AdminOverview = ({ stats }) => {
           </div>
         </div>
       </div>
+
+      {/* Ranked Matches Last 10 Days Table */}
+      {stats.rankedMatchesLast10Days && stats.rankedMatchesLast10Days.length > 0 && (
+        <div className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Calendar className="w-4 sm:w-5 h-4 sm:h-5 text-purple-400" />
+            Matchs Ranked - 10 derniers jours
+          </h3>
+          
+          {/* Stats summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+            <div className="bg-dark-900/50 rounded-lg p-3 border border-purple-500/20">
+              <p className="text-gray-400 text-xs mb-1">Total</p>
+              <p className="text-xl font-bold text-purple-400">
+                {stats.rankedMatchesLast10Days.reduce((a, b) => a + b.value, 0)}
+              </p>
+            </div>
+            <div className="bg-dark-900/50 rounded-lg p-3 border border-cyan-500/20">
+              <p className="text-gray-400 text-xs mb-1">Moyenne/jour</p>
+              <p className="text-xl font-bold text-cyan-400">
+                {(stats.rankedMatchesLast10Days.reduce((a, b) => a + b.value, 0) / 10).toFixed(1)}
+              </p>
+            </div>
+            <div className="bg-dark-900/50 rounded-lg p-3 border border-green-500/20">
+              <p className="text-gray-400 text-xs mb-1">Meilleur jour</p>
+              <p className="text-xl font-bold text-green-400">
+                {Math.max(...stats.rankedMatchesLast10Days.map(d => d.value))}
+              </p>
+            </div>
+          </div>
+          
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-white/10">
+                  <th className="text-left py-2 px-3 text-gray-400 text-xs sm:text-sm font-medium">Date</th>
+                  <th className="text-center py-2 px-3 text-gray-400 text-xs sm:text-sm font-medium">Matchs</th>
+                  <th className="text-right py-2 px-3 text-gray-400 text-xs sm:text-sm font-medium hidden sm:table-cell">Tendance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.rankedMatchesLast10Days.map((day, index) => {
+                  const prevDay = index > 0 ? stats.rankedMatchesLast10Days[index - 1] : null;
+                  const trend = prevDay ? day.value - prevDay.value : 0;
+                  const isToday = index === stats.rankedMatchesLast10Days.length - 1;
+                  const maxValue = Math.max(...stats.rankedMatchesLast10Days.map(d => d.value), 1);
+                  const barWidth = (day.value / maxValue) * 100;
+                  
+                  return (
+                    <tr 
+                      key={day.fullDate} 
+                      className={`border-b border-white/5 hover:bg-white/5 transition-colors ${
+                        isToday ? 'bg-purple-500/10' : ''
+                      }`}
+                    >
+                      <td className="py-2 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm ${isToday ? 'text-purple-400 font-bold' : 'text-white'}`}>
+                            {day.date}
+                          </span>
+                          {isToday && (
+                            <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[10px] font-bold rounded">
+                              Aujourd'hui
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2 px-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 sm:w-24 h-2 bg-dark-700 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-purple-500 to-cyan-500 rounded-full transition-all"
+                              style={{ width: `${barWidth}%` }}
+                            />
+                          </div>
+                          <span className={`text-sm font-bold min-w-[2rem] text-center ${
+                            day.value === 0 ? 'text-gray-500' : 'text-white'
+                          }`}>
+                            {day.value}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-right hidden sm:table-cell">
+                        {index > 0 && (
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium ${
+                            trend > 0 ? 'text-green-400' : trend < 0 ? 'text-red-400' : 'text-gray-500'
+                          }`}>
+                            {trend > 0 ? (
+                              <><TrendingUp className="w-3 h-3" />+{trend}</>
+                            ) : trend < 0 ? (
+                              <><TrendingUp className="w-3 h-3 rotate-180" />{trend}</>
+                            ) : (
+                              <span>-</span>
+                            )}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Visitors Chart - Last 30 Days */}
       <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 sm:p-6">

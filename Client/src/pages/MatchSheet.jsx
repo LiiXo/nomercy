@@ -206,6 +206,9 @@ const MatchSheet = () => {
   // Création de salons vocaux Discord (admin/staff)
   const [creatingVoiceChannels, setCreatingVoiceChannels] = useState(false);
   
+  // MVP voting state (voting is now handled in RankedMatchReport)
+  const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
+  
   // Helper local pour obtenir le rang à partir des points
   const getRankFromPoints = (points, lang = language) => {
     return getRankFromPointsWithThresholds(points, rankThresholds, lang);
@@ -317,6 +320,18 @@ const MatchSheet = () => {
       expiresIn: 'Expire dans',
       doublePts: 'Points x2',
       doubleGold: 'Gold x2',
+      // MVP translations
+      voteMvp: 'Voter pour le MVP',
+      mvpTitle: 'Meilleur joueur du match',
+      mvpDescription: 'Sélectionnez le joueur qui a le mieux joué ce match',
+      mvpVoteProgress: 'Votes MVP',
+      mvpVoteRecorded: 'Vote MVP enregistré',
+      mvpSelected: 'MVP désigné',
+      mvpBonusPoints: '+5 points bonus MVP',
+      myMvpVote: 'Mon vote MVP',
+      changeMvpVote: 'Changer mon vote MVP',
+      waitingMvpVotes: 'En attente des votes MVP',
+      mvpConfirmed: 'MVP confirmé !',
     },
     en: {
       back: 'Back',
@@ -422,6 +437,18 @@ const MatchSheet = () => {
       expiresIn: 'Expires in',
       doublePts: 'Points x2',
       doubleGold: 'Gold x2',
+      // MVP translations
+      voteMvp: 'Vote for MVP',
+      mvpTitle: 'Match MVP',
+      mvpDescription: 'Select the player who performed best this match',
+      mvpVoteProgress: 'MVP Votes',
+      mvpVoteRecorded: 'MVP vote recorded',
+      mvpSelected: 'MVP selected',
+      mvpBonusPoints: '+5 MVP bonus points',
+      myMvpVote: 'My MVP vote',
+      changeMvpVote: 'Change my MVP vote',
+      waitingMvpVotes: 'Waiting for MVP votes',
+      mvpConfirmed: 'MVP confirmed!',
     },
     de: {
       back: 'Zurück',
@@ -522,6 +549,18 @@ const MatchSheet = () => {
       expiresIn: 'Läuft ab in',
       doublePts: 'Punkte x2',
       doubleGold: 'Gold x2',
+      // MVP translations
+      voteMvp: 'Für MVP stimmen',
+      mvpTitle: 'Bester Spieler',
+      mvpDescription: 'Wählen Sie den Spieler, der in diesem Spiel am besten war',
+      mvpVoteProgress: 'MVP-Stimmen',
+      mvpVoteRecorded: 'MVP-Stimme aufgezeichnet',
+      mvpSelected: 'MVP ausgewählt',
+      mvpBonusPoints: '+5 MVP-Bonuspunkte',
+      myMvpVote: 'Meine MVP-Stimme',
+      changeMvpVote: 'MVP-Stimme ändern',
+      waitingMvpVotes: 'Warten auf MVP-Stimmen',
+      mvpConfirmed: 'MVP bestätigt!',
     },
     it: {
       back: 'Indietro',
@@ -622,6 +661,18 @@ const MatchSheet = () => {
       expiresIn: 'Scade tra',
       doublePts: 'Punti x2',
       doubleGold: 'Oro x2',
+      // MVP translations
+      voteMvp: 'Vota per MVP',
+      mvpTitle: 'Miglior giocatore',
+      mvpDescription: 'Seleziona il giocatore che ha giocato meglio questa partita',
+      mvpVoteProgress: 'Voti MVP',
+      mvpVoteRecorded: 'Voto MVP registrato',
+      mvpSelected: 'MVP selezionato',
+      mvpBonusPoints: '+5 punti bonus MVP',
+      myMvpVote: 'Il mio voto MVP',
+      changeMvpVote: 'Cambia voto MVP',
+      waitingMvpVotes: 'In attesa dei voti MVP',
+      mvpConfirmed: 'MVP confermato!',
     },
   }[language] || {};
 
@@ -1040,7 +1091,11 @@ const MatchSheet = () => {
           newRank: { points: newPoints },
           mode: match.mode || selectedMode,
           doublePts: currentPlayer.rewards.doublePts || false,
-          doubleGold: currentPlayer.rewards.doubleGold || false
+          doubleGold: currentPlayer.rewards.doubleGold || false,
+          // MVP info
+          isMvp: currentPlayer.rewards.isMvp || false,
+          mvpBonus: currentPlayer.rewards.mvpBonus || 5,
+          mvpPlayer: match.mvp?.player || null
         });
         
         setTimeout(() => setShowMatchReport(true), 500);
@@ -1612,6 +1667,89 @@ const MatchSheet = () => {
     } finally {
       setSubmittingResult(false);
     }
+  };
+
+  // Submit MVP vote
+  const handleMvpVote = async (mvpPlayerId) => {
+    if (!isRankedMatch) return;
+    if (!isRankedParticipant && !isStaff) return;
+    
+    setSubmittingMvpVote(true);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/${matchId}/mvp-vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ mvpPlayerId })
+      });
+
+      const data = await response.json();
+      console.log('[MatchSheet] MVP vote response:', data);
+      
+      if (data.success) {
+        setMatch(data.match);
+        
+        // Show confirmation message in chat
+        const systemMessage = {
+          _id: `mvp-vote-${Date.now()}`,
+          isSystem: true,
+          message: data.message,
+          createdAt: new Date(),
+          user: { username: 'SYSTEM' }
+        };
+        setMessages(prev => [...prev, systemMessage]);
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error submitting MVP vote:', err);
+      alert('Erreur lors du vote MVP');
+    } finally {
+      setSubmittingMvpVote(false);
+    }
+  };
+
+  // Helper to get MVP vote stats
+  const getMvpVoteStats = () => {
+    if (!isRankedMatch || !match?.mvp) {
+      return { 
+        votes: {}, 
+        totalVotes: 0, 
+        totalPlayers: 0, 
+        confirmed: false, 
+        mvpWinner: null,
+        hasVoted: false,
+        myVote: null 
+      };
+    }
+    
+    const realPlayers = match.players?.filter(p => !p.isFake) || [];
+    const totalPlayers = realPlayers.length;
+    const mvpVotes = match.mvp.votes || [];
+    const totalVotes = mvpVotes.length;
+    const userId = (user?._id || user?.id)?.toString();
+    
+    // Count votes per player
+    const voteCount = {};
+    mvpVotes.forEach(v => {
+      const votedForId = (v.votedFor?._id || v.votedFor)?.toString();
+      voteCount[votedForId] = (voteCount[votedForId] || 0) + 1;
+    });
+    
+    // Check if current user has voted
+    const myVoteObj = mvpVotes.find(v => (v.voter?._id || v.voter)?.toString() === userId);
+    const myVote = myVoteObj ? (myVoteObj.votedFor?._id || myVoteObj.votedFor)?.toString() : null;
+    
+    return {
+      votes: voteCount,
+      totalVotes,
+      totalPlayers,
+      confirmed: match.mvp.confirmed,
+      mvpWinner: match.mvp.player,
+      hasVoted: !!myVoteObj,
+      myVote,
+      votingActive: match.mvp.votingActive
+    };
   };
 
 
@@ -2439,6 +2577,31 @@ const MatchSheet = () => {
                 <Trophy className="w-4 h-4" />
                 {getWinnerVoteStats().hasVoted ? (t.changeVote || 'Changer mon vote') : (t.voteForWinner || t.selectWinner)}
               </button>
+            )}
+            
+            {/* MVP Voting is now on the combat report (RankedMatchReport) */}
+            
+            {/* MVP Confirmed Display */}
+            {isRankedMatch && match.mvp?.confirmed && match.mvp?.player && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 rounded-xl">
+                <div className="flex items-center justify-center gap-3">
+                  <div className="relative">
+                    <Star className="w-8 h-8 text-yellow-400 animate-pulse" />
+                    <div className="absolute inset-0 blur-sm bg-yellow-400/50 rounded-full animate-pulse" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-yellow-400 font-bold text-sm">{t.mvpConfirmed || 'MVP Confirmé !'}</p>
+                    <p className="text-white font-bold text-lg">
+                      {match.mvp.player?.username || 'Unknown'}
+                    </p>
+                    <p className="text-yellow-400 text-xs">{t.mvpBonusPoints || '+5 points bonus MVP'}</p>
+                  </div>
+                  <div className="relative">
+                    <Star className="w-8 h-8 text-yellow-400 animate-pulse" />
+                    <div className="absolute inset-0 blur-sm bg-yellow-400/50 rounded-full animate-pulse" />
+                  </div>
+                </div>
+              </div>
             )}
             
             {/* Staff Controls - For in_progress, ready, accepted matches */}
@@ -3515,6 +3678,17 @@ const MatchSheet = () => {
           isReferent={isReferent}
           doublePts={matchReportData.doublePts}
           doubleGold={matchReportData.doubleGold}
+          // MVP info - use live match data for confirmed MVP status
+          isMvp={match?.mvp?.confirmed && (match?.mvp?.player?._id?.toString() || match?.mvp?.player?.toString()) === (user?._id?.toString() || user?.id?.toString())}
+          mvpBonus={match?.mvp?.bonusPoints || 5}
+          mvpPlayer={match?.mvp?.player || null}
+          // MVP voting props
+          players={match?.players || []}
+          mvpVotingActive={match?.mvp?.votingActive || false}
+          mvpConfirmed={match?.mvp?.confirmed || false}
+          mvpVotes={match?.mvp?.votes || []}
+          onMvpVote={handleMvpVote}
+          isTestMatch={match?.isTestMatch || false}
         />
       )}
 

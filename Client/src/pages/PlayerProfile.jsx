@@ -945,6 +945,58 @@ const PlayerProfile = () => {
             </div>
           )}
 
+          {/* MVP Count Display - Animated Frame */}
+          {((playerData?.mvpCountHardcore > 0 && selectedMode === 'hardcore') || 
+            (playerData?.mvpCountCdl > 0 && selectedMode === 'cdl')) && (
+            <div className="bg-gradient-to-br from-yellow-900/20 via-dark-900/80 to-orange-900/20 backdrop-blur-xl rounded-2xl border-2 border-yellow-500/40 p-5 sm:p-6 mb-4 sm:mb-5 shadow-lg shadow-yellow-500/10 relative overflow-hidden">
+              {/* Animated background effects */}
+              <div className="absolute inset-0 overflow-hidden">
+                <div 
+                  className="absolute top-0 left-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl animate-pulse"
+                  style={{ animationDuration: '3s' }}
+                />
+                <div 
+                  className="absolute bottom-0 right-0 w-40 h-40 bg-orange-500/10 rounded-full blur-3xl animate-pulse"
+                  style={{ animationDuration: '4s', animationDelay: '1s' }}
+                />
+              </div>
+              
+              <div className="relative flex items-center justify-center gap-4 sm:gap-6">
+                {/* Left star */}
+                <div className="relative">
+                  <Star className="w-10 h-10 sm:w-12 sm:h-12 text-yellow-400" style={{ animation: 'spin 8s linear infinite' }} />
+                  <div className="absolute inset-0 blur-lg bg-yellow-400/40 animate-pulse" />
+                </div>
+                
+                {/* MVP Count Center */}
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <Star className="w-5 h-5 text-yellow-400 animate-pulse" />
+                    <span className="text-yellow-400 font-bold text-sm sm:text-base">
+                      {language === 'fr' ? 'Meilleur Joueur' : language === 'de' ? 'Bester Spieler' : language === 'it' ? 'Miglior Giocatore' : 'Most Valuable Player'}
+                    </span>
+                    <Star className="w-5 h-5 text-yellow-400 animate-pulse" />
+                  </div>
+                  <div 
+                    className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-orange-400 to-yellow-300"
+                    style={{ textShadow: '0 0 40px rgba(251, 191, 36, 0.6)' }}
+                  >
+                    {selectedMode === 'hardcore' ? playerData.mvpCountHardcore : playerData.mvpCountCdl}x
+                  </div>
+                  <p className="text-yellow-400/80 text-xs sm:text-sm font-medium">
+                    MVP {language === 'fr' ? 'en mode classé' : language === 'de' ? 'im Ranglistenmodus' : language === 'it' ? 'in modalità classificata' : 'in ranked mode'}
+                  </p>
+                </div>
+                
+                {/* Right star */}
+                <div className="relative">
+                  <Star className="w-10 h-10 sm:w-12 sm:h-12 text-yellow-400" style={{ animation: 'spin 8s linear infinite reverse' }} />
+                  <div className="absolute inset-0 blur-lg bg-yellow-400/40 animate-pulse" />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Total Stats (ladder + ranked combined) */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-${accentColor}-500/20 p-4 sm:p-6 mb-4 sm:mb-6`}>
             <h2 className="text-base sm:text-lg font-bold text-white mb-3 sm:mb-4 flex items-center space-x-2">

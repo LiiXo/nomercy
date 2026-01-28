@@ -1,12 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
+import { useLanguage } from '../LanguageContext';
+import { getAvatarUrl, getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, TrendingUp, TrendingDown, Coins, Zap, X, 
-  ChevronRight, Star, Shield, Crown, Medal, Flame, ArrowRight
+  ChevronRight, Star, Shield, Crown, Medal, Flame, ArrowRight, Users, Check, Loader2
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
+
+// Sons aléatoires pour le rapport de combat
+const COMBAT_REPORT_SOUNDS = [
+  '/sound.mp3',
+  '/sound2.mp3',
+  '/sound3.mp3',
+  '/sound4.mp3',
+  '/sound5.mp3'
+];
 
 // Définition des rangs par défaut (seuils dynamiques chargés depuis AppSettings)
 const DEFAULT_RANKS = [
@@ -65,14 +76,96 @@ const RankedMatchReport = ({
   matchId,
   isReferent = false,
   doublePts = false,
-  doubleGold = false
+  doubleGold = false,
+  isMvp = false,
+  mvpBonus = 5,
+  mvpPlayer = null,
+  // MVP voting props
+  players = [],
+  mvpVotingActive = false,
+  mvpConfirmed = false,
+  mvpVotes = [],
+  onMvpVote = null,
+  isTestMatch = false
 }) => {
   const navigate = useNavigate();
   const params = useParams();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const { language } = useLanguage();
   const [animationStep, setAnimationStep] = useState(0);
   const [progressAnimation, setProgressAnimation] = useState(0);
   const [ranks, setRanks] = useState(DEFAULT_RANKS);
+  const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
+  const audioRef = useRef(null);
+  
+  // Play random sound when combat report is shown
+  useEffect(() => {
+    if (show) {
+      // Select a random sound
+      const randomIndex = Math.floor(Math.random() * COMBAT_REPORT_SOUNDS.length);
+      const soundUrl = COMBAT_REPORT_SOUNDS[randomIndex];
+      
+      console.log('[RankedMatchReport] 🎵 Playing sound:', soundUrl);
+      
+      // Create and play audio
+      const audio = new Audio(soundUrl);
+      audio.volume = 0.5;
+      audioRef.current = audio;
+      
+      audio.play().catch(err => {
+        console.warn('[RankedMatchReport] Audio play failed:', err);
+      });
+      
+      // Cleanup on unmount or when report closes
+      return () => {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current = null;
+        }
+      };
+    }
+  }, [show]);
+  
+  // MVP voting translations
+  const mvpT = {
+    fr: {
+      voteTitle: 'Votez pour le MVP',
+      voteSubtitle: 'Sélectionnez le meilleur joueur du match',
+      votingProgress: 'Votes MVP',
+      waitingVotes: 'En attente des autres votes...',
+      mvpElected: 'MVP ÉLU',
+      youVoted: 'Vous avez voté',
+      votes: 'votes'
+    },
+    en: {
+      voteTitle: 'Vote for MVP',
+      voteSubtitle: 'Select the best player of the match',
+      votingProgress: 'MVP Votes',
+      waitingVotes: 'Waiting for other votes...',
+      mvpElected: 'MVP ELECTED',
+      youVoted: 'You voted',
+      votes: 'votes'
+    },
+    de: {
+      voteTitle: 'Für MVP stimmen',
+      voteSubtitle: 'Wählen Sie den besten Spieler des Spiels',
+      votingProgress: 'MVP-Stimmen',
+      waitingVotes: 'Warten auf andere Stimmen...',
+      mvpElected: 'MVP GEWÄHLT',
+      youVoted: 'Sie haben gewählt',
+      votes: 'Stimmen'
+    },
+    it: {
+      voteTitle: 'Vota per MVP',
+      voteSubtitle: 'Seleziona il miglior giocatore della partita',
+      votingProgress: 'Voti MVP',
+      waitingVotes: 'In attesa degli altri voti...',
+      mvpElected: 'MVP ELETTO',
+      youVoted: 'Hai votato',
+      votes: 'voti'
+    }
+  };
+  const t = mvpT[language] || mvpT.fr;
   
   // Charger les seuils de rang depuis AppSettings
   useEffect(() => {
@@ -125,6 +218,42 @@ const RankedMatchReport = ({
   const rankDown = rankChanged && newRankInfo.min < oldRankInfo.min;
 
   const RankIcon = currentRankInfo.icon;
+  
+  // MVP voting helpers
+  const realPlayers = players.filter(p => !p.isFake);
+  const totalRealPlayers = realPlayers.length;
+  const userId = (user?._id || user?.id)?.toString();
+  
+  // Count votes per player
+  const voteCount = {};
+  mvpVotes.forEach(v => {
+    const votedForId = (v.votedFor?._id || v.votedFor)?.toString();
+    if (votedForId) {
+      voteCount[votedForId] = (voteCount[votedForId] || 0) + 1;
+    }
+  });
+  
+  // Check if current user has voted
+  const myVoteObj = mvpVotes.find(v => (v.voter?._id || v.voter)?.toString() === userId);
+  const myVote = myVoteObj ? (myVoteObj.votedFor?._id || myVoteObj.votedFor)?.toString() : null;
+  const hasVoted = !!myVoteObj;
+  
+  // Required votes (1 for test matches, all players for normal)
+  const requiredVotes = isTestMatch ? 1 : totalRealPlayers;
+  
+  // Show MVP voting if active and not confirmed
+  const showMvpVoting = mvpVotingActive && !mvpConfirmed && onMvpVote;
+  
+  // Handle MVP vote
+  const handleMvpVote = async (mvpPlayerId) => {
+    if (!onMvpVote || submittingMvpVote) return;
+    setSubmittingMvpVote(true);
+    try {
+      await onMvpVote(mvpPlayerId);
+    } finally {
+      setSubmittingMvpVote(false);
+    }
+  };
 
   useEffect(() => {
     if (!show) {
@@ -244,7 +373,7 @@ const RankedMatchReport = ({
                 (rewards?.pointsChange || 0) >= 0 
                   ? 'border-purple-500/30' 
                   : 'border-red-500/30'
-              } ${doublePts && isWinner ? 'ring-2 ring-yellow-400/50' : ''}`}>
+              } ${doublePts && isWinner ? 'ring-2 ring-yellow-400/50' : ''} ${isMvp ? 'ring-2 ring-yellow-400/50' : ''}`}>
                 <div className="flex items-center justify-center gap-2 mb-2">
                   {(rewards?.pointsChange || 0) >= 0 ? (
                     <TrendingUp className="w-5 h-5 text-purple-400" />
@@ -260,9 +389,14 @@ const RankedMatchReport = ({
                   (rewards?.pointsChange || 0) >= 0 ? 'text-purple-400' : 'text-red-400'
                 }`}>
                   {(rewards?.pointsChange || 0) > 0 ? '+' : ''}{rewards?.pointsChange || 0}
+                  {isMvp && (
+                    <span className="text-yellow-400 ml-1">+{mvpBonus}</span>
+                  )}
                 </div>
-                <p className={`text-xs text-center mt-1 ${(rewards?.pointsChange || 0) >= 0 ? 'text-green-400/70' : 'text-red-400/70'}`}>
-                  {doublePts && isWinner ? '🔥 Boosté !' : ((rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu')}
+                <p className={`text-xs text-center mt-1 ${
+                  isMvp ? 'text-yellow-400/70' : ((rewards?.pointsChange || 0) >= 0 ? 'text-green-400/70' : 'text-red-400/70')
+                }`}>
+                  {isMvp ? '⭐ MVP Bonus !' : (doublePts && isWinner ? '🔥 Boosté !' : ((rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu'))}
                 </p>
               </div>
 
@@ -311,6 +445,129 @@ const RankedMatchReport = ({
                 </p>
               </div>
             </div>
+            
+            {/* MVP Bonus Section */}
+            {isMvp && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-yellow-500/20 via-orange-500/20 to-yellow-500/20 border-2 border-yellow-500/50 rounded-xl relative overflow-hidden">
+                {/* Animated background */}
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-yellow-500/10 animate-pulse" />
+                
+                <div className="relative flex items-center justify-center gap-4">
+                  <div className="relative">
+                    <Star className="w-10 h-10 text-yellow-400 animate-bounce" />
+                    <div className="absolute inset-0 blur-md bg-yellow-400/50" />
+                  </div>
+                  
+                  <div className="text-center">
+                    <p className="text-yellow-400 font-bold text-lg">MVP DU MATCH !</p>
+                    <p className="text-white text-sm">Vous avez été élu meilleur joueur</p>
+                    <div className="mt-2 inline-flex items-center gap-2 px-4 py-1 bg-yellow-500/30 rounded-full">
+                      <TrendingUp className="w-4 h-4 text-yellow-400" />
+                      <span className="text-yellow-400 font-bold">+{mvpBonus} pts bonus</span>
+                    </div>
+                  </div>
+                  
+                  <div className="relative">
+                    <Star className="w-10 h-10 text-yellow-400 animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div className="absolute inset-0 blur-md bg-yellow-400/50" />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* MVP Voting Section */}
+            {showMvpVoting && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 border-2 border-purple-500/50 rounded-xl">
+                <div className="text-center mb-4">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Star className="w-6 h-6 text-yellow-400" />
+                    <h3 className="text-white font-bold text-lg">{t.voteTitle}</h3>
+                    <Star className="w-6 h-6 text-yellow-400" />
+                  </div>
+                  <p className="text-gray-400 text-sm">{t.voteSubtitle}</p>
+                  <p className="text-purple-400 text-xs mt-1">
+                    {t.votingProgress}: {mvpVotes.length}/{requiredVotes}
+                  </p>
+                </div>
+                
+                {!hasVoted ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {realPlayers.map((p, idx) => {
+                      const player = p.user || p;
+                      const playerId = (player._id || player.id || p._id)?.toString();
+                      // Build avatar URL properly
+                      const avatar = player.avatarUrl || player.avatar 
+                        ? (player.avatarUrl || player.avatar).startsWith('/uploads/')
+                          ? `https://api-nomercy.ggsecure.io${player.avatarUrl || player.avatar}`
+                          : (player.avatarUrl || player.avatar)
+                        : player.discordAvatar && player.discordId
+                          ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`
+                          : `https://ui-avatars.com/api/?name=${encodeURIComponent((player.username || p.username || 'U').charAt(0))}&background=6366f1&color=fff&size=128&bold=true`;
+                      const playerVotes = voteCount[playerId] || 0;
+                      
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleMvpVote(playerId)}
+                          disabled={submittingMvpVote}
+                          className="flex flex-col items-center p-3 rounded-lg bg-dark-800/50 border border-white/10 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all disabled:opacity-50"
+                        >
+                          <img
+                            src={avatar}
+                            alt=""
+                            className="w-12 h-12 rounded-full border-2 border-purple-500/50 mb-2"
+                          />
+                          <span className="text-white text-sm font-medium truncate max-w-full">
+                            {player.username || p.username}
+                          </span>
+                          {playerVotes > 0 && (
+                            <span className="text-purple-400 text-xs mt-1">
+                              {playerVotes} {t.votes}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/20 border border-green-500/50 rounded-lg mb-3">
+                      <Check className="w-5 h-5 text-green-400" />
+                      <span className="text-green-400 font-medium">{t.youVoted}</span>
+                    </div>
+                    <p className="text-gray-400 text-sm flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t.waitingVotes}
+                    </p>
+                    <p className="text-purple-400 text-xs mt-2">
+                      {mvpVotes.length}/{requiredVotes} {t.votes}
+                    </p>
+                  </div>
+                )}
+                
+                {submittingMvpVote && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-xl">
+                    <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {/* MVP Confirmed Display (when voting just completed but not current user) */}
+            {mvpConfirmed && mvpPlayer && !isMvp && (
+              <div className="mt-4 p-4 bg-gradient-to-r from-yellow-500/10 via-orange-500/10 to-yellow-500/10 border-2 border-yellow-500/30 rounded-xl">
+                <div className="flex items-center justify-center gap-3">
+                  <Star className="w-6 h-6 text-yellow-400" />
+                  <div className="text-center">
+                    <p className="text-yellow-400 font-bold">{t.mvpElected}</p>
+                    <p className="text-white font-medium">
+                      {mvpPlayer.username || mvpPlayer}
+                    </p>
+                  </div>
+                  <Star className="w-6 h-6 text-yellow-400" />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Rang et Progression */}

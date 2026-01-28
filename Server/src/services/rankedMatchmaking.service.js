@@ -1862,7 +1862,7 @@ const finalizeMapVote = async (matchId) => {
           .map(p => p.user.discordId);
         
         
-        const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, mode);
+        const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, match.mode);
         if (voiceChannels) {
           match.team1VoiceChannel = voiceChannels.team1;
           match.team2VoiceChannel = voiceChannels.team2;
@@ -2322,7 +2322,7 @@ const completeRosterSelection = async (matchId) => {
         .map(p => p.user.discordId);
       
       
-      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, mode);
+      const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, match.mode);
       if (voiceChannels) {
         match.team1VoiceChannel = voiceChannels.team1;
         match.team2VoiceChannel = voiceChannels.team2;

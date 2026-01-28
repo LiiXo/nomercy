@@ -146,6 +146,28 @@ const rankedMatchSchema = new mongoose.Schema({
     confirmed: { type: Boolean, default: false },
     confirmedAt: Date
   },
+  // MVP voting (after match winner is confirmed)
+  mvp: {
+    // Selected MVP player
+    player: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    // Votes for MVP
+    votes: [{
+      voter: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      votedFor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      votedAt: { type: Date, default: Date.now }
+    }],
+    // MVP bonus points awarded
+    bonusPoints: { type: Number, default: 5 },
+    // MVP voting phase active
+    votingActive: { type: Boolean, default: false },
+    // MVP confirmed (all players voted or timeout)
+    confirmed: { type: Boolean, default: false },
+    confirmedAt: Date
+  },
   // Litige (si les référents ne sont pas d'accord)
   dispute: {
     isActive: { type: Boolean, default: false },
