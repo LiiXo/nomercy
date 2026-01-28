@@ -1940,7 +1940,6 @@ router.put('/admin/:squadId/ladder-points', verifyToken, requireAdmin, async (re
 
     await squad.save();
 
-    console.log(`[ADMIN] Squad ${squad.name} ladder points updated by admin`);
 
     // Log to Discord
     await logAdminAction(req.user, 'Update Ladder Points', squad.name, {
@@ -2039,7 +2038,6 @@ router.post('/admin/reset-all-squads-stats', verifyToken, requireAdmin, async (r
     // Delete all completed matches (ladder matches)
     const matchResult = await Match.deleteMany({ status: 'completed' });
 
-    console.log(`[ADMIN] All squads stats reset by ${req.user.username}. ${squadResult.modifiedCount} squads updated, ${matchResult.deletedCount} matches deleted.`);
 
     // Log to Discord
     await logAdminAction(req.user, 'Reset All Squads Stats', 'GLOBAL', {

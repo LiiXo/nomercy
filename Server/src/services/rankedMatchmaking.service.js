@@ -67,14 +67,12 @@ let cleanupInterval = null;
  */
 export const initMatchmaking = (socketIo) => {
   io = socketIo;
-  console.log('[Ranked Matchmaking] Service initialized');
   
   // Start the queue cleanup interval (runs every 30 seconds)
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
   }
   cleanupInterval = setInterval(cleanupTimedOutPlayers, 30000);
-  console.log('[Ranked Matchmaking] Queue timeout cleanup started (15 min timeout, 30s interval)');
 };
 
 /**
@@ -95,7 +93,6 @@ const cleanupTimedOutPlayers = () => {
       if (timeInQueue >= QUEUE_TIMEOUT_MS) {
         timedOutPlayers.push(player);
         queue.splice(i, 1);
-        console.log(`[Ranked Matchmaking] Player ${player.username} timed out from queue (${Math.round(timeInQueue / 1000)}s)`);
       }
     }
     
@@ -327,7 +324,6 @@ const generateDiverseTeams = (players, teamSize, gameMode, mode) => {
   const team1TotalPoints = team1.reduce((sum, p) => sum + (p.points || 0), 0);
   const team2TotalPoints = team2.reduce((sum, p) => sum + (p.points || 0), 0);
   
-  console.log(`[Ranked Matchmaking] Random teams: Team1=${team1TotalPoints}pts, Team2=${team2TotalPoints}pts (no balancing)`);
   
   return { team1, team2 };
 };
@@ -477,7 +473,6 @@ export const joinQueue = async (userId, gameMode, mode) => {
         user.rankedBanExpiresAt = null;
         user.rankedBannedBy = null;
         await user.save();
-        console.log(`[Ranked Matchmaking] Ranked ban expired for ${user.username}, auto-unbanned`);
       } else {
         // Le ban est toujours actif
         const expiresText = user.rankedBanExpiresAt 
@@ -549,7 +544,6 @@ export const joinQueue = async (userId, gameMode, mode) => {
     };
     
     queue.push(playerData);
-    console.log(`[Ranked Matchmaking] ${user.username} joined ${gameMode} ${mode} queue. Queue size: ${queue.length}`);
     
     // Notifier tous les joueurs de la file
     broadcastQueueUpdate(gameMode, mode);
@@ -583,7 +577,6 @@ export const leaveQueue = async (userId, gameMode, mode) => {
     
     const player = queue[playerIndex];
     queue.splice(playerIndex, 1);
-    console.log(`[Ranked Matchmaking] ${player.username} left ${gameMode} ${mode} queue. Queue size: ${queue.length}`);
     
     // Notifier les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
@@ -654,7 +647,6 @@ const checkMatchmakingStart = async (gameMode, mode) => {
   
   // CDL: Match immédiat dès qu'on a 8 joueurs (pas de timer)
   if (mode === 'cdl' && queue.length >= minPlayers) {
-    console.log(`[Ranked Matchmaking] CDL mode: ${queue.length} players reached for ${gameMode}, creating 4v4 match immediately`);
     cancelMatchmakingTimer(gameMode, mode);
     createMatchFromQueue(gameMode, mode);
     return;
@@ -662,7 +654,6 @@ const checkMatchmakingStart = async (gameMode, mode) => {
   
   // Hardcore: Si on a atteint le max de joueurs (10), match immédiat en 5v5
   if (mode === 'hardcore' && queue.length >= maxPlayers) {
-    console.log(`[Ranked Matchmaking] Hardcore mode: ${maxPlayers} players reached for ${gameMode}, creating 5v5 match now`);
     cancelMatchmakingTimer(gameMode, mode);
     createMatchFromQueue(gameMode, mode);
     return;
@@ -675,7 +666,6 @@ const checkMatchmakingStart = async (gameMode, mode) => {
   if (mode === 'hardcore' && optimalFormat && !queueTimers[timerKey]) {
     const endTime = Date.now() + (MATCHMAKING_TIMER_SECONDS * 1000);
     
-    console.log(`[Ranked Matchmaking] Starting ${MATCHMAKING_TIMER_SECONDS}s timer for ${gameMode} ${mode} (current format: ${optimalFormat.format})`);
     
     const timer = setTimeout(() => {
       createMatchFromQueue(gameMode, mode);
@@ -698,7 +688,6 @@ const cancelMatchmakingTimer = (gameMode, mode) => {
   if (timerInfo) {
     clearTimeout(timerInfo.timer);
     delete queueTimers[timerKey];
-    console.log(`[Ranked Matchmaking] Timer cancelled for ${gameMode} ${mode}`);
   }
 };
 
@@ -717,7 +706,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
   delete queueTimers[timerKey];
   
   if (queue.length < 4) {
-    console.log(`[Ranked Matchmaking] Not enough players for ${gameMode} ${mode}`);
     return;
   }
   
@@ -733,7 +721,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const ejected = sortedQueue.pop();
     ejectedPlayers.push(ejected);
     playerCount--;
-    console.log(`[Ranked Matchmaking] Ejecting ${ejected.username} (odd number of players)`);
   }
   
   // CDL: uniquement 4v4 (8 joueurs max), Hardcore: jusqu'à 5v5 (10 joueurs max)
@@ -743,7 +730,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
   const optimalFormat = getOptimalFormat(playerCount, mode);
     
   if (!optimalFormat) {
-    console.log(`[Ranked Matchmaking] No valid format for ${playerCount} players in ${mode} mode`);
     return;
   }
   
@@ -752,7 +738,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
     const excess = sortedQueue.splice(maxPlayers);
     ejectedPlayers.push(...excess);
     playerCount = maxPlayers;
-    console.log(`[Ranked Matchmaking] Capping to ${maxPlayers} players for ${mode} mode, ${excess.length} players stay in queue`);
   }
   
   const playersForMatch = sortedQueue.slice(0, playerCount);
@@ -780,7 +765,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
     }
   }
   
-  console.log(`[Ranked Matchmaking] Creating ${format} match with ${playerCount} players`);
   
   // Créer le match
   try {
@@ -793,7 +777,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
         const ggsecure = await checkGGSecureStatus(player.userId);
         if (ggsecure.required && !ggsecure.connected) {
           playersToRemove.push(player);
-          console.log(`[Ranked Matchmaking] Player ${player.username} is no longer connected to GGSecure, removing from match`);
           
           // Notifier le joueur
           if (io) {
@@ -815,7 +798,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
       );
       
       if (remainingPlayers.length < 4) {
-        console.log(`[Ranked Matchmaking] Not enough players after GGSecure check (${remainingPlayers.length}), cancelling match creation`);
         
         // Remettre les joueurs valides dans la file
         const queue = getQueue(gameMode, mode);
@@ -835,7 +817,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
         // Trier par date d'arrivée pour éjecter le dernier
         remainingPlayers.sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
         const ejectedAfterGGSecure = remainingPlayers.pop();
-        console.log(`[Ranked Matchmaking] Ejecting ${ejectedAfterGGSecure.username} after GGSecure check (odd number: ${remainingPlayers.length + 1} -> ${remainingPlayers.length})`);
         
         // Remettre le joueur éjecté dans la file d'attente
         const queue = getQueue(gameMode, mode);
@@ -862,7 +843,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
       // IMPORTANT: Recalculer teamSize après retrait de joueurs
       teamSize = playerCount / 2;
       
-      console.log(`[Ranked Matchmaking] Continuing with ${playerCount} players after GGSecure check (teamSize: ${teamSize})`);
     }
     
     // Générer des équipes diversifiées en évitant les compositions récentes
@@ -939,22 +919,18 @@ const createMatchFromQueue = async (gameMode, mode) => {
       [`${configPath}.ranked.gameModes`]: gameMode,
       [`${configPath}.ranked.formats`]: rankedFormat
     });
-    console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode} ${rankedFormat} (new config with format)`);
     
     // Si pas assez de maps avec le format, essayer sans filtrer par format
     if (maps.length < mapCount) {
-      console.log(`[Ranked Matchmaking] Not enough maps with format ${rankedFormat}, trying without format filter`);
       maps = await GameMap.find({ 
         isActive: true,
         [`${configPath}.ranked.enabled`]: true,
         [`${configPath}.ranked.gameModes`]: gameMode
       });
-      console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode} (new config without format)`);
     }
     
     // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
     if (maps.length < mapCount) {
-      console.log(`[Ranked Matchmaking] Not enough maps with new config (${maps.length}/${mapCount}), trying legacy structure`);
       
       if (isHardpoint && teamSize === 4) {
         // Pour Hardpoint, chercher d'abord avec le format spécifique hardpoint-4v4
@@ -965,7 +941,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
           rankedFormats: 'hardpoint-4v4',
           gameModes: gameMode
         });
-        console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked Hardpoint format hardpoint-4v4 (legacy)`);
         
         // Si pas de maps avec hardpoint-4v4, essayer avec 4v4
         if (maps.length < mapCount) {
@@ -976,7 +951,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
             rankedFormats: '4v4',
             gameModes: gameMode
           });
-          console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked Hardpoint format 4v4 (legacy)`);
         }
       } else {
         maps = await GameMap.find({ 
@@ -986,50 +960,41 @@ const createMatchFromQueue = async (gameMode, mode) => {
           rankedFormats: rankedFormat,
           ...(gameMode ? { gameModes: gameMode } : {})
         });
-        console.log(`[Ranked Matchmaking] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'} format ${rankedFormat} (legacy)`);
       }
     }
     
     // Si pas assez de maps avec le format spécifique, essayer sans filtrer par rankedFormats
     if (maps.length < mapCount) {
-      console.log(`[Ranked Matchmaking] Not enough maps with format ${rankedFormat} (${maps.length}/${mapCount}), trying without format filter`);
       maps = await GameMap.find({ 
         isActive: true,
         ladders: 'ranked',
         mode: { $in: [mode, 'both'] },
         ...(gameMode ? { gameModes: gameMode } : {})
       });
-      console.log(`[Ranked Matchmaking] Found ${maps.length} maps without format filter`);
     }
     
     // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
     if (maps.length < mapCount) {
-      console.log(`[Ranked Matchmaking] Not enough ranked maps (${maps.length}/${mapCount}), falling back to squad-team maps`);
       maps = await GameMap.find({ 
         isActive: true,
         ladders: { $in: ['ranked', 'squad-team'] },
         mode: { $in: [mode, 'both'] },
         ...(gameMode ? { gameModes: gameMode } : {})
       });
-      console.log(`[Ranked Matchmaking] Found ${maps.length} maps with fallback (ranked + squad-team)`);
     }
     
     // Si toujours pas assez, prendre toutes les maps actives avec le bon gameMode (sans filtrer par mode)
     let availableMaps = maps;
     if (maps.length < 3) {
-      console.log(`[Ranked Matchmaking] Still not enough maps, falling back to all active maps with gameMode (no mode filter)`);
       availableMaps = await GameMap.find({ 
         isActive: true,
         ...(gameMode ? { gameModes: gameMode } : {})
       });
-      console.log(`[Ranked Matchmaking] Found ${availableMaps.length} maps with second fallback (gameMode only)`);
     }
     
     // Dernier recours : toutes les maps actives
     if (availableMaps.length < 3) {
-      console.log(`[Ranked Matchmaking] Last resort: all active maps`);
       availableMaps = await GameMap.find({ isActive: true });
-      console.log(`[Ranked Matchmaking] Found ${availableMaps.length} active maps total`);
     }
     
     const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, mapCount).map((map, index) => ({
@@ -1039,7 +1004,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
       winner: null
     }));
     
-    console.log(`[Ranked Matchmaking] Selected ${mapCount} maps for match (BO${bestOf}):`, selectedMaps);
     
     // Sélectionner 3 maps pour le vote (différentes des maps du match si possible)
     let mapsForVote = availableMaps
@@ -1054,7 +1018,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     // Si pas de maps disponibles, créer des maps par défaut
     if (mapsForVote.length === 0) {
-      console.log(`[Ranked Matchmaking] No maps found, using default maps`);
       mapsForVote = [
         { name: 'Raid', image: null, votes: 0, votedBy: [] },
         { name: 'Standoff', image: null, votes: 0, votedBy: [] },
@@ -1062,8 +1025,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
       ];
     }
     
-    console.log(`[Ranked Matchmaking] Maps for vote (${mapsForVote.length} maps):`, mapsForVote.map(m => m.name));
-    console.log(`[Ranked Matchmaking] Full mapVoteOptions data:`, JSON.stringify(mapsForVote, null, 2));
     
     // Créer les données des joueurs pour le match
     // DISTRIBUTION ALÉATOIRE: Tous les joueurs sont assignés à leur équipe dès le départ
@@ -1133,7 +1094,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
       if (team2ReferentId) await match.populate('team2Referent', 'username');
     }
     
-    console.log(`[Ranked Matchmaking] Match created: ${match._id} (${teamSize}v${teamSize}) format: ${format}`);
     
     // Ajouter un message système
     match.chat.push({
@@ -1170,14 +1130,12 @@ const createMatchFromQueue = async (gameMode, mode) => {
     
     // Préparer les options de vote de map pour l'envoi
     const mapVoteOptionsForClient = mapsForVote.map(m => ({ name: m.name, image: m.image, votes: 0 }));
-    console.log(`[Ranked Matchmaking] Sending mapVoteOptions to clients:`, JSON.stringify(mapVoteOptionsForClient));
     
     // Notifier tous les vrais joueurs du match
     const matchIdStr = match._id.toString();
     
     for (const player of matchPlayers) {
       if (io && player.user) { // Ne notifier que les vrais joueurs
-        console.log(`[Ranked Matchmaking] Sending rankedMatchFound to user-${player.user} (${player.username}), team: ${player.team}, matchId: ${matchIdStr}`);
         io.to(`user-${player.user}`).emit('rankedMatchFound', {
           matchId: matchIdStr,
           gameMode,
@@ -1346,7 +1304,6 @@ export const addFakePlayers = async (gameMode, mode, count = 5) => {
       
       queue.push(playerData);
       addedCount++;
-      console.log(`[Ranked Matchmaking] Added fake player: ${playerData.username}`);
     }
     
     // Notifier tous les joueurs de la file
@@ -1381,7 +1338,6 @@ export const removeFakePlayers = async (gameMode, mode) => {
     const newQueue = getQueue(gameMode, mode);
     const removedCount = originalLength - newQueue.length;
     
-    console.log(`[Ranked Matchmaking] Removed ${removedCount} fake players from ${gameMode} ${mode}`);
     
     // Notifier les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
@@ -1455,20 +1411,16 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       // Mêlée générale: 8 joueurs (moi + 7 bots)
       actualTeamSize = 4; // 4v4
       totalPlayers = 8;
-      console.log(`[Ranked Matchmaking] Team Deathmatch test: 8 players (4v4 format)`);
     } else if (gameMode === 'Duel') {
       // Duel: 2 joueurs (moi + 1 bot)
       actualTeamSize = 1; // 1v1
       totalPlayers = 2;
-      console.log(`[Ranked Matchmaking] Duel test: 2 players (1v1 format)`);
     } else {
       // Autres modes: 4v4 ou 5v5 selon teamSize
       actualTeamSize = teamSize;
       totalPlayers = teamSize * 2;
-      console.log(`[Ranked Matchmaking] ${gameMode} test: ${totalPlayers} players (${teamSize}v${teamSize} format)`);
     }
     
-    console.log(`[Ranked Matchmaking] Starting staff test match for ${user.username} (${actualTeamSize}v${actualTeamSize}, ${totalPlayers} total players)`);
     
     // Créer les faux joueurs pour remplir le match
     const fakeNames = [
@@ -1553,22 +1505,18 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       [`${configPathTest}.ranked.gameModes`]: gameMode,
       [`${configPathTest}.ranked.formats`]: rankedFormatTest
     });
-    console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode} ${rankedFormatTest} (new config with format)`);
     
     // Si pas assez de maps avec le format, essayer sans filtrer par format
     if (mapsTest.length < mapCount) {
-      console.log(`[Ranked Matchmaking Test] Not enough maps with format ${rankedFormatTest}, trying without format filter`);
       mapsTest = await GameMap.find({ 
         isActive: true,
         [`${configPathTest}.ranked.enabled`]: true,
         [`${configPathTest}.ranked.gameModes`]: gameMode
       });
-      console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode} (new config without format)`);
     }
     
     // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
     if (mapsTest.length < mapCount) {
-      console.log(`[Ranked Matchmaking Test] Not enough maps with new config (${mapsTest.length}/${mapCount}), trying legacy structure`);
       
       if (isHardpoint && teamSize === 4) {
         mapsTest = await GameMap.find({ 
@@ -1578,7 +1526,6 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
           rankedFormats: 'hardpoint-4v4',
           gameModes: gameMode
         });
-        console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked Hardpoint format hardpoint-4v4 (legacy)`);
         
         if (mapsTest.length < mapCount) {
           mapsTest = await GameMap.find({ 
@@ -1588,7 +1535,6 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
             rankedFormats: '4v4',
             gameModes: gameMode
           });
-          console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked Hardpoint format 4v4 (legacy)`);
         }
       } else {
         mapsTest = await GameMap.find({ 
@@ -1598,50 +1544,41 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
           rankedFormats: rankedFormatTest,
           ...(gameMode ? { gameModes: gameMode } : {})
         });
-        console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps for ${mode} ranked ${gameMode || 'any'} format ${rankedFormatTest} (legacy)`);
       }
     }
     
     // Si pas assez de maps avec le format spécifique, essayer sans filtrer par rankedFormats
     if (mapsTest.length < mapCount) {
-      console.log(`[Ranked Matchmaking Test] Not enough maps with format ${rankedFormatTest} (${mapsTest.length}/${mapCount}), trying without format filter`);
       mapsTest = await GameMap.find({ 
         isActive: true,
         ladders: 'ranked',
         mode: { $in: [mode, 'both'] },
         ...(gameMode ? { gameModes: gameMode } : {})
       });
-      console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps without format filter`);
     }
     
     // Si pas assez de maps avec ladder 'ranked', chercher les maps avec ladder 'squad-team' (fallback)
     if (mapsTest.length < mapCount) {
-      console.log(`[Ranked Matchmaking Test] Not enough ranked maps (${mapsTest.length}/${mapCount}), falling back to squad-team maps`);
       mapsTest = await GameMap.find({ 
         isActive: true,
         ladders: { $in: ['ranked', 'squad-team'] },
         mode: { $in: [mode, 'both'] },
         ...(gameMode ? { gameModes: gameMode } : {})
       });
-      console.log(`[Ranked Matchmaking Test] Found ${mapsTest.length} maps with fallback (ranked + squad-team)`);
     }
     
     // Si toujours pas assez, prendre toutes les maps actives avec le bon gameMode (sans filtrer par mode)
     let availableMaps = mapsTest;
     if (mapsTest.length < mapCount) {
-      console.log(`[Ranked Matchmaking Test] Still not enough maps, falling back to all active maps with gameMode (no mode filter)`);
       availableMaps = await GameMap.find({ 
         isActive: true,
         ...(gameMode ? { gameModes: gameMode } : {})
       });
-      console.log(`[Ranked Matchmaking Test] Found ${availableMaps.length} maps with second fallback (gameMode only)`);
     }
     
     // Dernier recours : toutes les maps actives
     if (availableMaps.length < mapCount) {
-      console.log(`[Ranked Matchmaking Test] Last resort: all active maps`);
       availableMaps = await GameMap.find({ isActive: true });
-      console.log(`[Ranked Matchmaking Test] Found ${availableMaps.length} active maps total`);
     }
     
     const selectedMaps = availableMaps.sort(() => Math.random() - 0.5).slice(0, mapCount).map((map, index) => ({
@@ -1664,7 +1601,6 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     
     // Si pas de maps disponibles, créer des maps par défaut
     if (mapsForVoteTest.length === 0) {
-      console.log(`[Ranked Matchmaking Test] No maps found, using default maps`);
       mapsForVoteTest = [
         { name: 'Raid', image: null, votes: 0, votedBy: [] },
         { name: 'Standoff', image: null, votes: 0, votedBy: [] },
@@ -1672,7 +1608,6 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       ];
     }
     
-    console.log(`[Ranked Matchmaking Test] Maps for vote:`, mapsForVoteTest.map(m => m.name));
     
     // Créer les données des joueurs pour le match
     // MÉLANGE AUTOMATIQUE: Tous les joueurs sont assignés directement à leur équipe (comme en matchmaking normal)
@@ -1754,7 +1689,6 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     if (team1ReferentId) await match.populate('team1Referent', 'username');
     if (team2ReferentId) await match.populate('team2Referent', 'username');
     
-    console.log(`[Ranked Matchmaking] Staff test match created: ${match._id} (${actualTeamSize}v${actualTeamSize}) - ${isSpecialMode ? 'Mode spécial (pas de mélange)' : 'Mélange automatique activé'}`);
     
     // Ajouter un message système
     const formatLabel = gameMode === 'Team Deathmatch' ? 'Mêlée générale (8 joueurs)' : 
@@ -1820,11 +1754,9 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     // Pour Duel, démarrer le timer de vote de map normalement
     if (gameMode === 'Team Deathmatch') {
       // Team Deathmatch: aller directement au vote de map sans délai
-      console.log(`[Ranked Matchmaking] Team Deathmatch: starting immediate map vote`);
       startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
     } else if (gameMode === 'Duel') {
       // Duel: pas de sélection de roster mais délai normal pour le vote
-      console.log(`[Ranked Matchmaking] Duel: skipping roster selection, going to map vote`);
     } else if (!isSpecialMode) {
       // Modes normaux: démarrer le timer de vote de map
       startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
@@ -1867,10 +1799,8 @@ const startMapVoteTimer = (matchId, players) => {
     clearTimeout(mapVoteTimers[matchIdStr]);
   }
   
-  console.log(`[Ranked Matchmaking] Starting map vote timer for match ${matchIdStr} (${MAP_VOTE_TOTAL_TIME/1000}s)`);
   
   mapVoteTimers[matchIdStr] = setTimeout(async () => {
-    console.log(`[Ranked Matchmaking] Map vote timer expired for match ${matchIdStr}, finalizing...`);
     await finalizeMapVote(matchId);
     delete mapVoteTimers[matchIdStr];
   }, MAP_VOTE_TOTAL_TIME);
@@ -1883,7 +1813,6 @@ const finalizeMapVote = async (matchId) => {
   try {
     const match = await RankedMatch.findById(matchId);
     if (!match || match.selectedMap?.name) {
-      console.log(`[Ranked Matchmaking] Map vote already finalized or match not found: ${matchId}`);
       return;
     }
     
@@ -1918,7 +1847,6 @@ const finalizeMapVote = async (matchId) => {
     // Utiliser || pour être plus défensif: si UN SEUL canal existe, on ne recrée pas
     const hasExistingTeam1Channel = match.team1VoiceChannel && match.team1VoiceChannel.channelId;
     const hasExistingTeam2Channel = match.team2VoiceChannel && match.team2VoiceChannel.channelId;
-    console.log(`[Ranked Matchmaking] Voice channel check for ${matchId}: team1=${hasExistingTeam1Channel ? match.team1VoiceChannel.channelId : 'none'}, team2=${hasExistingTeam2Channel ? match.team2VoiceChannel.channelId : 'none'}`);
     
     if (!hasExistingTeam1Channel && !hasExistingTeam2Channel) {
       try {
@@ -1933,13 +1861,11 @@ const finalizeMapVote = async (matchId) => {
           .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
           .map(p => p.user.discordId);
         
-        console.log(`[Ranked Matchmaking] Creating voice channels with Discord IDs - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
         
         const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, mode);
         if (voiceChannels) {
           match.team1VoiceChannel = voiceChannels.team1;
           match.team2VoiceChannel = voiceChannels.team2;
-          console.log(`[Ranked Matchmaking] ✓ Voice channels created for match ${matchId}:`, JSON.stringify(voiceChannels));
         } else {
           console.warn(`[Ranked Matchmaking] ⚠️ Voice channels NOT created for match ${matchId} - Discord bot may not be ready or configured`);
         }
@@ -1947,12 +1873,10 @@ const finalizeMapVote = async (matchId) => {
         console.error(`[Ranked Matchmaking] ❌ Failed to create voice channels:`, voiceError.message);
       }
     } else {
-      console.log(`[Ranked Matchmaking] Voice channels already exist for match ${matchId}, skipping duplicate creation`);
     }
     
     await match.save();
     
-    console.log(`[Ranked Matchmaking] Map vote finalized for match ${matchId}: ${winningMap.name} (${winningMap.votes} votes)`);
     
     // Notifier tous les joueurs de la map sélectionnée
     if (io) {
@@ -2025,7 +1949,6 @@ export const handleMapVote = async (userId, matchId, mapIndex) => {
     match.mapVoteOptions[mapIndex].votes += 1;
     await match.save();
     
-    console.log(`[Ranked Matchmaking] Player ${userId} voted for map ${match.mapVoteOptions[mapIndex].name} in match ${matchId}`);
     
     // Notifier tous les joueurs de la mise à jour des votes
     if (io) {
@@ -2063,7 +1986,6 @@ const startRosterSelection = async (matchId) => {
       return;
     }
     
-    console.log(`[Roster Selection] Starting roster selection for match ${matchId}`);
     
     // Initialiser la sélection de roster
     match.rosterSelection = {
@@ -2129,10 +2051,8 @@ const startRosterSelectionTurnTimer = async (matchId, team) => {
   // Délai court pour le bot (1.5s), normal pour le joueur (10s)
   const turnTime = isBotTurn ? 1500 : ROSTER_SELECTION_TURN_TIME;
   
-  console.log(`[Roster Selection] Starting turn timer for match ${matchIdStr}, team ${team} (${turnTime/1000}s)${isBotTurn ? ' [BOT]' : ''}`);
   
   rosterSelectionTimers[matchIdStr] = setTimeout(async () => {
-    console.log(`[Roster Selection] Turn timer expired for match ${matchIdStr}, picking random player for team ${team}${isBotTurn ? ' [BOT]' : ''}`);
     await forceRandomRosterPick(matchId, team);
     delete rosterSelectionTimers[matchIdStr];
   }, turnTime);
@@ -2171,7 +2091,6 @@ const forceRandomRosterPick = async (matchId, team) => {
     // Obtenir l'identifiant du joueur (userId pour vrais joueurs, username pour bots)
     const playerId = selectedPlayer.user?.toString() || selectedPlayer.username;
     
-    console.log(`[Roster Selection] Random pick for team ${team}: ${selectedPlayer.username}`);
     
     // Effectuer le pick
     await processRosterPick(matchId, team, playerId, true);
@@ -2266,7 +2185,6 @@ const processRosterPick = async (matchId, team, playerId, isRandom = false) => {
     };
     
     if (io) {
-      console.log(`[Roster Selection] Emitting rosterSelectionUpdate to all players...`);
       
       const matchIdStr = match._id.toString();
       const team1RefId = match.team1Referent?.toString() || null;
@@ -2334,12 +2252,10 @@ const processRosterPick = async (matchId, team, playerId, isRandom = false) => {
             isTeam2Referent
           };
           
-          console.log(`[Roster Selection] Emitting to user-${playerId} (${player.username}), isYourTurn: ${isYourTurn}, nextTurn: ${nextTurn}`);
           io.to(`user-${playerId}`).emit('rosterSelectionUpdate', playerUpdateData);
         }
       }
       
-      console.log(`[Roster Selection] Finished emitting to all players, availablePlayers: ${baseUpdateData.availablePlayers.length}, team1: ${baseUpdateData.team1Players.length}, team2: ${baseUpdateData.team2Players.length}`);
     }
     
     // Démarrer le timer pour le prochain tour
@@ -2361,7 +2277,6 @@ const completeRosterSelection = async (matchId) => {
     const match = await RankedMatch.findById(matchId);
     if (!match) return;
     
-    console.log(`[Roster Selection] Completing roster selection for match ${matchId}`);
     
     // Annuler le timer s'il existe encore
     const matchIdStr = matchId.toString();
@@ -2406,13 +2321,11 @@ const completeRosterSelection = async (matchId) => {
         .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
         .map(p => p.user.discordId);
       
-      console.log(`[Roster Selection] Creating voice channels - Team1: ${team1DiscordIds.length}, Team2: ${team2DiscordIds.length}`);
       
       const voiceChannels = await createMatchVoiceChannels(matchId, team1DiscordIds, team2DiscordIds, mode);
       if (voiceChannels) {
         match.team1VoiceChannel = voiceChannels.team1;
         match.team2VoiceChannel = voiceChannels.team2;
-        console.log(`[Roster Selection] ✓ Voice channels created for match ${matchId}:`, JSON.stringify(voiceChannels));
       } else {
         console.warn(`[Roster Selection] ⚠️ Voice channels NOT created for match ${matchId}`);
       }
@@ -2430,7 +2343,6 @@ const completeRosterSelection = async (matchId) => {
           const playerTeam = player.team;
           const playerId = player.user._id || player.user;
           
-          console.log(`[Roster Selection] Sending rosterSelectionComplete to player ${player.username}, team: ${playerTeam}`);
           
           io.to(`user-${playerId}`).emit('rosterSelectionComplete', {
             matchId: match._id,
@@ -2461,7 +2373,6 @@ const completeRosterSelection = async (matchId) => {
     }
     
     // Démarrer le timer de vote de map
-    console.log(`[Roster Selection] Starting map vote timer for match ${matchId}`);
     startMapVoteTimer(matchId, match.players.filter(p => p.user));
     
   } catch (error) {
@@ -2602,7 +2513,6 @@ export const joinStaffQueue = async (userId, gameMode, mode) => {
     };
     
     queue.push(playerData);
-    console.log(`[Staff Queue] ${user.username} joined ${gameMode} ${mode} staff queue. Queue size: ${queue.length}`);
     
     // Broadcast staff queue update
     broadcastStaffQueueUpdate(gameMode, mode);
@@ -2635,14 +2545,12 @@ export const leaveStaffQueue = async (userId, gameMode, mode) => {
     }
     
     queue.splice(playerIndex, 1);
-    console.log(`[Staff Queue] Player left ${gameMode} ${mode} staff queue. Queue size: ${queue.length}`);
     
     // Vérifier si on doit annuler le timer
     const timerKey = getStaffQueueKey(gameMode, mode);
     if (queue.length < 8 && staffQueueTimers[timerKey]) {
       clearTimeout(staffQueueTimers[timerKey].timer);
       delete staffQueueTimers[timerKey];
-      console.log(`[Staff Queue] Timer cancelled for ${gameMode} ${mode}`);
     }
     
     // Broadcast update
@@ -2715,7 +2623,6 @@ export const addBotsToStaffQueue = async (gameMode, mode, count = 1) => {
       
       queue.push(botData);
       addedCount++;
-      console.log(`[Staff Queue] Added bot: ${botData.username}`);
     }
     
     // Broadcast update
@@ -2750,7 +2657,6 @@ export const clearStaffQueueBots = async (gameMode, mode) => {
     const newQueue = getStaffQueue(gameMode, mode);
     const removedCount = originalLength - newQueue.length;
     
-    console.log(`[Staff Queue] Removed ${removedCount} bots from ${gameMode} ${mode}`);
     
     // Broadcast update
     broadcastStaffQueueUpdate(gameMode, mode);
@@ -2812,7 +2718,6 @@ const checkStaffMatchmakingStart = async (gameMode, mode) => {
   
   // CDL: Match immédiat dès qu'on a 8 joueurs (pas de timer)
   if (mode === 'cdl' && queue.length >= minPlayers) {
-    console.log(`[Staff Queue] CDL mode: ${queue.length} players reached for ${gameMode}, creating 4v4 match immediately`);
     if (staffQueueTimers[timerKey]) {
       clearTimeout(staffQueueTimers[timerKey].timer);
       delete staffQueueTimers[timerKey];
@@ -2823,7 +2728,6 @@ const checkStaffMatchmakingStart = async (gameMode, mode) => {
   
   // Hardcore: Si on a atteint le max de joueurs (10), match immédiat en 5v5
   if (mode === 'hardcore' && queue.length >= maxPlayers) {
-    console.log(`[Staff Queue] Hardcore mode: ${maxPlayers} players reached for ${gameMode}, creating 5v5 match now`);
     if (staffQueueTimers[timerKey]) {
       clearTimeout(staffQueueTimers[timerKey].timer);
       delete staffQueueTimers[timerKey];
@@ -2836,7 +2740,6 @@ const checkStaffMatchmakingStart = async (gameMode, mode) => {
   if (mode === 'hardcore' && queue.length >= minPlayers && !staffQueueTimers[timerKey]) {
     const endTime = Date.now() + (MATCHMAKING_TIMER_SECONDS * 1000);
     
-    console.log(`[Staff Queue] Starting ${MATCHMAKING_TIMER_SECONDS}s timer for ${gameMode} ${mode}`);
     
     const timer = setTimeout(async () => {
       await createStaffMatchFromQueue(gameMode, mode);
@@ -2887,7 +2790,6 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
   // Vider la file staff
   staffQueues[key] = [];
   
-  console.log(`[Staff Queue] Creating ${format} staff test match with ${playerCount} players`);
   
   try {
     // Mélanger les joueurs
@@ -2982,7 +2884,6 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
     });
     
     await newMatch.save();
-    console.log(`[Staff Queue] Match created: ${newMatch._id}`);
     
     // Préparer les données des joueurs pour l'animation (format identique au mode normal)
     const playersForAnimation = matchPlayers.map((p, index) => ({

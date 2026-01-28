@@ -519,7 +519,6 @@ router.post('/use-item/:purchaseId', verifyToken, async (req, res) => {
           ? item.matchCount // Number of matches
           : 1; // Par défaut 1 match si non configuré (au lieu de null/unlimited)
         
-        console.log(`[SHOP] Creating booster: effectType=${item.effectType}, matchCount=${item.matchCount}, remainingMatches=${remainingMatches}`);
         
         await ItemUsage.create({
           user: req.user._id,
@@ -1089,7 +1088,6 @@ router.post('/admin/give-item', verifyToken, requireAdmin, async (req, res) => {
         ? item.matchCount
         : 1; // Par défaut 1 match si non configuré
       
-      console.log(`[SHOP GIFT] Creating booster: effectType=${item.effectType}, matchCount=${item.matchCount}, remainingMatches=${remainingMatches}`);
 
       const usage = new ItemUsage({
         user: userId,
@@ -1103,7 +1101,6 @@ router.post('/admin/give-item', verifyToken, requireAdmin, async (req, res) => {
       await usage.save();
     }
 
-    console.log(`[Admin] ${req.user.username} gave ${item.name} to ${targetUser.username}`);
 
     res.json({
       success: true,
@@ -1139,7 +1136,6 @@ router.delete('/admin/purchases/:purchaseId', verifyToken, requireAdmin, async (
       await User.findByIdAndUpdate(user._id, {
         $inc: { goldCoins: pricePaid }
       });
-      console.log(`[Admin] Refunded ${pricePaid} gold to ${user.username}`);
     }
 
     // Unequip item from user's profile if it's equipped
@@ -1150,13 +1146,11 @@ router.delete('/admin/purchases/:purchaseId', verifyToken, requireAdmin, async (
       // Check if this item is equipped as a title
       if (user.equippedTitle && user.equippedTitle.toString() === itemId) {
         updateFields.equippedTitle = null;
-        console.log(`[Admin] Unequipped title ${item.name} from ${user.username}`);
       }
 
       // Check if this item is equipped as a profile animation
       if (user.equippedProfileAnimation && user.equippedProfileAnimation.toString() === itemId) {
         updateFields.equippedProfileAnimation = null;
-        console.log(`[Admin] Unequipped profile animation ${item.name} from ${user.username}`);
       }
 
       // Apply unequip updates if any
@@ -1168,7 +1162,6 @@ router.delete('/admin/purchases/:purchaseId', verifyToken, requireAdmin, async (
     // Delete associated ItemUsage records (deactivates any active consumables)
     const deletedUsages = await ItemUsage.deleteMany({ purchase: purchaseId });
     if (deletedUsages.deletedCount > 0) {
-      console.log(`[Admin] Deleted ${deletedUsages.deletedCount} ItemUsage records for purchase ${purchaseId}`);
     }
 
     // Also delete any ItemUsage that references this item for this user (in case purchase link is missing)
@@ -1186,7 +1179,6 @@ router.delete('/admin/purchases/:purchaseId', verifyToken, requireAdmin, async (
     // Delete the purchase
     await Purchase.findByIdAndDelete(purchaseId);
 
-    console.log(`[Admin] ${req.user.username} deleted purchase ${purchaseId} for ${user?.username || 'unknown'} (item: ${item?.name || 'unknown'}, refund: ${refund === 'true' ? pricePaid : 0})`);
 
     res.json({
       success: true,

@@ -208,7 +208,6 @@ router.get('/anticheat-status/:userId', async (req, res) => {
       // L'endpoint qui a renvoyé 401 (donc qui existe et nécessite auth)
       const ggsecureUrl = `https://api.ggsecure.io/api/v1/fingerprints/player/${userId}`;
       
-      console.log(`[GGSecure] Checking status for user ${user.username} (${userId})`);
       
       const response = await fetch(ggsecureUrl, {
         headers: {
@@ -219,11 +218,9 @@ router.get('/anticheat-status/:userId', async (req, res) => {
         }
       });
       
-      console.log(`[GGSecure] HTTP ${response.status} from API`);
       
       if (response.ok) {
         const ggsecureData = await response.json();
-        console.log(`[GGSecure] Response for ${user.username}:`, JSON.stringify(ggsecureData));
         
         // Vérifier isOnline dans différentes structures de réponse possibles
         const isOnline = ggsecureData.data?.isOnline === true || 
@@ -242,7 +239,6 @@ router.get('/anticheat-status/:userId', async (req, res) => {
         
         // Si le joueur est banni sur GGSecure, il ne peut pas jouer
         if (isBanned) {
-          console.log(`[GGSecure] User ${user.username} is BANNED`);
           return res.json({ 
             success: true, 
             isOnline: false, 
@@ -251,14 +247,12 @@ router.get('/anticheat-status/:userId', async (req, res) => {
           });
         }
         
-        console.log(`[GGSecure] User ${user.username} isOnline: ${isOnline}`);
         return res.json({ 
           success: true, 
           isOnline: isOnline
         });
       } else if (response.status === 404) {
         // Joueur non trouvé dans GGSecure
-        console.log(`[GGSecure] User ${user.username} not found in GGSecure`);
         return res.json({ 
           success: true, 
           isOnline: false, 
@@ -274,7 +268,6 @@ router.get('/anticheat-status/:userId', async (req, res) => {
           message: 'GGSecure authentication failed'
         });
       } else {
-        console.log(`[GGSecure] Unexpected HTTP ${response.status}`);
         return res.json({ 
           success: true, 
           isOnline: true, 
@@ -1255,7 +1248,6 @@ router.post('/reset-my-stats', verifyToken, async (req, res) => {
       { $set: { matchHistory: [] } }
     );
 
-    console.log(`[RESET STATS] User ${req.user.username} (${userId}) reset their stats (reset #${req.user.statsResetCount}). Cost: ${actualCost} gold. Cleared personal matchHistory: ${ladderMatchCount} entries. Ranked matches played: ${rankedMatchCount}`);
 
     res.json({
       success: true,
@@ -1826,7 +1818,6 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
         });
     }
 
-    console.log(`[ADMIN] User ${user.username} (${userId}) - ${logDescription} by ${req.user._id}`);
 
     // Log to Discord
     await logAdminAction(req.user, 'Reset Stats', user.username, {
@@ -1883,7 +1874,6 @@ router.post('/admin/:userId/summon', verifyToken, requireArbitre, async (req, re
     });
 
     if (result.success) {
-      console.log(`[ADMIN] User ${user.username} (${userId}) summoned by ${req.user.username || req.user._id}`);
       
       res.json({
         success: true,
@@ -2184,7 +2174,6 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
       
       user.markModified('statsHardcore');
       user.markModified('statsCdl');
-      console.log(`[ADMIN] Updated ladder stats for user ${user.username}: HC ${user.statsHardcore.xp}XP/${user.statsHardcore.wins}W/${user.statsHardcore.losses}L, CDL ${user.statsCdl.xp}XP/${user.statsCdl.wins}W/${user.statsCdl.losses}L`);
     }
 
     await user.save();
@@ -2209,7 +2198,6 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
           hardcoreRanking.losses = rankedStats.hardcore.losses;
         }
         await hardcoreRanking.save();
-        console.log(`[ADMIN] Updated hardcore ranking for user ${user.username}: ${hardcoreRanking.points} points, ${hardcoreRanking.wins}W/${hardcoreRanking.losses}L`);
       }
       
       // Update CDL ranking
@@ -2228,7 +2216,6 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
           cdlRanking.losses = rankedStats.cdl.losses;
         }
         await cdlRanking.save();
-        console.log(`[ADMIN] Updated CDL ranking for user ${user.username}: ${cdlRanking.points} points, ${cdlRanking.wins}W/${cdlRanking.losses}L`);
       }
     }
 
@@ -2468,7 +2455,6 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
 
     // Process abandonment if applicable
     if (isAbandonWarn && abandonedMatchId) {
-      console.log(`[ABANDON WARN] Processing abandonment warning for user ${user.username}, match ${abandonedMatchId}`);
       
       const match = await RankedMatch.findById(abandonedMatchId).populate('players.user', 'username');
       
@@ -2483,11 +2469,9 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
           const abandoningTeam = Number(abandoningPlayer.team);
           const winningTeam = Number(match.result.winner);
           
-          console.log(`[ABANDON WARN] Player team: ${abandoningTeam}, Winning team: ${winningTeam}`);
           
           // Only process if the abandoning player's team lost
           if (abandoningTeam !== winningTeam) {
-            console.log(`[ABANDON WARN] Team lost - processing refunds for teammates`);
             
             // Find teammates (same team, excluding the abandoning player)
             const teammates = match.players.filter(p => {
@@ -2496,7 +2480,6 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
               return Number(p.team) === abandoningTeam && pUserId !== user._id.toString();
             });
             
-            console.log(`[ABANDON WARN] Found ${teammates.length} teammates to refund`);
             
             for (const teammate of teammates) {
               const teammateUserId = teammate.user?._id || teammate.user;
@@ -2505,7 +2488,6 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
               const goldEarned = rewards.goldEarned || 0;
               const xpEarned = rewards.xpEarned || 0;
               
-              console.log(`[ABANDON WARN] Refunding teammate ${teammate.username}: points=${pointsLost}, gold=${goldEarned}, xp=${xpEarned}`);
               
               // Refund ranking points (pointsLost is negative, so we subtract it to add back)
               const ranking = await Ranking.findOne({ user: teammateUserId, mode: match.mode, season: 1 });
@@ -2516,7 +2498,6 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
                 // Remove the loss from their record
                 ranking.losses = Math.max(0, (ranking.losses || 0) - 1);
                 await ranking.save();
-                console.log(`[ABANDON WARN]   Ranking updated: ${oldPoints} -> ${ranking.points} pts, losses: ${ranking.losses}`);
               }
               
               // Update the player's rewards in the match to reflect the refund
@@ -2556,10 +2537,8 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
               const oldAbandonerPoints = abandonerRanking.points;
               abandonerRanking.points = Math.max(0, abandonerRanking.points - 60);
               await abandonerRanking.save();
-              console.log(`[ABANDON WARN] Penalty applied to abandoner: ${oldAbandonerPoints} -> ${abandonerRanking.points} pts (-60)`);
             }
             
-            console.log(`[ABANDON WARN] Successfully processed abandonment. ${teammatesRefunded} teammates refunded.`);
           } else {
             // Even if the team won, apply the 60 points penalty to the abandoning player
             const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: 1 });
@@ -2567,15 +2546,11 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
               const oldAbandonerPoints = abandonerRanking.points;
               abandonerRanking.points = Math.max(0, abandonerRanking.points - 60);
               await abandonerRanking.save();
-              console.log(`[ABANDON WARN] Penalty applied to abandoner (team won): ${oldAbandonerPoints} -> ${abandonerRanking.points} pts (-60)`);
             }
-            console.log(`[ABANDON WARN] Team won - no refunds needed but penalty applied`);
           }
         } else {
-          console.log(`[ABANDON WARN] Player not found in match`);
         }
       } else {
-        console.log(`[ABANDON WARN] Match not found or not completed`);
       }
     }
 

@@ -6,7 +6,6 @@ dotenv.config();
 const seedOrnaments = async () => {
   try {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nomercy');
-    console.log('Connected to MongoDB');
 
     const ShopItem = (await import('../models/ShopItem.js')).default;
 
@@ -138,13 +137,10 @@ const seedOrnaments = async () => {
 
     // Delete existing ornaments
     await ShopItem.deleteMany({ category: 'ornament' });
-    console.log('Deleted existing ornaments');
 
     // Insert new ornaments
     const result = await ShopItem.insertMany(ornaments);
-    console.log(`Inserted ${result.length} ornaments`);
 
-    console.log('Ornaments seeded successfully!');
     process.exit(0);
   } catch (error) {
     console.error('Error seeding ornaments:', error);

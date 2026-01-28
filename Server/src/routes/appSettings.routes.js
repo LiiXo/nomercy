@@ -467,7 +467,6 @@ router.post('/admin/reset-ranked-leaderboard/:mode', verifyToken, requireAdmin, 
       }
     );
     
-    console.log(`[ADMIN] Ranked leaderboard reset for mode "${mode}" by ${req.user.username}. ${result.modifiedCount} rankings reset.`);
 
     // Log to Discord
     await logAdminAction(req.user, 'Reset Leaderboard', mode === 'hardcore' ? 'Hardcore' : 'CDL', {
@@ -514,7 +513,6 @@ router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, re
         enabledAt: new Date()
       };
       
-      console.log(`[EVENT] Double XP activé pour ${durationHours}h par ${req.user.username}`);
     } else {
       // Disable double XP
       settings.events.doubleXP = {
@@ -524,7 +522,6 @@ router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, re
         enabledAt: null
       };
       
-      console.log(`[EVENT] Double XP désactivé par ${req.user.username}`);
     }
     
     settings.markModified('events');
@@ -573,7 +570,6 @@ router.post('/admin/events/double-gold', verifyToken, requireAdmin, async (req, 
         enabledAt: new Date()
       };
       
-      console.log(`[EVENT] Double Gold activé pour ${durationHours}h par ${req.user.username}`);
     } else {
       // Disable double gold
       settings.events.doubleGold = {
@@ -583,7 +579,6 @@ router.post('/admin/events/double-gold', verifyToken, requireAdmin, async (req, 
         enabledAt: null
       };
       
-      console.log(`[EVENT] Double Gold désactivé par ${req.user.username}`);
     }
     
     settings.markModified('events');

@@ -95,11 +95,9 @@ const isNewSquad = async (squadId) => {
  */
 const updatePlayersMatchHistory = async (roster, matchId, squadId, result) => {
   if (!roster || roster.length === 0) {
-    console.log(`[UPDATE MATCH HISTORY] ⚠️ Roster vide pour le match ${matchId}`);
     return;
   }
 
-  console.log(`[UPDATE MATCH HISTORY] Mise à jour de ${roster.length} joueurs pour ${result} (match: ${matchId}, squad: ${squadId})`);
 
   for (const rosterEntry of roster) {
     const playerId = rosterEntry.user?._id || rosterEntry.user;
@@ -112,7 +110,6 @@ const updatePlayersMatchHistory = async (roster, matchId, squadId, result) => {
         );
 
         if (alreadyExists) {
-          console.log(`[UPDATE MATCH HISTORY] Match déjà dans l'historique de ${player.username}, ignoré`);
           continue;
         }
 
@@ -127,7 +124,6 @@ const updatePlayersMatchHistory = async (roster, matchId, squadId, result) => {
             }
           }
         });
-        console.log(`[UPDATE MATCH HISTORY] ✅ Historique mis à jour pour ${player?.username || playerId} (${result})`);
       } catch (error) {
         console.error(`[UPDATE MATCH HISTORY] ❌ Erreur pour le joueur ${playerId}:`, error);
       }
@@ -141,7 +137,6 @@ router.post('/new-squad-approval/:approvalId/respond', verifyToken, async (req, 
     const { approvalId } = req.params;
     const { approved } = req.body;
     
-    console.log(`[NEW SQUAD] Received response for ${approvalId}: approved=${approved}`);
     
     // Chercher dans la base de données
     const pendingApproval = await NewSquadApproval.findOne({ 
@@ -150,7 +145,6 @@ router.post('/new-squad-approval/:approvalId/respond', verifyToken, async (req, 
     });
     
     if (!pendingApproval) {
-      console.log(`[NEW SQUAD] ❌ Approval ${approvalId} NOT FOUND in database!`);
       
       // Même si l'approbation n'existe plus, on renvoie un succès au posteur
       return res.json({
@@ -181,7 +175,6 @@ router.post('/new-squad-approval/:approvalId/respond', verifyToken, async (req, 
       });
     }
     
-    console.log(`[NEW SQUAD] Approval ${approvalId} responded: ${approved ? 'APPROVED' : 'REJECTED'}`);
     
     res.json({
       success: true,
@@ -659,8 +652,6 @@ router.get('/:matchId', verifyToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
 
-    console.log('[GET MATCH] challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
-    console.log('[GET MATCH] opponentRoster:', JSON.stringify(match.opponentRoster, null, 2));
 
     // Vérifier l'accès : membre d'une des deux équipes, helper dans le roster, ou staff/arbitre
     const isStaff = user.roles?.some(r => ['admin', 'staff', 'arbitre', 'gerant_cdl', 'gerant_hardcore'].includes(r));
@@ -683,7 +674,6 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     );
     const isHelper = isHelperInChallenger || isHelperInOpponent;
 
-    console.log(`[GET MATCH] Access check - User squad: ${userSquadId}, Challenger: ${challengerId}, Opponent: ${opponentId}, isParticipant: ${isParticipant}, isHelper: ${isHelper}, isStaff: ${isStaff}`);
 
     if (!isStaff && !isParticipant && !isHelper) {
       return res.status(403).json({ success: false, message: 'Accès non autorisé - Vous devez être membre d\'une des équipes ou aide dans le roster' });
@@ -793,14 +783,10 @@ router.post('/', verifyToken, async (req, res) => {
     const user = await User.findById(req.user._id).populate('squad');
     
     // Debug logs
-    console.log('[MATCH CREATE] User ID:', user._id);
-    console.log('[MATCH CREATE] User roles:', user.roles);
-    console.log('[MATCH CREATE] Is admin/staff:', isAdminOrStaff(user));
     
     // Vérifier si le ladder posting est désactivé (sauf pour admin/staff)
     if (!isAdminOrStaff(user)) {
       const settings = await AppSettings.getSettings();
-      console.log('[MATCH CREATE] Ladder posting enabled:', settings.features?.ladderPosting?.enabled);
       if (!settings.features?.ladderPosting?.enabled) {
         return res.status(403).json({ 
           success: false, 
@@ -808,7 +794,6 @@ router.post('/', verifyToken, async (req, res) => {
         });
       }
     } else {
-      console.log('[MATCH CREATE] User is admin/staff, bypassing ladder check');
     }
     
     if (!user.squad) {
@@ -910,7 +895,6 @@ router.post('/', verifyToken, async (req, res) => {
     // Déterminer le mode basé sur le ladder ou l'escouade
     const mode = squad.mode === 'both' ? 'hardcore' : squad.mode;
 
-    console.log('[CREATE MATCH] Received roster:', JSON.stringify(req.body.roster, null, 2));
     
     // Enrichir le roster avec les usernames pour l'historique
     let enrichedRoster = [];
@@ -953,7 +937,6 @@ router.post('/', verifyToken, async (req, res) => {
     });
 
     await match.save();
-    console.log('[CREATE MATCH] Saved match with challengerRoster:', JSON.stringify(match.challengerRoster, null, 2));
 
     const populatedMatch = await Match.findById(match._id)
       .populate('challenger', 'name tag color logo members createdAt')
@@ -1106,7 +1089,6 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     const acceptingSquadIsNew = await isNewSquad(squad._id);
     
     if (acceptingSquadIsNew) {
-      console.log(`[NEW SQUAD] Squad ${squad.name} is new, requesting approval from match poster`);
       
       const io = req.app.get('io');
       const matchPosterId = match.createdBy._id.toString();
@@ -1144,7 +1126,6 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
         expiresAt
       });
       
-      console.log(`[NEW SQUAD] Approval document created in DB: ${approvalId}`);
       
       // Envoyer la demande d'approbation au posteur du match via Socket.io
       io.to(`user-${matchPosterId}`).emit('newSquadApprovalRequest', {
@@ -1164,7 +1145,6 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
         ladderId: match.ladderId
       });
       
-      console.log(`[NEW SQUAD] Approval request ${approvalId} sent to user-${matchPosterId}`);
       
       // Attendre la réponse en polluant la base de données (max 30 secondes)
       const startTime = Date.now();
@@ -1222,7 +1202,6 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
         });
       }
       
-      console.log(`[NEW SQUAD] Approval granted for squad ${squad.name}`);
     }
     // ========== FIN VÉRIFICATION NOUVELLE ESCOUADE ==========
 
@@ -1241,7 +1220,6 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     match.hostTeam = Math.random() < 0.5 ? match.challenger : squad._id;
     
     // Ajouter le roster de l'adversaire avec les usernames pour l'historique
-    console.log('[ACCEPT MATCH] Received roster:', JSON.stringify(req.body.roster, null, 2));
     if (req.body.roster && req.body.roster.length > 0) {
       const userIds = req.body.roster.map(r => r.user);
       const rosterUsers = await User.find({ _id: { $in: userIds } }).select('_id username');
@@ -1253,7 +1231,6 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
         isHelper: r.isHelper || false
       }));
     }
-    console.log('[ACCEPT MATCH] OpponentRoster assigned:', JSON.stringify(match.opponentRoster, null, 2));
 
     // Si le match est en mode random, piocher 3 maps aléatoires depuis la DB
     if (match.mapType === 'random') {
@@ -1268,18 +1245,15 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
           [`${configPath}.ladder.gameModes`]: match.gameMode
         });
 
-        console.log(`[RANDOM MAPS] Found ${availableMaps.length} maps for ${match.mode} ladder ${match.gameMode} (new config)`);
 
         // Fallback: si pas de maps avec la nouvelle config, essayer l'ancienne structure
         if (availableMaps.length === 0) {
-          console.log(`[RANDOM MAPS] No maps with new config, falling back to legacy structure`);
           availableMaps = await Map.find({
             isActive: true,
             ladders: match.ladderId,
             gameModes: match.gameMode,
             mode: { $in: [match.mode, 'both'] }
           });
-          console.log(`[RANDOM MAPS] Found ${availableMaps.length} maps with legacy config`);
         }
 
         if (availableMaps.length >= 3) {
@@ -1292,14 +1266,12 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
           }));
         } else if (availableMaps.length > 0) {
           // S'il y a moins de 3 maps, prendre toutes celles disponibles
-          console.log(`[RANDOM MAPS] Warning: Only ${availableMaps.length} maps available for ${match.mode} ${match.ladderId}`);
           match.randomMaps = availableMaps.map((map, index) => ({
             name: map.name,
             image: map.image,
             order: index + 1
           }));
         } else {
-          console.log(`[RANDOM MAPS] No maps found for ${match.mode} ${match.ladderId} ${match.gameMode}`);
         }
       } catch (mapError) {
         console.error('Error fetching random maps:', mapError);
@@ -1832,7 +1804,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     // Récupérer les valeurs configurées dans l'admin panel selon le type de ladder
     const rewardsConfig = await getSquadMatchRewards(match.ladderId);
     
-    console.log(`[MATCH RESULT] Full rewardsConfig for ${match.ladderId}:`, JSON.stringify(rewardsConfig, null, 2));
     
     // Points à attribuer (depuis la config) - avec valeurs par défaut
     const pointsWin = rewardsConfig.ladderPointsWin ?? 20;
@@ -1840,8 +1811,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     const generalPointsWin = rewardsConfig.generalSquadPointsWin ?? 15;
     const generalPointsLoss = rewardsConfig.generalSquadPointsLoss ?? 7;
 
-    console.log(`[MATCH RESULT] Match ${matchId} (${match.ladderId}) - Winner: ${winnerId}, Loser: ${loserId}`);
-    console.log(`[MATCH RESULT] Config - Ladder Points Win: ${pointsWin}, Loss: ${pointsLoss}, General Win: ${generalPointsWin}, Loss: ${generalPointsLoss}`);
 
     // 1. Mettre à jour le classement (ladder) du gagnant
     const statsField = getStatsFieldForMode(match.mode);
@@ -1857,7 +1826,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       },
       { new: true }
     );
-    console.log(`[MATCH RESULT] Winner squad updated: ${winnerUpdate?.name}, Ladder +${pointsWin}, Total +${generalPointsWin} (${statsField})`);
 
     // 2. Mettre à jour le classement (ladder) du perdant (empêcher les points négatifs)
     const loserSquad = await Squad.findById(loserId);
@@ -1885,7 +1853,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         },
         { new: true }
       );
-      console.log(`[MATCH RESULT] Loser squad updated: ${loserUpdate?.name}, Ladder -${actualLadderLoss}, Total -${actualTotalLoss} (${statsField})`);
     }
 
     // 3. Mettre à jour les stats individuelles des joueurs du roster
@@ -1897,14 +1864,9 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     let winnerRoster = isWinnerChallenger ? match.challengerRoster : match.opponentRoster;
     let loserRoster = isWinnerChallenger ? match.opponentRoster : match.challengerRoster;
     
-    console.log(`[MATCH RESULT] DEBUG - winnerId: ${winnerIdStr}, challengerId: ${challengerIdStr}, opponentId: ${opponentIdStr}`);
-    console.log(`[MATCH RESULT] DEBUG - isWinnerChallenger: ${isWinnerChallenger}`);
-    console.log(`[MATCH RESULT] DEBUG - Winner team: ${isWinnerChallenger ? match.challenger.name : match.opponent.name}`);
-    console.log(`[MATCH RESULT] DEBUG - Loser team: ${isWinnerChallenger ? match.opponent.name : match.challenger.name}`);
 
     // Fallback: si les rosters sont vides, utiliser les membres des escouades
     if ((!winnerRoster || winnerRoster.length === 0) || (!loserRoster || loserRoster.length === 0)) {
-      console.log(`[MATCH RESULT] ⚠️ Roster(s) vide(s), récupération depuis les escouades...`);
       
       const winnerSquad = await Squad.findById(winnerId).populate('members.user', '_id username');
       const loserSquad = await Squad.findById(loserId).populate('members.user', '_id username');
@@ -1916,7 +1878,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
             username: m.user?.username || 'Unknown',
             isHelper: false
           }));
-          console.log(`[MATCH RESULT] ✅ Winner roster récupéré depuis l'escouade: ${winnerRoster.length} joueurs`);
         }
       }
       
@@ -1927,7 +1888,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
             username: m.user?.username || 'Unknown',
             isHelper: false
           }));
-          console.log(`[MATCH RESULT] ✅ Loser roster récupéré depuis l'escouade: ${loserRoster.length} joueurs`);
         }
       }
     }
@@ -1938,8 +1898,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     const playerXPWinMin = rewardsConfig.playerXPWinMin ?? 450;
     const playerXPWinMax = rewardsConfig.playerXPWinMax ?? 550;
 
-    console.log(`[MATCH RESULT] Player config - Coins Win: ${playerCoinsWin}, Coins Loss: ${playerCoinsLoss}, XP: ${playerXPWinMin}-${playerXPWinMax}`);
-    console.log(`[MATCH RESULT] Winner roster: ${winnerRoster?.length || 0} players, Loser roster: ${loserRoster?.length || 0} players`);
 
     // Stocker les récompenses attribuées pour le rapport de combat
     const rewardsGiven = {
@@ -1963,18 +1921,14 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     const playerStatsField = getStatsFieldForMode(match.mode);
     
     if (winnerRoster && winnerRoster.length > 0) {
-      console.log(`[MATCH RESULT] Processing ${winnerRoster.length} winner players... (${playerStatsField})`);
       for (const rosterEntry of winnerRoster) {
         const playerId = rosterEntry.user?._id || rosterEntry.user;
-        console.log(`[MATCH RESULT] Winner roster entry:`, JSON.stringify(rosterEntry));
-        console.log(`[MATCH RESULT] Extracted playerId: ${playerId}`);
         
         if (playerId) {
           // XP aléatoire entre min et max
           const xpGained = Math.floor(Math.random() * (playerXPWinMax - playerXPWinMin + 1)) + playerXPWinMin;
           rewardsGiven.winners.xpGained.push({ playerId: playerId.toString(), xp: xpGained });
           
-          console.log(`[MATCH RESULT] Updating player ${playerId} with: goldCoins +${playerCoinsWin}, xp +${xpGained}, wins +1 (${playerStatsField})`);
           
           const updatedPlayer = await User.findByIdAndUpdate(playerId, {
             $inc: { 
@@ -1986,17 +1940,12 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
           
           if (updatedPlayer) {
             const modeStats = updatedPlayer[playerStatsField] || {};
-            console.log(`[MATCH RESULT] ✅ Winner player ${updatedPlayer.username}: goldCoins=${updatedPlayer.goldCoins}, xp=${modeStats.xp}, wins=${modeStats.wins} (${playerStatsField})`);
           } else {
-            console.log(`[MATCH RESULT] ❌ FAILED to update player ${playerId} - player not found!`);
           }
         } else {
-          console.log(`[MATCH RESULT] ⚠️ No playerId found in roster entry`);
         }
       }
     } else {
-      console.log(`[MATCH RESULT] ⚠️ WARNING: Winner roster is empty or not found!`);
-      console.log(`[MATCH RESULT] winnerRoster value:`, winnerRoster);
     }
 
     // Mettre à jour les stats des joueurs perdants (depuis le roster) - par mode
@@ -2011,25 +1960,19 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
               [`${playerStatsField}.losses`]: 1
             }
           }, { new: true });
-          console.log(`[MATCH RESULT] Loser player ${updatedPlayer?.username}: +${playerCoinsLoss} coins consolation (${playerStatsField})`);
         }
       }
     } else {
-      console.log(`[MATCH RESULT] WARNING: Loser roster is empty or not found!`);
     }
 
     // ✅ MISE À JOUR DE L'HISTORIQUE DES JOUEURS (uniquement ceux du roster)
-    console.log(`[MATCH RESULT] 🔄 Mise à jour de l'historique des matchs pour les joueurs...`);
     await updatePlayersMatchHistory(winnerRoster, match._id, winnerId, 'win');
     await updatePlayersMatchHistory(loserRoster, match._id, loserId, 'loss');
-    console.log(`[MATCH RESULT] ✅ Historique des joueurs mis à jour`);
 
     // Sauvegarder les récompenses dans le match pour le rapport de combat
     match.result.rewardsGiven = rewardsGiven;
     await match.save();
 
-    console.log('[MATCH RESULT] 💾 Rewards saved in match.result.rewardsGiven');
-    console.log('[MATCH RESULT] rewardsGiven:', JSON.stringify(rewardsGiven, null, 2));
 
     const populatedMatch = await Match.findById(matchId)
       .populate('challenger', 'name tag color logo members registeredLadders')
@@ -2041,12 +1984,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       .populate('opponentRoster.user', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles');
 
-    console.log('[MATCH RESULT] 🚀 Emitting matchUpdate with type: completed');
-    console.log('[MATCH RESULT] Match status:', populatedMatch.status);
-    console.log('[MATCH RESULT] Winner:', populatedMatch.result.winner);
-    console.log('[MATCH RESULT] RewardsGiven present:', !!populatedMatch.result.rewardsGiven);
-    console.log('[MATCH RESULT] RewardsGiven XP array:', populatedMatch.result.rewardsGiven?.winners?.xpGained);
-    console.log('[MATCH RESULT] RewardsGiven full:', JSON.stringify(populatedMatch.result.rewardsGiven, null, 2));
 
     // Émettre via Socket.io pour mise à jour en temps réel
     const io = req.app.get('io');
@@ -2055,7 +1992,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         type: 'completed',
         match: populatedMatch
       });
-      console.log('[MATCH RESULT] ✅ Event emitted to room: match-' + matchId);
       
       // Envoyer aussi le message système dans le chat
       const systemMessage = populatedMatch.chat[populatedMatch.chat.length - 1];
@@ -2828,7 +2764,6 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
 
       // Fallback: si les rosters sont vides, utiliser les membres des escouades
       if ((!winnerRoster || winnerRoster.length === 0) || (!loserRoster || loserRoster.length === 0)) {
-        console.log(`[RESOLVE MATCH] ⚠️ Roster(s) vide(s), récupération depuis les escouades...`);
         
         const winnerSquadFallback = await Squad.findById(winnerId).populate('members.user', '_id username');
         const loserSquadFallback = await Squad.findById(loserId).populate('members.user', '_id username');
@@ -2840,7 +2775,6 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
               username: m.user?.username || 'Unknown',
               isHelper: false
             }));
-            console.log(`[RESOLVE MATCH] ✅ Winner roster récupéré: ${winnerRoster.length} joueurs`);
           }
         }
         
@@ -2851,7 +2785,6 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
               username: m.user?.username || 'Unknown',
               isHelper: false
             }));
-            console.log(`[RESOLVE MATCH] ✅ Loser roster récupéré: ${loserRoster.length} joueurs`);
           }
         }
       }
@@ -2907,10 +2840,8 @@ router.post('/:matchId/resolve', verifyToken, async (req, res) => {
       }
 
       // ✅ MISE À JOUR DE L'HISTORIQUE DES JOUEURS (uniquement ceux du roster)
-      console.log(`[RESOLVE MATCH] 🔄 Mise à jour de l'historique des matchs pour les joueurs...`);
       await updatePlayersMatchHistory(winnerRoster, match._id, winnerId, 'win');
       await updatePlayersMatchHistory(loserRoster, match._id, loserId, 'loss');
-      console.log(`[RESOLVE MATCH] ✅ Historique des joueurs mis à jour`);
 
       match.result = {
         winner: winnerId,
@@ -3108,9 +3039,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
     }
     
     const adminUser = await User.findById(req.user._id);
-    console.log(`[LADDER DELETE] ====================================`);
-    console.log(`[LADDER DELETE] Admin ${adminUser?.username} supprime le match ${req.params.matchId}`);
-    console.log(`[LADDER DELETE] Status: ${match.status}, Mode: ${match.mode}, Ladder: ${match.ladderId}`);
 
     // Si le match est complété, on doit rembourser les stats
     if (match.status === 'completed' && match.result?.winner) {
@@ -3120,8 +3048,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
       // Determine stats field based on mode
       const statsField = match.mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
       
-      console.log(`[LADDER DELETE] Match complété - Remboursement des stats (${statsField})...`);
-      console.log(`[LADDER DELETE] Winner: ${isWinnerChallenger ? 'Challenger' : 'Opponent'}`);
       
       // Rollback stats for challenger roster
       for (const rosterEntry of match.challengerRoster) {
@@ -3149,7 +3075,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
         user.markModified('matchHistory');
         await user.save();
         
-        console.log(`[LADDER DELETE] Challenger ${user.username}: ${isWinner ? 'win' : 'loss'} removed, was ${oldWins}W/${oldLosses}L, now ${user[statsField].wins}W/${user[statsField].losses}L`);
       }
       
       // Rollback stats for opponent roster
@@ -3178,7 +3103,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
         user.markModified('matchHistory');
         await user.save();
         
-        console.log(`[LADDER DELETE] Opponent ${user.username}: ${isWinner ? 'win' : 'loss'} removed, was ${oldWins}W/${oldLosses}L, now ${user[statsField].wins}W/${user[statsField].losses}L`);
       }
       
       // Rollback squad stats if applicable
@@ -3193,7 +3117,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
             challengerSquad.stats.totalLosses = Math.max(0, challengerSquad.stats.totalLosses - 1);
           }
           await challengerSquad.save();
-          console.log(`[LADDER DELETE] Challenger squad ${challengerSquad.name}: stats updated`);
         }
       }
       
@@ -3206,19 +3129,14 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
             opponentSquad.stats.totalLosses = Math.max(0, opponentSquad.stats.totalLosses - 1);
           }
           await opponentSquad.save();
-          console.log(`[LADDER DELETE] Opponent squad ${opponentSquad.name}: stats updated`);
         }
       }
       
-      console.log(`[LADDER DELETE] Remboursement terminé`);
     } else {
-      console.log(`[LADDER DELETE] Match non complété - Pas de remboursement nécessaire`);
     }
     
     await Match.findByIdAndDelete(req.params.matchId);
     
-    console.log(`[LADDER DELETE] Match supprimé avec succès`);
-    console.log(`[LADDER DELETE] ====================================`);
 
     res.json({
       success: true,

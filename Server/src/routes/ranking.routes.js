@@ -75,7 +75,6 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const { mode } = req.params;
     const { season = 1, limit = 100, page = 1, all = 'false' } = req.query;
 
-    console.log(`[RANKINGS] Leaderboard request - mode=${mode}, season=${season}, page=${page}`);
 
     if (!['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
@@ -86,7 +85,6 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const cachedData = leaderboardCache.get(cacheKey);
     
     if (isCacheValid(cachedData)) {
-      console.log(`[RANKINGS] Returning cached leaderboard for ${cacheKey}`);
       return res.json(cachedData.data);
     }
 
@@ -107,7 +105,6 @@ router.get('/leaderboard/:mode', async (req, res) => {
     // First, let's check how many rankings exist for this mode (without filters)
     const totalInDb = await Ranking.countDocuments({ mode, season: parseInt(season) });
     const withMatchesInDb = await Ranking.countDocuments({ mode, season: parseInt(season), $or: [{ wins: { $gt: 0 } }, { losses: { $gt: 0 } }] });
-    console.log(`[RANKINGS] DB check - mode=${mode}: total=${totalInDb}, with matches=${withMatchesInDb}`);
 
     // Fetch more than needed to account for filtered users, then slice
     const overFetchMultiplier = 2;
@@ -120,24 +117,19 @@ router.get('/leaderboard/:mode', async (req, res) => {
       .limit(parsedLimit * overFetchMultiplier + skip)
       .skip(0); // Skip will be handled after filtering
 
-    console.log(`[RANKINGS] Query returned ${rankings.length} rankings before user filter`);
 
     // Filter out rankings with null users, banned, deleted, or no username
     const validRankings = rankings.filter(r => {
       if (!r.user) {
-        console.log(`[RANKINGS] Filtered: ranking ${r._id} has no user`);
         return false;
       }
       if (!r.user.username) {
-        console.log(`[RANKINGS] Filtered: user ${r.user._id} has no username`);
         return false;
       }
       if (r.user.isBanned === true) {
-        console.log(`[RANKINGS] Filtered: user ${r.user.username} is banned`);
         return false;
       }
       if (r.user.isDeleted === true) {
-        console.log(`[RANKINGS] Filtered: user ${r.user.username} is deleted`);
         return false;
       }
       return true;
@@ -177,7 +169,6 @@ router.get('/leaderboard/:mode', async (req, res) => {
     // Count all valid (non-banned) users
     const total = validRankings.length;
 
-    console.log(`[RANKINGS] Found ${total} valid rankings for mode=${mode}, returning ${rankedData.length} on page ${parsedPage}`);
 
     const responseData = {
       success: true,
@@ -197,7 +188,6 @@ router.get('/leaderboard/:mode', async (req, res) => {
       data: responseData,
       timestamp: Date.now()
     });
-    console.log(`[RANKINGS] Cached leaderboard for ${cacheKey}`);
 
     res.json(responseData);
   } catch (error) {
@@ -937,10 +927,7 @@ router.get('/debug/my-rankings', verifyToken, async (req, res) => {
       username: req.user.username
     };
     
-    console.log(`[RANKINGS DEBUG] User ${req.user.username} has ${rankings.length} ranking entries:`);
-    console.log(`[RANKINGS DEBUG] User flags: isBanned=${userFlags.isBanned}, isDeleted=${userFlags.isDeleted}`);
     rankings.forEach(r => {
-      console.log(`  - mode=${r.mode}, season=${r.season}, ${r.wins}W/${r.losses}L, ${r.points}pts`);
     });
     
     res.json({

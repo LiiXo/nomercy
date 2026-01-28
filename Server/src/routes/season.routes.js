@@ -741,17 +741,9 @@ router.post('/admin/ranked/test-trophy/:userId', verifyToken, requireAdmin, asyn
     const { userId } = req.params;
     const { division = 'diamond' } = req.body;
     
-    console.log(`[Test Trophy] Assigning ${division} trophy to user ${userId}`);
     
     const result = await createAndAssignTrophyToUser(userId, division);
     
-    console.log(`[Test Trophy] Result:`, {
-      trophyId: result.trophy._id,
-      trophyName: result.trophy.name,
-      userId: result.user._id,
-      userTrophiesCount: result.user.trophies?.length,
-      alreadyHad: result.alreadyHad
-    });
     
     if (result.alreadyHad) {
       return res.json({

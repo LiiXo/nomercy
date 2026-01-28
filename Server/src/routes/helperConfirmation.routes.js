@@ -67,9 +67,6 @@ router.post('/request', verifyToken, async (req, res) => {
       const room = io.sockets.adapter.rooms.get(roomName);
       const socketsInRoom = room ? room.size : 0;
       
-      console.log(`[HELPER CONFIRMATION] Emitting to room: ${roomName}`);
-      console.log(`[HELPER CONFIRMATION] Sockets in room: ${socketsInRoom}`);
-      console.log(`[HELPER CONFIRMATION] Helper ID: ${helperId}`);
       
       // Emit to the specific user's room
       io.to(roomName).emit('helperConfirmationRequest', {
@@ -91,9 +88,7 @@ router.post('/request', verifyToken, async (req, res) => {
         expiresAt: confirmation.expiresAt
       });
       
-      console.log(`[HELPER CONFIRMATION] Event emitted to ${roomName}`);
     } else {
-      console.log('[HELPER CONFIRMATION] Socket.io not available!');
     }
 
     res.json({

@@ -42,11 +42,9 @@ router.get('/random/:ladderId', async (req, res) => {
       ...(gameMode ? { [`${configPath}.ladder.gameModes`]: gameMode } : {})
     });
     
-    console.log(`[Random Maps] Found ${allMaps.length} maps for ${mode} ladder ${gameMode || 'any'} (new config)`);
     
     // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
     if (allMaps.length < 3) {
-      console.log(`[Random Maps] Not enough maps with new config, falling back to legacy structure`);
       const legacyQuery = { 
         isActive: true, 
         ladders: ladderId 
@@ -55,7 +53,6 @@ router.get('/random/:ladderId', async (req, res) => {
       if (mode) legacyQuery.mode = { $in: [mode, 'both'] };
       
       allMaps = await Map.find(legacyQuery);
-      console.log(`[Random Maps] Found ${allMaps.length} maps with legacy config`);
     }
     
     if (allMaps.length < 3) {
@@ -92,11 +89,9 @@ router.get('/ranked', async (req, res) => {
       ...(format ? { [`${configPath}.ranked.formats`]: format } : {})
     }).sort({ name: 1 });
     
-    console.log(`[Ranked Maps] Found ${maps.length} maps for ${mode} ranked ${gameMode || 'any'} format ${format || 'any'} (new config)`);
     
     // Fallback: Si pas assez de maps avec la nouvelle config, essayer l'ancienne structure
     if (maps.length === 0) {
-      console.log(`[Ranked Maps] No maps with new config, falling back to legacy structure`);
       const legacyQuery = { 
         isActive: true, 
         ladders: 'ranked' 
@@ -115,7 +110,6 @@ router.get('/ranked', async (req, res) => {
       if (mode) legacyQuery.mode = { $in: [mode, 'both'] };
       
       maps = await Map.find(legacyQuery).sort({ name: 1 });
-      console.log(`[Ranked Maps] Found ${maps.length} maps with legacy config`);
     }
     
     // Récupérer le paramètre BO1/BO3 pour déterminer le minimum de maps requises
@@ -446,7 +440,6 @@ router.post('/admin/enable-all', verifyToken, requireStaff, async (req, res) => 
       }
     );
     
-    console.log(`[Maps] Enabled all configurations for ${result.modifiedCount} maps`);
     
     res.json({ 
       success: true, 

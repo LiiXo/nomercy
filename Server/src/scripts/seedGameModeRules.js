@@ -7,15 +7,12 @@ dotenv.config();
 
 const seedGameModeRules = async () => {
   try {
-    console.log('🌱 Seeding Game Mode Rules...');
     
     // Connect to MongoDB
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
 
     // Clear existing rules
     await GameModeRules.deleteMany({});
-    console.log('🗑️  Cleared existing game mode rules');
 
     // Hardcore Mode Rules
     const hardcoreRules = new GameModeRules({
@@ -129,12 +126,8 @@ const seedGameModeRules = async () => {
     await hardcoreRules.save();
     await cdlRules.save();
 
-    console.log('✅ Successfully seeded game mode rules:');
-    console.log('  - Hardcore Mode Rules');
-    console.log('  - CDL Mode Rules');
 
     mongoose.connection.close();
-    console.log('👋 Disconnected from MongoDB');
     
   } catch (error) {
     console.error('❌ Error seeding game mode rules:', error);

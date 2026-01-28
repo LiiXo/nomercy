@@ -9,11 +9,6 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL || 'http://localhost:5000/api/auth/discord/callback';
 
-console.log('Passport Discord Config:', {
-  clientID: DISCORD_CLIENT_ID ? '✓ Set' : '✗ Missing',
-  clientSecret: DISCORD_CLIENT_SECRET ? '✓ Set' : '✗ Missing', 
-  callbackURL: DISCORD_CALLBACK_URL
-});
 
 if (!DISCORD_CLIENT_ID || !DISCORD_CLIENT_SECRET) {
   console.error('⚠️  WARNING: Discord OAuth credentials not set! Please configure DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET in .env');

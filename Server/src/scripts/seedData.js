@@ -560,26 +560,22 @@ const shopItems = [
 // ==================== SEED FUNCTIONS ====================
 
 async function seedShopItems() {
-  console.log('🛒 Seeding shop items...');
   
   // Clear existing items
   await ShopItem.deleteMany({});
   
   // Insert new items
   const items = await ShopItem.insertMany(shopItems);
-  console.log(`   ✓ ${items.length} shop items created`);
   
   return items;
 }
 
 async function seedTestRankings() {
-  console.log('🏆 Seeding test rankings...');
   
   // Get all users with complete profiles
   const users = await User.find({ isProfileComplete: true }).limit(20);
   
   if (users.length === 0) {
-    console.log('   ⚠ No users found, skipping rankings');
     return;
   }
 
@@ -621,27 +617,21 @@ async function seedTestRankings() {
 
   if (rankings.length > 0) {
     await Ranking.insertMany(rankings);
-    console.log(`   ✓ ${rankings.length} rankings created`);
   }
 }
 
 async function main() {
   try {
-    console.log('\n🚀 Starting database seed...\n');
-    console.log(`📦 Connecting to: ${MONGODB_URI}\n`);
     
     await mongoose.connect(MONGODB_URI);
-    console.log('✓ Connected to MongoDB\n');
 
     await seedShopItems();
     await seedTestRankings();
 
-    console.log('\n✅ Database seeded successfully!\n');
   } catch (error) {
     console.error('\n❌ Error seeding database:', error);
   } finally {
     await mongoose.disconnect();
-    console.log('📦 Disconnected from MongoDB\n');
     process.exit(0);
   }
 }

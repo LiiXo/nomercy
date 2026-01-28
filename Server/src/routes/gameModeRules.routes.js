@@ -202,7 +202,6 @@ router.post('/admin/:mode/:location/:subType/section', verifyToken, requireStaff
     const { mode, location, subType } = req.params;
     const { title, content, icon, order } = req.body;
     
-    console.log('Adding section:', { mode, location, subType, title, content });
     
     if (!title?.fr || !title?.en || !content?.fr || !content?.en) {
       return res.status(400).json({ 

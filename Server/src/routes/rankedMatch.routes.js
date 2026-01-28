@@ -27,7 +27,6 @@ async function distributeRankedRewards(match) {
   try {
     // Note: Les matchs de test distribuent maintenant les récompenses pour permettre les tests
     if (match.isTestMatch) {
-      console.log(`[RANKED REWARDS] ⚡ Match de test ${match._id} - Distribution des récompenses ACTIVÉE pour test`);
     }
     
     // Récupérer la configuration des récompenses
@@ -54,19 +53,12 @@ async function distributeRankedRewards(match) {
     const isDoubleGold = doubleGoldEnabled && !doubleGoldExpired;
     
     // Log détaillé des événements pour debug
-    console.log(`[RANKED REWARDS] EVENT STATUS:`);
-    console.log(`  Double XP - enabled: ${doubleXPEnabled}, expired: ${doubleXPExpired}, ACTIVE: ${isDoubleXP}`);
-    console.log(`  Double Gold - enabled: ${doubleGoldEnabled}, expired: ${doubleGoldExpired}, ACTIVE: ${isDoubleGold}`);
     
     if (isDoubleXP) {
-      console.log(`[RANKED REWARDS] 🌟 EVENT ACTIF: Double XP !`);
     }
     if (isDoubleGold) {
-      console.log(`[RANKED REWARDS] 💰 EVENT ACTIF: Double Gold !`);
     }
     
-    console.log(`[RANKED REWARDS] DEBUG - Config rankedPointsLossPerRank from DB:`, JSON.stringify(config?.rankedPointsLossPerRank));
-    console.log(`[RANKED REWARDS] DEBUG - Rank thresholds from AppSettings:`, JSON.stringify(rankThresholds));
     
     // Default values for points loss per rank - ensures all ranks have valid negative values
     const DEFAULT_POINTS_LOSS = {
@@ -85,28 +77,18 @@ async function distributeRankedRewards(match) {
     if (config?.rankedPointsLossPerRank) {
       Object.keys(DEFAULT_POINTS_LOSS).forEach(rank => {
         const value = config.rankedPointsLossPerRank[rank];
-        console.log(`[RANKED REWARDS] DEBUG - Rank ${rank}: config value = ${value} (type: ${typeof value})`);
         // Only use the config value if it's a negative number (valid loss)
         if (typeof value === 'number' && value < 0) {
           pointsLossPerRank[rank] = value;
         }
       });
     } else {
-      console.log(`[RANKED REWARDS] ⚠️ WARNING - rankedPointsLossPerRank not found in config, using defaults!`);
     }
     
     // S'assurer que winningTeam est un Number pour les comparaisons
     const winningTeam = Number(match.result.winner);
     const losingTeam = winningTeam === 1 ? 2 : 1;
     
-    console.log(`[RANKED REWARDS] ====================================`);
-    console.log(`[RANKED REWARDS] Match ${match._id} - Winner: Team ${winningTeam}`);
-    console.log(`[RANKED REWARDS] Mode: ${match.mode} | GameMode: ${match.gameMode}`);
-    console.log(`[RANKED REWARDS] Config - Gagnants: ${pointsWin}pts ladder, ${coinsWin} gold, ${xpWinMin}-${xpWinMax} XP`);
-    console.log(`[RANKED REWARDS] Config - Perdants: Points par rang, ${coinsLoss} gold (consolation), 0 XP`);
-    console.log(`[RANKED REWARDS] Points perdus par rang:`, pointsLossPerRank);
-    console.log(`[RANKED REWARDS] Total players in match: ${match.players.length}`);
-    console.log(`[RANKED REWARDS] ====================================`);
     
     let processedCount = 0;
     let skippedCount = 0;
@@ -119,7 +101,6 @@ async function distributeRankedRewards(match) {
       try {
         // Ignorer les faux joueurs (bots)
         if (player.isFake) {
-          console.log(`[RANKED REWARDS] Player ${i}: Skipped (fake player)`);
           skippedCount++;
           continue;
         }
@@ -128,7 +109,6 @@ async function distributeRankedRewards(match) {
         const userId = player.user?._id || player.user;
         
         if (!userId) {
-          console.log(`[RANKED REWARDS] Player ${i}: Skipped (no user ID)`);
           skippedCount++;
           continue;
         }
@@ -145,7 +125,6 @@ async function distributeRankedRewards(match) {
         
         const isWinner = playerTeam === winningTeam;
         
-        console.log(`[RANKED REWARDS] Player ${i}: team=${playerTeam}, winningTeam=${winningTeam}, isWinner=${isWinner}, userId=${userId}`);
         
         // Charger l'utilisateur
         const user = await User.findById(userId);
@@ -176,13 +155,9 @@ async function distributeRankedRewards(match) {
         
         // Log détaillé des boosters pour debug
         if (activeBoosters.length > 0) {
-          console.log(`[RANKED REWARDS] Player ${i} (${user.username}): BOOSTERS FOUND:`);
           activeBoosters.forEach(b => {
-            console.log(`  - ${b.effectType}: isActive=${b.isActive}, wasConsumed=${b.wasConsumed}, remainingMatches=${b.remainingMatches}`);
           });
-          console.log(`  Double PTS: ${hasDoublePts}, Double Gold: ${hasDoubleGold}`);
         } else {
-          console.log(`[RANKED REWARDS] Player ${i} (${user.username}): No active boosters`);
         }
         
         // ========== CALCULER LES RÉCOMPENSES ==========
@@ -218,7 +193,6 @@ async function distributeRankedRewards(match) {
           // Utiliser les points perdus configurés pour le rang du joueur
           const configuredLoss = pointsLossPerRank[playerDivision];
           rankedPointsChange = configuredLoss ?? pointsLoss;
-          console.log(`[RANKED REWARDS] Player ${i}: Division=${playerDivision}, Points=${ranking?.points || 0}, ConfiguredLoss=${configuredLoss}, FallbackLoss=${pointsLoss}, FinalLoss=${rankedPointsChange} pts`);
         }
         
         // Gold (monnaie du jeu)
@@ -237,7 +211,6 @@ async function distributeRankedRewards(match) {
         // XP pour le classement Top Player (expérience générale)
         const xpChange = isWinner ? Math.floor(Math.random() * (xpWinMax - xpWinMin + 1)) + xpWinMin : 0;
         if (!ranking) {
-          console.log(`[RANKED REWARDS] Player ${i}: Creating NEW ranking entry for ${user.username} in mode=${match.mode}, season=1`);
           ranking = new Ranking({ 
             user: userId, 
             mode: match.mode, 
@@ -247,7 +220,6 @@ async function distributeRankedRewards(match) {
             losses: 0 
           });
         } else {
-          console.log(`[RANKED REWARDS] Player ${i}: Found EXISTING ranking for ${user.username} - mode=${ranking.mode}, season=${ranking.season}, ${ranking.wins}W/${ranking.losses}L, ${ranking.points}pts`);
         }
         
         // Appliquer les changements de points ladder classé (minimum 0)
@@ -268,7 +240,6 @@ async function distributeRankedRewards(match) {
         }
         
         await ranking.save();
-        console.log(`[RANKED REWARDS] Player ${i}: Ranking saved - ${ranking.wins}W/${ranking.losses}L, ${ranking.points} pts`);
         
         // ========== METTRE À JOUR LES STATS DU JOUEUR PAR MODE (User) ==========
         // Use mode-specific stats field
@@ -291,7 +262,6 @@ async function distributeRankedRewards(match) {
         }
         
         await user.save();
-        console.log(`[RANKED REWARDS] Player ${i}: User saved - ${user[statsField].wins}W/${user[statsField].losses}L, ${user.goldCoins} gold, ${user[statsField].xp} XP (${statsField})`);
         
         // ========== ENREGISTRER LES RÉCOMPENSES DANS LE MATCH ==========
         // Mettre à jour directement via l'index (plus fiable)
@@ -322,11 +292,6 @@ async function distributeRankedRewards(match) {
         match.players[i].points = newRankedPoints;
         
         // ========== LOG DÉTAILLÉ ==========
-        console.log(`[RANKED REWARDS] ✅ Joueur: ${user.username} (${isWinner ? '🏆 GAGNANT' : '💔 PERDANT'})`);
-        console.log(`[RANKED REWARDS]   └─ Ladder Classé: ${oldRankedPoints} → ${newRankedPoints} (${rankedPointsChange > 0 ? '+' : ''}${rankedPointsChange})${hasDoublePts && isWinner ? ' [BOOSTER x2]' : ''}`);
-        console.log(`[RANKED REWARDS]   └─ Gold: ${oldGold} → ${user.goldCoins} (+${goldChange})${hasDoubleGold && isWinner ? ' [BOOSTER x2]' : ''}`);
-        console.log(`[RANKED REWARDS]   └─ XP Top Player: ${oldXP} → ${user[statsField].xp} (+${xpChange}) (${statsField})`);
-        console.log(`[RANKED REWARDS]   └─ Record: ${ranking.wins}V - ${ranking.losses}D (Série: ${ranking.currentStreak})`);
         
         // ========== DECREMENT MATCH COUNT FOR BOOSTERS ==========
         if (activeBoosters.length > 0) {
@@ -347,7 +312,6 @@ async function distributeRankedRewards(match) {
                 }
               });
               
-              console.log(`[RANKED REWARDS]   └─ 🎯 Booster ${booster.effectType}: ${booster.remainingMatches} → ${newRemainingMatches} matches remaining${newRemainingMatches <= 0 ? ' [EXPIRED]' : ''}`);
             } else {
               // Unlimited booster - just reset inMatch flag and increment counter
               await ItemUsage.findByIdAndUpdate(booster._id, {
@@ -359,7 +323,6 @@ async function distributeRankedRewards(match) {
                   totalMatchesUsed: 1
                 }
               });
-              console.log(`[RANKED REWARDS]   └─ 🎯 Booster applied: ${booster.effectType} (unlimited)`);
             }
           }
         }
@@ -377,12 +340,6 @@ async function distributeRankedRewards(match) {
     match.markModified('players');
     await match.save();
     
-    console.log(`[RANKED REWARDS] ====================================`);
-    console.log(`[RANKED REWARDS] ✅ Récompenses distribuées pour le match ${match._id}`);
-    console.log(`[RANKED REWARDS]   └─ Traités: ${processedCount} joueurs`);
-    console.log(`[RANKED REWARDS]   └─ Ignorés: ${skippedCount} (bots/sans ID)`);
-    console.log(`[RANKED REWARDS]   └─ Erreurs: ${errorCount}`);
-    console.log(`[RANKED REWARDS] ====================================\n`);
     
   } catch (error) {
     console.error('[RANKED REWARDS] ❌ Erreur globale lors de la distribution des récompenses:', error);
@@ -661,24 +618,15 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     }
 
     // Déterminer l'équipe de l'utilisateur
-    console.log('[GET Match] Looking for user:', user._id.toString());
-    console.log('[GET Match] Match players:', match.players.map(p => ({
-      username: p.username,
-      team: p.team,
-      isFake: p.isFake,
-      userId: p.user?._id?.toString() || p.user?.toString() || 'null'
-    })));
     
     const userPlayer = match.players.find(p => {
       const pUserId = p.user?._id?.toString() || p.user?.toString();
       const matches = pUserId === user._id.toString();
       if (matches) {
-        console.log('[GET Match] Found user player:', p.username, 'team:', p.team);
       }
       return matches;
     });
     const myTeam = userPlayer?.team || null;
-    console.log('[GET Match] Final myTeam:', myTeam);
 
     // Vérifier si l'utilisateur est référent
     const isReferent = 
@@ -873,7 +821,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       // Mettre à jour le vote existant
       match.result.playerVotes[existingVoteIndex].winner = winner;
       match.result.playerVotes[existingVoteIndex].votedAt = new Date();
-      console.log(`[RANKED] Player ${user.username} changed vote to Team ${winner}`);
     } else {
       // Ajouter un nouveau vote
       match.result.playerVotes.push({
@@ -881,7 +828,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
         winner,
         votedAt: new Date()
       });
-      console.log(`[RANKED] Player ${user.username} voted for Team ${winner}`);
     }
 
     // Calculer les votes - seuls les vrais joueurs comptent (pas les bots)
@@ -895,7 +841,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     // Seuil de 60% basé sur les vrais joueurs uniquement (pas les bots)
     const threshold = Math.ceil(totalRealPlayers * 0.6);
     
-    console.log(`[RANKED] Votes: Team1=${votesForTeam1}, Team2=${votesForTeam2}, Total=${totalVotes}/${totalRealPlayers} real players (${totalAllPlayers} total), Threshold=${threshold}`);
 
     let resultMessage = '';
     let matchCompleted = false;
@@ -911,8 +856,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       // Attribuer les récompenses aux joueurs
       await distributeRankedRewards(match);
       
-      console.log('[RANKED] \u2705 Match completed with 60%+ consensus for Team 1');
-      console.log(`[RANKED] Votes for Team 1: ${votesForTeam1}/${totalRealPlayers} (${Math.round(votesForTeam1/totalRealPlayers*100)}%)`);
       resultMessage = `Match valid\u00e9 ! L'\u00e9quipe 1 gagne avec ${votesForTeam1}/${totalRealPlayers} votes (${Math.round(votesForTeam1/totalRealPlayers*100)}%)`;
       matchCompleted = true;
             
@@ -930,8 +873,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       // Attribuer les récompenses aux joueurs
       await distributeRankedRewards(match);
       
-      console.log('[RANKED] \u2705 Match completed with 60%+ consensus for Team 2');
-      console.log(`[RANKED] Votes for Team 2: ${votesForTeam2}/${totalRealPlayers} (${Math.round(votesForTeam2/totalRealPlayers*100)}%)`);
       resultMessage = `Match valid\u00e9 ! L'\u00e9quipe 2 gagne avec ${votesForTeam2}/${totalRealPlayers} votes (${Math.round(votesForTeam2/totalRealPlayers*100)}%)`;
       matchCompleted = true;
             
@@ -942,7 +883,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     } else {
       // Pas encore de consensus
       resultMessage = `Vote enregistré. Équipe 1: ${votesForTeam1} votes, Équipe 2: ${votesForTeam2} votes. Il faut ${threshold} votes (60%) pour valider.`;
-      console.log(`[RANKED] No consensus yet. Need ${threshold} votes for 60%`);
     }
 
     await match.save();
@@ -956,13 +896,8 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       { path: 'result.playerVotes.user', select: 'username' }
     ]);
 
-    console.log('[RANKED] 🚀 Emitting rankedMatchUpdate...');
-    console.log('[RANKED] Match status:', match.status);
     if (matchCompleted) {
-      console.log('[RANKED] Result winner:', match.result?.winner);
-      console.log('[RANKED] All players rewards:');
       match.players.forEach((p, i) => {
-        console.log(`[RANKED]   Player ${i}: team=${p.team}, rewards=`, p.rewards);
       });
     }
 
@@ -970,7 +905,6 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
-      console.log('[RANKED] ✅ Event emitted to room: ranked-match-' + matchId);
     }
 
     res.json({ 
@@ -1108,7 +1042,6 @@ router.post('/:matchId/code', verifyToken, async (req, res) => {
         );
         
         if (boosterUpdateResult.modifiedCount > 0) {
-          console.log(`[RANKED MATCH] Set inMatch=true for ${boosterUpdateResult.modifiedCount} active boosters at match start`);
         }
       }
     }
@@ -1246,7 +1179,6 @@ router.post('/:matchId/cancellation/vote', verifyToken, async (req, res) => {
         message: `Match annulé par vote des joueurs (${currentVotes}/${realPlayers.length} votes)`
       });
 
-      console.log(`[RANKED CANCELLATION] Match ${matchId} cancelled by player vote (${currentVotes}/${requiredVotes} required)`);
     }
 
     await match.save();
@@ -1411,7 +1343,6 @@ router.post('/:matchId/call-arbitrator', verifyToken, async (req, res) => {
     try {
       const callerUser = await User.findById(userId).select('username');
       await logArbitratorCall(match, callerUser);
-      console.log(`[ARBITRATOR CALL] ${callerUsername} called arbitrator for match ${matchId}`);
     } catch (discordError) {
       console.error('Error sending Discord notification for arbitrator call:', discordError);
       // On ne fait pas échouer la requête si Discord échoue
@@ -1671,15 +1602,11 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
       return res.status(400).json({ success: false, message: 'Ce match est déjà annulé' });
     }
     
-    console.log(`[RANKED CANCEL] ====================================`);
-    console.log(`[RANKED CANCEL] Admin ${adminUser.username} annule le match ${matchId}`);
-    console.log(`[RANKED CANCEL] Status actuel: ${match.status}, GameMode: ${match.gameMode}, Mode: ${match.mode}`);
     
     let rewardsRefunded = false;
     
     // Si le match était complété avec un gagnant, rembourser les récompenses
     if (match.status === 'completed' && match.result?.winner) {
-      console.log(`[RANKED CANCEL] Match complété - Remboursement des récompenses...`);
       rewardsRefunded = true;
       
       const winningTeam = Number(match.result.winner);
@@ -1699,11 +1626,6 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
         const goldEarned = rewards.goldEarned || 0;
         const xpEarned = rewards.xpEarned || 0;
         
-        console.log(`[RANKED CANCEL] Remboursement joueur: ${username}`);
-        console.log(`[RANKED CANCEL]   └─ Points: ${pointsChange > 0 ? '+' : ''}${pointsChange} → retrait`);
-        console.log(`[RANKED CANCEL]   └─ Gold: +${goldEarned} → retrait`);
-        console.log(`[RANKED CANCEL]   └─ XP: +${xpEarned} → retrait`);
-        console.log(`[RANKED CANCEL]   └─ ${isWinner ? 'Victoire' : 'Défaite'} → retrait`);
         
         // Mettre à jour le Ranking (points du ladder classé + wins/losses)
         const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
@@ -1722,7 +1644,6 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
           }
           
           await ranking.save();
-          console.log(`[RANKED CANCEL]   └─ Ranking mis à jour: ${ranking.points} pts, ${ranking.wins}V/${ranking.losses}D`);
         }
         
         // Mettre à jour l'User (gold, XP, wins/losses par mode)
@@ -1745,11 +1666,9 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
           }
           
           await user.save();
-          console.log(`[RANKED CANCEL]   └─ User mis à jour: ${user.goldCoins} gold, ${user[statsField].xp} XP, ${user[statsField].wins}V/${user[statsField].losses}D`);
         }
       }
       
-      console.log(`[RANKED CANCEL] Remboursement terminé pour ${match.players.filter(p => !p.isFake && p.user).length} joueurs`);
     }
     
     match.status = 'cancelled';
@@ -1764,8 +1683,6 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
     
     await match.save();
     
-    console.log(`[RANKED CANCEL] Match annulé avec succès`);
-    console.log(`[RANKED CANCEL] ====================================`);
     
     // Notifier les joueurs
     const io = req.app.get('io');
@@ -1838,16 +1755,11 @@ router.post('/admin/:matchId/force-result', verifyToken, requireArbitre, async (
       { path: 'chat.user', select: 'username roles' }
     ]);
     
-    console.log('[RANKED] 🚀 Emitting rankedMatchUpdate with rewards...');
-    console.log('[RANKED] Match status:', match.status);
-    console.log('[RANKED] Winner:', match.result.winner);
-    console.log('[RANKED] Sample player rewards:', match.players[0]?.rewards);
     
     // Notifier les joueurs
     const io = req.app.get('io');
     if (io) {
       io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
-      console.log('[RANKED] ✅ Event emitted to room: ranked-match-' + matchId);
     }
     
     res.json({ success: true, message: 'Résultat forcé', match });
@@ -1910,16 +1822,11 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireArbitre, asyn
       { path: 'dispute.resolvedBy', select: 'username' }
     ]);
     
-    console.log('[RANKED] 🚀 Emitting rankedMatchUpdate with rewards (dispute resolved)...');
-    console.log('[RANKED] Match status:', match.status);
-    console.log('[RANKED] Winner:', match.result.winner);
-    console.log('[RANKED] Sample player rewards:', match.players[0]?.rewards);
     
     // Notifier les joueurs
     const io = req.app.get('io');
     if (io) {
       io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
-      console.log('[RANKED] ✅ Event emitted to room: ranked-match-' + matchId);
     }
     
     res.json({ success: true, message: 'Litige résolu', match });
@@ -1973,7 +1880,6 @@ router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, 
     
     await match.save();
     
-    console.log(`[RANKED ADMIN] Match ${matchId} status changed: ${oldStatus} → ${status}`);
     
     // Notifier les joueurs via socket
     const io = req.app.get('io');
@@ -2021,12 +1927,9 @@ router.post('/admin/:matchId/create-voice-channels', verifyToken, requireArbitre
       .filter(p => p.team === 2 && p.user?.discordId && !p.isFake)
       .map(p => p.user.discordId);
     
-    console.log(`[RANKED ADMIN] Creating voice channels for match ${matchId}`);
-    console.log(`[RANKED ADMIN] Team1 Discord IDs: ${team1DiscordIds.length}, Team2 Discord IDs: ${team2DiscordIds.length}`);
     
     // Supprimer les anciens salons vocaux s'ils existent
     if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
-      console.log(`[RANKED ADMIN] Deleting existing voice channels before creating new ones`);
       await deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId, { force: true });
     }
     
@@ -2045,8 +1948,6 @@ router.post('/admin/:matchId/create-voice-channels', verifyToken, requireArbitre
     match.team2VoiceChannel = voiceChannels.team2;
     await match.save();
     
-    console.log(`[RANKED ADMIN] ✅ Voice channels created for match ${matchId}`);
-    console.log(`[RANKED ADMIN] Team1: ${voiceChannels.team1.channelName}, Team2: ${voiceChannels.team2.channelName}`);
     
     // Notifier les joueurs via socket
     const io = req.app.get('io');
@@ -2080,13 +1981,9 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
     
-    console.log(`[RANKED DELETE] ====================================`);
-    console.log(`[RANKED DELETE] Admin ${adminUser.username} supprime le match ${matchId}`);
-    console.log(`[RANKED DELETE] Status: ${match.status}, GameMode: ${match.gameMode}, Mode: ${match.mode}`);
     
     // Si le match est complété, on doit rembourser les récompenses
     if (match.status === 'completed' && match.result?.winner) {
-      console.log(`[RANKED DELETE] Match complété - Remboursement des récompenses...`);
       
       const winningTeam = Number(match.result.winner);
       
@@ -2105,11 +2002,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
         const goldEarned = rewards.goldEarned || 0;
         const xpEarned = rewards.xpEarned || 0;
         
-        console.log(`[RANKED DELETE] Remboursement joueur: ${username}`);
-        console.log(`[RANKED DELETE]   └─ Points: ${pointsChange > 0 ? '+' : ''}${pointsChange} → retrait`);
-        console.log(`[RANKED DELETE]   └─ Gold: +${goldEarned} → retrait`);
-        console.log(`[RANKED DELETE]   └─ XP: +${xpEarned} → retrait`);
-        console.log(`[RANKED DELETE]   └─ ${isWinner ? 'Victoire' : 'Défaite'} → retrait`);
         
         // Mettre à jour le Ranking (points du ladder classé + wins/losses)
         const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
@@ -2129,7 +2021,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
           }
           
           await ranking.save();
-          console.log(`[RANKED DELETE]   └─ Ranking mis à jour: ${ranking.points} pts, ${ranking.wins}V/${ranking.losses}D`);
         }
         
         // Mettre à jour l'User (gold, XP, wins/losses par mode)
@@ -2153,13 +2044,10 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
           }
           
           await user.save();
-          console.log(`[RANKED DELETE]   └─ User mis à jour: ${user.goldCoins} gold, ${user[statsFieldDel].xp} XP, ${user[statsFieldDel].wins}V/${user[statsFieldDel].losses}D (${statsFieldDel})`);
         }
       }
       
-      console.log(`[RANKED DELETE] Remboursement terminé pour ${match.players.filter(p => !p.isFake && p.user).length} joueurs`);
     } else {
-      console.log(`[RANKED DELETE] Match non complété - Pas de remboursement nécessaire`);
     }
     
     // Supprimer les salons vocaux Discord si présents
@@ -2170,8 +2058,6 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
     // Supprimer le match
     await RankedMatch.findByIdAndDelete(matchId);
     
-    console.log(`[RANKED DELETE] Match supprimé avec succès`);
-    console.log(`[RANKED DELETE] ====================================`);
     
     // Notifier via socket si disponible
     const io = req.app.get('io');
@@ -2210,7 +2096,6 @@ router.get('/player-history/:playerId', async (req, res) => {
     const user = await User.findById(playerObjectId).select('statsResetAt');
     const statsResetAt = user?.statsResetAt || null;
 
-    console.log(`[PLAYER HISTORY] Recherche matchs pour joueur: ${playerId}, mode: ${mode || 'all'}, statsResetAt: ${statsResetAt}`);
 
     // Build query - filter out matches before stats reset if applicable
     const query = {
@@ -2235,7 +2120,6 @@ router.get('/player-history/:playerId', async (req, res) => {
       .sort({ completedAt: -1 })
       .limit(parseInt(limit));
     
-    console.log(`[PLAYER HISTORY] Trouvé ${matches.length} matchs pour le joueur ${playerId}`);
 
     // Transformer les données pour le frontend
     const formattedMatches = matches.map(match => {
@@ -2247,13 +2131,6 @@ router.get('/player-history/:playerId', async (req, res) => {
       });
       
       if (!playerInfo) {
-        console.log(`[PLAYER HISTORY] ⚠️ Match ${match._id}: Joueur ${playerId} non trouvé dans players malgré la requête!`);
-        console.log(`[PLAYER HISTORY]   Players dans ce match:`, match.players.map(p => ({
-          userId: p.user?._id?.toString() || p.user?.toString(),
-          username: p.username || p.user?.username,
-          team: p.team,
-          isFake: p.isFake
-        })));
       }
       
       const team1Players = match.players.filter(p => Number(p.team) === 1);
@@ -2271,7 +2148,6 @@ router.get('/player-history/:playerId', async (req, res) => {
                        !isNaN(winnerTeam) && 
                        playerTeam === winnerTeam;
       
-      console.log(`[PLAYER HISTORY] Match ${match._id}: playerTeam=${playerTeam}, winnerTeam=${winnerTeam}, isWinner=${isWinner}, rewards=${JSON.stringify(playerInfo?.rewards)}`);
       
       return {
         _id: match._id,

@@ -147,10 +147,8 @@ router.put('/admin/:memberId', verifyToken, requireAdmin, async (req, res) => {
 router.delete('/admin/:memberId', verifyToken, requireAdmin, async (req, res) => {
   try {
     const { memberId } = req.params;
-    console.log('[Team] Delete request for member:', memberId);
 
     const member = await TeamMember.findByIdAndDelete(memberId);
-    console.log('[Team] Delete result:', member ? 'Found and deleted' : 'Not found');
     
     if (!member) {
       return res.status(404).json({

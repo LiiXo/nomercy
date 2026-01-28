@@ -57,13 +57,10 @@ async function migrateMap(map) {
 
 async function runMigration() {
   try {
-    console.log('Connecting to MongoDB...');
     await mongoose.connect(MONGODB_URI);
-    console.log('Connected to MongoDB');
     
     // Get all maps
     const maps = await Map.find({});
-    console.log(`Found ${maps.length} maps to migrate`);
     
     let migratedCount = 0;
     let skippedCount = 0;
@@ -75,7 +72,6 @@ async function runMigration() {
         (map.cdlConfig?.ladder?.enabled || map.cdlConfig?.ranked?.enabled);
       
       if (alreadyMigrated) {
-        console.log(`Skipping ${map.name} - already migrated`);
         skippedCount++;
         continue;
       }
@@ -85,26 +81,16 @@ async function runMigration() {
       // Apply updates
       await Map.findByIdAndUpdate(map._id, { $set: updates });
       
-      console.log(`Migrated: ${map.name}`);
-      console.log(`  - Hardcore Ladder: ${updates.hardcoreConfig.ladder.enabled ? updates.hardcoreConfig.ladder.gameModes.join(', ') : 'disabled'}`);
-      console.log(`  - Hardcore Ranked: ${updates.hardcoreConfig.ranked.enabled ? updates.hardcoreConfig.ranked.gameModes.join(', ') : 'disabled'}`);
-      console.log(`  - CDL Ladder: ${updates.cdlConfig.ladder.enabled ? updates.cdlConfig.ladder.gameModes.join(', ') : 'disabled'}`);
-      console.log(`  - CDL Ranked: ${updates.cdlConfig.ranked.enabled ? updates.cdlConfig.ranked.gameModes.join(', ') : 'disabled'}`);
       
       migratedCount++;
     }
     
-    console.log('\n=== Migration Complete ===');
-    console.log(`Migrated: ${migratedCount} maps`);
-    console.log(`Skipped: ${skippedCount} maps (already migrated)`);
-    console.log(`Total: ${maps.length} maps`);
     
   } catch (error) {
     console.error('Migration error:', error);
     process.exit(1);
   } finally {
     await mongoose.disconnect();
-    console.log('Disconnected from MongoDB');
     process.exit(0);
   }
 }

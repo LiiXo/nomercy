@@ -65,7 +65,6 @@ const ONLINE_TIMEOUT = 60000; // 1 minute
 const strickerQueue = [];  // Array of { odId, odUsername, odPoints, odRank, odSquadId, odSquadName, joinedAt }
 const strickerOnlineUsers = {};  // { odId: timestamp }
 
-console.log('[STRICKER] Queue storage initialized');
 
 // Cleanup old online users
 setInterval(() => {
@@ -79,7 +78,6 @@ setInterval(() => {
     }
     keysToDelete.forEach(key => delete strickerOnlineUsers[key]);
     if (keysToDelete.length > 0) {
-      console.log(`[STRICKER] Cleaned up ${keysToDelete.length} inactive online users`);
     }
   } catch (err) {
     console.error('[STRICKER] Error cleaning up stricker online users:', err.message);
@@ -328,7 +326,6 @@ async function createStrickerMatch() {
       }
     }
     
-    console.log(`[STRICKER] Match créé: ${match._id}`);
     
     return match;
   } catch (error) {
@@ -687,7 +684,6 @@ async function distributeStrickerRewards(match) {
     match.markModified('players');
     await match.save();
     
-    console.log(`[STRICKER] Récompenses distribuées pour match ${match._id}`);
   } catch (error) {
     console.error('[STRICKER] Erreur distribution récompenses:', error);
   }

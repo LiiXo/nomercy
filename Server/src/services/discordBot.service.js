@@ -37,7 +37,6 @@ let summonCleanupInterval = null;
 export const setShuttingDown = (value) => {
   isShuttingDown = value;
   if (value) {
-    console.log('[Discord Bot] Server is shutting down - channel deletion disabled');
   }
 };
 
@@ -66,7 +65,6 @@ export const initDiscordBot = async () => {
   });
 
   client.once('ready', () => {
-    console.log(`[Discord Bot] ✓ Arbitrage bot connected as ${client.user.tag}`);
     isReady = true;
     
     // Start summon channel cleanup interval (runs every 24 hours)
@@ -76,7 +74,6 @@ export const initDiscordBot = async () => {
     // Run cleanup once at startup, then every 24 hours
     cleanupSummonChannels();
     summonCleanupInterval = setInterval(cleanupSummonChannels, 24 * 60 * 60 * 1000);
-    console.log('[Discord Bot] Summon channel cleanup scheduled (every 24h)');
   });
 
   client.on('error', (error) => {
@@ -98,11 +95,9 @@ const cleanupSummonChannels = async () => {
   if (!client || !isReady || isShuttingDown) return;
   
   try {
-    console.log('[Discord Bot] Starting 24h summon channel cleanup...');
     
     const category = await client.channels.fetch(SUPPORT_TICKET_CATEGORY_ID).catch(() => null);
     if (!category) {
-      console.log('[Discord Bot] Support-ticket category not found, skipping cleanup');
       return;
     }
     
@@ -110,11 +105,9 @@ const cleanupSummonChannels = async () => {
     const voiceChannels = category.children.cache.filter(ch => ch.type === 2); // 2 = GuildVoice
     
     if (voiceChannels.size === 0) {
-      console.log('[Discord Bot] No summon voice channels to clean up');
       return;
     }
     
-    console.log(`[Discord Bot] Found ${voiceChannels.size} summon voice channel(s) to delete`);
     
     let deleted = 0;
     for (const [, channel] of voiceChannels) {
@@ -129,13 +122,11 @@ const cleanupSummonChannels = async () => {
         }
         await channel.delete('Nettoyage automatique des convocations (24h)');
         deleted++;
-        console.log(`[Discord Bot] Deleted summon channel: ${channel.name}`);
       } catch (deleteError) {
         console.error(`[Discord Bot] Failed to delete channel ${channel.name}:`, deleteError.message);
       }
     }
     
-    console.log(`[Discord Bot] ✅ Summon cleanup complete: ${deleted}/${voiceChannels.size} channels deleted`);
   } catch (error) {
     console.error('[Discord Bot] Error during summon channel cleanup:', error.message);
   }
@@ -484,7 +475,6 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
   const matchIdStr = matchId?.toString() || matchId;
 
   try {
-    console.log(`[Discord Bot] Attempting to create voice channels for match ${matchIdStr} in category ${RANKED_VOICE_CATEGORY_ID}`);
     
     // Get the category
     const category = await client.channels.fetch(RANKED_VOICE_CATEGORY_ID);
@@ -524,7 +514,6 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
       reason: `Match classé ${matchIdStr} (${mode.toUpperCase()})`
     });
 
-    console.log(`[Discord Bot] Created voice channels for match ${matchIdStr}: #${matchCode} (open access, ${userLimit} users max, mode: ${mode})`)
 
     return {
       team1: { channelId: team1Channel.id, channelName: team1ChannelName },
@@ -544,7 +533,6 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
 export const deleteMatchVoiceChannels = async (team1ChannelId, team2ChannelId, options = {}) => {
   // Skip deletion during server shutdown/restart unless explicitly forced
   if (isShuttingDown && !options.force) {
-    console.log('[Discord Bot] Skipping channel deletion during server restart');
     return { skipped: true, reason: 'server_restart' };
   }
 
@@ -568,7 +556,6 @@ export const deleteMatchVoiceChannels = async (team1ChannelId, team2ChannelId, o
             }
           }
           await channel1.delete('Match terminé');
-          console.log(`[Discord Bot] Deleted voice channel ${team1ChannelId}`);
         }
       } catch (e) {
         console.warn(`[Discord Bot] Could not delete team 1 channel: ${e.message}`);
@@ -589,7 +576,6 @@ export const deleteMatchVoiceChannels = async (team1ChannelId, team2ChannelId, o
             }
           }
           await channel2.delete('Match terminé');
-          console.log(`[Discord Bot] Deleted voice channel ${team2ChannelId}`);
         }
       } catch (e) {
         console.warn(`[Discord Bot] Could not delete team 2 channel: ${e.message}`);
@@ -635,7 +621,6 @@ export const sendPlayerSummon = async (player, summonedBy, summonData) => {
     const now = new Date();
     const msUntilDeletion = deletionTime.getTime() - now.getTime();
     
-    console.log(`[Discord Bot] Summon scheduled - End time: ${timeEnd}, Deletion at: ${deletionTime.toLocaleString('fr-FR')} (in ${Math.round(msUntilDeletion / 1000)} seconds)`);
 
     // Create voice channel in Support-Ticket category
     let voiceChannel = null;
@@ -645,7 +630,6 @@ export const sendPlayerSummon = async (player, summonedBy, summonData) => {
         const guild = category.guild;
         const channelName = `\uD83D\uDCDE ${player.username || player.discordUsername}`;
         
-        console.log(`[Discord Bot] Creating voice channel in category: ${category.name} (${category.id})`);
         
         // Build permission overwrites
         const permissionOverwrites = [
@@ -690,10 +674,8 @@ export const sendPlayerSummon = async (player, summonedBy, summonData) => {
           permissionOverwrites: permissionOverwrites
         });
         
-        console.log(`[Discord Bot] Created summon voice channel: ${channelName} in ${category.name}`);
 
         // Voice channel will be cleaned up automatically every 24h
-        console.log(`[Discord Bot] Voice channel created - will be cleaned up in next 24h cycle`);
       }
     } catch (channelError) {
       console.error('[Discord Bot] Failed to create summon voice channel:', channelError.message);
@@ -731,7 +713,6 @@ A private voice channel has been created for you: **${voiceChannel.name}**`, inl
 
         // Send the DM
         await discordUser.send({ embeds: [embed] });
-        console.log(`[Discord Bot] Sent summon DM to ${player.username || player.discordUsername}`);
 
         // Log to admin channel
         const adminEmbed = new EmbedBuilder()

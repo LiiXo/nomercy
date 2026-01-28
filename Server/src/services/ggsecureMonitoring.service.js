@@ -21,7 +21,6 @@ let io = null;
  */
 export const initGGSecureMonitoring = (socketIo) => {
   io = socketIo;
-  console.log('[GGSecure Monitoring] Service initialized');
 };
 
 /**
@@ -134,7 +133,6 @@ const sendConnectionMessage = async (player, match, matchType, isConnected) => {
         ...(matchType === 'ladder' ? { squad: player.squad } : { team: player.team })
       });
 
-      console.log(`[GGSecure Monitoring] ${player.username} ${isConnected ? 'reconnected' : 'disconnected'} - ${matchType === 'ladder' ? 'Match' : 'Ranked Match'} ${match._id}`);
     }
 
     // Ajouter un message dans le chat du match (sans formatage, le frontend s'en chargera)
@@ -293,7 +291,6 @@ export const checkRankedMatchGGSecureStatus = async (match) => {
   }
   
   try {
-    console.log(`[GGSecure Monitoring] Immediate check for ranked match ${match._id}`);
     
     // Collecter tous les joueurs réels du match (non-fake)
     // La vérification de la plateforme PC est faite dans checkGGSecureStatus
@@ -317,7 +314,6 @@ export const checkRankedMatchGGSecureStatus = async (match) => {
       }
     }
     
-    console.log(`[GGSecure Monitoring] Checking ${realPlayers.length} real players in match ${match._id}`);
     
     // Vérifier le statut de chaque joueur réel
     // checkPlayerInMatch vérifiera si c'est un joueur PC via checkGGSecureStatus
@@ -346,7 +342,6 @@ export const startGGSecureMonitoring = () => {
   // Nettoyer les anciens statuts toutes les 10 minutes
   setInterval(cleanupOldStatuses, 10 * 60 * 1000);
 
-  console.log('[GGSecure Monitoring] Started - checking every 30 seconds');
   
   // Première vérification immédiate
   setTimeout(monitorAllMatches, 5000); // Attendre 5 secondes après le démarrage

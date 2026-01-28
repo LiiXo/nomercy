@@ -35,7 +35,6 @@ router.post('/admin/reset-all', verifyToken, requireAdmin, async (req, res) => {
       });
     }
     
-    console.log('🔥 Starting full system reset...');
     
     // Supprimer les salons vocaux Discord pour tous les matchs classés avant suppression
     const rankedMatchesWithVoice = await RankedMatch.find({
@@ -45,55 +44,41 @@ router.post('/admin/reset-all', verifyToken, requireAdmin, async (req, res) => {
       ]
     }).select('team1VoiceChannel team2VoiceChannel');
     
-    console.log(`🎙️ Suppression de ${rankedMatchesWithVoice.length} salons vocaux Discord...`);
     for (const match of rankedMatchesWithVoice) {
       if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
         await deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
       }
     }
-    console.log('✅ Salons vocaux Discord supprimés');
     
     // Delete ALL users including admins
     const deletedUsers = await User.deleteMany({});
-    console.log(`✅ Deleted ${deletedUsers.deletedCount} users (including admins)`);
     
     // Delete all squads
     const deletedSquads = await Squad.deleteMany({});
-    console.log(`✅ Deleted ${deletedSquads.deletedCount} squads`);
     
     // Delete all matches (both ladder and ranked)
     const deletedMatches = await Match.deleteMany({});
-    console.log(`✅ Deleted ${deletedMatches.deletedCount} ladder matches`);
     
     const deletedRankedMatches = await RankedMatch.deleteMany({});
-    console.log(`✅ Deleted ${deletedRankedMatches.deletedCount} ranked matches`);
     
     // Delete all rankings
     const deletedRankings = await Ranking.deleteMany({});
-    console.log(`✅ Deleted ${deletedRankings.deletedCount} rankings`);
     
     // Delete all hub posts
     const deletedHubPosts = await HubPost.deleteMany({});
-    console.log(`✅ Deleted ${deletedHubPosts.deletedCount} hub posts`);
     
     // Delete all announcements
     const deletedAnnouncements = await Announcement.deleteMany({});
-    console.log(`✅ Deleted ${deletedAnnouncements.deletedCount} announcements`);
     
     // Delete all purchases
     const deletedPurchases = await Purchase.deleteMany({});
-    console.log(`✅ Deleted ${deletedPurchases.deletedCount} purchases`);
     
     // Delete all item usages
     const deletedItemUsages = await ItemUsage.deleteMany({});
-    console.log(`✅ Deleted ${deletedItemUsages.deletedCount} item usages`);
     
     // Delete all seasons
     const deletedSeasons = await Season.deleteMany({});
-    console.log(`✅ Deleted ${deletedSeasons.deletedCount} seasons`);
     
-    console.log('✅ System reset completed successfully');
-    console.log('📋 Preserved: Game rules, Maps, Shop items, Trophies, Config');
     
     res.json({
       success: true,

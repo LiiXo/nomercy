@@ -111,7 +111,6 @@ const startServer = async () => {
 
   // Socket.io event handlers
   io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
     socketPages.set(socket.id, new Set());
     
     // Emit total online users count to all clients
@@ -129,7 +128,6 @@ const startServer = async () => {
         }
         userSockets.get(userId).add(socket.id);
         
-        console.log(`Socket ${socket.id} joined user room for user-${userId}`);
       }
     });
 
@@ -145,7 +143,6 @@ const startServer = async () => {
           }
         }
         
-        console.log(`Socket ${socket.id} left user room for user-${userId}`);
       }
     });
 
@@ -200,13 +197,11 @@ const startServer = async () => {
     socket.on('joinRankedMatch', (matchId) => {
       const roomName = `ranked-match-${matchId}`;
       socket.join(roomName);
-      console.log(`[Socket] ${socket.userId || socket.id} joined ranked match room: ${roomName}`);
     });
 
     socket.on('leaveRankedMatch', (matchId) => {
       const roomName = `ranked-match-${matchId}`;
       socket.leave(roomName);
-      console.log(`[Socket] ${socket.userId || socket.id} left ranked match room: ${roomName}`);
     });
 
     // Map vote for ranked matches
@@ -232,16 +227,13 @@ const startServer = async () => {
     // Ladder match rooms
     socket.on('joinMatch', (matchId) => {
       socket.join(`match-${matchId}`);
-      console.log(`Socket ${socket.id} joined match-${matchId}`);
     });
 
     socket.on('leaveMatch', (matchId) => {
       socket.leave(`match-${matchId}`);
-      console.log(`Socket ${socket.id} left match-${matchId}`);
     });
 
     socket.on('disconnect', () => {
-      console.log('Client disconnected:', socket.id);
       // Decrement viewer count for all pages this socket was in
       const pages = socketPages.get(socket.id);
       if (pages) {
@@ -284,14 +276,6 @@ const startServer = async () => {
   initGGSecureMonitoring(io);
 
   // Log config for debugging
-  console.log('=== Server Configuration ===');
-  console.log('PORT:', PORT);
-  console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓ Set' : '✗ Missing');
-  console.log('DISCORD_CLIENT_ID:', process.env.DISCORD_CLIENT_ID ? '✓ Set' : '✗ Missing');
-  console.log('DISCORD_CLIENT_SECRET:', process.env.DISCORD_CLIENT_SECRET ? '✓ Set' : '✗ Missing');
-  console.log('DISCORD_CALLBACK_URL:', process.env.DISCORD_CALLBACK_URL || '✗ Missing');
-  console.log('CLIENT_URL:', process.env.CLIENT_URL || 'http://localhost:5173');
-  console.log('============================');
 
   // Middleware
   app.use(cors({
@@ -302,7 +286,6 @@ const startServer = async () => {
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log('[CORS] Origine bloquée:', origin);
         callback(null, true); // Autoriser quand même pour éviter les erreurs
       }
     },
@@ -370,11 +353,8 @@ const startServer = async () => {
   // Connect to MongoDB and start server
   try {
     await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nomercy');
-    console.log('✓ Connected to MongoDB');
     
     httpServer.listen(PORT, () => {
-      console.log(`✓ Server running on http://localhost:${PORT}`);
-      console.log('✓ Socket.io enabled');
       
       // Job de nettoyage des matchs expirés - toutes les 5 minutes
       const cleanupExpiredMatches = async () => {
@@ -387,7 +367,6 @@ const startServer = async () => {
             { status: 'expired' }
           );
           if (result.modifiedCount > 0) {
-            console.log(`✓ ${result.modifiedCount} matchs expirés nettoyés`);
           }
         } catch (err) {
           console.error('Erreur nettoyage matchs:', err);
@@ -409,29 +388,24 @@ const startServer = async () => {
       
       // Graceful shutdown handler - preserve Discord voice channels on restart
       const gracefulShutdown = async (signal) => {
-        console.log(`\n[Server] Received ${signal}, starting graceful shutdown...`);
         
         // Mark as shutting down to prevent voice channel deletion
         setShuttingDown(true);
-        console.log('[Server] Voice channel protection enabled - channels will be preserved');
         
         // Wait a moment to ensure any in-flight requests complete
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Close HTTP server
         httpServer.close(() => {
-          console.log('[Server] HTTP server closed');
         });
         
         // Close MongoDB connection
         try {
           await mongoose.connection.close();
-          console.log('[Server] MongoDB connection closed');
         } catch (err) {
           console.error('[Server] Error closing MongoDB:', err);
         }
         
-        console.log('[Server] Graceful shutdown complete - voice channels preserved');
         process.exit(0);
       };
       
