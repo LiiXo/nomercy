@@ -13,7 +13,7 @@ import Announcement from '../models/Announcement.js';
 import AccountDeletion from '../models/AccountDeletion.js';
 import Ranking from '../models/Ranking.js';
 import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
-import { logPlayerBan, logPlayerUnban, logAdminAction, logPlayerWarn, logRankedBan, logRankedUnban, logReferentBan } from '../services/discordBot.service.js';
+import { logPlayerBan, logPlayerUnban, logAdminAction, logPlayerWarn, logRankedBan, logRankedUnban, logReferentBan, sendPlayerSummon } from '../services/discordBot.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1651,7 +1651,215 @@ router.put('/admin/:userId/referent-ban', verifyToken, requireArbitre, async (re
 router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req, res) => {
   try {
     const { userId } = req.params;
+    const { type, keepLosses, reduction, newPoints } = req.body;
     
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouv\u00e9.'
+      });
+    }
+
+    let message = '';
+    let logDescription = '';
+
+    switch (type) {
+      case 'general': {
+        // Reset general stats and delete match history
+        const Match = (await import('../models/Match.js')).default;
+        
+        const deleteResult = await Match.deleteMany({
+          $or: [
+            { 'challengerRoster.user': userId },
+            { 'opponentRoster.user': userId }
+          ]
+        });
+
+        // Reset user stats
+        const previousLosses = user.stats?.losses || 0;
+        user.stats = {
+          wins: 0,
+          losses: keepLosses ? previousLosses : 0,
+          points: 0,
+          rank: null
+        };
+        user.matchHistory = [];
+        await user.save();
+
+        message = `Stats g\u00e9n\u00e9rales r\u00e9initialis\u00e9es. ${deleteResult.deletedCount} match(s) supprim\u00e9(s).${keepLosses ? ' D\u00e9faites conserv\u00e9es.' : ''}`;
+        logDescription = `Reset stats g\u00e9n\u00e9ral${keepLosses ? ' (d\u00e9faites conserv\u00e9es)' : ''}`;
+        break;
+      }
+
+      case 'ranked': {
+        // Reset ranked stats in Ranking model
+        const Ranking = (await import('../models/Ranking.js')).default;
+        const RankedMatch = (await import('../models/RankedMatch.js')).default;
+        
+        // Get current losses if keeping them
+        const hardcoreRanking = await Ranking.findOne({ user: userId, mode: 'hardcore', season: 1 });
+        const cdlRanking = await Ranking.findOne({ user: userId, mode: 'cdl', season: 1 });
+        
+        const hardcoreLosses = hardcoreRanking?.losses || 0;
+        const cdlLosses = cdlRanking?.losses || 0;
+
+        // Reset rankings
+        await Ranking.updateMany(
+          { user: userId },
+          { 
+            $set: { 
+              wins: 0, 
+              losses: keepLosses ? undefined : 0,
+              points: 0 
+            } 
+          }
+        );
+
+        if (keepLosses) {
+          // Keep losses by not resetting them
+          if (hardcoreRanking) {
+            await Ranking.updateOne({ _id: hardcoreRanking._id }, { $set: { losses: hardcoreLosses } });
+          }
+          if (cdlRanking) {
+            await Ranking.updateOne({ _id: cdlRanking._id }, { $set: { losses: cdlLosses } });
+          }
+        }
+
+        // Delete ranked matches
+        const deleteResult = await RankedMatch.deleteMany({
+          $or: [
+            { 'team1.players.odId': user.discordId },
+            { 'team2.players.odId': user.discordId }
+          ]
+        });
+
+        // Reset mode-specific stats
+        user.statsHardcore = { ...user.statsHardcore, wins: 0, losses: keepLosses ? user.statsHardcore?.losses : 0, points: 0 };
+        user.statsCdl = { ...user.statsCdl, wins: 0, losses: keepLosses ? user.statsCdl?.losses : 0, points: 0 };
+        await user.save();
+
+        message = `Stats class\u00e9es r\u00e9initialis\u00e9es. ${deleteResult.deletedCount} match(s) supprim\u00e9(s).${keepLosses ? ' D\u00e9faites conserv\u00e9es.' : ''}`;
+        logDescription = `Reset mode class\u00e9${keepLosses ? ' (d\u00e9faites conserv\u00e9es)' : ''}`;
+        break;
+      }
+
+      case 'xp': {
+        // Reset or reduce XP
+        const previousHardcoreXP = user.statsHardcore?.xp || 0;
+        const previousCdlXP = user.statsCdl?.xp || 0;
+        
+        let newHardcoreXP, newCdlXP;
+        
+        if (reduction === 100) {
+          // Full reset to 0
+          newHardcoreXP = 0;
+          newCdlXP = 0;
+        } else {
+          // Reduce by percentage
+          newHardcoreXP = Math.round(previousHardcoreXP * (1 - reduction / 100));
+          newCdlXP = Math.round(previousCdlXP * (1 - reduction / 100));
+        }
+
+        user.statsHardcore = { ...user.statsHardcore, xp: newHardcoreXP };
+        user.statsCdl = { ...user.statsCdl, xp: newCdlXP };
+        await user.save();
+
+        message = reduction === 100 
+          ? 'XP r\u00e9initialis\u00e9 \u00e0 0 pour tous les modes.'
+          : `XP r\u00e9duit de ${reduction}%. Hardcore: ${previousHardcoreXP} \u2192 ${newHardcoreXP}, CDL: ${previousCdlXP} \u2192 ${newCdlXP}`;
+        logDescription = reduction === 100 ? 'Reset XP \u00e0 0' : `Retrait ${reduction}% XP`;
+        break;
+      }
+
+      case 'ranked-points': {
+        // Deduct ranked points
+        const Ranking = (await import('../models/Ranking.js')).default;
+        
+        // Get current rankings
+        const hardcoreRanking = await Ranking.findOne({ user: userId, mode: 'hardcore', season: 1 });
+        const cdlRanking = await Ranking.findOne({ user: userId, mode: 'cdl', season: 1 });
+        
+        const currentTotal = (hardcoreRanking?.points || 0) + (cdlRanking?.points || 0);
+        const pointsToRemove = currentTotal - newPoints;
+        
+        if (pointsToRemove <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Les nouveaux points doivent \u00eatre inf\u00e9rieurs aux points actuels.'
+          });
+        }
+
+        // Distribute the reduction proportionally
+        const hardcorePoints = hardcoreRanking?.points || 0;
+        const cdlPoints = cdlRanking?.points || 0;
+        
+        let newHardcorePoints, newCdlPoints;
+        
+        if (currentTotal > 0) {
+          // Proportional reduction
+          const hardcoreRatio = hardcorePoints / currentTotal;
+          newHardcorePoints = Math.round(newPoints * hardcoreRatio);
+          newCdlPoints = newPoints - newHardcorePoints;
+        } else {
+          newHardcorePoints = 0;
+          newCdlPoints = 0;
+        }
+
+        // Update rankings
+        if (hardcoreRanking) {
+          await Ranking.updateOne({ _id: hardcoreRanking._id }, { $set: { points: newHardcorePoints } });
+        }
+        if (cdlRanking) {
+          await Ranking.updateOne({ _id: cdlRanking._id }, { $set: { points: newCdlPoints } });
+        }
+
+        message = `Points class\u00e9s modifi\u00e9s: ${currentTotal} \u2192 ${newPoints} (-${pointsToRemove} pts)`;
+        logDescription = `Retrait ${pointsToRemove} points class\u00e9s`;
+        break;
+      }
+
+      default:
+        return res.status(400).json({
+          success: false,
+          message: 'Type de reset invalide.'
+        });
+    }
+
+    console.log(`[ADMIN] User ${user.username} (${userId}) - ${logDescription} by ${req.user._id}`);
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Reset Stats', user.username, {
+      description: logDescription
+    });
+
+    res.json({
+      success: true,
+      message
+    });
+  } catch (error) {
+    console.error('Reset user stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la r\u00e9initialisation.'
+    });
+  }
+});
+
+// Admin: Summon a user (send Discord notification and create voice channel)
+router.post('/admin/:userId/summon', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { date, timeStart, timeEnd, reason, summonedBy } = req.body;
+
+    // Validate required fields
+    if (!date || !timeStart || !timeEnd || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date, horaires et raison sont requis.'
+      });
+    }
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
@@ -1660,52 +1868,49 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
       });
     }
 
-    // Import Match model
-    const Match = (await import('../models/Match.js')).default;
+    // Get the admin/arbitre who is summoning
+    const summoner = summonedBy ? {
+      username: summonedBy.username,
+      discordUsername: summonedBy.username
+    } : req.user;
 
-    // Delete all matches where user is in challenger or opponent roster
-    const deleteResult = await Match.deleteMany({
-      $or: [
-        { 'challengerRoster.user': userId },
-        { 'opponentRoster.user': userId }
-      ]
+    // Send Discord notification and create voice channel
+    const result = await sendPlayerSummon(user, summoner, {
+      date,
+      timeStart,
+      timeEnd,
+      reason
     });
 
-    // Reset user stats
-    user.stats = {
-      wins: 0,
-      losses: 0,
-      points: 0,
-      rank: null
-    };
-
-    await user.save();
-
-    console.log(`[ADMIN] User ${user.username} (${userId}) stats reset by ${req.user._id}. ${deleteResult.deletedCount} matches deleted.`);
-
-    // Log to Discord
-    await logAdminAction(req.user, 'Reset Stats', user.username, {
-      description: 'Réinitialisation des stats et suppression de l\'historique',
-      fields: [
-        { name: 'Matchs supprimés', value: deleteResult.deletedCount.toString() }
-      ]
-    });
-
-    res.json({
-      success: true,
-      message: `Stats réinitialisées et ${deleteResult.deletedCount} match(s) supprimé(s).`,
-      matchesDeleted: deleteResult.deletedCount,
-      user: {
-        _id: user._id,
-        username: user.username,
-        stats: user.stats
+    if (result.success) {
+      console.log(`[ADMIN] User ${user.username} (${userId}) summoned by ${req.user.username || req.user._id}`);
+      
+      res.json({
+        success: true,
+        message: 'Convocation envoyée avec succès.',
+        voiceChannel: result.voiceChannel
+      });
+    } else {
+      // Partial success - voice channel created but DM failed
+      if (result.voiceChannel) {
+        res.json({
+          success: true,
+          message: 'Salon vocal créé mais le DM n\'a pas pu être envoyé (DMs fermés).',
+          voiceChannel: result.voiceChannel,
+          dmFailed: true
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: result.error || 'Erreur lors de l\'envoi de la convocation.'
+        });
       }
-    });
+    }
   } catch (error) {
-    console.error('Reset user stats error:', error);
+    console.error('Summon user error:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la réinitialisation.'
+      message: 'Erreur lors de l\'envoi de la convocation.'
     });
   }
 });

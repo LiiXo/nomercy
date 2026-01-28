@@ -41,6 +41,7 @@ import MyPurchases from './pages/MyPurchases';
 import GameModeRulesEditor from './components/GameModeRulesEditor';
 import RecentRankedMatches from './pages/RecentRankedMatches';
 import StrickerMode from './pages/StrickerMode';
+import Team from './pages/Team';
 
 // Loading component
 const LoadingScreen = () => (
@@ -481,6 +482,18 @@ function AppContent() {
               <ProtectedRoute>
                 <PageTransition>
                   <PrivacyPolicy />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Team Page */}
+          <Route 
+            path="/team" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <Team />
                 </PageTransition>
               </ProtectedRoute>
             } 

@@ -15,6 +15,9 @@ const ARBITRATOR_ROLE_ID = '1461108156913680647';
 // Voice channel category for ranked matches
 const RANKED_VOICE_CATEGORY_ID = '1460717958656688271';
 
+// Support ticket category for summons
+const SUPPORT_TICKET_CATEGORY_ID = '1447349602331398164';
+
 // Discord bot client
 let client = null;
 let isReady = false;
@@ -527,6 +530,237 @@ export const deleteMatchVoiceChannels = async (team1ChannelId, team2ChannelId, o
   }
 };
 
+/**
+ * Send a summon notification to a player via Discord DM and create a voice channel
+ * @param {Object} player - The player to summon (must have discordId)
+ * @param {Object} summonedBy - The admin/staff who is summoning
+ * @param {Object} summonData - { date, timeStart, timeEnd, reason }
+ * @returns {Object} - { success, voiceChannel, error }
+ */
+export const sendPlayerSummon = async (player, summonedBy, summonData) => {
+  if (!client || !isReady) {
+    console.warn('[Discord Bot] Bot not ready, skipping summon notification');
+    return { success: false, error: 'Bot not ready' };
+  }
+
+  if (!player.discordId) {
+    console.warn('[Discord Bot] Player has no Discord ID, cannot send summon');
+    return { success: false, error: 'Player has no Discord ID' };
+  }
+
+  const { date, timeStart, timeEnd, reason } = summonData;
+  const summonerName = summonedBy?.username || summonedBy?.discordUsername || 'Admin';
+
+  try {
+    // Format date for display
+    const dateObj = new Date(date + 'T00:00:00'); // Force local timezone
+    const dateFR = dateObj.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const dateEN = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Calculate deletion time (date + timeEnd + 30 seconds)
+    const [endHour, endMinute] = timeEnd.split(':').map(Number);
+    const [year, month, day] = date.split('-').map(Number);
+    const deletionTime = new Date(year, month - 1, day, endHour, endMinute, 30, 0); // 30 seconds after end time
+    
+    const now = new Date();
+    const msUntilDeletion = deletionTime.getTime() - now.getTime();
+    
+    console.log(`[Discord Bot] Summon scheduled - End time: ${timeEnd}, Deletion at: ${deletionTime.toLocaleString('fr-FR')} (in ${Math.round(msUntilDeletion / 1000)} seconds)`);
+
+    // Create voice channel in Support-Ticket category
+    let voiceChannel = null;
+    try {
+      const category = await client.channels.fetch(SUPPORT_TICKET_CATEGORY_ID);
+      if (category) {
+        const guild = category.guild;
+        const channelName = `\uD83D\uDCDE ${player.username || player.discordUsername}`;
+        
+        console.log(`[Discord Bot] Creating voice channel in category: ${category.name} (${category.id})`);
+        
+        // Build permission overwrites
+        const permissionOverwrites = [
+          {
+            // Deny everyone from joining
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel]
+          },
+          {
+            // Allow the summoned player to join and see (using Discord ID directly)
+            id: player.discordId,
+            type: 1, // 1 = member
+            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak]
+          },
+          {
+            // Allow admins (role ID for admin)
+            id: '1450169699710144644',
+            type: 0, // 0 = role
+            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak, PermissionFlagsBits.MoveMembers]
+          },
+          {
+            // Allow staff (role ID for staff)
+            id: '1450169557451935784',
+            type: 0, // 0 = role
+            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak, PermissionFlagsBits.MoveMembers]
+          },
+          {
+            // Allow arbitres (role ID for arbitre)
+            id: '1461108156913680647',
+            type: 0, // 0 = role
+            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Speak, PermissionFlagsBits.MoveMembers]
+          }
+        ];
+        
+        // Create channel with restricted permissions
+        voiceChannel = await guild.channels.create({
+          name: channelName,
+          type: ChannelType.GuildVoice,
+          parent: category,
+          userLimit: 2,
+          reason: `Convocation de ${player.username || player.discordUsername} par ${summonerName}`,
+          permissionOverwrites: permissionOverwrites
+        });
+        
+        console.log(`[Discord Bot] Created summon voice channel: ${channelName} in ${category.name}`);
+
+        // Schedule auto-deletion 30 seconds after end time
+        const deleteChannel = async () => {
+          console.log(`[Discord Bot] Attempting to delete summon channel: ${voiceChannel.id}`);
+          try {
+            const channelToDelete = await client.channels.fetch(voiceChannel.id).catch(() => null);
+            if (channelToDelete) {
+              // Disconnect all members first
+              for (const [, member] of channelToDelete.members) {
+                try {
+                  await member.voice.disconnect('Convocation termin\u00e9e');
+                } catch (e) {
+                  console.warn(`[Discord Bot] Could not disconnect member: ${e.message}`);
+                }
+              }
+              await channelToDelete.delete('Convocation termin\u00e9e - suppression automatique');
+              console.log(`[Discord Bot] Successfully deleted summon voice channel: ${channelName}`);
+            } else {
+              console.log(`[Discord Bot] Channel ${voiceChannel.id} already deleted or not found`);
+            }
+          } catch (deleteError) {
+            console.error('[Discord Bot] Failed to auto-delete summon channel:', deleteError.message);
+          }
+        };
+
+        if (msUntilDeletion > 0) {
+          console.log(`[Discord Bot] Scheduling deletion in ${Math.round(msUntilDeletion / 1000)} seconds`);
+          setTimeout(deleteChannel, msUntilDeletion);
+        } else {
+          // If the time has already passed, delete after 30 seconds from now
+          console.log(`[Discord Bot] End time passed, scheduling deletion in 30 seconds`);
+          setTimeout(deleteChannel, 30 * 1000);
+        }
+      }
+    } catch (channelError) {
+      console.error('[Discord Bot] Failed to create summon voice channel:', channelError.message);
+    }
+
+    // Get Discord user and send DM
+    try {
+      const discordUser = await client.users.fetch(player.discordId);
+      
+      if (discordUser) {
+        // Create the embed for the DM
+        const embed = new EmbedBuilder()
+          .setColor(0x3498DB) // Blue
+          .setTitle('\uD83D\uDCE2 CONVOCATION / SUMMON')
+          .setDescription('Vous \u00eates convoqu\u00e9(e) par l\'\u00e9quipe NoMercy.\nYou have been summoned by the NoMercy team.')
+          .addFields(
+            { name: '\uD83C\uDDEB\uD83C\uDDF7 Message', value: `Vous \u00eates convoqu\u00e9(e) par **${summonerName}** le **${dateFR}** entre **${timeStart}** et **${timeEnd}**.\n\n**Raison:** ${reason}`, inline: false },
+            { name: '\uD83C\uDDEC\uD83C\uDDE7 Message', value: `You are summoned by **${summonerName}** on **${dateEN}** between **${timeStart}** and **${timeEnd}**.\n\n**Reason:** ${reason}`, inline: false }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'NoMercy - Arbitrage' });
+
+        // Add voice channel info and instructions
+        if (voiceChannel) {
+          embed.addFields(
+            { name: '\uD83D\uDCCD O\u00f9 se rendre / Where to go', value: `**Serveur Discord NoMercy** \u2192 Cat\u00e9gorie **Support-Ticket**\n**NoMercy Discord Server** \u2192 **Support-Ticket** category`, inline: false },
+            { name: '\uD83C\uDFA4 Salon vocal / Voice channel', value: `Un salon vocal priv\u00e9 a \u00e9t\u00e9 cr\u00e9\u00e9 pour vous: **${voiceChannel.name}**
+A private voice channel has been created for you: **${voiceChannel.name}**
+
+\u26A0\uFE0F _Ce salon sera supprim\u00e9 automatiquement 5 min apr\u00e8s l'heure de convocation._
+\u26A0\uFE0F _This channel will be automatically deleted 5 min after the summon time._`, inline: false }
+          );
+        } else {
+          embed.addFields(
+            { name: '\uD83D\uDCCD O\u00f9 se rendre / Where to go', value: `**Serveur Discord NoMercy** \u2192 Cat\u00e9gorie **Support-Ticket**\n**NoMercy Discord Server** \u2192 **Support-Ticket** category`, inline: false }
+          );
+        }
+
+        // Send the DM
+        await discordUser.send({ embeds: [embed] });
+        console.log(`[Discord Bot] Sent summon DM to ${player.username || player.discordUsername}`);
+
+        // Log to admin channel
+        const adminEmbed = new EmbedBuilder()
+          .setColor(0x3498DB)
+          .setTitle('\uD83D\uDCE2 CONVOCATION ENVOY\u00c9E')
+          .setThumbnail(getPlayerAvatarUrl(player))
+          .addFields(
+            { name: '\uD83D\uDC64 Joueur', value: player.username || player.discordUsername || 'N/A', inline: true },
+            { name: '\uD83D\uDC6E Convoqu\u00e9 par', value: summonerName, inline: true },
+            { name: '\uD83D\uDCC5 Date', value: dateFR, inline: true },
+            { name: '\u23F0 Horaire', value: `${timeStart} - ${timeEnd}`, inline: true },
+            { name: '\uD83D\uDCDD Raison', value: reason, inline: false }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'NoMercy Arbitrage' });
+
+        if (voiceChannel) {
+          adminEmbed.addFields(
+            { name: '\uD83C\uDFA4 Salon vocal', value: `${voiceChannel.name} (suppression auto: ${deletionTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})`, inline: true }
+          );
+        }
+
+        await sendToChannel(ADMIN_LOG_CHANNEL_ID, { embeds: [adminEmbed] });
+
+        return {
+          success: true,
+          voiceChannel: voiceChannel ? { channelId: voiceChannel.id, channelName: voiceChannel.name } : null
+        };
+      }
+    } catch (dmError) {
+      console.error('[Discord Bot] Failed to send summon DM:', dmError.message);
+      
+      // Still log to admin channel even if DM failed
+      const errorEmbed = new EmbedBuilder()
+        .setColor(0xFF0000)
+        .setTitle('\u26A0\uFE0F CONVOCATION - DM \u00c9CHOU\u00c9')
+        .setDescription(`Impossible d'envoyer le DM \u00e0 **${player.username || player.discordUsername}** (DMs ferm\u00e9s ou utilisateur introuvable)`)
+        .addFields(
+          { name: '\uD83D\uDC6E Convoqu\u00e9 par', value: summonerName, inline: true },
+          { name: '\uD83D\uDCC5 Date', value: dateFR, inline: true },
+          { name: '\u23F0 Horaire', value: `${timeStart} - ${timeEnd}`, inline: true }
+        )
+        .setTimestamp();
+
+      if (voiceChannel) {
+        errorEmbed.addFields(
+          { name: '\uD83C\uDFA4 Salon vocal', value: `${voiceChannel.name} (cr\u00e9\u00e9 malgr\u00e9 l'\u00e9chec du DM)`, inline: true }
+        );
+      }
+
+      await sendToChannel(ADMIN_LOG_CHANNEL_ID, { embeds: [errorEmbed] });
+
+      return {
+        success: false,
+        error: 'Failed to send DM (user may have DMs disabled)',
+        voiceChannel: voiceChannel ? { channelId: voiceChannel.id, channelName: voiceChannel.name } : null
+      };
+    }
+
+    return { success: false, error: 'Could not fetch Discord user' };
+  } catch (error) {
+    console.error('[Discord Bot] Error sending summon:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -541,5 +775,6 @@ export default {
   createMatchVoiceChannels,
   deleteMatchVoiceChannels,
   setShuttingDown,
-  getShuttingDown
+  getShuttingDown,
+  sendPlayerSummon
 };

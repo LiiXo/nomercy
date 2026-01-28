@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { Zap, Shield, ExternalLink, Settings, Skull, Crosshair, Users, MessageSquare, BookOpen } from 'lucide-react';
+import { Zap, Shield, ExternalLink, Settings, Skull, Crosshair, Users, MessageSquare, BookOpen, Gamepad2, Heart } from 'lucide-react';
 
 const Footer = () => {
   const { t, language } = useLanguage();
@@ -17,6 +17,9 @@ const Footer = () => {
     { label: t('home'), href: '/', icon: <Zap className="w-3.5 h-3.5" /> },
     { label: t('rankedMode'), href: `/${selectedMode}/ranked`, icon: <Crosshair className="w-3.5 h-3.5" /> },
   ];
+
+  // Staff-only links
+  const showStrickerLink = isAuthenticated && user && (hasAdminAccess?.() || isStaff?.() || isArbitre?.());
 
   const supportLinks = [
     { label: t('rules'), href: '/rules', icon: <BookOpen className="w-3.5 h-3.5" />, isLink: true },
@@ -100,6 +103,34 @@ const Footer = () => {
                   </Link>
                 </li>
               ))}
+              {showStrickerLink && (
+                <li>
+                  <Link
+                    to="/stricker"
+                    className={`text-sm text-gray-400 hover:text-white transition-all flex items-center gap-3 group hover:translate-x-1`}
+                  >
+                    <span className={`transition-colors ${
+                      isHardcore ? 'text-neon-red/50 group-hover:text-neon-red' : 'text-accent-500/50 group-hover:text-accent-500'
+                    }`}>
+                      <Gamepad2 className="w-3.5 h-3.5" />
+                    </span>
+                    <span>Stricker</span>
+                  </Link>
+                </li>
+              )}
+              <li>
+                <Link
+                  to="/team"
+                  className={`text-sm text-gray-400 hover:text-white transition-all flex items-center gap-3 group hover:translate-x-1`}
+                >
+                  <span className={`transition-colors ${
+                    isHardcore ? 'text-neon-red/50 group-hover:text-neon-red' : 'text-accent-500/50 group-hover:text-accent-500'
+                  }`}>
+                    <Heart className="w-3.5 h-3.5" />
+                  </span>
+                  <span>{language === 'fr' ? "L'Équipe" : 'The Team'}</span>
+                </Link>
+              </li>
             </ul>
           </div>
 

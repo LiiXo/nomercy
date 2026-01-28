@@ -8,6 +8,7 @@ import AdminOverview from '../components/admin/AdminOverview';
 import AdminUsers from '../components/admin/AdminUsers';
 import AdminSquads from '../components/admin/AdminSquads';
 import AdminApplication from '../components/admin/AdminApplication';
+import AdminTeam from '../components/admin/AdminTeam';
 import { 
   ArrowLeft, Shield, Package, Users, BarChart3, Plus, Edit2, Trash2, 
   Save, X, Loader2, Search, ChevronDown, Eye, EyeOff, Coins, TrendingUp, TrendingDown,
@@ -16,7 +17,7 @@ import {
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
-  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History
+  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -300,6 +301,7 @@ const AdminPanel = () => {
       adminOnly: true,
       tabs: [
         { id: 'application', label: 'Application', icon: Power, adminOnly: true, arbitreAccess: false },
+        { id: 'team', label: 'Équipe', icon: Heart, adminOnly: true, arbitreAccess: false },
         { id: 'config', label: 'Config', icon: Settings, adminOnly: true, arbitreAccess: false },
         { id: 'seasons', label: 'Saisons', icon: Calendar, adminOnly: true, arbitreAccess: false },
         { id: 'system', label: 'Système', icon: Database, adminOnly: true, arbitreAccess: false },
@@ -8186,8 +8188,7 @@ Cette action est irréversible!`)) {
             userIsAdmin={userIsAdmin}
             openUserPurchasesModal={openUserPurchasesModal}
             openGiveItemModal={openGiveItemModal}
-            handleTestTrophyDistribution={handleTestTrophyDistribution}
-            testTrophyLoading={testTrophyLoading}
+            currentUser={user}
           />
         );
       case 'squads':
@@ -8234,6 +8235,8 @@ Cette action est irréversible!`)) {
             setError={setError}
           />
         );
+      case 'team':
+        return <AdminTeam />;
       case 'config':
         return renderConfig();
       case 'seasons':
