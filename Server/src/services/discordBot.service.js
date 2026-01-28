@@ -25,6 +25,12 @@ let isReady = false;
 // Flag to prevent channel deletion during server restart
 let isShuttingDown = false;
 
+// Map to track pending summon channel deletions { channelId: { deletionTime: Date, channelName: string } }
+// Summon channels are cleaned up every 24 hours automatically
+
+// Cleanup interval for summon channels
+let summonCleanupInterval = null;
+
 /**
  * Set the shutting down flag to prevent channel deletion during restart
  */
@@ -62,6 +68,15 @@ export const initDiscordBot = async () => {
   client.once('ready', () => {
     console.log(`[Discord Bot] ✓ Arbitrage bot connected as ${client.user.tag}`);
     isReady = true;
+    
+    // Start summon channel cleanup interval (runs every 24 hours)
+    if (summonCleanupInterval) {
+      clearInterval(summonCleanupInterval);
+    }
+    // Run cleanup once at startup, then every 24 hours
+    cleanupSummonChannels();
+    summonCleanupInterval = setInterval(cleanupSummonChannels, 24 * 60 * 60 * 1000);
+    console.log('[Discord Bot] Summon channel cleanup scheduled (every 24h)');
   });
 
   client.on('error', (error) => {
@@ -72,6 +87,57 @@ export const initDiscordBot = async () => {
     await client.login(token);
   } catch (error) {
     console.error('[Discord Bot] Failed to login:', error.message);
+  }
+};
+
+/**
+ * Cleanup expired summon channels
+ */
+// Cleanup all summon voice channels in the support-ticket category (runs every 24h)
+const cleanupSummonChannels = async () => {
+  if (!client || !isReady || isShuttingDown) return;
+  
+  try {
+    console.log('[Discord Bot] Starting 24h summon channel cleanup...');
+    
+    const category = await client.channels.fetch(SUPPORT_TICKET_CATEGORY_ID).catch(() => null);
+    if (!category) {
+      console.log('[Discord Bot] Support-ticket category not found, skipping cleanup');
+      return;
+    }
+    
+    // Get all voice channels in the category
+    const voiceChannels = category.children.cache.filter(ch => ch.type === 2); // 2 = GuildVoice
+    
+    if (voiceChannels.size === 0) {
+      console.log('[Discord Bot] No summon voice channels to clean up');
+      return;
+    }
+    
+    console.log(`[Discord Bot] Found ${voiceChannels.size} summon voice channel(s) to delete`);
+    
+    let deleted = 0;
+    for (const [, channel] of voiceChannels) {
+      try {
+        // Disconnect all members first
+        for (const [, member] of channel.members) {
+          try {
+            await member.voice.disconnect('Nettoyage automatique des convocations');
+          } catch (e) {
+            console.warn(`[Discord Bot] Could not disconnect member: ${e.message}`);
+          }
+        }
+        await channel.delete('Nettoyage automatique des convocations (24h)');
+        deleted++;
+        console.log(`[Discord Bot] Deleted summon channel: ${channel.name}`);
+      } catch (deleteError) {
+        console.error(`[Discord Bot] Failed to delete channel ${channel.name}:`, deleteError.message);
+      }
+    }
+    
+    console.log(`[Discord Bot] ✅ Summon cleanup complete: ${deleted}/${voiceChannels.size} channels deleted`);
+  } catch (error) {
+    console.error('[Discord Bot] Error during summon channel cleanup:', error.message);
   }
 };
 
@@ -622,38 +688,8 @@ export const sendPlayerSummon = async (player, summonedBy, summonData) => {
         
         console.log(`[Discord Bot] Created summon voice channel: ${channelName} in ${category.name}`);
 
-        // Schedule auto-deletion 30 seconds after end time
-        const deleteChannel = async () => {
-          console.log(`[Discord Bot] Attempting to delete summon channel: ${voiceChannel.id}`);
-          try {
-            const channelToDelete = await client.channels.fetch(voiceChannel.id).catch(() => null);
-            if (channelToDelete) {
-              // Disconnect all members first
-              for (const [, member] of channelToDelete.members) {
-                try {
-                  await member.voice.disconnect('Convocation termin\u00e9e');
-                } catch (e) {
-                  console.warn(`[Discord Bot] Could not disconnect member: ${e.message}`);
-                }
-              }
-              await channelToDelete.delete('Convocation termin\u00e9e - suppression automatique');
-              console.log(`[Discord Bot] Successfully deleted summon voice channel: ${channelName}`);
-            } else {
-              console.log(`[Discord Bot] Channel ${voiceChannel.id} already deleted or not found`);
-            }
-          } catch (deleteError) {
-            console.error('[Discord Bot] Failed to auto-delete summon channel:', deleteError.message);
-          }
-        };
-
-        if (msUntilDeletion > 0) {
-          console.log(`[Discord Bot] Scheduling deletion in ${Math.round(msUntilDeletion / 1000)} seconds`);
-          setTimeout(deleteChannel, msUntilDeletion);
-        } else {
-          // If the time has already passed, delete after 30 seconds from now
-          console.log(`[Discord Bot] End time passed, scheduling deletion in 30 seconds`);
-          setTimeout(deleteChannel, 30 * 1000);
-        }
+        // Voice channel will be cleaned up automatically every 24h
+        console.log(`[Discord Bot] Voice channel created - will be cleaned up in next 24h cycle`);
       }
     } catch (channelError) {
       console.error('[Discord Bot] Failed to create summon voice channel:', channelError.message);
@@ -680,11 +716,8 @@ export const sendPlayerSummon = async (player, summonedBy, summonData) => {
         if (voiceChannel) {
           embed.addFields(
             { name: '\uD83D\uDCCD O\u00f9 se rendre / Where to go', value: `**Serveur Discord NoMercy** \u2192 Cat\u00e9gorie **Support-Ticket**\n**NoMercy Discord Server** \u2192 **Support-Ticket** category`, inline: false },
-            { name: '\uD83C\uDFA4 Salon vocal / Voice channel', value: `Un salon vocal priv\u00e9 a \u00e9t\u00e9 cr\u00e9\u00e9 pour vous: **${voiceChannel.name}**
-A private voice channel has been created for you: **${voiceChannel.name}**
-
-\u26A0\uFE0F _Ce salon sera supprim\u00e9 automatiquement 5 min apr\u00e8s l'heure de convocation._
-\u26A0\uFE0F _This channel will be automatically deleted 5 min after the summon time._`, inline: false }
+            { name: '\uD83C\uDFA4 Salon vocal / Voice channel', value: `Un salon vocal privé a été créé pour vous: **${voiceChannel.name}**
+A private voice channel has been created for you: **${voiceChannel.name}**`, inline: false }
           );
         } else {
           embed.addFields(

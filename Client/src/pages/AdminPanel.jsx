@@ -354,7 +354,11 @@ const AdminPanel = () => {
   const [warnData, setWarnData] = useState({
     userId: null,
     username: '',
-    reason: ''
+    reason: '',
+    isAbandonWarn: false,
+    recentMatches: [],
+    selectedMatchId: null,
+    loadingMatches: false
   });
 
   // Ranked ban modal state
@@ -1650,12 +1654,35 @@ const AdminPanel = () => {
     }
   };
 
+  // Fetch user's recent ranked matches for abandonment warning
+  const fetchUserRecentMatches = async (userId) => {
+    setWarnData(prev => ({ ...prev, loadingMatches: true }));
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/player-history/${userId}?limit=5`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setWarnData(prev => ({ ...prev, recentMatches: data.matches || [], loadingMatches: false }));
+      } else {
+        setWarnData(prev => ({ ...prev, recentMatches: [], loadingMatches: false }));
+      }
+    } catch (err) {
+      console.error('Fetch recent matches error:', err);
+      setWarnData(prev => ({ ...prev, recentMatches: [], loadingMatches: false }));
+    }
+  };
+
   // Open warn modal
   const openWarnModal = (user) => {
     setWarnData({
       userId: user._id,
       username: user.username,
-      reason: ''
+      reason: '',
+      isAbandonWarn: false,
+      recentMatches: [],
+      selectedMatchId: null,
+      loadingMatches: false
     });
     setShowWarnModal(true);
   };
@@ -1667,18 +1694,37 @@ const AdminPanel = () => {
       return;
     }
 
+    // Validation for abandonment warning
+    if (warnData.isAbandonWarn && !warnData.selectedMatchId) {
+      setError('Veuillez sélectionner le match abandonné');
+      return;
+    }
+
     try {
+      const body = {
+        reason: warnData.reason,
+        isAbandonWarn: warnData.isAbandonWarn,
+        abandonedMatchId: warnData.isAbandonWarn ? warnData.selectedMatchId : null
+      };
+
       const response = await fetch(`${API_URL}/users/admin/${warnData.userId}/warn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ reason: warnData.reason })
+        body: JSON.stringify(body)
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(`${warnData.username} a reçu un avertissement (Total: ${data.warnCount})`);
+        let successMsg = `${warnData.username} a reçu un avertissement (Total: ${data.warnCount})`;
+        if (warnData.isAbandonWarn) {
+          successMsg += ` - Pénalité abandon: -60 pts`;
+          if (data.abandonmentProcessed) {
+            successMsg += `, Défaite annulée pour ${data.teammatesRefunded || 0} coéquipier(s)`;
+          }
+        }
+        setSuccess(successMsg);
         setShowWarnModal(false);
         fetchUsers();
       } else {
@@ -8600,7 +8646,7 @@ Cette action est irréversible!`)) {
       {showWarnModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowWarnModal(false)}></div>
-          <div className="relative bg-dark-900 border-t sm:border border-orange-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+          <div className="relative bg-dark-900 border-t sm:border border-orange-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto">
             <div className="flex items-center gap-3 mb-4 sm:mb-6">
               <div className="p-2 sm:p-3 bg-orange-500/20 rounded-xl">
                 <AlertTriangle className="w-5 sm:w-6 h-5 sm:h-6 text-orange-400" />
@@ -8617,12 +8663,124 @@ Cette action est irréversible!`)) {
                 <textarea
                   value={warnData.reason}
                   onChange={(e) => setWarnData({ ...warnData, reason: e.target.value })}
-                  placeholder="Ex: Comportement inapproprié, propos offensants, etc."
+                  placeholder="Ex: Comportement inapproprié, propos offensants, abandon de match, etc."
                   className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50 resize-none"
                   rows={3}
                   required
                 />
               </div>
+
+              {/* Abandon Warning Checkbox */}
+              <div className="flex items-center gap-3 p-4 bg-dark-800/50 border border-white/10 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="abandonWarn"
+                  checked={warnData.isAbandonWarn}
+                  onChange={(e) => {
+                    const isChecked = e.target.checked;
+                    setWarnData({ ...warnData, isAbandonWarn: isChecked, selectedMatchId: null });
+                    if (isChecked && warnData.recentMatches.length === 0) {
+                      fetchUserRecentMatches(warnData.userId);
+                    }
+                  }}
+                  className="w-5 h-5 rounded border-white/20 bg-dark-700 text-purple-500 focus:ring-purple-500 focus:ring-offset-0"
+                />
+                <label htmlFor="abandonWarn" className="flex-1 cursor-pointer">
+                  <span className="text-white font-medium">Warn pour abandon</span>
+                  <p className="text-gray-400 text-xs mt-0.5">Annule la défaite pour les coéquipiers si le match était perdu</p>
+                </label>
+              </div>
+
+              {/* Match Selection (shown when abandon checkbox is checked) */}
+              {warnData.isAbandonWarn && (
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Sélectionner le match abandonné *
+                  </label>
+                  
+                  {warnData.loadingMatches ? (
+                    <div className="flex items-center justify-center py-6">
+                      <Loader2 className="w-6 h-6 animate-spin text-purple-500" />
+                      <span className="ml-2 text-gray-400">Chargement des matchs...</span>
+                    </div>
+                  ) : warnData.recentMatches.length === 0 ? (
+                    <div className="p-4 bg-dark-800 rounded-xl text-center">
+                      <p className="text-gray-400">Aucun match classé récent trouvé</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {warnData.recentMatches.map((match) => {
+                        const isSelected = warnData.selectedMatchId === match._id;
+                        const isLoss = !match.isWinner;
+                        const matchDate = new Date(match.completedAt || match.createdAt);
+                        
+                        return (
+                          <div
+                            key={match._id}
+                            onClick={() => setWarnData({ ...warnData, selectedMatchId: match._id })}
+                            className={`p-3 rounded-xl cursor-pointer transition-all border-2 ${
+                              isSelected 
+                                ? 'border-purple-500 bg-purple-500/20' 
+                                : 'border-transparent bg-dark-800 hover:bg-dark-700'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-3 h-3 rounded-full ${isLoss ? 'bg-red-500' : 'bg-green-500'}`} />
+                                <div>
+                                  <p className="text-white font-medium text-sm">
+                                    {match.gameMode} ({match.teamSize}v{match.teamSize})
+                                  </p>
+                                  <p className="text-gray-400 text-xs">
+                                    {match.mode === 'cdl' ? 'CDL' : 'Hardcore'} • {matchDate.toLocaleDateString('fr-FR')} {matchDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                                  isLoss 
+                                    ? 'bg-red-500/20 text-red-400' 
+                                    : 'bg-green-500/20 text-green-400'
+                                }`}>
+                                  {isLoss ? 'Défaite' : 'Victoire'}
+                                </span>
+                                {isSelected && (
+                                  <CheckCircle className="w-5 h-5 text-purple-400" />
+                                )}
+                              </div>
+                            </div>
+                            {/* Show teams */}
+                            <div className="mt-2 pt-2 border-t border-white/10 grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-gray-500">Equipe 1:</span>
+                                <p className="text-gray-300 truncate">
+                                  {match.team1?.map(p => p.username).join(', ') || 'N/A'}
+                                </p>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">Equipe 2:</span>
+                                <p className="text-gray-300 truncate">
+                                  {match.team2?.map(p => p.username).join(', ') || 'N/A'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {warnData.selectedMatchId && (
+                    <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                      <p className="text-purple-400 text-sm">
+                        <strong>Pénalité abandon :</strong> Le joueur perdra <span className="text-red-400 font-bold">-60 pts</span> au classement.
+                        {' '}Si ce match était une défaite, les points perdus seront restaurés pour les coéquipiers.
+                        La victoire de l'équipe adverse sera conservée.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
                 <p className="text-orange-400 text-sm flex items-center gap-2">
@@ -8641,7 +8799,7 @@ Cette action est irréversible!`)) {
               </button>
               <button
                 onClick={handleWarn}
-                disabled={!warnData.reason.trim()}
+                disabled={!warnData.reason.trim() || (warnData.isAbandonWarn && !warnData.selectedMatchId)}
                 className="flex-1 py-3 px-4 bg-orange-500 text-white font-medium rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <AlertTriangle className="w-5 h-5" />

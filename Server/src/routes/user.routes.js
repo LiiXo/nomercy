@@ -2438,7 +2438,7 @@ router.get('/admin/:userId/matches', verifyToken, requireStaff, async (req, res)
 // Admin: Add warning to user (admin, staff, arbitre can do this)
 router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res) => {
   try {
-    const { reason } = req.body;
+    const { reason, isAbandonWarn, abandonedMatchId } = req.body;
 
     if (!reason || reason.trim().length === 0) {
       return res.status(400).json({
@@ -2463,21 +2463,152 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
       });
     }
 
-    // Add the warning
-    user.warns.push({
+    let abandonmentProcessed = false;
+    let teammatesRefunded = 0;
+
+    // Process abandonment if applicable
+    if (isAbandonWarn && abandonedMatchId) {
+      console.log(`[ABANDON WARN] Processing abandonment warning for user ${user.username}, match ${abandonedMatchId}`);
+      
+      const match = await RankedMatch.findById(abandonedMatchId).populate('players.user', 'username');
+      
+      if (match && match.status === 'completed' && match.result?.winner) {
+        // Find the abandoning player's team
+        const abandoningPlayer = match.players.find(p => {
+          const pUserId = p.user?._id?.toString() || p.user?.toString();
+          return pUserId === user._id.toString();
+        });
+        
+        if (abandoningPlayer) {
+          const abandoningTeam = Number(abandoningPlayer.team);
+          const winningTeam = Number(match.result.winner);
+          
+          console.log(`[ABANDON WARN] Player team: ${abandoningTeam}, Winning team: ${winningTeam}`);
+          
+          // Only process if the abandoning player's team lost
+          if (abandoningTeam !== winningTeam) {
+            console.log(`[ABANDON WARN] Team lost - processing refunds for teammates`);
+            
+            // Find teammates (same team, excluding the abandoning player)
+            const teammates = match.players.filter(p => {
+              if (p.isFake || !p.user) return false;
+              const pUserId = p.user?._id?.toString() || p.user?.toString();
+              return Number(p.team) === abandoningTeam && pUserId !== user._id.toString();
+            });
+            
+            console.log(`[ABANDON WARN] Found ${teammates.length} teammates to refund`);
+            
+            for (const teammate of teammates) {
+              const teammateUserId = teammate.user?._id || teammate.user;
+              const rewards = teammate.rewards || {};
+              const pointsLost = rewards.pointsChange || 0; // This is negative for losses
+              const goldEarned = rewards.goldEarned || 0;
+              const xpEarned = rewards.xpEarned || 0;
+              
+              console.log(`[ABANDON WARN] Refunding teammate ${teammate.username}: points=${pointsLost}, gold=${goldEarned}, xp=${xpEarned}`);
+              
+              // Refund ranking points (pointsLost is negative, so we subtract it to add back)
+              const ranking = await Ranking.findOne({ user: teammateUserId, mode: match.mode, season: 1 });
+              if (ranking) {
+                const oldPoints = ranking.points;
+                // Points change was negative (loss), so subtracting adds them back
+                ranking.points = Math.max(0, ranking.points - pointsLost);
+                // Remove the loss from their record
+                ranking.losses = Math.max(0, (ranking.losses || 0) - 1);
+                await ranking.save();
+                console.log(`[ABANDON WARN]   Ranking updated: ${oldPoints} -> ${ranking.points} pts, losses: ${ranking.losses}`);
+              }
+              
+              // Update the player's rewards in the match to reflect the refund
+              const playerIndex = match.players.findIndex(p => {
+                const pUserId = p.user?._id?.toString() || p.user?.toString();
+                return pUserId === teammateUserId.toString();
+              });
+              
+              if (playerIndex !== -1) {
+                // Mark that this player was refunded due to abandonment
+                match.players[playerIndex].rewards = {
+                  ...match.players[playerIndex].rewards,
+                  abandonRefunded: true,
+                  originalPointsChange: pointsLost,
+                  refundedPointsChange: 0 // Effectively 0 change after refund
+                };
+              }
+              
+              teammatesRefunded++;
+            }
+            
+            // Mark the match as having abandonment processed
+            match.abandonment = {
+              processedAt: new Date(),
+              abandonedBy: user._id,
+              abandonedByUsername: user.username,
+              teammatesRefunded: teammatesRefunded,
+              processedBy: req.user._id
+            };
+            
+            await match.save();
+            abandonmentProcessed = true;
+            
+            // Apply 60 points penalty to the abandoning player
+            const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: 1 });
+            if (abandonerRanking) {
+              const oldAbandonerPoints = abandonerRanking.points;
+              abandonerRanking.points = Math.max(0, abandonerRanking.points - 60);
+              await abandonerRanking.save();
+              console.log(`[ABANDON WARN] Penalty applied to abandoner: ${oldAbandonerPoints} -> ${abandonerRanking.points} pts (-60)`);
+            }
+            
+            console.log(`[ABANDON WARN] Successfully processed abandonment. ${teammatesRefunded} teammates refunded.`);
+          } else {
+            // Even if the team won, apply the 60 points penalty to the abandoning player
+            const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: 1 });
+            if (abandonerRanking) {
+              const oldAbandonerPoints = abandonerRanking.points;
+              abandonerRanking.points = Math.max(0, abandonerRanking.points - 60);
+              await abandonerRanking.save();
+              console.log(`[ABANDON WARN] Penalty applied to abandoner (team won): ${oldAbandonerPoints} -> ${abandonerRanking.points} pts (-60)`);
+            }
+            console.log(`[ABANDON WARN] Team won - no refunds needed but penalty applied`);
+          }
+        } else {
+          console.log(`[ABANDON WARN] Player not found in match`);
+        }
+      } else {
+        console.log(`[ABANDON WARN] Match not found or not completed`);
+      }
+    }
+
+    // Add the warning with abandonment details if applicable
+    const warning = {
       reason: reason.trim(),
       warnedAt: new Date(),
       warnedBy: req.user._id
-    });
-
+    };
+    
+    if (isAbandonWarn && abandonedMatchId) {
+      warning.isAbandonWarn = true;
+      warning.abandonedMatchId = abandonedMatchId;
+      warning.abandonmentProcessed = abandonmentProcessed;
+      warning.teammatesRefunded = teammatesRefunded;
+    }
+    
+    user.warns.push(warning);
     await user.save();
 
     // Log to Discord (both channels)
-    await logPlayerWarn(user, req.user, reason.trim(), user.warns.length);
+    let discordReason = reason.trim();
+    if (isAbandonWarn && abandonmentProcessed) {
+      discordReason += ` [ABANDON - ${teammatesRefunded} coéquipiers remboursés]`;
+    }
+    await logPlayerWarn(user, req.user, discordReason, user.warns.length);
 
     res.json({
       success: true,
       message: 'Avertissement ajouté.',
+      warnCount: user.warns.length,
+      abandonmentProcessed,
+      teammatesRefunded,
       user: {
         id: user._id,
         username: user.username,
