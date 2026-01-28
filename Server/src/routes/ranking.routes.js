@@ -73,18 +73,18 @@ async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null)
 router.get('/leaderboard/:mode', async (req, res) => {
   try {
     const { mode } = req.params;
-    const { season = 1, limit = 100, page = 1, all = 'false' } = req.query;
+    const { season = 1, limit = 100, page = 1, all = 'false', force = 'false' } = req.query;
 
 
     if (!['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
 
-    // Check cache first
+    // Check cache first (unless force refresh is requested)
     const cacheKey = getLeaderboardCacheKey(mode, season, limit, page, all);
     const cachedData = leaderboardCache.get(cacheKey);
     
-    if (isCacheValid(cachedData)) {
+    if (force !== 'true' && isCacheValid(cachedData)) {
       return res.json(cachedData.data);
     }
 
@@ -243,6 +243,50 @@ router.get('/top-player', async (req, res) => {
   } catch (error) {
     console.error('Error fetching top player:', error);
     res.status(500).json({ success: false, message: 'Error fetching top player' });
+  }
+});
+
+// Get MVP leader (player with most MVP awards) for homepage highlight
+router.get('/mvp-leader', async (req, res) => {
+  try {
+    const { mode = 'hardcore' } = req.query;
+
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'Invalid mode' });
+    }
+    
+    // Use the appropriate MVP count field based on mode
+    const mvpCountField = mode === 'cdl' ? 'mvpCountCdl' : 'mvpCountHardcore';
+
+    // Find user with most MVP awards for this mode
+    const mvpLeader = await User.findOne({
+      isBanned: { $ne: true },
+      isDeleted: { $ne: true },
+      username: { $ne: null, $exists: true },
+      [mvpCountField]: { $gt: 0 }
+    })
+      .select(`username avatar avatarUrl discordAvatar discordId ${mvpCountField}`)
+      .sort({ [mvpCountField]: -1 });
+
+    if (!mvpLeader) {
+      return res.json({ success: true, player: null });
+    }
+
+    res.json({
+      success: true,
+      player: {
+        _id: mvpLeader._id,
+        username: mvpLeader.username,
+        avatar: mvpLeader.avatar,
+        avatarUrl: mvpLeader.avatarUrl,
+        discordAvatar: mvpLeader.discordAvatar,
+        discordId: mvpLeader.discordId,
+        mvpCount: mvpLeader[mvpCountField] || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching MVP leader:', error);
+    res.status(500).json({ success: false, message: 'Error fetching MVP leader' });
   }
 });
 

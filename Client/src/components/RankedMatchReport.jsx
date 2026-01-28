@@ -309,13 +309,13 @@ const RankedMatchReport = ({
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center bg-black/90 backdrop-blur-sm overflow-y-auto py-4 sm:py-8">
       {/* Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-pink-900/20" />
+      <div className="absolute inset-0 bg-gradient-to-br from-purple-900/20 to-pink-900/20 pointer-events-none" />
 
       {/* Modal */}
       <div 
-        className={`relative w-full max-w-2xl mx-4 transform transition-all duration-500 ${
+        className={`relative w-full max-w-2xl mx-3 sm:mx-4 my-auto transform transition-all duration-500 ${
           animationStep >= 1 ? 'scale-100 opacity-100' : 'scale-90 opacity-0'
         }`}
       >
@@ -324,34 +324,34 @@ const RankedMatchReport = ({
           isWinner 
             ? 'from-green-900/40 to-emerald-900/40 border-green-500/50' 
             : 'from-red-900/40 to-orange-900/40 border-red-500/50'
-        } border-2 rounded-2xl p-8 backdrop-blur-xl shadow-2xl`}>
+        } border-2 rounded-xl sm:rounded-2xl p-4 sm:p-8 backdrop-blur-xl shadow-2xl max-h-[90vh] sm:max-h-none overflow-y-auto`}>
           
           {/* Bouton fermer */}
           <button
             onClick={handleClose}
-            className="absolute top-4 right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+            className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-10"
           >
             <X className="w-5 h-5 text-white" />
           </button>
 
           {/* Header - Victoire ou Défaite */}
-          <div className="text-center mb-8">
-            <div className={`inline-flex items-center gap-3 px-6 py-3 rounded-full ${
+          <div className="text-center mb-4 sm:mb-8">
+            <div className={`inline-flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-3 rounded-full ${
               isWinner 
                 ? 'bg-green-500/20 border-2 border-green-500/50' 
                 : 'bg-red-500/20 border-2 border-red-500/50'
             }`}>
               {isWinner ? (
                 <>
-                  <Trophy className="w-8 h-8 text-yellow-400" />
-                  <span className="text-2xl font-bold text-white">VICTOIRE</span>
-                  <Trophy className="w-8 h-8 text-yellow-400" />
+                  <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400" />
+                  <span className="text-xl sm:text-2xl font-bold text-white">VICTOIRE</span>
+                  <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-400" />
                 </>
               ) : (
                 <>
-                  <TrendingDown className="w-8 h-8 text-red-400" />
-                  <span className="text-2xl font-bold text-white">DÉFAITE</span>
-                  <TrendingDown className="w-8 h-8 text-red-400" />
+                  <TrendingDown className="w-6 h-6 sm:w-8 sm:h-8 text-red-400" />
+                  <span className="text-xl sm:text-2xl font-bold text-white">DÉFAITE</span>
+                  <TrendingDown className="w-6 h-6 sm:w-8 sm:h-8 text-red-400" />
                 </>
               )}
             </div>
@@ -359,89 +359,87 @@ const RankedMatchReport = ({
 
           {/* Récompenses */}
           <div 
-            className={`mb-8 transition-all duration-500 delay-300 ${
+            className={`mb-4 sm:mb-8 transition-all duration-500 delay-300 ${
               animationStep >= 2 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
             }`}
           >
-            <h3 className="text-white font-bold text-lg mb-4 text-center">
+            <h3 className="text-white font-bold text-base sm:text-lg mb-3 sm:mb-4 text-center">
               {isWinner ? '🎁 Récompenses Obtenues' : '💔 Pertes et Consolations'}
             </h3>
             
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-4">
               {/* Points Ladder */}
-              <div className={`bg-dark-900/50 rounded-xl p-4 border-2 ${
+              <div className={`bg-dark-900/50 rounded-lg sm:rounded-xl p-2 sm:p-4 border-2 ${
                 (rewards?.pointsChange || 0) >= 0 
                   ? 'border-purple-500/30' 
                   : 'border-red-500/30'
               } ${doublePts && isWinner ? 'ring-2 ring-yellow-400/50' : ''} ${isMvp ? 'ring-2 ring-yellow-400/50' : ''}`}>
-                <div className="flex items-center justify-center gap-2 mb-2">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 mb-1 sm:mb-2">
                   {(rewards?.pointsChange || 0) >= 0 ? (
-                    <TrendingUp className="w-5 h-5 text-purple-400" />
+                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
                   ) : (
-                    <TrendingDown className="w-5 h-5 text-red-400" />
+                    <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
                   )}
-                  <span className="text-gray-400 text-sm">Points Ladder</span>
+                  <span className="text-gray-400 text-[10px] sm:text-sm text-center">Points</span>
                   {doublePts && isWinner && (
-                    <span className="px-1.5 py-0.5 bg-yellow-500/30 text-yellow-400 text-[10px] font-bold rounded animate-pulse">x2</span>
+                    <span className="px-1 py-0.5 bg-yellow-500/30 text-yellow-400 text-[8px] sm:text-[10px] font-bold rounded animate-pulse">x2</span>
                   )}
                 </div>
-                <div className={`text-2xl font-bold text-center ${
+                <div className={`text-lg sm:text-2xl font-bold text-center ${
                   (rewards?.pointsChange || 0) >= 0 ? 'text-purple-400' : 'text-red-400'
                 }`}>
                   {(rewards?.pointsChange || 0) > 0 ? '+' : ''}{rewards?.pointsChange || 0}
                   {isMvp && (
-                    <span className="text-yellow-400 ml-1">+{mvpBonus}</span>
+                    <span className="text-yellow-400 ml-1 text-sm sm:text-base">+{mvpBonus}</span>
                   )}
                 </div>
-                <p className={`text-xs text-center mt-1 ${
+                <p className={`text-[10px] sm:text-xs text-center mt-1 ${
                   isMvp ? 'text-yellow-400/70' : ((rewards?.pointsChange || 0) >= 0 ? 'text-green-400/70' : 'text-red-400/70')
                 }`}>
-                  {isMvp ? '⭐ MVP Bonus !' : (doublePts && isWinner ? '🔥 Boosté !' : ((rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu'))}
+                  {isMvp ? '⭐ MVP' : (doublePts && isWinner ? '🔥 Boosté' : ((rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu'))}
                 </p>
               </div>
 
               {/* Gold */}
-              <div className={`bg-dark-900/50 rounded-xl p-4 border-2 ${
+              <div className={`bg-dark-900/50 rounded-lg sm:rounded-xl p-2 sm:p-4 border-2 ${
                 isWinner ? 'border-yellow-500/30' : 'border-orange-500/30'
               } ${doubleGold && isWinner ? 'ring-2 ring-yellow-400/50' : ''}`}>
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Coins className={`w-5 h-5 ${isWinner ? 'text-yellow-400' : 'text-orange-400'}`} />
-                  <span className="text-gray-400 text-sm">
-                    {isWinner ? 'Gold Gagné' : 'Gold Consolation'}
-                  </span>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                  <Coins className={`w-4 h-4 sm:w-5 sm:h-5 ${isWinner ? 'text-yellow-400' : 'text-orange-400'}`} />
+                  <span className="text-gray-400 text-[10px] sm:text-sm text-center">Gold</span>
                   {doubleGold && isWinner && (
-                    <span className="px-1.5 py-0.5 bg-yellow-500/30 text-yellow-400 text-[10px] font-bold rounded animate-pulse">x2</span>
+                    <span className="px-1 py-0.5 bg-yellow-500/30 text-yellow-400 text-[8px] sm:text-[10px] font-bold rounded animate-pulse">x2</span>
                   )}
                 </div>
-                <div className={`text-2xl font-bold text-center ${
+                <div className={`text-lg sm:text-2xl font-bold text-center ${
                   isWinner ? 'text-yellow-400' : 'text-orange-400'
                 }`}>
                   +{rewards?.goldEarned || 0}
                 </div>
-                <p className={`text-xs text-center mt-1 ${isWinner ? 'text-yellow-400/70' : 'text-orange-400/70'}`}>
-                  {doubleGold && isWinner ? '🔥 Boosté !' : (isWinner ? '💰 Récompense' : '🎁 Lot de consolation')}
+                <p className={`text-[10px] sm:text-xs text-center mt-1 ${isWinner ? 'text-yellow-400/70' : 'text-orange-400/70'}`}>
+                  {doubleGold && isWinner ? '🔥 Boosté' : (isWinner ? '💰 Récompense' : '🎁 Consolation')}
                 </p>
               </div>
 
               {/* XP */}
-              <div className={`bg-dark-900/50 rounded-xl p-4 border-2 ${
+              <div className={`bg-dark-900/50 rounded-lg sm:rounded-xl p-2 sm:p-4 border-2 ${
                 (rewards?.xpEarned || 0) > 0 
                   ? 'border-cyan-500/30' 
                   : 'border-gray-500/30'
               }`}>
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Zap className={`w-5 h-5 ${
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 mb-1 sm:mb-2">
+                  <Zap className={`w-4 h-4 sm:w-5 sm:h-5 ${
                     (rewards?.xpEarned || 0) > 0 ? 'text-cyan-400' : 'text-gray-500'
                   }`} />
-                  <span className="text-gray-400 text-sm">XP Top Player</span>
+                  <span className="text-gray-400 text-[10px] sm:text-sm text-center">XP</span>
                 </div>
-                <div className={`text-2xl font-bold text-center ${
+                <div className={`text-lg sm:text-2xl font-bold text-center ${
                   (rewards?.xpEarned || 0) > 0 ? 'text-cyan-400' : 'text-gray-500'
                 }`}>
                   {(rewards?.xpEarned || 0) > 0 ? '+' : ''}{rewards?.xpEarned || 0}
                 </div>
-                <p className={`text-xs text-center mt-1 ${(rewards?.xpEarned || 0) > 0 ? 'text-cyan-400/70' : 'text-gray-500'}`}>
-                  {(rewards?.xpEarned || 0) > 0 ? '⚡ Expérience gagnée' : '❌ Aucune XP'}
+                <p className={`text-[10px] sm:text-xs text-center mt-1 ${(rewards?.xpEarned || 0) > 0 ? 'text-cyan-400/70' : 'text-gray-500'}`}>
+                  {(rewards?.xpEarned || 0) > 0 ? '⚡ XP gagnée' : '❌ Aucune'}
                 </p>
               </div>
             </div>
@@ -477,21 +475,21 @@ const RankedMatchReport = ({
             
             {/* MVP Voting Section */}
             {showMvpVoting && (
-              <div className="mt-4 p-4 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 border-2 border-purple-500/50 rounded-xl">
-                <div className="text-center mb-4">
-                  <div className="flex items-center justify-center gap-2 mb-2">
-                    <Star className="w-6 h-6 text-yellow-400" />
-                    <h3 className="text-white font-bold text-lg">{t.voteTitle}</h3>
-                    <Star className="w-6 h-6 text-yellow-400" />
+              <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 border-2 border-purple-500/50 rounded-lg sm:rounded-xl relative">
+                <div className="text-center mb-3 sm:mb-4">
+                  <div className="flex items-center justify-center gap-2 mb-1 sm:mb-2">
+                    <Star className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
+                    <h3 className="text-white font-bold text-base sm:text-lg">{t.voteTitle}</h3>
+                    <Star className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-400" />
                   </div>
-                  <p className="text-gray-400 text-sm">{t.voteSubtitle}</p>
+                  <p className="text-gray-400 text-xs sm:text-sm">{t.voteSubtitle}</p>
                   <p className="text-purple-400 text-xs mt-1">
                     {t.votingProgress}: {mvpVotes.length}/{requiredVotes}
                   </p>
                 </div>
                 
                 {!hasVoted ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     {realPlayers.map((p, idx) => {
                       const player = p.user || p;
                       const playerId = (player._id || player.id || p._id)?.toString();
@@ -510,18 +508,18 @@ const RankedMatchReport = ({
                           key={idx}
                           onClick={() => handleMvpVote(playerId)}
                           disabled={submittingMvpVote}
-                          className="flex flex-col items-center p-3 rounded-lg bg-dark-800/50 border border-white/10 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all disabled:opacity-50"
+                          className="flex flex-col items-center p-2 sm:p-3 rounded-lg bg-dark-800/50 border border-white/10 hover:border-purple-500/50 hover:bg-purple-500/10 transition-all disabled:opacity-50 active:scale-95"
                         >
                           <img
                             src={avatar}
                             alt=""
-                            className="w-12 h-12 rounded-full border-2 border-purple-500/50 mb-2"
+                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-purple-500/50 mb-1 sm:mb-2"
                           />
-                          <span className="text-white text-sm font-medium truncate max-w-full">
+                          <span className="text-white text-xs sm:text-sm font-medium truncate max-w-full">
                             {player.username || p.username}
                           </span>
                           {playerVotes > 0 && (
-                            <span className="text-purple-400 text-xs mt-1">
+                            <span className="text-purple-400 text-[10px] sm:text-xs mt-1">
                               {playerVotes} {t.votes}
                             </span>
                           )}
@@ -530,12 +528,12 @@ const RankedMatchReport = ({
                     })}
                   </div>
                 ) : (
-                  <div className="text-center py-4">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/20 border border-green-500/50 rounded-lg mb-3">
-                      <Check className="w-5 h-5 text-green-400" />
-                      <span className="text-green-400 font-medium">{t.youVoted}</span>
+                  <div className="text-center py-3 sm:py-4">
+                    <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-500/20 border border-green-500/50 rounded-lg mb-2 sm:mb-3">
+                      <Check className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
+                      <span className="text-green-400 font-medium text-sm sm:text-base">{t.youVoted}</span>
                     </div>
-                    <p className="text-gray-400 text-sm flex items-center justify-center gap-2">
+                    <p className="text-gray-400 text-xs sm:text-sm flex items-center justify-center gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       {t.waitingVotes}
                     </p>
@@ -576,35 +574,35 @@ const RankedMatchReport = ({
               animationStep >= 3 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
             }`}
           >
-            <div className="bg-dark-900/50 rounded-xl p-6 border-2 border-white/10">
+            <div className="bg-dark-900/50 rounded-lg sm:rounded-xl p-3 sm:p-6 border-2 border-white/10">
               {/* Changement de rang */}
               {rankChanged && (
-                <div className="mb-6 text-center">
-                  <div className={`inline-flex items-center gap-3 px-4 py-2 rounded-full ${
+                <div className="mb-4 sm:mb-6 text-center">
+                  <div className={`inline-flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full ${
                     rankUp 
                       ? 'bg-green-500/20 border border-green-500/50' 
                       : 'bg-red-500/20 border border-red-500/50'
                   }`}>
-                    <span className="text-white font-semibold">
+                    <span className="text-white font-semibold text-sm sm:text-base">
                       {rankUp ? '🎉 PROMOTION !' : '📉 Rétrogradation'}
                     </span>
                   </div>
                   
-                  <div className="flex items-center justify-center gap-4 mt-4">
+                  <div className="flex items-center justify-center gap-3 sm:gap-4 mt-3 sm:mt-4">
                     <div className="text-center">
-                      <div className={`w-16 h-16 mx-auto mb-2 rounded-full bg-gradient-to-br ${oldRankInfo.gradient} flex items-center justify-center`}>
-                        {React.createElement(oldRankInfo.icon, { className: 'w-8 h-8 text-white' })}
+                      <div className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-1 sm:mb-2 rounded-full bg-gradient-to-br ${oldRankInfo.gradient} flex items-center justify-center`}>
+                        {React.createElement(oldRankInfo.icon, { className: 'w-6 h-6 sm:w-8 sm:h-8 text-white' })}
                       </div>
-                      <span className="text-gray-400 text-sm">{oldRankInfo.name}</span>
+                      <span className="text-gray-400 text-xs sm:text-sm">{oldRankInfo.name}</span>
                     </div>
                     
-                    <ArrowRight className="w-6 h-6 text-white" />
+                    <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     
                     <div className="text-center">
-                      <div className={`w-16 h-16 mx-auto mb-2 rounded-full bg-gradient-to-br ${newRankInfo.gradient} flex items-center justify-center animate-pulse`}>
-                        {React.createElement(newRankInfo.icon, { className: 'w-8 h-8 text-white' })}
+                      <div className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-1 sm:mb-2 rounded-full bg-gradient-to-br ${newRankInfo.gradient} flex items-center justify-center animate-pulse`}>
+                        {React.createElement(newRankInfo.icon, { className: 'w-6 h-6 sm:w-8 sm:h-8 text-white' })}
                       </div>
-                      <span className="text-white font-bold text-sm">{newRankInfo.name}</span>
+                      <span className="text-white font-bold text-xs sm:text-sm">{newRankInfo.name}</span>
                     </div>
                   </div>
                 </div>
@@ -612,31 +610,31 @@ const RankedMatchReport = ({
 
               {/* Rang actuel et progression */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${currentRankInfo.gradient} flex items-center justify-center`}>
-                      <RankIcon className="w-6 h-6 text-white" />
+                <div className="flex items-center justify-between mb-2 sm:mb-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br ${currentRankInfo.gradient} flex items-center justify-center flex-shrink-0`}>
+                      <RankIcon className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     </div>
-                    <div>
-                      <div className="text-white font-bold">{currentRankInfo.name}</div>
-                      <div className="text-gray-400 text-sm">
+                    <div className="min-w-0">
+                      <div className="text-white font-bold text-sm sm:text-base">{currentRankInfo.name}</div>
+                      <div className="text-gray-400 text-xs sm:text-sm">
                         {newRank?.points || 0} / {currentRankInfo.max + 1} points
                       </div>
                     </div>
                   </div>
                   
-                  <div className="text-right">
-                    <div className="text-white font-bold text-lg">
-                      {oldRank?.points || 0} <ChevronRight className="inline w-4 h-4" /> {newRank?.points || 0}
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-white font-bold text-sm sm:text-lg">
+                      {oldRank?.points || 0} <ChevronRight className="inline w-3 h-3 sm:w-4 sm:h-4" /> {newRank?.points || 0}
                     </div>
-                    <div className="text-gray-400 text-sm">
+                    <div className="text-gray-400 text-[10px] sm:text-sm">
                       {Math.round(progressInCurrentRank)}% vers {ranks[ranks.findIndex(r => r.name === currentRankInfo.name) + 1]?.name || 'Max'}
                     </div>
                   </div>
                 </div>
 
                 {/* Barre de progression animée */}
-                <div className="relative h-3 bg-dark-800 rounded-full overflow-hidden">
+                <div className="relative h-2 sm:h-3 bg-dark-800 rounded-full overflow-hidden">
                   <div 
                     className={`absolute inset-y-0 left-0 bg-gradient-to-r ${currentRankInfo.gradient} transition-all duration-1000 ease-out`}
                     style={{ width: `${progressAnimation}%` }}
@@ -649,11 +647,11 @@ const RankedMatchReport = ({
           </div>
 
           {/* Boutons d'action */}
-          <div className="mt-8 flex justify-center">
+          <div className="mt-4 sm:mt-8 flex justify-center pb-2">
             {/* Bouton continuer */}
             <button
               onClick={handleClose}
-              className={`px-8 py-3 rounded-xl font-bold text-white transition-all hover:scale-105 ${
+              className={`px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-bold text-white transition-all hover:scale-105 active:scale-95 text-sm sm:text-base ${
                 isWinner 
                   ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700' 
                   : 'bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700'

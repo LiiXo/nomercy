@@ -8,7 +8,7 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, RefreshCw
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -315,6 +315,7 @@ const RankedMode = () => {
   const [loadingRanking, setLoadingRanking] = useState(true);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
+  const [refreshingLeaderboard, setRefreshingLeaderboard] = useState(false);
   
   // Calculated stats from match history (for accurate display)
   const [calculatedStats, setCalculatedStats] = useState({ wins: 0, losses: 0, total: 0 });
@@ -814,10 +815,14 @@ const RankedMode = () => {
   };
 
   // Fetch leaderboard with pagination
-  const fetchLeaderboard = async (page = 1) => {
-    setLoadingLeaderboard(true);
+  const fetchLeaderboard = async (page = 1, force = false) => {
+    if (force) {
+      setRefreshingLeaderboard(true);
+    } else {
+      setLoadingLeaderboard(true);
+    }
     try {
-      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?limit=${LEADERBOARD_PER_PAGE}&page=${page}`;
+      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?limit=${LEADERBOARD_PER_PAGE}&page=${page}${force ? '&force=true' : ''}`;
       console.log('[Leaderboard] Fetching:', url);
       
       const response = await fetch(url, { credentials: 'include' });
@@ -840,7 +845,13 @@ const RankedMode = () => {
       console.error('Error fetching leaderboard:', err);
     } finally {
       setLoadingLeaderboard(false);
+      setRefreshingLeaderboard(false);
     }
+  };
+
+  // Force refresh leaderboard (bypass cache)
+  const handleRefreshLeaderboard = () => {
+    fetchLeaderboard(leaderboardPage, true);
   };
 
   // Check active match and handle reconnection to appropriate phase
@@ -3608,12 +3619,23 @@ const RankedMode = () => {
           <div className="rounded-3xl bg-dark-800/50 backdrop-blur-xl border border-white/10 overflow-hidden">
             {/* Header */}
             <div className={`px-6 py-4 bg-gradient-to-r ${isHardcore ? 'from-red-500/20 to-orange-500/10' : 'from-cyan-500/20 to-blue-500/10'} border-b border-white/10`}>
-              <h3 className="text-xl font-bold text-white flex items-center gap-3">
-                <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
-                  <Crown className="w-5 h-5 text-white" />
-                </div>
-                {t.leaderboard} - Top 100
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                  <div className={`p-2 rounded-xl bg-gradient-to-br ${isHardcore ? 'from-red-500 to-orange-600' : 'from-cyan-400 to-blue-600'}`}>
+                    <Crown className="w-5 h-5 text-white" />
+                  </div>
+                  {t.leaderboard} - Top 100
+                </h3>
+                {/* Refresh button */}
+                <button
+                  onClick={handleRefreshLeaderboard}
+                  disabled={refreshingLeaderboard || loadingLeaderboard}
+                  className={`p-2 rounded-xl border transition-all duration-200 ${isHardcore ? 'border-red-500/30 hover:border-red-500/60 hover:bg-red-500/10' : 'border-cyan-500/30 hover:border-cyan-500/60 hover:bg-cyan-500/10'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={language === 'fr' ? 'Actualiser le classement' : 'Refresh leaderboard'}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${refreshingLeaderboard ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
               {/* Update notice */}
               <p className="text-xs text-gray-400 mt-2 flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5" />

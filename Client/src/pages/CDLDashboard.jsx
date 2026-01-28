@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
 import { useData } from '../DataContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
-import { Trophy, Users, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight, Lock } from 'lucide-react';
+import { Trophy, Users, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight, Lock, Star } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
 
@@ -63,12 +63,13 @@ const CDLDashboard = () => {
   // CDL-specific top player and squad (separate from hardcore)
   const [topPlayer, setTopPlayer] = useState(null);
   const [topSquad, setTopSquad] = useState(null);
+  const [mvpLeader, setMvpLeader] = useState(null);
   
   // Ranked matches stats for the banner
   const [rankedMatchesStats, setRankedMatchesStats] = useState({ totalMatches: 0, totalPlayers: 0, stats: [] });
   
   // Site statistics
-  const [siteStats, setSiteStats] = useState({ totalUsers: 0, totalSquads: 0, totalMatches: 0 });
+  const [siteStats, setSiteStats] = useState({ totalUsers: 0, totalSquads: 0, totalMatches: 0, avgMatchesPerDay: 0 });
   
   // Check if user is admin or staff (can bypass disabled features)
   const isAdminOrStaff = user?.roles?.some(r => ['admin', 'staff', 'gerant_cdl', 'gerant_hardcore'].includes(r));
@@ -143,6 +144,7 @@ const CDLDashboard = () => {
       totalPlayers: 'Joueurs',
       totalMatches: 'Matchs',
       totalSquads: 'Escouades',
+      avgMatchesPerDay: 'Matchs/jour',
       siteStatistics: 'Statistiques du site',
       waitingHelperConfirmation: 'En attente de confirmation de l\'aide...',
       helperAccepted: 'L\'aide a accepté !',
@@ -229,6 +231,7 @@ const CDLDashboard = () => {
       totalPlayers: 'Players',
       totalMatches: 'Matches',
       totalSquads: 'Squads',
+      avgMatchesPerDay: 'Matches/day',
       siteStatistics: 'Site Statistics',
       waitingHelperConfirmation: 'Waiting for helper confirmation...',
       helperAccepted: 'Helper accepted!',
@@ -315,6 +318,7 @@ const CDLDashboard = () => {
       totalPlayers: 'Spieler',
       totalMatches: 'Spiele',
       totalSquads: 'Squads',
+      avgMatchesPerDay: 'Spiele/Tag',
       siteStatistics: 'Seitenstatistiken',
       waitingHelperConfirmation: 'Warte auf Helferbestätigung...',
       helperAccepted: 'Helfer hat akzeptiert!',
@@ -401,6 +405,7 @@ const CDLDashboard = () => {
       totalPlayers: 'Giocatori',
       totalMatches: 'Partite',
       totalSquads: 'Squadre',
+      avgMatchesPerDay: 'Partite/giorno',
       siteStatistics: 'Statistiche del sito',
       waitingHelperConfirmation: 'In attesa di conferma dell\'aiuto...',
       helperAccepted: 'L\'aiuto ha accettato!',
@@ -497,17 +502,21 @@ const CDLDashboard = () => {
   useEffect(() => {
     const fetchTopStats = async () => {
       try {
-        const [playerRes, squadRes] = await Promise.all([
+        const [playerRes, squadRes, mvpRes] = await Promise.all([
           fetch(`${API_URL}/rankings/top-player?mode=cdl`),
-          fetch(`${API_URL}/rankings/top-squad?mode=cdl`)
+          fetch(`${API_URL}/rankings/top-squad?mode=cdl`),
+          fetch(`${API_URL}/rankings/mvp-leader?mode=cdl`)
         ]);
-        const [playerData, squadData] = await Promise.all([playerRes.json(), squadRes.json()]);
+        const [playerData, squadData, mvpData] = await Promise.all([playerRes.json(), squadRes.json(), mvpRes.json()]);
         
         if (playerData.success && playerData.player) {
           setTopPlayer(playerData.player);
         }
         if (squadData.success && squadData.squad) {
           setTopSquad(squadData.squad);
+        }
+        if (mvpData.success && mvpData.player) {
+          setMvpLeader(mvpData.player);
         }
       } catch (err) {
         console.error('Error fetching CDL top stats:', err);
@@ -1549,8 +1558,8 @@ const CDLDashboard = () => {
             </div>
           </div>
 
-          {/* Top Player & Top Squad Section */}
-          {(topPlayer || topSquad) && (
+          {/* Top Player & MVP Leader & Top Squad Section */}
+          {(topPlayer || mvpLeader || topSquad) && (
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-8 mb-8">
               {/* Top Player */}
               {topPlayer && (
@@ -1589,7 +1598,7 @@ const CDLDashboard = () => {
                       <div className="flex-1 min-w-0">
                         <p className="text-xs text-yellow-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
                           <Trophy className="w-3.5 h-3.5" />
-                          {language === 'fr' ? 'Meilleur Joueur' : 'Top Player'}
+                          {language === 'fr' ? 'Top 1 Expérience' : 'Top 1 XP'}
                         </p>
                         <p className="text-white font-bold text-xl truncate group-hover:text-yellow-400 transition-colors">
                           {topPlayer.username}
@@ -1602,6 +1611,62 @@ const CDLDashboard = () => {
                       {/* Decorative medal */}
                       <div className="relative">
                         <Medal className="w-10 h-10 text-yellow-500/30 group-hover:text-yellow-500/60 transition-colors" />
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )}
+              
+              {/* MVP Leader */}
+              {mvpLeader && (
+                <Link
+                  to={`/player/${mvpLeader._id}`}
+                  className="group relative w-full sm:w-auto"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative glass-card rounded-2xl border border-cyan-500/30 hover:border-cyan-400/50 transition-all duration-300 transform group-hover:scale-[1.02] overflow-hidden">
+                    {/* Animated background */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-cyan-500/5 animate-pulse" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500 animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                    
+                    <div className="relative flex items-center gap-4 p-5 sm:p-6">
+                      {/* Star icon with glow */}
+                      <div className="absolute top-3 left-3 z-10">
+                        <div className="relative">
+                          <Star className="w-6 h-6 text-cyan-400 animate-bounce" style={{ animationDuration: '2s' }} />
+                          <div className="absolute inset-0 text-cyan-400 blur-sm animate-pulse">
+                            <Star className="w-6 h-6" />
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Avatar */}
+                      <div className="relative ml-6">
+                        <div className="absolute inset-0 bg-cyan-500/30 rounded-full blur-md animate-pulse" />
+                        <img
+                          src={getAvatarUrl(mvpLeader.avatarUrl || mvpLeader.avatar) || '/avatar.jpg'}
+                          alt={mvpLeader.username}
+                          className="relative w-16 h-16 rounded-full object-cover border-2 border-cyan-500/50 group-hover:border-cyan-400 transition-colors"
+                        />
+                      </div>
+                      
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-cyan-400 font-semibold uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5" />
+                          {language === 'fr' ? 'Leader MVP' : 'MVP Leader'}
+                        </p>
+                        <p className="text-white font-bold text-xl truncate group-hover:text-cyan-400 transition-colors">
+                          {mvpLeader.username}
+                        </p>
+                        <p className="text-gray-400 text-sm mt-0.5">
+                          <span className="text-cyan-400 font-semibold">{(mvpLeader.mvpCount || 0).toLocaleString()}</span> MVP
+                        </p>
+                      </div>
+                      
+                      {/* Decorative star */}
+                      <div className="relative">
+                        <Star className="w-10 h-10 text-cyan-500/30 group-hover:text-cyan-500/60 transition-colors" />
                       </div>
                     </div>
                   </div>
@@ -1991,7 +2056,7 @@ const CDLDashboard = () => {
                 <Target className="w-6 h-6 text-cyan-400" />
                 {txt.siteStatistics}
               </h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Total Players */}
                 <div className="p-6 glass rounded-xl border border-cyan-500/30 hover:border-cyan-500/50 transition-all">
                   <div className="flex items-center gap-4">
@@ -2027,6 +2092,19 @@ const CDLDashboard = () => {
                     <div className="flex-1">
                       <p className="text-gray-400 text-sm uppercase tracking-wider">{txt.totalSquads}</p>
                       <p className="text-3xl font-bold text-white mt-1">{siteStats.totalSquads.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Avg Matches Per Day */}
+                <div className="p-6 glass rounded-xl border border-purple-500/30 hover:border-purple-500/50 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-purple-500/20 rounded-xl">
+                      <Target className="w-8 h-8 text-purple-400" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-gray-400 text-sm uppercase tracking-wider">{txt.avgMatchesPerDay}</p>
+                      <p className="text-3xl font-bold text-white mt-1">{siteStats.avgMatchesPerDay}</p>
                     </div>
                   </div>
                 </div>

@@ -130,12 +130,25 @@ router.get('/stats', async (req, res) => {
 
     const totalMatches = totalLadderMatches + totalRankedMatches;
 
+    // Calculate average ranked matches per day (last 10 days - same as admin panel)
+    const tenDaysAgo = new Date();
+    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
+    tenDaysAgo.setHours(0, 0, 0, 0);
+
+    const rankedLast10 = await RankedMatch.countDocuments({
+      status: 'completed',
+      createdAt: { $gte: tenDaysAgo }
+    });
+
+    const avgMatchesPerDay = Math.round(rankedLast10 / 10 * 10) / 10;
+
     res.json({
       success: true,
       stats: {
         totalUsers,
         totalSquads,
-        totalMatches
+        totalMatches,
+        avgMatchesPerDay
       }
     });
   } catch (error) {
