@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://cdn.discordapp.com https://nomercy.ggsecure.io data:; script-src 'self' 'unsafe-inline';">
+  <title>Iris - NoMercy Anticheat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --neon-red: #ff2d55;
+      --neon-orange: #ff6b2c;
+      --dark-950: #0a0a0b;
+      --dark-900: #18181b;
+      --dark-800: #27272a;
+      --dark-700: #3f3f46;
+      --dark-600: #52525b;
+      --dark-500: #71717a;
+      --dark-400: #a1a1aa;
+    }
+
+    body {
+      font-family: 'Outfit', system-ui, sans-serif;
+      background: var(--dark-950);
+      color: white;
+      overflow: hidden;
+      height: 100vh;
+      user-select: none;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--dark-900);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--dark-600);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--dark-500);
+    }
+
+    /* Title bar */
+    .title-bar {
+      -webkit-app-region: drag;
+      height: 36px;
+      background: linear-gradient(to right, rgba(255, 45, 85, 0.1), transparent);
+      border-bottom: 1px solid rgba(255, 45, 85, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+    }
+
+    .title-bar-text {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--dark-400);
+      font-weight: 500;
+    }
+
+    .title-bar-text svg {
+      width: 16px;
+      height: 16px;
+      color: var(--neon-red);
+    }
+
+    .window-controls {
+      -webkit-app-region: no-drag;
+      display: flex;
+      gap: 8px;
+    }
+
+    .window-btn {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s, filter 0.2s;
+    }
+
+    .window-btn:hover {
+      transform: scale(1.1);
+      filter: brightness(1.2);
+    }
+
+    .btn-minimize {
+      background: #ffbd2e;
+    }
+
+    .btn-close {
+      background: #ff5f57;
+    }
+
+    /* Main container */
+    .container {
+      height: calc(100vh - 36px);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Background effects */
+    .bg-gradient {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at 50% 0%, rgba(255, 45, 85, 0.15) 0%, transparent 60%),
+                  radial-gradient(ellipse at 0% 100%, rgba(255, 107, 44, 0.1) 0%, transparent 50%);
+    }
+
+    .grid-pattern {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.03;
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Content */
+    .content {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+    }
+
+    /* Logo section */
+    .logo-section {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .logo-container {
+      position: relative;
+      display: inline-block;
+      margin-bottom: 16px;
+    }
+
+    .logo-glow {
+      position: absolute;
+      inset: -20px;
+      background: radial-gradient(circle, rgba(255, 45, 85, 0.4) 0%, transparent 70%);
+      filter: blur(20px);
+      animation: pulse-glow 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.1); }
+    }
+
+    .logo {
+      position: relative;
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-orange) 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 40px rgba(255, 45, 85, 0.4);
+      overflow: hidden;
+    }
+
+    .logo img {
+      width: 60px;
+      height: 60px;
+      object-fit: contain;
+    }
+
+    .logo svg {
+      width: 40px;
+      height: 40px;
+      color: white;
+    }
+
+    .app-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 48px;
+      letter-spacing: 8px;
+      background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-orange) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .app-subtitle {
+      font-size: 12px;
+      color: var(--dark-400);
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+
+    /* Card */
+    .card {
+      background: rgba(24, 24, 27, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 45, 85, 0.2);
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 340px;
+    }
+
+    /* Login view */
+    #login-view .card {
+      text-align: center;
+    }
+
+    .login-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .login-description {
+      color: var(--dark-400);
+      font-size: 14px;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .discord-btn {
+      width: 100%;
+      padding: 14px 24px;
+      background: #5865F2;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .discord-btn:hover {
+      background: #4752C4;
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(88, 101, 242, 0.4);
+    }
+
+    .discord-btn:active {
+      transform: translateY(0);
+    }
+
+    .discord-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Loading view */
+    #loading-view {
+      display: none;
+    }
+
+    #loading-view .card {
+      text-align: center;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--dark-700);
+      border-top-color: var(--neon-red);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: var(--dark-400);
+      font-size: 14px;
+    }
+
+    /* Connected view */
+    #connected-view {
+      display: none;
+    }
+
+    .user-section {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+      background: rgba(255, 45, 85, 0.05);
+      border: 1px solid rgba(255, 45, 85, 0.2);
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .user-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid var(--neon-red);
+      box-shadow: 0 0 20px rgba(255, 45, 85, 0.3);
+    }
+
+    .user-info {
+      flex: 1;
+    }
+
+    .user-name {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .user-status {
+      font-size: 12px;
+      color: #22c55e;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: #22c55e;
+      border-radius: 50%;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* Hardware info */
+    .hardware-section {
+      margin-bottom: 20px;
+    }
+
+    .hardware-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--dark-500);
+      margin-bottom: 8px;
+    }
+
+    .hardware-id {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: var(--dark-400);
+      background: var(--dark-900);
+      padding: 12px;
+      border-radius: 8px;
+      word-break: break-all;
+      border: 1px solid var(--dark-700);
+    }
+
+    /* Security Status */
+    .security-section {
+      margin-bottom: 20px;
+    }
+
+    .security-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--dark-500);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .security-label svg {
+      width: 14px;
+      height: 14px;
+      color: var(--neon-red);
+    }
+
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .security-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: var(--dark-900);
+      border: 1px solid var(--dark-700);
+      border-radius: 8px;
+      font-size: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .security-item.enabled {
+      border-color: rgba(34, 197, 94, 0.3);
+      background: rgba(34, 197, 94, 0.05);
+    }
+
+    .security-item.disabled {
+      border-color: rgba(239, 68, 68, 0.3);
+      background: rgba(239, 68, 68, 0.05);
+    }
+
+    .security-item.warning {
+      border-color: rgba(245, 158, 11, 0.3);
+      background: rgba(245, 158, 11, 0.05);
+    }
+
+    .security-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    .security-icon.enabled {
+      color: #22c55e;
+    }
+
+    .security-icon.disabled {
+      color: #ef4444;
+    }
+
+    .security-icon.warning {
+      color: #f59e0b;
+    }
+
+    .security-name {
+      flex: 1;
+      color: var(--dark-300);
+      font-weight: 500;
+    }
+
+    .security-status {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .security-status.enabled {
+      color: #22c55e;
+    }
+
+    .security-status.disabled {
+      color: #ef4444;
+    }
+
+    .security-status.warning {
+      color: #f59e0b;
+    }
+
+    .security-loading {
+      text-align: center;
+      padding: 20px;
+      color: var(--dark-500);
+      font-size: 12px;
+    }
+
+    /* Status badge */
+    .status-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px;
+      background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .status-badge svg {
+      width: 18px;
+      height: 18px;
+      color: #22c55e;
+    }
+
+    .status-badge span {
+      font-size: 14px;
+      font-weight: 500;
+      color: #22c55e;
+    }
+
+    /* Logout button */
+    .logout-btn {
+      width: 100%;
+      padding: 12px;
+      background: transparent;
+      border: 1px solid rgba(255, 45, 85, 0.3);
+      border-radius: 10px;
+      color: var(--neon-red);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .logout-btn:hover {
+      background: rgba(255, 45, 85, 0.1);
+      border-color: var(--neon-red);
+    }
+
+    /* Error state */
+    .error-message {
+      padding: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 10px;
+      color: #ef4444;
+      font-size: 14px;
+      text-align: center;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: auto;
+      padding-top: 20px;
+      text-align: center;
+    }
+
+    .footer-text {
+      font-size: 11px;
+      color: var(--dark-600);
+    }
+
+    .footer-link {
+      color: var(--neon-red);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .footer-link:hover {
+      text-decoration: underline;
+    }
+
+    /* Version */
+    .version {
+      font-size: 10px;
+      color: var(--dark-600);
+      margin-top: 8px;
+    }
+
+    /* Animations */
+    .fade-in {
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .slide-up {
+      animation: slideUp 0.5s ease-out;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Title bar -->
+  <div class="title-bar">
+    <div class="title-bar-text">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      <span>IRIS ANTICHEAT</span>
+    </div>
+    <div class="window-controls">
+      <button class="window-btn btn-minimize" onclick="window.iris.minimize()"></button>
+      <button class="window-btn btn-close" onclick="window.iris.close()"></button>
+    </div>
+  </div>
+
+  <!-- Main container -->
+  <div class="container">
+    <!-- Background effects -->
+    <div class="bg-gradient"></div>
+    <div class="grid-pattern"></div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Logo section -->
+      <div class="logo-section fade-in">
+        <div class="logo-container">
+          <div class="logo-glow"></div>
+          <div class="logo">
+            <img src="https://nomercy.ggsecure.io/logo.png" alt="NoMercy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+        </div>
+        <h1 class="app-title">IRIS</h1>
+        <p class="app-subtitle">NoMercy Security</p>
+      </div>
+
+      <!-- Login view -->
+      <div id="login-view" class="slide-up">
+        <div class="card">
+          <h2 class="login-title">Connexion requise</h2>
+          <p class="login-description">
+            Connectez-vous avec Discord pour lier votre compte NoMercy à cette machine.
+          </p>
+          <div id="login-error" class="error-message"></div>
+          <button class="discord-btn" onclick="startAuth()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037 13.13 13.13 0 00-.608 1.25 18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037 19.736 19.736 0 00-4.884 1.515.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128c.122-.093.244-.19.361-.289a.074.074 0 01.078-.012c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.118.098.24.195.361.288a.077.077 0 01-.006.128 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </svg>
+            <span>Se connecter avec Discord</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading view -->
+      <div id="loading-view">
+        <div class="card">
+          <div class="spinner"></div>
+          <p class="loading-text" id="loading-message">Connexion en cours...</p>
+        </div>
+      </div>
+
+      <!-- Connected view -->
+      <div id="connected-view">
+        <div class="card">
+          <div class="user-section">
+            <img id="user-avatar" class="user-avatar" src="" alt="Avatar">
+            <div class="user-info">
+              <div id="user-name" class="user-name">Username</div>
+              <div class="user-status">
+                <div class="status-dot"></div>
+                <span>Connecté</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hardware-section">
+            <div class="hardware-label">Hardware ID (TPM 2.0)</div>
+            <div id="hardware-id" class="hardware-id">Loading...</div>
+          </div>
+
+          <!-- Security Status Section -->
+          <div class="security-section">
+            <div class="security-label">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <span>État de sécurité Windows</span>
+            </div>
+            <div id="security-grid" class="security-grid">
+              <div class="security-loading">Analyse en cours...</div>
+            </div>
+          </div>
+
+          <div class="status-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+              <polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <span>Machine vérifiée</span>
+          </div>
+
+          <button class="logout-btn" onclick="logout()">Déconnexion</button>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p class="footer-text">
+          En utilisant Iris, vous acceptez les 
+          <a class="footer-link" onclick="window.iris.openExternal('https://nomercy.gg/terms')">conditions d'utilisation</a>
+        </p>
+        <p class="version">v1.0.0</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Views
+    const loginView = document.getElementById('login-view');
+    const loadingView = document.getElementById('loading-view');
+    const connectedView = document.getElementById('connected-view');
+    const loginError = document.getElementById('login-error');
+    const loadingMessage = document.getElementById('loading-message');
+
+    // Show specific view
+    function showView(view) {
+      loginView.style.display = 'none';
+      loadingView.style.display = 'none';
+      connectedView.style.display = 'none';
+      view.style.display = 'block';
+    }
+
+    // Show error
+    function showError(message) {
+      loginError.textContent = message;
+      loginError.style.display = 'block';
+      showView(loginView);
+    }
+
+    // Start Discord authentication
+    async function startAuth() {
+      loginError.style.display = 'none';
+      loadingMessage.textContent = 'Connexion en cours...';
+      showView(loadingView);
+      
+      const result = await window.iris.startDiscordAuth();
+      if (!result.success) {
+        showError(result.error || 'Erreur de connexion');
+      }
+    }
+
+    // Logout
+    async function logout() {
+      await window.iris.logout();
+      showView(loginView);
+    }
+
+    // Update connected view with user data
+    function updateConnectedView(user, hardwareId) {
+      document.getElementById('user-avatar').src = user.avatarUrl || 
+        `https://cdn.discordapp.com/embed/avatars/${parseInt(user.discriminator || '0') % 5}.png`;
+      document.getElementById('user-name').textContent = user.username;
+      document.getElementById('hardware-id').textContent = hardwareId;
+      showView(connectedView);
+      
+      // Load security status
+      loadSecurityStatus();
+    }
+
+    // Security status icons
+    const checkIcon = `<svg class="security-icon enabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const xIcon = `<svg class="security-icon disabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    const warnIcon = `<svg class="security-icon warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
+    // Load and display security status
+    async function loadSecurityStatus() {
+      const grid = document.getElementById('security-grid');
+      grid.innerHTML = '<div class="security-loading">Analyse en cours...</div>';
+      
+      try {
+        const result = await window.iris.getSecurityStatus();
+        
+        if (result.success) {
+          const security = result.security;
+          
+          const items = [
+            { 
+              name: 'Secure Boot', 
+              enabled: security.secureBoot.enabled,
+              status: security.secureBoot.enabled ? 'Actif' : 'Désactivé'
+            },
+            { 
+              name: 'TPM 2.0', 
+              enabled: security.tpm.present && security.tpm.enabled,
+              status: security.tpm.present ? (security.tpm.version || 'Actif') : 'Absent'
+            },
+            { 
+              name: 'Defender', 
+              enabled: security.defender.enabled && security.defender.realTimeProtection,
+              status: security.defender.realTimeProtection ? 'Actif' : 'Désactivé'
+            },
+            { 
+              name: 'HVCI', 
+              enabled: security.hvci.enabled,
+              status: security.hvci.enabled ? 'Actif' : 'Désactivé'
+            },
+            { 
+              name: 'VBS', 
+              enabled: security.vbs.enabled,
+              status: security.vbs.running ? 'Actif' : (security.vbs.enabled ? 'Configuré' : 'Désactivé')
+            },
+            { 
+              name: 'BitLocker', 
+              enabled: security.bitlocker.enabled,
+              status: security.bitlocker.enabled ? 'Actif' : 'Désactivé'
+            },
+            { 
+              name: 'UEFI', 
+              enabled: security.uefi.enabled,
+              status: security.uefi.enabled ? 'Actif' : 'Legacy'
+            },
+            { 
+              name: 'Kernel DMA', 
+              enabled: security.kernelDma.enabled,
+              status: security.kernelDma.enabled ? 'Actif' : 'Désactivé'
+            }
+          ];
+          
+          grid.innerHTML = items.map(item => `
+            <div class="security-item ${item.enabled ? 'enabled' : 'disabled'}">
+              ${item.enabled ? checkIcon : xIcon}
+              <span class="security-name">${item.name}</span>
+              <span class="security-status ${item.enabled ? 'enabled' : 'disabled'}">${item.status}</span>
+            </div>
+          `).join('');
+        } else {
+          grid.innerHTML = '<div class="security-loading">Erreur de chargement</div>';
+        }
+      } catch (error) {
+        console.error('Security status error:', error);
+        grid.innerHTML = '<div class="security-loading">Erreur de chargement</div>';
+      }
+    }
+
+    // Listen for auth events
+    window.iris.onAuthStatus((data) => {
+      if (data.status === 'processing') {
+        loadingMessage.textContent = 'Vérification de votre compte...';
+      }
+    });
+
+    window.iris.onAuthSuccess((data) => {
+      updateConnectedView(data.user, data.hardwareId);
+    });
+
+    window.iris.onAuthError((data) => {
+      showError(data.message || 'Erreur d\'authentification');
+    });
+
+    // Check for existing session on load
+    async function init() {
+      showView(loadingView);
+      loadingMessage.textContent = 'Vérification de la session...';
+      
+      const session = await window.iris.verifySession();
+      
+      if (session.success) {
+        const hwId = await window.iris.getHardwareId();
+        updateConnectedView(session.user, hwId.hardwareId);
+      } else {
+        showView(loginView);
+      }
+    }
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>

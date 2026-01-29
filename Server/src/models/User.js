@@ -271,6 +271,53 @@ const userSchema = new mongoose.Schema({
     },
     reason: String
   }],
+
+  // Iris Anticheat - Hardware binding
+  irisHardwareId: {
+    type: String,
+    default: null,
+    sparse: true,
+    index: true
+  },
+  irisSystemInfo: {
+    cpu: {
+      manufacturer: String,
+      brand: String,
+      cores: Number,
+      physicalCores: Number
+    },
+    system: {
+      manufacturer: String,
+      model: String,
+      uuid: String
+    },
+    os: {
+      platform: String,
+      distro: String,
+      release: String,
+      arch: String
+    },
+    memory: {
+      total: Number
+    },
+    gpu: {
+      vendor: String,
+      model: String,
+      vram: Number
+    },
+    baseboard: {
+      manufacturer: String,
+      model: String
+    }
+  },
+  irisLastSeen: {
+    type: Date,
+    default: null
+  },
+  irisRegisteredAt: {
+    type: Date,
+    default: null
+  },
   
 }, {
   timestamps: true

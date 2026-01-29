@@ -33,6 +33,8 @@ import AdminPanel from './pages/AdminPanel';
 import MatchSheet from './pages/MatchSheet';
 import Rules from './pages/Rules';
 import Anticheat from './pages/Anticheat';
+import IrisAuthorize from './pages/IrisAuthorize';
+import IrisCallback from './pages/IrisCallback';
 import TermsOfService from './pages/TermsOfService';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Messages from './pages/Messages';
@@ -461,6 +463,18 @@ function AppContent() {
                 </PageTransition>
               </ProtectedRoute>
             } 
+          />
+
+          {/* Iris Authorization (for desktop app) */}
+          <Route 
+            path="/iris/authorize" 
+            element={<IrisAuthorize />} 
+          />
+
+          {/* Iris Discord Callback */}
+          <Route 
+            path="/iris/callback" 
+            element={<IrisCallback />} 
           />
 
           {/* Terms of Service */}

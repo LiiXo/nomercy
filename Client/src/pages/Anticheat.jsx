@@ -1,340 +1,466 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  Shield, Download, Check, AlertTriangle, ArrowLeft, 
+  Cpu, HardDrive, Monitor, Lock, Zap, Eye, RefreshCw
+} from 'lucide-react';
+import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
-import { useAuth } from '../AuthContext';
-import { Shield, Eye, Cpu, Lock, CheckCircle, ArrowLeft, Zap, Server, Fingerprint, LogIn } from 'lucide-react';
-import { Link } from 'react-router-dom';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const Anticheat = () => {
+  const { user, isAuthenticated } = useAuth();
   const { language } = useLanguage();
   const { selectedMode } = useMode();
-  const { user, login } = useAuth();
+  const navigate = useNavigate();
+  
+  const [downloading, setDownloading] = useState(false);
+  const [downloadInfo, setDownloadInfo] = useState(null);
+  const [error, setError] = useState('');
 
   const isHardcore = selectedMode === 'hardcore';
-  const gradientFrom = isHardcore ? 'from-red-500' : 'from-cyan-500';
-  const gradientTo = isHardcore ? 'to-orange-600' : 'to-blue-600';
-  const borderColor = isHardcore ? 'border-red-500/20' : 'border-cyan-500/20';
-  const textAccent = isHardcore ? 'text-red-400' : 'text-cyan-400';
-  const bgAccent = isHardcore ? 'bg-red-500/10' : 'bg-cyan-500/10';
+  const accentColor = isHardcore ? 'red' : 'cyan';
+  const gradientFrom = isHardcore ? 'from-red-500' : 'from-cyan-400';
+  const gradientTo = isHardcore ? 'to-orange-600' : 'to-cyan-600';
 
-  const getText = (key) => {
-    const texts = {
-      pageTitle: {
-        fr: 'Anti-Cheat',
-        en: 'Anti-Cheat',
-        it: 'Anti-Cheat',
-        de: 'Anti-Cheat',
-      },
-      pageSubtitle: {
-        fr: 'Système de protection NoMercy pour un jeu équitable',
-        en: 'NoMercy protection system for fair play',
-        it: 'Sistema di protezione NoMercy per un gioco equo',
-        de: 'NoMercy-Schutzsystem für faires Spielen',
-      },
-      back: {
-        fr: 'Retour',
-        en: 'Back',
-        it: 'Indietro',
-        de: 'Zurück',
-      },
-      whyAnticheat: {
-        fr: 'Pourquoi un Anti-Cheat ?',
-        en: 'Why Anti-Cheat?',
-        it: 'Perché un Anti-Cheat?',
-        de: 'Warum Anti-Cheat?',
-      },
-      whyDesc: {
-        fr: 'NoMercy utilise un système anti-triche avancé pour garantir une compétition équitable. Notre objectif est de créer un environnement où le talent et les compétences sont les seuls facteurs de succès.',
-        en: 'NoMercy uses an advanced anti-cheat system to ensure fair competition. Our goal is to create an environment where talent and skills are the only factors for success.',
-        it: 'NoMercy utilizza un sistema anti-cheat avanzato per garantire una competizione equa. Il nostro obiettivo è creare un ambiente in cui talento e abilità siano gli unici fattori di successo.',
-        de: 'NoMercy verwendet ein fortschrittliches Anti-Cheat-System, um einen fairen Wettbewerb zu gewährleisten. Unser Ziel ist es, eine Umgebung zu schaffen, in der Talent und Fähigkeiten die einzigen Erfolgsfaktoren sind.',
-      },
-      howItWorks: {
-        fr: 'Comment ça fonctionne',
-        en: 'How it works',
-        it: 'Come funziona',
-        de: 'Wie es funktioniert',
-      },
-      feature1Title: {
-        fr: 'Détection en temps réel',
-        en: 'Real-time detection',
-        it: 'Rilevamento in tempo reale',
-        de: 'Echtzeit-Erkennung',
-      },
-      feature1Desc: {
-        fr: 'Notre système surveille en permanence les processus suspects et les modifications de mémoire pendant les parties.',
-        en: 'Our system constantly monitors suspicious processes and memory modifications during matches.',
-        it: 'Il nostro sistema monitora costantemente processi sospetti e modifiche alla memoria durante le partite.',
-        de: 'Unser System überwacht während der Spiele ständig verdächtige Prozesse und Speicheränderungen.',
-      },
-      feature2Title: {
-        fr: 'Analyse comportementale',
-        en: 'Behavioral analysis',
-        it: 'Analisi comportamentale',
-        de: 'Verhaltensanalyse',
-      },
-      feature2Desc: {
-        fr: 'Intelligence artificielle analysant les patterns de jeu pour détecter les comportements anormaux.',
-        en: 'Artificial intelligence analyzing gameplay patterns to detect abnormal behaviors.',
-        it: 'Intelligenza artificiale che analizza i pattern di gioco per rilevare comportamenti anomali.',
-        de: 'Künstliche Intelligenz analysiert Spielmuster, um abnormales Verhalten zu erkennen.',
-      },
-      feature3Title: {
-        fr: 'Signature de fichiers',
-        en: 'File signature',
-        it: 'Firma dei file',
-        de: 'Dateisignatur',
-      },
-      feature3Desc: {
-        fr: 'Vérification de l\'intégrité des fichiers du jeu et détection des modifications non autorisées.',
-        en: 'Verification of game file integrity and detection of unauthorized modifications.',
-        it: 'Verifica dell\'integrità dei file di gioco e rilevamento di modifiche non autorizzate.',
-        de: 'Überprüfung der Spieledatei-Integrität und Erkennung unbefugter Änderungen.',
-      },
-      feature4Title: {
-        fr: 'Base de données cloud',
-        en: 'Cloud database',
-        it: 'Database cloud',
-        de: 'Cloud-Datenbank',
-      },
-      feature4Desc: {
-        fr: 'Mise à jour continue des signatures de cheats connus via notre infrastructure cloud.',
-        en: 'Continuous update of known cheat signatures via our cloud infrastructure.',
-        it: 'Aggiornamento continuo delle firme dei cheat noti tramite la nostra infrastruttura cloud.',
-        de: 'Kontinuierliche Aktualisierung bekannter Cheat-Signaturen über unsere Cloud-Infrastruktur.',
+  const texts = {
+    fr: {
+      title: 'Iris Anticheat',
+      subtitle: 'Sécurisez votre compte NoMercy',
+      description: 'Iris est notre solution anticheat nouvelle génération qui lie votre compte Discord à votre machine via TPM 2.0 pour garantir l\'intégrité de tous les joueurs PC.',
+      downloadBtn: 'Télécharger Iris',
+      downloading: 'Préparation...',
+      loginRequired: 'Connexion requise',
+      loginDescription: 'Connectez-vous avec Discord pour télécharger Iris.',
+      profileRequired: 'Profil requis',
+      profileDescription: 'Complétez votre profil avant de télécharger Iris.',
+      completeProfile: 'Compléter mon profil',
+      features: {
+        title: 'Fonctionnalités',
+        tpm: {
+          title: 'TPM 2.0',
+          desc: 'Identification matérielle unique et infalsifiable'
+        },
+        binding: {
+          title: 'Liaison sécurisée',
+          desc: 'Un compte Discord = Une machine'
+        },
+        lightweight: {
+          title: 'Ultra léger',
+          desc: 'Aucun impact sur les performances de jeu'
+        },
+        realtime: {
+          title: 'Temps réel',
+          desc: 'Vérification continue pendant les matchs'
+        }
       },
       requirements: {
-        fr: 'Prérequis',
-        en: 'Requirements',
-        it: 'Requisiti',
-        de: 'Anforderungen',
+        title: 'Configuration requise',
+        os: 'Windows 10/11 (64-bit)',
+        tpm: 'TPM 2.0 activé',
+        discord: 'Compte Discord lié',
+        admin: 'Droits administrateur'
       },
-      req1: {
-        fr: 'Windows 10 ou supérieur (64-bit)',
-        en: 'Windows 10 or higher (64-bit)',
-        it: 'Windows 10 o superiore (64-bit)',
-        de: 'Windows 10 oder höher (64-bit)',
+      howItWorks: {
+        title: 'Comment ça marche',
+        step1: {
+          title: 'Téléchargez',
+          desc: 'Installez Iris sur votre PC'
+        },
+        step2: {
+          title: 'Connectez-vous',
+          desc: 'Liez votre compte Discord'
+        },
+        step3: {
+          title: 'Jouez',
+          desc: 'Iris vérifie automatiquement votre identité'
+        }
       },
-      req2: {
-        fr: 'Droits administrateur pour l\'installation',
-        en: 'Administrator rights for installation',
-        it: 'Diritti di amministratore per l\'installazione',
-        de: 'Administratorrechte für die Installation',
+      back: 'Retour',
+      version: 'Version',
+      fileName: 'Nom du fichier'
+    },
+    en: {
+      title: 'Iris Anticheat',
+      subtitle: 'Secure your NoMercy account',
+      description: 'Iris is our next-generation anticheat solution that links your Discord account to your machine via TPM 2.0 to ensure the integrity of all PC players.',
+      downloadBtn: 'Download Iris',
+      downloading: 'Preparing...',
+      loginRequired: 'Login required',
+      loginDescription: 'Sign in with Discord to download Iris.',
+      profileRequired: 'Profile required',
+      profileDescription: 'Complete your profile before downloading Iris.',
+      completeProfile: 'Complete my profile',
+      features: {
+        title: 'Features',
+        tpm: {
+          title: 'TPM 2.0',
+          desc: 'Unique and tamper-proof hardware identification'
+        },
+        binding: {
+          title: 'Secure binding',
+          desc: 'One Discord account = One machine'
+        },
+        lightweight: {
+          title: 'Ultra lightweight',
+          desc: 'Zero impact on game performance'
+        },
+        realtime: {
+          title: 'Real-time',
+          desc: 'Continuous verification during matches'
+        }
       },
-      req3: {
-        fr: 'Connexion internet stable',
-        en: 'Stable internet connection',
-        it: 'Connessione internet stabile',
-        de: 'Stabile Internetverbindung',
+      requirements: {
+        title: 'System requirements',
+        os: 'Windows 10/11 (64-bit)',
+        tpm: 'TPM 2.0 enabled',
+        discord: 'Linked Discord account',
+        admin: 'Administrator rights'
       },
-      req4: {
-        fr: '50 MB d\'espace disque disponible',
-        en: '50 MB of available disk space',
-        it: '50 MB di spazio su disco disponibile',
-        de: '50 MB verfügbarer Speicherplatz',
+      howItWorks: {
+        title: 'How it works',
+        step1: {
+          title: 'Download',
+          desc: 'Install Iris on your PC'
+        },
+        step2: {
+          title: 'Sign in',
+          desc: 'Link your Discord account'
+        },
+        step3: {
+          title: 'Play',
+          desc: 'Iris automatically verifies your identity'
+        }
       },
-      privacy: {
-        fr: 'Confidentialité',
-        en: 'Privacy',
-        it: 'Privacy',
-        de: 'Datenschutz',
+      back: 'Back',
+      version: 'Version',
+      fileName: 'File name'
+    },
+    de: {
+      title: 'Iris Anticheat',
+      subtitle: 'Sichern Sie Ihr NoMercy-Konto',
+      description: 'Iris ist unsere Anticheat-Lösung der nächsten Generation, die Ihr Discord-Konto über TPM 2.0 mit Ihrer Maschine verknüpft, um die Integrität aller PC-Spieler zu gewährleisten.',
+      downloadBtn: 'Iris herunterladen',
+      downloading: 'Vorbereitung...',
+      loginRequired: 'Anmeldung erforderlich',
+      loginDescription: 'Melden Sie sich mit Discord an, um Iris herunterzuladen.',
+      profileRequired: 'Profil erforderlich',
+      profileDescription: 'Vervollständigen Sie Ihr Profil, bevor Sie Iris herunterladen.',
+      completeProfile: 'Mein Profil vervollständigen',
+      features: {
+        title: 'Funktionen',
+        tpm: {
+          title: 'TPM 2.0',
+          desc: 'Einzigartige und fälschungssichere Hardware-Identifikation'
+        },
+        binding: {
+          title: 'Sichere Bindung',
+          desc: 'Ein Discord-Konto = Eine Maschine'
+        },
+        lightweight: {
+          title: 'Ultraleicht',
+          desc: 'Keine Auswirkungen auf die Spielleistung'
+        },
+        realtime: {
+          title: 'Echtzeit',
+          desc: 'Kontinuierliche Überprüfung während der Spiele'
+        }
       },
-      privacyDesc: {
-        fr: 'Notre anti-cheat est conçu avec la confidentialité en priorité. Il ne collecte que les informations strictement nécessaires à la détection de triche et ne surveille pas vos activités personnelles en dehors du jeu.',
-        en: 'Our anti-cheat is designed with privacy as a priority. It only collects information strictly necessary for cheat detection and does not monitor your personal activities outside of the game.',
-        it: 'Il nostro anti-cheat è progettato con la privacy come priorità. Raccoglie solo le informazioni strettamente necessarie per il rilevamento dei cheat e non monitora le tue attività personali al di fuori del gioco.',
-        de: 'Unser Anti-Cheat ist mit Datenschutz als Priorität konzipiert. Es sammelt nur Informationen, die für die Cheat-Erkennung unbedingt erforderlich sind, und überwacht Ihre persönlichen Aktivitäten außerhalb des Spiels nicht.',
+      requirements: {
+        title: 'Systemanforderungen',
+        os: 'Windows 10/11 (64-bit)',
+        tpm: 'TPM 2.0 aktiviert',
+        discord: 'Verknüpftes Discord-Konto',
+        admin: 'Administratorrechte'
       },
-      downloadBtn: {
-        fr: 'Télécharger l\'Anti-Cheat',
-        en: 'Download Anti-Cheat',
-        it: 'Scarica Anti-Cheat',
-        de: 'Anti-Cheat herunterladen',
+      howItWorks: {
+        title: 'Wie es funktioniert',
+        step1: {
+          title: 'Herunterladen',
+          desc: 'Installieren Sie Iris auf Ihrem PC'
+        },
+        step2: {
+          title: 'Anmelden',
+          desc: 'Verknüpfen Sie Ihr Discord-Konto'
+        },
+        step3: {
+          title: 'Spielen',
+          desc: 'Iris überprüft automatisch Ihre Identität'
+        }
       },
-      comingSoon: {
-        fr: 'Bientôt disponible',
-        en: 'Coming soon',
-        it: 'Prossimamente',
-        de: 'Demnächst',
+      back: 'Zurück',
+      version: 'Version',
+      fileName: 'Dateiname'
+    },
+    it: {
+      title: 'Iris Anticheat',
+      subtitle: 'Proteggi il tuo account NoMercy',
+      description: 'Iris è la nostra soluzione anticheat di nuova generazione che collega il tuo account Discord alla tua macchina tramite TPM 2.0 per garantire l\'integrità di tutti i giocatori PC.',
+      downloadBtn: 'Scarica Iris',
+      downloading: 'Preparazione...',
+      loginRequired: 'Accesso richiesto',
+      loginDescription: 'Accedi con Discord per scaricare Iris.',
+      profileRequired: 'Profilo richiesto',
+      profileDescription: 'Completa il tuo profilo prima di scaricare Iris.',
+      completeProfile: 'Completa il mio profilo',
+      features: {
+        title: 'Funzionalità',
+        tpm: {
+          title: 'TPM 2.0',
+          desc: 'Identificazione hardware unica e a prova di manomissione'
+        },
+        binding: {
+          title: 'Collegamento sicuro',
+          desc: 'Un account Discord = Una macchina'
+        },
+        lightweight: {
+          title: 'Ultra leggero',
+          desc: 'Nessun impatto sulle prestazioni di gioco'
+        },
+        realtime: {
+          title: 'Tempo reale',
+          desc: 'Verifica continua durante le partite'
+        }
       },
-      version: {
-        fr: 'Version',
-        en: 'Version',
-        it: 'Versione',
-        de: 'Version',
+      requirements: {
+        title: 'Requisiti di sistema',
+        os: 'Windows 10/11 (64-bit)',
+        tpm: 'TPM 2.0 abilitato',
+        discord: 'Account Discord collegato',
+        admin: 'Diritti di amministratore'
       },
-      loginRequired: {
-        fr: 'Connectez-vous pour télécharger l\'Anti-Cheat',
-        en: 'Login to download the Anti-Cheat',
-        it: 'Accedi per scaricare l\'Anti-Cheat',
-        de: 'Melden Sie sich an, um den Anti-Cheat herunterzuladen',
+      howItWorks: {
+        title: 'Come funziona',
+        step1: {
+          title: 'Scarica',
+          desc: 'Installa Iris sul tuo PC'
+        },
+        step2: {
+          title: 'Accedi',
+          desc: 'Collega il tuo account Discord'
+        },
+        step3: {
+          title: 'Gioca',
+          desc: 'Iris verifica automaticamente la tua identità'
+        }
       },
-      loginBtn: {
-        fr: 'Se connecter',
-        en: 'Login',
-        it: 'Accedi',
-        de: 'Anmelden',
-      },
-      pcOnly: {
-        fr: 'L\'Anti-Cheat est réservé aux joueurs PC uniquement.',
-        en: 'Anti-Cheat is only available for PC players.',
-        it: 'L\'Anti-Cheat è disponibile solo per i giocatori PC.',
-        de: 'Anti-Cheat ist nur für PC-Spieler verfügbar.',
-      },
-    };
-    return texts[key]?.[language] || texts[key]?.en || key;
+      back: 'Indietro',
+      version: 'Versione',
+      fileName: 'Nome file'
+    }
   };
 
+  const t = texts[language] || texts.en;
+
+  // Fetch download info when authenticated
   useEffect(() => {
-    document.title = `NoMercy - ${getText('pageTitle')}`;
-  }, [language]);
+    if (isAuthenticated && user?.isProfileComplete) {
+      fetchDownloadInfo();
+    }
+  }, [isAuthenticated, user]);
+
+  const fetchDownloadInfo = async () => {
+    try {
+      const response = await fetch(`${API_URL}/iris/download`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setDownloadInfo(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch download info:', err);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!downloadInfo) return;
+    
+    setDownloading(true);
+    setError('');
+    
+    try {
+      // Open download in new tab/window
+      window.open(`${API_URL}${downloadInfo.downloadUrl}`, '_blank');
+    } catch (err) {
+      setError('Download failed. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const features = [
-    { icon: Eye, title: getText('feature1Title'), desc: getText('feature1Desc') },
-    { icon: Cpu, title: getText('feature2Title'), desc: getText('feature2Desc') },
-    { icon: Fingerprint, title: getText('feature3Title'), desc: getText('feature3Desc') },
-    { icon: Server, title: getText('feature4Title'), desc: getText('feature4Desc') },
+    { icon: Cpu, ...t.features.tpm },
+    { icon: Lock, ...t.features.binding },
+    { icon: Zap, ...t.features.lightweight },
+    { icon: Eye, ...t.features.realtime }
   ];
 
   const requirements = [
-    getText('req1'),
-    getText('req2'),
-    getText('req3'),
-    getText('req4'),
+    { icon: Monitor, text: t.requirements.os },
+    { icon: Cpu, text: t.requirements.tpm },
+    { icon: Shield, text: t.requirements.discord },
+    { icon: Lock, text: t.requirements.admin }
+  ];
+
+  const steps = [
+    { number: '01', ...t.howItWorks.step1 },
+    { number: '02', ...t.howItWorks.step2 },
+    { number: '03', ...t.howItWorks.step3 }
   ];
 
   return (
-    <div className="min-h-screen bg-dark-950 relative">
+    <div className="min-h-screen bg-dark-950 relative overflow-hidden">
       {/* Background Effects */}
-      <div className="absolute inset-0 pointer-events-none" style={{ 
-        background: isHardcore 
-          ? 'radial-gradient(ellipse at 20% 20%, rgba(239, 68, 68, 0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(249, 115, 22, 0.05) 0%, transparent 50%)'
-          : 'radial-gradient(ellipse at 20% 20%, rgba(34, 211, 238, 0.08) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 50%)'
-      }}></div>
-      <div className="absolute inset-0 grid-pattern pointer-events-none opacity-30"></div>
+      <div className="absolute inset-0 grid-pattern pointer-events-none opacity-20"></div>
+      {isHardcore ? (
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(239, 68, 68, 0.15) 0%, transparent 60%)' }}></div>
+      ) : (
+        <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(6, 182, 212, 0.15) 0%, transparent 60%)' }}></div>
+      )}
 
       <div className="relative z-10 py-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Back button */}
           <Link 
             to={selectedMode ? `/${selectedMode}` : '/'}
-            className={`inline-flex items-center space-x-2 ${textAccent} hover:underline mb-6`}
+            className={`inline-flex items-center space-x-2 text-${accentColor}-400 hover:underline mb-8`}
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>{getText('back')}</span>
+            <span>{t.back}</span>
           </Link>
 
-          {/* Header */}
-          <div className="mb-10">
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <div className={`absolute inset-0 ${isHardcore ? 'bg-red-500/30' : 'bg-cyan-500/30'} blur-xl`}></div>
-                <div className={`relative w-14 h-14 bg-gradient-to-br ${gradientFrom} ${gradientTo} rounded-xl flex items-center justify-center shadow-lg ${isHardcore ? 'shadow-red-500/40' : 'shadow-cyan-500/40'}`}>
-                  <Shield className="w-7 h-7 text-white" />
-                </div>
-              </div>
-              <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-white mb-1">{getText('pageTitle')}</h1>
-                <p className="text-gray-400 text-sm">{getText('pageSubtitle')}</p>
+          {/* Hero Section */}
+          <div className="text-center mb-12">
+            <div className="relative inline-block mb-6">
+              <div className={`absolute inset-0 blur-3xl opacity-30 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}></div>
+              <div className={`relative w-24 h-24 rounded-2xl bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg`}>
+                <Shield className="w-12 h-12 text-white" />
               </div>
             </div>
+            <h1 className={`text-4xl md:text-5xl font-display tracking-wider mb-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent`}>
+              {t.title}
+            </h1>
+            <p className="text-xl text-gray-400 mb-4">{t.subtitle}</p>
+            <p className="text-gray-500 max-w-2xl mx-auto">{t.description}</p>
           </div>
 
-          {/* Why Anti-Cheat */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${borderColor} p-6 mb-6`}>
-            <h2 className={`text-xl font-bold text-white mb-4 flex items-center space-x-2`}>
-              <Zap className={`w-5 h-5 ${textAccent}`} />
-              <span>{getText('whyAnticheat')}</span>
-            </h2>
-            <p className="text-gray-300 leading-relaxed mb-6">{getText('whyDesc')}</p>
-            
-            {/* Download Button */}
-            <div className="flex flex-col items-center">
-              {user ? (
-                user.platform === 'PC' ? (
-                  <>
-                    <p className="text-gray-500 text-xs mb-2">Player ID: <span className="text-cyan-400 font-mono">{user.id}</span></p>
-                    <iframe
-                      src={`https://api.ggsecure.io/api/embed/button/693cef61be96745c4607e233/${user.id}`}
-                      width="300"
-                      height="80"
-                      frameBorder="0"
-                      title="GGSecure Anti-Cheat Download"
-                    />
-                  </>
-                ) : (
-                  <div className="text-center p-4 bg-dark-800/50 rounded-xl border border-gray-700/50">
-                    <p className="text-gray-400">{getText('pcOnly')}</p>
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center space-y-4">
-                  <p className="text-gray-400">{getText('loginRequired')}</p>
-                  <button
-                    onClick={login}
-                    className={`inline-flex items-center space-x-3 px-10 py-5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-2xl text-white font-bold text-xl shadow-2xl ${isHardcore ? 'shadow-red-500/40 hover:shadow-red-500/60' : 'shadow-cyan-500/40 hover:shadow-cyan-500/60'} hover:scale-105 transition-all duration-300 border ${borderColor}`}
-                  >
-                    <LogIn className="w-6 h-6" />
-                    <span>{getText('loginBtn')}</span>
-                  </button>
+          {/* Download Section */}
+          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 p-8 mb-12`}>
+            {!isAuthenticated ? (
+              // Not logged in
+              <div className="text-center py-8">
+                <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">{t.loginRequired}</h3>
+                <p className="text-gray-400 mb-6">{t.loginDescription}</p>
+                <button
+                  onClick={() => window.location.href = `${API_URL}/auth/discord`}
+                  className="flex items-center gap-2 px-6 py-3 bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium rounded-xl mx-auto transition-all hover:scale-105"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037 13.13 13.13 0 00-.608 1.25 18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037 19.736 19.736 0 00-4.884 1.515.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128c.122-.093.244-.19.361-.289a.074.074 0 01.078-.012c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.118.098.24.195.361.288a.077.077 0 01-.006.128 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+                  </svg>
+                  <span>{language === 'fr' ? 'Connexion' : 'Login'}</span>
+                </button>
+              </div>
+            ) : !user?.isProfileComplete ? (
+              // Profile not complete
+              <div className="text-center py-8">
+                <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">{t.profileRequired}</h3>
+                <p className="text-gray-400 mb-6">{t.profileDescription}</p>
+                <button
+                  onClick={() => navigate('/setup-profile')}
+                  className={`px-6 py-3 bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-bold rounded-xl hover:opacity-90 transition-all`}
+                >
+                  {t.completeProfile}
+                </button>
+              </div>
+            ) : (
+              // Ready to download
+              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                  <h3 className="text-2xl font-bold text-white mb-2">{t.downloadBtn}</h3>
+                  {downloadInfo && (
+                    <div className="text-sm text-gray-400 space-y-1">
+                      <p>{t.version}: <span className="text-white">{downloadInfo.version}</span></p>
+                      <p>{t.fileName}: <span className="text-white">{downloadInfo.fileName}</span></p>
+                    </div>
+                  )}
                 </div>
-              )}
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading || !downloadInfo}
+                  className={`flex items-center gap-3 px-8 py-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-bold text-lg rounded-xl hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {downloading ? (
+                    <>
+                      <RefreshCw className="w-6 h-6 animate-spin" />
+                      <span>{t.downloading}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-6 h-6" />
+                      <span>{t.downloadBtn}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {error && (
+              <p className="text-red-400 text-center mt-4">{error}</p>
+            )}
+          </div>
+
+          {/* Features */}
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-white text-center mb-8">{t.features.title}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {features.map((feature, index) => (
+                <div 
+                  key={index}
+                  className={`bg-dark-900/60 backdrop-blur-sm border border-${accentColor}-500/10 rounded-xl p-6 hover:border-${accentColor}-500/30 transition-all`}
+                >
+                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center mb-4`}>
+                    <feature.icon className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2">{feature.title}</h3>
+                  <p className="text-gray-400 text-sm">{feature.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* How it works */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${borderColor} overflow-hidden mb-6`}>
-            <div className={`px-6 py-4 border-b ${borderColor} ${bgAccent}`}>
-              <h2 className="font-bold text-white flex items-center space-x-2">
-                <Cpu className={`w-5 h-5 ${textAccent}`} />
-                <span>{getText('howItWorks')}</span>
-              </h2>
-            </div>
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {features.map((feature, index) => {
-                const Icon = feature.icon;
-                return (
-                  <div key={index} className="flex items-start space-x-4">
-                    <div className={`w-10 h-10 rounded-lg ${bgAccent} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`w-5 h-5 ${textAccent}`} />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-semibold mb-1">{feature.title}</h3>
-                      <p className="text-gray-400 text-sm">{feature.desc}</p>
-                    </div>
+          <div className="mb-12">
+            <h2 className="text-2xl font-bold text-white text-center mb-8">{t.howItWorks.title}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {steps.map((step, index) => (
+                <div key={index} className="text-center">
+                  <div className={`text-6xl font-display bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent mb-4`}>
+                    {step.number}
                   </div>
-                );
-              })}
+                  <h3 className="text-xl font-bold text-white mb-2">{step.title}</h3>
+                  <p className="text-gray-400">{step.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* Requirements */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${borderColor} overflow-hidden mb-6`}>
-            <div className={`px-6 py-4 border-b ${borderColor} ${bgAccent}`}>
-              <h2 className="font-bold text-white flex items-center space-x-2">
-                <CheckCircle className={`w-5 h-5 ${textAccent}`} />
-                <span>{getText('requirements')}</span>
-              </h2>
+          <div className={`bg-dark-900/60 backdrop-blur-sm border border-${accentColor}-500/10 rounded-xl p-8`}>
+            <h2 className="text-2xl font-bold text-white text-center mb-6">{t.requirements.title}</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {requirements.map((req, index) => (
+                <div key={index} className="flex items-center gap-3 text-gray-300">
+                  <req.icon className={`w-5 h-5 text-${accentColor}-400 flex-shrink-0`} />
+                  <span className="text-sm">{req.text}</span>
+                </div>
+              ))}
             </div>
-            <div className="p-6">
-              <ul className="space-y-3">
-                {requirements.map((req, index) => (
-                  <li key={index} className="flex items-center space-x-3">
-                    <CheckCircle className={`w-4 h-4 ${textAccent}`} />
-                    <span className="text-gray-300 text-sm">{req}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* Privacy */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${borderColor} p-6`}>
-            <h2 className={`text-xl font-bold text-white mb-4 flex items-center space-x-2`}>
-              <Lock className={`w-5 h-5 ${textAccent}`} />
-              <span>{getText('privacy')}</span>
-            </h2>
-            <p className="text-gray-300 leading-relaxed">{getText('privacyDesc')}</p>
           </div>
         </div>
       </div>
@@ -343,4 +469,3 @@ const Anticheat = () => {
 };
 
 export default Anticheat;
-
