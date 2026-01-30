@@ -25,6 +25,28 @@ const router = express.Router();
  */
 async function distributeRankedRewards(match) {
   try {
+    // ========== PROTECTION CONTRE LES APPELS MULTIPLES ==========
+    // Vérifier si les récompenses ont déjà été distribuées pour éviter les doublons
+    if (match.rewardsDistributed === true) {
+      console.log(`[RANKED REWARDS] ⚠️ Match ${match._id}: Récompenses déjà distribuées, skip.`);
+      return;
+    }
+    
+    // Vérifier aussi si au moins un joueur a déjà reçu des récompenses (double check)
+    // Note: pointsChange peut être 0 par défaut, donc on vérifie si oldPoints ou newPoints sont définis
+    const hasExistingRewards = match.players.some(p => 
+      p.rewards && 
+      (p.rewards.oldPoints !== undefined && p.rewards.oldPoints !== 0) ||
+      (p.rewards.newPoints !== undefined && p.rewards.newPoints !== 0)
+    );
+    if (hasExistingRewards) {
+      console.log(`[RANKED REWARDS] ⚠️ Match ${match._id}: Des récompenses existent déjà, skip.`);
+      return;
+    }
+    
+    // Marquer immédiatement comme distribué pour éviter les race conditions
+    match.rewardsDistributed = true;
+    
     // Note: Les matchs de test distribuent maintenant les récompenses pour permettre les tests
     if (match.isTestMatch) {
     }
@@ -847,6 +869,25 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
 
     let resultMessage = '';
     let matchCompleted = false;
+
+    // ========== PROTECTION CONTRE LES RACE CONDITIONS ==========
+    // Vérifier si les récompenses n'ont pas déjà été distribuées par une autre requête
+    if (match.rewardsDistributed === true) {
+      await match.save(); // Sauvegarder quand même le vote
+      return res.json({ 
+        success: true, 
+        match, 
+        message: 'Vote enregistré. Le match a déjà été finalisé.',
+        voteStats: {
+          votesForTeam1,
+          votesForTeam2,
+          totalVotes,
+          totalPlayers: totalRealPlayers,
+          threshold,
+          yourVote: winner
+        }
+      });
+    }
 
     // Vérifier si 60% des joueurs ont voté pour le même gagnant
     if (votesForTeam1 >= threshold) {

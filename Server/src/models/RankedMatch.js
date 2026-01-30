@@ -241,6 +241,11 @@ const rankedMatchSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Flag pour éviter la distribution double des récompenses (race condition protection)
+  rewardsDistributed: {
+    type: Boolean,
+    default: false
+  },
   // Roster selection phase (for test matches - referents pick players)
   rosterSelection: {
     isActive: { type: Boolean, default: false },

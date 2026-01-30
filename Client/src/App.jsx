@@ -5,7 +5,7 @@ import { ModeProvider, useMode } from './ModeContext';
 import { AuthProvider, useAuth } from './AuthContext';
 import { AudioProvider } from './AudioProvider';
 import { SocketProvider } from './SocketContext';
-import { DataProvider } from './DataContext';
+import { DataProvider, useData } from './DataContext';
 import ScrollToTop from './components/ScrollToTop';
 import PageTransition from './components/PageTransition';
 import AnnouncementModal from './components/AnnouncementModal';
@@ -59,6 +59,7 @@ const LoadingScreen = () => (
 const ProtectedRoute = ({ children, requiredMode }) => {
   const { selectedMode } = useMode();
   const { isAuthenticated, isProfileComplete, loading, isStaff } = useAuth();
+  const { isCdlModeEnabled, isHardcoreModeEnabled } = useData();
   
   if (loading) {
     return <LoadingScreen />;
@@ -68,8 +69,13 @@ const ProtectedRoute = ({ children, requiredMode }) => {
     return <Navigate to="/" replace />;
   }
 
-  // Mode CDL temporairement indisponible (sauf pour staff/admin)
-  if (requiredMode === 'cdl' && !isStaff()) {
+  // Check if CDL mode is accessible (enabled OR staff)
+  if (requiredMode === 'cdl' && !isCdlModeEnabled && !isStaff()) {
+    return <Navigate to="/" replace />;
+  }
+  
+  // Check if Hardcore mode is accessible (enabled OR staff)
+  if (requiredMode === 'hardcore' && !isHardcoreModeEnabled && !isStaff()) {
     return <Navigate to="/" replace />;
   }
   

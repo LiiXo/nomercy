@@ -27,10 +27,17 @@ const getPublicSettings = async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
     
+    // Ensure features have default values for mode toggles
+    const features = {
+      ...settings.features,
+      hardcoreMode: settings.features?.hardcoreMode || { enabled: true, disabledMessage: '' },
+      cdlMode: settings.features?.cdlMode || { enabled: true, disabledMessage: '' }
+    };
+    
     // Return only what's needed for the frontend
     res.json({
       success: true,
-      features: settings.features,
+      features: features,
       globalAlerts: settings.globalAlerts?.filter(a => a.active && (!a.expiresAt || new Date(a.expiresAt) > new Date())) || [],
       maintenance: settings.maintenance,
       banner: settings.banner,
@@ -204,13 +211,25 @@ router.patch('/admin/feature/:featureKey', verifyToken, requireStaff, async (req
     const { featureKey } = req.params;
     const { enabled, disabledMessage } = req.body;
     
+    // Valid feature keys from schema
+    const validFeatureKeys = [
+      'rankedMatchmaking', 'rankedPosting', 'ladderMatchmaking', 'ladderPosting',
+      'squadCreation', 'squadInvites', 'hubPosting', 'shopPurchases', 
+      'profileEditing', 'hardcoreMode', 'cdlMode', 'globalChat', 'registration'
+    ];
+    
+    if (!validFeatureKeys.includes(featureKey)) {
+      return res.status(400).json({ success: false, message: 'Feature non trouvée' });
+    }
+    
     let settings = await AppSettings.findOne();
     if (!settings) {
       settings = new AppSettings();
     }
     
+    // Initialize the feature if it doesn't exist in the document
     if (!settings.features[featureKey]) {
-      return res.status(400).json({ success: false, message: 'Feature non trouvée' });
+      settings.features[featureKey] = { enabled: true, disabledMessage: '' };
     }
     
     if (typeof enabled === 'boolean') {
