@@ -173,22 +173,14 @@ const appSettingsSchema = new mongoose.Schema({
       enabled: { type: Boolean, default: false },
       expiresAt: { type: Date, default: null },
       enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-      enabledAt: { type: Date, default: null },
-      // Programmation de l'événement (heure française)
-      scheduledStartAt: { type: Date, default: null },
-      scheduledEndAt: { type: Date, default: null },
-      scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+      enabledAt: { type: Date, default: null }
     },
     // Double Gold (double les pièces gagnées)
     doubleGold: {
       enabled: { type: Boolean, default: false },
       expiresAt: { type: Date, default: null },
       enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-      enabledAt: { type: Date, default: null },
-      // Programmation de l'événement (heure française)
-      scheduledStartAt: { type: Date, default: null },
-      scheduledEndAt: { type: Date, default: null },
-      scheduledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+      enabledAt: { type: Date, default: null }
     }
   }
 }, {

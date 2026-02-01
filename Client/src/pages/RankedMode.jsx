@@ -797,10 +797,10 @@ const RankedMode = () => {
   };
 
   // Fetch ranked match history and calculate accurate stats (filtered by current season)
-  const fetchCalculatedStats = async () => {
-    if (!isAuthenticated || !user?.id) return;
+  const fetchCalculatedStats = async (season) => {
+    if (!isAuthenticated || !user?.id || !season) return;
     try {
-      const response = await fetch(`${API_URL}/ranked-matches/player-history/${user.id}?limit=500&mode=${selectedMode}&season=${currentSeason}`, { credentials: 'include' });
+      const response = await fetch(`${API_URL}/ranked-matches/player-history/${user.id}?limit=500&mode=${selectedMode}&season=${season}`, { credentials: 'include' });
       const data = await response.json();
       if (data.success && data.matches) {
         // Calculate wins/losses from actual match history
@@ -1919,8 +1919,8 @@ const RankedMode = () => {
 
   // Fetch calculated stats and leaderboard AFTER season is loaded (uses currentSeason for filtering)
   useEffect(() => {
-    if (!seasonLoaded) return;
-    fetchCalculatedStats();
+    if (!seasonLoaded || !currentSeason) return;
+    fetchCalculatedStats(currentSeason);
     fetchLeaderboard(leaderboardPage);
   }, [seasonLoaded, isAuthenticated, selectedMode, currentSeason]);
 
