@@ -6021,6 +6021,9 @@ Cette action est irréversible!`)) {
   const [testTrophyLoading, setTestTrophyLoading] = useState(null);
   const [editingSeasonNumber, setEditingSeasonNumber] = useState(null);
   const [savingSeasonNumber, setSavingSeasonNumber] = useState(false);
+  const [exportingRankings, setExportingRankings] = useState(false);
+  const [rankedMatchmakingEnabled, setRankedMatchmakingEnabled] = useState(true);
+  const [togglingMatchmaking, setTogglingMatchmaking] = useState(false);
 
   const fetchLadderSeasonHistory = async () => {
     setSeasonsLoading(true);
@@ -6045,12 +6048,17 @@ Cette action est irréversible!`)) {
 
   const fetchRankedSeasonInfo = async () => {
     try {
-      const response = await fetch(`${API_URL}/seasons/admin/ranked/info`, {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setRankedSeasonInfo(data);
+      const [seasonRes, settingsRes] = await Promise.all([
+        fetch(`${API_URL}/seasons/admin/ranked/info`, { credentials: 'include' }),
+        fetch(`${API_URL}/app-settings/admin`, { credentials: 'include' })
+      ]);
+      const seasonData = await seasonRes.json();
+      const settingsData = await settingsRes.json();
+      if (seasonData.success) {
+        setRankedSeasonInfo(seasonData);
+      }
+      if (settingsData.success && settingsData.settings?.features?.rankedMatchmaking) {
+        setRankedMatchmakingEnabled(settingsData.settings.features.rankedMatchmaking.enabled !== false);
       }
     } catch (err) {
       console.error('Error fetching ranked season info:', err);
@@ -6076,6 +6084,101 @@ Cette action est irréversible!`)) {
       setError('Erreur lors du reset de la saison');
     } finally {
       setRankedResetLoading(false);
+    }
+  };
+
+  // Export rankings to text file
+  const handleExportRankings = async () => {
+    setExportingRankings(true);
+    try {
+      // Fetch all rankings (top 100)
+      const response = await fetch(`${API_URL}/rankings/leaderboard/all?limit=100&page=1`, { credentials: 'include' });
+      const data = await response.json();
+      
+      if (data.success && data.rankings) {
+        const date = new Date().toLocaleDateString('fr-FR');
+        const currentSeason = rankedSeasonInfo?.currentSeason || 1;
+        
+        // Build text content
+        let content = `=== CLASSEMENT MODE CLASSÉ - ${date} ===\n\n`;
+        content += `Top 100 joueurs - Saison ${currentSeason}\n\n`;
+        content += `${'#'.padEnd(5)}${'Joueur'.padEnd(25)}${'Points'.padEnd(10)}${'V'.padEnd(8)}${'D'.padEnd(8)}${'Division'.padEnd(15)}\n`;
+        content += '-'.repeat(71) + '\n';
+        
+        const divisionNames = {
+          bronze: 'Bronze',
+          silver: 'Argent',
+          gold: 'Or',
+          platinum: 'Platine',
+          diamond: 'Diamant',
+          master: 'Maître',
+          grandmaster: 'Grand Maître',
+          champion: 'Champion'
+        };
+        
+        data.rankings.forEach((player, index) => {
+          const position = (index + 1).toString().padEnd(5);
+          const username = (player.user?.username || 'Inconnu').substring(0, 24).padEnd(25);
+          const points = player.points.toString().padEnd(10);
+          const wins = player.wins.toString().padEnd(8);
+          const losses = player.losses.toString().padEnd(8);
+          const division = (divisionNames[player.division] || player.division || 'Bronze').padEnd(15);
+          
+          content += `${position}${username}${points}${wins}${losses}${division}\n`;
+        });
+        
+        content += '\n' + '-'.repeat(71) + '\n';
+        content += `Total: ${data.rankings.length} joueurs classés\n`;
+        content += `Exporté le: ${new Date().toLocaleString('fr-FR')}\n`;
+        
+        // Create and download file
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `classement_mode_classe_saison_${currentSeason}_${date.replace(/\//g, '-')}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        setSuccess('Classement exporté avec succès');
+      } else {
+        setError('Erreur lors de la récupération des classements');
+      }
+    } catch (err) {
+      console.error('Error exporting rankings:', err);
+      setError('Erreur lors de l\'export des classements');
+    } finally {
+      setExportingRankings(false);
+    }
+  };
+
+  // Toggle ranked matchmaking (admin only)
+  const handleToggleRankedMatchmaking = async () => {
+    setTogglingMatchmaking(true);
+    try {
+      const newState = !rankedMatchmakingEnabled;
+      const response = await fetch(`${API_URL}/app-settings/admin/feature/rankedMatchmaking`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          enabled: newState,
+          disabledMessage: 'La recherche de match en mode classé est temporairement désactivée.'
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRankedMatchmakingEnabled(newState);
+        setSuccess(newState ? 'Recherche de match activée' : 'Recherche de match désactivée');
+      } else {
+        setError(data.message || 'Erreur lors du changement');
+      }
+    } catch (err) {
+      setError('Erreur lors du changement de statut');
+    } finally {
+      setTogglingMatchmaking(false);
     }
   };
 
@@ -6245,6 +6348,80 @@ Cette action est irréversible!`)) {
           <p className="text-gray-500 text-sm mt-3">
             Ce numéro sera utilisé pour nommer les trophées lors de la RAZ (ex: "Diamant - Saison {rankedSeasonInfo?.currentSeason || 1}")
           </p>
+        </div>
+
+        {/* Toggle Ranked Matchmaking - Admin Only */}
+        {userIsAdmin && (
+          <div className="bg-dark-800/50 border border-yellow-500/30 rounded-xl overflow-hidden">
+            <div className="p-6 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Power className="w-5 h-5 text-yellow-400" />
+                Recherche de Match - Mode Classé
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">
+                Activer ou désactiver la recherche de match pour tous les joueurs
+              </p>
+            </div>
+            <div className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${rankedMatchmakingEnabled ? 'bg-green-500' : 'bg-red-500'} animate-pulse`}></div>
+                  <span className={`text-lg font-semibold ${rankedMatchmakingEnabled ? 'text-green-400' : 'text-red-400'}`}>
+                    {rankedMatchmakingEnabled ? 'Recherche activée' : 'Recherche désactivée'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleToggleRankedMatchmaking}
+                  disabled={togglingMatchmaking}
+                  className={`px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${rankedMatchmakingEnabled 
+                    ? 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400' 
+                    : 'bg-green-500/20 hover:bg-green-500/30 border border-green-500/30 text-green-400'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {togglingMatchmaking ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : rankedMatchmakingEnabled ? (
+                    <><ToggleRight className="w-5 h-5" /> Désactiver</>
+                  ) : (
+                    <><ToggleLeft className="w-5 h-5" /> Activer</>
+                  )}
+                </button>
+              </div>
+              <p className="text-gray-500 text-sm mt-4">
+                Lorsque désactivée, les joueurs ne pourront plus lancer de recherche de match en mode classé.
+                Les matchs déjà en cours ne seront pas affectés.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Export Rankings Button */}
+        <div className="bg-dark-800/50 border border-blue-500/30 rounded-xl overflow-hidden">
+          <div className="p-6 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border-b border-white/10">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Download className="w-5 h-5 text-blue-400" />
+              Export des Classements
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">
+              Télécharger le classement actuel en format texte
+            </p>
+          </div>
+          <div className="p-6">
+            <p className="text-gray-400 text-sm mb-4">
+              Exporter le Top 100 des joueurs avec leurs points, victoires, défaites et division.
+            </p>
+            <button
+              onClick={handleExportRankings}
+              disabled={exportingRankings}
+              className="w-full py-4 px-6 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exportingRankings ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> Export en cours...</>
+              ) : (
+                <><Download className="w-5 h-5" /> Exporter les Classements</>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* RAZ Season Button */}

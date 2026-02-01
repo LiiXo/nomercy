@@ -40,7 +40,7 @@ const trophySchema = new mongoose.Schema({
   color: {
     type: String,
     default: 'amber',
-    enum: ['amber', 'yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'cyan', 'green', 'emerald', 'gray']
+    enum: ['amber', 'yellow', 'orange', 'red', 'pink', 'purple', 'blue', 'cyan', 'teal', 'green', 'emerald', 'gray']
   },
   // Rarity level (higher = rarer, displayed first)
   rarity: {

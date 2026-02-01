@@ -69,7 +69,7 @@ const startServer = async () => {
   const allowedOrigins = [
     process.env.CLIENT_URL || 'http://localhost:5173',
     'https://app.ggsecure.io',
-    'https://nomercy.ggsecure.io',
+    'https://nomercy.app',
     'http://localhost:5173',
     'http://localhost:3000'
   ].filter(Boolean);
