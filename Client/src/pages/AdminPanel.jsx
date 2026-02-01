@@ -135,10 +135,20 @@ const AdminPanel = () => {
   
   // Events states (Double XP, Double Gold)
   const [events, setEvents] = useState({
-    doubleXP: { enabled: false, expiresAt: null },
-    doubleGold: { enabled: false, expiresAt: null }
+    doubleXP: { enabled: false, expiresAt: null, scheduledStartAt: null, scheduledEndAt: null },
+    doubleGold: { enabled: false, expiresAt: null, scheduledStartAt: null, scheduledEndAt: null }
   });
   const [loadingEvents, setLoadingEvents] = useState(false);
+  
+  // Event scheduling modal states
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [schedulingEventType, setSchedulingEventType] = useState(null); // 'doubleXP' or 'doubleGold'
+  const [scheduleForm, setScheduleForm] = useState({
+    startDate: '',
+    startTime: '',
+    endDate: '',
+    endTime: ''
+  });
   
   // Update editedConfig when config changes
   // Ensure all expected game modes are present for ranked rewards
@@ -264,6 +274,123 @@ const AdminPanel = () => {
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     return `${hours}h ${minutes}m restantes`;
+  };
+  
+  // Open scheduling modal for an event
+  const openScheduleModal = (eventType) => {
+    setSchedulingEventType(eventType);
+    const eventKey = eventType === 'double-xp' ? 'doubleXP' : 'doubleGold';
+    const event = events[eventKey];
+    
+    // Pre-fill form with existing schedule if available
+    if (event?.scheduledStartAt) {
+      const start = new Date(event.scheduledStartAt);
+      const startLocal = new Date(start.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+      setScheduleForm(prev => ({
+        ...prev,
+        startDate: startLocal.toISOString().split('T')[0],
+        startTime: startLocal.toTimeString().slice(0, 5)
+      }));
+    } else {
+      setScheduleForm(prev => ({ ...prev, startDate: '', startTime: '' }));
+    }
+    
+    if (event?.scheduledEndAt) {
+      const end = new Date(event.scheduledEndAt);
+      const endLocal = new Date(end.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+      setScheduleForm(prev => ({
+        ...prev,
+        endDate: endLocal.toISOString().split('T')[0],
+        endTime: endLocal.toTimeString().slice(0, 5)
+      }));
+    } else {
+      setScheduleForm(prev => ({ ...prev, endDate: '', endTime: '' }));
+    }
+    
+    setShowScheduleModal(true);
+  };
+  
+  // Submit event schedule
+  const handleScheduleEvent = async () => {
+    if (!scheduleForm.startDate || !scheduleForm.startTime) {
+      setError('La date et l\'heure de début sont requises');
+      return;
+    }
+    
+    setLoadingEvents(true);
+    try {
+      const startDateTime = new Date(`${scheduleForm.startDate}T${scheduleForm.startTime}:00`);
+      
+      let endUTC = null;
+      if (scheduleForm.endDate && scheduleForm.endTime) {
+        endUTC = new Date(`${scheduleForm.endDate}T${scheduleForm.endTime}:00`);
+      }
+      
+      const response = await fetch(`${API_URL}/app-settings/admin/events/${schedulingEventType}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          scheduledStartAt: startDateTime.toISOString(),
+          scheduledEndAt: endUTC ? endUTC.toISOString() : null
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message);
+        setShowScheduleModal(false);
+        setScheduleForm({ startDate: '', startTime: '', endDate: '', endTime: '' });
+        fetchEvents();
+      } else {
+        setError(data.message || 'Erreur lors de la programmation');
+      }
+    } catch (err) {
+      setError('Erreur lors de la programmation');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+  
+  // Cancel scheduled event
+  const handleCancelSchedule = async (eventType) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir annuler la programmation de cet événement ?')) {
+      return;
+    }
+    
+    setLoadingEvents(true);
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/events/${eventType}/schedule`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Programmation annulée');
+        fetchEvents();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de l\'annulation');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+  
+  // Format scheduled date for display
+  const formatScheduledDate = (dateStr) => {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return date.toLocaleString('fr-FR', { 
+      timeZone: 'Europe/Paris',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   // Navigation tabs configuration grouped by category
@@ -4146,7 +4273,7 @@ Cette action est irréversible!`)) {
             Événements Temporaires (Mode Classé)
           </h3>
           <p className="text-gray-400 text-sm mb-4">
-            Activez des événements spéciaux pour booster les récompenses en mode classé. Durée: 24h.
+            Activez des événements spéciaux ou programmez-les à l'avance (heure française).
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4154,7 +4281,9 @@ Cette action est irréversible!`)) {
             <div className={`p-4 rounded-xl border transition-all ${
               events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
                 ? 'bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/20'
-                : 'bg-dark-800/50 border-white/10'
+                : events.doubleXP?.scheduledStartAt
+                  ? 'bg-purple-500/10 border-purple-500/30'
+                  : 'bg-dark-800/50 border-white/10'
             }`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -4186,19 +4315,57 @@ Cette action est irréversible!`)) {
                   }`} />
                 </button>
               </div>
+              
+              {/* Time remaining if active */}
               {events.doubleXP?.enabled && events.doubleXP?.expiresAt && new Date(events.doubleXP.expiresAt) > new Date() && (
-                <div className="flex items-center gap-2 text-purple-400 text-sm">
+                <div className="flex items-center gap-2 text-purple-400 text-sm mb-2">
                   <Clock className="w-4 h-4" />
                   <span>{formatEventTimeRemaining(events.doubleXP.expiresAt)}</span>
                 </div>
               )}
+              
+              {/* Scheduled info */}
+              {events.doubleXP?.scheduledStartAt && (
+                <div className="mt-2 p-2 bg-purple-500/10 rounded-lg">
+                  <div className="flex items-center gap-2 text-purple-300 text-xs mb-1">
+                    <Calendar className="w-3 h-3" />
+                    <span>Programmé</span>
+                  </div>
+                  <div className="text-purple-400 text-sm">
+                    <div>🟢 Début: {formatScheduledDate(events.doubleXP.scheduledStartAt)}</div>
+                    {events.doubleXP.scheduledEndAt && (
+                      <div>🔴 Fin: {formatScheduledDate(events.doubleXP.scheduledEndAt)}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleCancelSchedule('double-xp')}
+                    disabled={loadingEvents}
+                    className="mt-2 text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Annuler la programmation
+                  </button>
+                </div>
+              )}
+              
+              {/* Schedule button */}
+              <button
+                onClick={() => openScheduleModal('double-xp')}
+                disabled={loadingEvents}
+                className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors text-sm"
+              >
+                <Calendar className="w-4 h-4" />
+                Programmer
+              </button>
             </div>
             
             {/* Double Gold Event */}
             <div className={`p-4 rounded-xl border transition-all ${
               events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
                 ? 'bg-yellow-500/20 border-yellow-500/50 shadow-lg shadow-yellow-500/20'
-                : 'bg-dark-800/50 border-white/10'
+                : events.doubleGold?.scheduledStartAt
+                  ? 'bg-yellow-500/10 border-yellow-500/30'
+                  : 'bg-dark-800/50 border-white/10'
             }`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -4230,19 +4397,56 @@ Cette action est irréversible!`)) {
                   }`} />
                 </button>
               </div>
+              
+              {/* Time remaining if active */}
               {events.doubleGold?.enabled && events.doubleGold?.expiresAt && new Date(events.doubleGold.expiresAt) > new Date() && (
-                <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                <div className="flex items-center gap-2 text-yellow-400 text-sm mb-2">
                   <Clock className="w-4 h-4" />
                   <span>{formatEventTimeRemaining(events.doubleGold.expiresAt)}</span>
                 </div>
               )}
+              
+              {/* Scheduled info */}
+              {events.doubleGold?.scheduledStartAt && (
+                <div className="mt-2 p-2 bg-yellow-500/10 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-300 text-xs mb-1">
+                    <Calendar className="w-3 h-3" />
+                    <span>Programmé</span>
+                  </div>
+                  <div className="text-yellow-400 text-sm">
+                    <div>🟢 Début: {formatScheduledDate(events.doubleGold.scheduledStartAt)}</div>
+                    {events.doubleGold.scheduledEndAt && (
+                      <div>🔴 Fin: {formatScheduledDate(events.doubleGold.scheduledEndAt)}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleCancelSchedule('double-gold')}
+                    disabled={loadingEvents}
+                    className="mt-2 text-xs text-red-400 hover:text-red-300 flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    Annuler la programmation
+                  </button>
+                </div>
+              )}
+              
+              {/* Schedule button */}
+              <button
+                onClick={() => openScheduleModal('double-gold')}
+                disabled={loadingEvents}
+                className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg transition-colors text-sm"
+              >
+                <Calendar className="w-4 h-4" />
+                Programmer
+              </button>
             </div>
           </div>
           
           <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
             <p className="text-yellow-400 text-sm">
               💡 <strong>Double XP</strong> : Double les points classés gagnés en victoire.<br />
-              💰 <strong>Double Gold</strong> : Double le gold gagné (victoire ET consolation défaite).
+              💰 <strong>Double Gold</strong> : Double le gold gagné (victoire ET consolation défaite).<br />
+              📅 <strong>Programmation</strong> : Les heures sont en heure française (Europe/Paris).
             </p>
           </div>
         </div>
@@ -9695,6 +9899,123 @@ Cette action est irréversible!`)) {
                   <>
                     <RotateCcw className="w-5 h-5" />
                     Reset
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Event Scheduling Modal */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowScheduleModal(false)}></div>
+          <div className="relative bg-dark-900 border-t sm:border border-yellow-500/20 rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-4 sm:mb-6">
+              <div className={`p-2 sm:p-3 rounded-xl ${schedulingEventType === 'double-xp' ? 'bg-purple-500/20' : 'bg-yellow-500/20'}`}>
+                <Calendar className={`w-5 sm:w-6 h-5 sm:h-6 ${schedulingEventType === 'double-xp' ? 'text-purple-400' : 'text-yellow-400'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-white truncate">
+                  Programmer {schedulingEventType === 'double-xp' ? 'Double XP' : 'Double Gold'}
+                </h3>
+                <p className="text-gray-400 text-xs sm:text-sm">Heure française (Europe/Paris)</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {/* Start Date/Time */}
+              <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
+                <label className="block text-sm font-medium text-green-400 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Début de l'événement *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={scheduleForm.startDate}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, startDate: e.target.value })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-green-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Heure</label>
+                    <input
+                      type="time"
+                      value={scheduleForm.startTime}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-green-500/50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* End Date/Time */}
+              <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
+                <label className="block text-sm font-medium text-red-400 mb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4" />
+                  Fin de l'événement (optionnel)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={scheduleForm.endDate}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, endDate: e.target.value })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-red-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Heure</label>
+                    <input
+                      type="time"
+                      value={scheduleForm.endTime}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })}
+                      className="w-full px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white focus:outline-none focus:border-red-500/50"
+                    />
+                  </div>
+                </div>
+                <p className="text-gray-500 text-xs mt-2">
+                  Si non définie, l'événement devra être désactivé manuellement.
+                </p>
+              </div>
+
+              <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                <p className="text-yellow-400 text-sm">
+                  📅 L'événement s'activera/désactivera automatiquement aux heures programmées (vérification chaque minute).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-3 mt-4 sm:mt-6">
+              <button
+                onClick={() => {
+                  setShowScheduleModal(false);
+                  setScheduleForm({ startDate: '', startTime: '', endDate: '', endTime: '' });
+                }}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleScheduleEvent}
+                disabled={loadingEvents || !scheduleForm.startDate || !scheduleForm.startTime}
+                className={`flex-1 py-3 px-4 font-medium rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${
+                  schedulingEventType === 'double-xp' 
+                    ? 'bg-purple-500 text-white hover:bg-purple-600' 
+                    : 'bg-yellow-500 text-black hover:bg-yellow-400'
+                }`}
+              >
+                {loadingEvents ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Calendar className="w-5 h-5" />
+                    Programmer
                   </>
                 )}
               </button>

@@ -25,7 +25,7 @@ function isCacheValid(cachedData) {
 // ==================== PUBLIC ROUTES ====================
 
 // Helper function to calculate wins/losses from RankedMatch history
-async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null) {
+async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null, season = null) {
   try {
     const query = {
       'players.user': userId,
@@ -34,8 +34,21 @@ async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null)
       mode: mode
     };
     
-    // If user has reset their stats, only count matches after the reset
-    if (statsResetAt) {
+    // If season is provided, filter by season date range
+    if (season) {
+      const currentYear = new Date().getFullYear();
+      const seasonMonth = parseInt(season); // Season 1 = January, Season 2 = February, etc.
+      let startDate = new Date(Date.UTC(currentYear, seasonMonth - 1, 1, 9, 0, 0));
+      const endDate = new Date(Date.UTC(currentYear, seasonMonth, 1, 9, 0, 0));
+      
+      // If user has reset their stats, use the later of: season start OR statsResetAt
+      if (statsResetAt && new Date(statsResetAt) > startDate) {
+        startDate = new Date(statsResetAt);
+      }
+      
+      query.completedAt = { $gte: startDate, $lt: endDate };
+    } else if (statsResetAt) {
+      // No season filter, just use statsResetAt
       query.completedAt = { $gt: statsResetAt };
     }
     
@@ -69,7 +82,7 @@ async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null)
   }
 }
 
-// Get leaderboard
+// Get leaderboard (shows all players with points, wins/losses filtered by current season)
 router.get('/leaderboard/:mode', async (req, res) => {
   try {
     const { mode } = req.params;
@@ -88,23 +101,23 @@ router.get('/leaderboard/:mode', async (req, res) => {
       return res.json(cachedData.data);
     }
 
-    // Build query - if all=true, show all players including 0 points
-    // Otherwise only show players who have played at least one match
+    // Build query - NO season filter for rankings (show all players with points)
+    // Wins/losses will be calculated filtered by season
     const showAll = all === 'true';
-    const query = { mode, season: parseInt(season) };
+    const query = { mode };
     
     if (!showAll) {
-      // Only players who have played at least one match
-      query.$or = [{ wins: { $gt: 0 } }, { losses: { $gt: 0 } }];
+      // Only players who have points > 0 (ranked players)
+      query.points = { $gt: 0 };
     }
 
     const parsedLimit = parseInt(limit);
     const parsedPage = parseInt(page);
     const skip = (parsedPage - 1) * parsedLimit;
 
-    // First, let's check how many rankings exist for this mode (without filters)
-    const totalInDb = await Ranking.countDocuments({ mode, season: parseInt(season) });
-    const withMatchesInDb = await Ranking.countDocuments({ mode, season: parseInt(season), $or: [{ wins: { $gt: 0 } }, { losses: { $gt: 0 } }] });
+    // First, let's check how many rankings exist for this mode
+    const totalInDb = await Ranking.countDocuments({ mode });
+    const withPointsInDb = await Ranking.countDocuments({ mode, points: { $gt: 0 } });
 
     // Fetch more than needed to account for filtered users, then slice
     const overFetchMultiplier = 2;
@@ -138,7 +151,7 @@ router.get('/leaderboard/:mode', async (req, res) => {
     // Apply pagination on filtered results
     const paginatedRankings = validRankings.slice(skip, skip + parsedLimit);
 
-    // Calculate accurate wins/losses from match history for each player
+    // Calculate accurate wins/losses from match history for each player (filtered by season)
     const rankedDataPromises = paginatedRankings.map(async (r, index, arr) => {
       const currentPoints = r.points;
       
@@ -150,9 +163,9 @@ router.get('/leaderboard/:mode', async (req, res) => {
       const isTiedWithNext = nextPoints !== null && nextPoints === currentPoints;
       const hasTie = isTiedWithPrev || isTiedWithNext;
       
-      // Calculate actual wins/losses from RankedMatch history
+      // Calculate actual wins/losses from RankedMatch history (filtered by current season)
       const statsResetAt = r.user?.statsResetAt || null;
-      const { wins, losses } = await calculateWinsLossesFromHistory(r.user._id, mode, statsResetAt);
+      const { wins, losses } = await calculateWinsLossesFromHistory(r.user._id, mode, statsResetAt, parseInt(season));
       
       const jsonData = r.toJSON();
       return {
@@ -461,9 +474,9 @@ router.get('/user/:userId/:mode', async (req, res) => {
       return res.status(403).json({ success: false, message: 'User is banned' });
     }
 
-    // Calculate accurate wins/losses from RankedMatch history
+    // Calculate accurate wins/losses from RankedMatch history (filtered by season)
     const statsResetAt = ranking.user.statsResetAt || null;
-    const { wins, losses } = await calculateWinsLossesFromHistory(userId, mode, statsResetAt);
+    const { wins, losses } = await calculateWinsLossesFromHistory(userId, mode, statsResetAt, parseInt(season));
 
     // Get user's position - count only non-banned users with better stats
     const allHigherRankings = await Ranking.find({
@@ -541,9 +554,9 @@ router.get('/me/:mode', verifyToken, async (req, res) => {
       await ranking.save();
     }
 
-    // Calculate accurate wins/losses from RankedMatch history
+    // Calculate accurate wins/losses from RankedMatch history (filtered by season)
     const statsResetAt = req.user.statsResetAt || null;
-    const { wins, losses } = await calculateWinsLossesFromHistory(req.user._id, mode, statsResetAt);
+    const { wins, losses } = await calculateWinsLossesFromHistory(req.user._id, mode, statsResetAt, parseInt(season));
 
     // Get position - with tiebreakers, excluding banned users
     const allHigherRankings = await Ranking.find({

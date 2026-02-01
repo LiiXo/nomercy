@@ -635,20 +635,168 @@ router.get('/admin/events', verifyToken, requireAdmin, async (req, res) => {
                  (!settings.events?.doubleXP?.expiresAt || new Date(settings.events.doubleXP.expiresAt) > now),
         expiresAt: settings.events?.doubleXP?.expiresAt,
         enabledBy: settings.events?.doubleXP?.enabledBy,
-        enabledAt: settings.events?.doubleXP?.enabledAt
+        enabledAt: settings.events?.doubleXP?.enabledAt,
+        // Scheduling info
+        scheduledStartAt: settings.events?.doubleXP?.scheduledStartAt,
+        scheduledEndAt: settings.events?.doubleXP?.scheduledEndAt,
+        scheduledBy: settings.events?.doubleXP?.scheduledBy
       },
       doubleGold: {
         enabled: settings.events?.doubleGold?.enabled && 
                  (!settings.events?.doubleGold?.expiresAt || new Date(settings.events.doubleGold.expiresAt) > now),
         expiresAt: settings.events?.doubleGold?.expiresAt,
         enabledBy: settings.events?.doubleGold?.enabledBy,
-        enabledAt: settings.events?.doubleGold?.enabledAt
+        enabledAt: settings.events?.doubleGold?.enabledAt,
+        // Scheduling info
+        scheduledStartAt: settings.events?.doubleGold?.scheduledStartAt,
+        scheduledEndAt: settings.events?.doubleGold?.scheduledEndAt,
+        scheduledBy: settings.events?.doubleGold?.scheduledBy
       }
     };
     
     res.json({ success: true, events });
   } catch (error) {
     console.error('Error fetching events:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Schedule Double XP event (admin only)
+router.post('/admin/events/double-xp/schedule', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { scheduledStartAt, scheduledEndAt } = req.body;
+    
+    if (!scheduledStartAt) {
+      return res.status(400).json({ success: false, message: 'La date de début est requise' });
+    }
+    
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    
+    // Initialize events if not exists
+    if (!settings.events) {
+      settings.events = {};
+    }
+    if (!settings.events.doubleXP) {
+      settings.events.doubleXP = { enabled: false };
+    }
+    
+    // Set scheduled times
+    settings.events.doubleXP.scheduledStartAt = new Date(scheduledStartAt);
+    settings.events.doubleXP.scheduledEndAt = scheduledEndAt ? new Date(scheduledEndAt) : null;
+    settings.events.doubleXP.scheduledBy = req.user._id;
+    
+    settings.markModified('events');
+    await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Schedule Event', 'Double XP', {
+      fields: [
+        { name: 'Début programmé', value: new Date(scheduledStartAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) },
+        { name: 'Fin programmée', value: scheduledEndAt ? new Date(scheduledEndAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) : 'Non définie' }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Événement Double XP programmé',
+      event: settings.events.doubleXP
+    });
+  } catch (error) {
+    console.error('Error scheduling double XP event:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Schedule Double Gold event (admin only)
+router.post('/admin/events/double-gold/schedule', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { scheduledStartAt, scheduledEndAt } = req.body;
+    
+    if (!scheduledStartAt) {
+      return res.status(400).json({ success: false, message: 'La date de début est requise' });
+    }
+    
+    let settings = await AppSettings.findOne();
+    if (!settings) {
+      settings = new AppSettings();
+    }
+    
+    // Initialize events if not exists
+    if (!settings.events) {
+      settings.events = {};
+    }
+    if (!settings.events.doubleGold) {
+      settings.events.doubleGold = { enabled: false };
+    }
+    
+    // Set scheduled times
+    settings.events.doubleGold.scheduledStartAt = new Date(scheduledStartAt);
+    settings.events.doubleGold.scheduledEndAt = scheduledEndAt ? new Date(scheduledEndAt) : null;
+    settings.events.doubleGold.scheduledBy = req.user._id;
+    
+    settings.markModified('events');
+    await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Schedule Event', 'Double Gold', {
+      fields: [
+        { name: 'Début programmé', value: new Date(scheduledStartAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) },
+        { name: 'Fin programmée', value: scheduledEndAt ? new Date(scheduledEndAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) : 'Non définie' }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Événement Double Gold programmé',
+      event: settings.events.doubleGold
+    });
+  } catch (error) {
+    console.error('Error scheduling double gold event:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Cancel scheduled event (admin only)
+router.delete('/admin/events/:eventType/schedule', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { eventType } = req.params;
+    
+    if (!['double-xp', 'double-gold'].includes(eventType)) {
+      return res.status(400).json({ success: false, message: 'Type d\'\u00e9vénement invalide' });
+    }
+    
+    const eventKey = eventType === 'double-xp' ? 'doubleXP' : 'doubleGold';
+    
+    let settings = await AppSettings.findOne();
+    if (!settings || !settings.events || !settings.events[eventKey]) {
+      return res.status(404).json({ success: false, message: 'Événement non trouvé' });
+    }
+    
+    // Clear scheduling
+    settings.events[eventKey].scheduledStartAt = null;
+    settings.events[eventKey].scheduledEndAt = null;
+    settings.events[eventKey].scheduledBy = null;
+    
+    settings.markModified('events');
+    await settings.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Cancel Scheduled Event', eventType === 'double-xp' ? 'Double XP' : 'Double Gold', {
+      fields: [
+        { name: 'État', value: 'Programmation annulée' }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: 'Programmation annulée',
+      event: settings.events[eventKey]
+    });
+  } catch (error) {
+    console.error('Error canceling scheduled event:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

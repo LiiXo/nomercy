@@ -464,6 +464,7 @@ const RankedMode = () => {
   
   // Current season from config
   const [currentSeason, setCurrentSeason] = useState(1);
+  const [seasonLoaded, setSeasonLoaded] = useState(false);
   
   // Season rewards and countdown
   const [seasonRewardsInfo, setSeasonRewardsInfo] = useState(null);
@@ -634,6 +635,8 @@ const RankedMode = () => {
       }
     } catch (err) {
       console.error('Error fetching rank thresholds:', err);
+    } finally {
+      setSeasonLoaded(true);
     }
   };
   
@@ -793,11 +796,11 @@ const RankedMode = () => {
     }
   };
 
-  // Fetch ranked match history and calculate accurate stats
+  // Fetch ranked match history and calculate accurate stats (filtered by current season)
   const fetchCalculatedStats = async () => {
     if (!isAuthenticated || !user?.id) return;
     try {
-      const response = await fetch(`${API_URL}/ranked-matches/player-history/${user.id}?limit=500&mode=${selectedMode}`, { credentials: 'include' });
+      const response = await fetch(`${API_URL}/ranked-matches/player-history/${user.id}?limit=500&mode=${selectedMode}&season=${currentSeason}`, { credentials: 'include' });
       const data = await response.json();
       if (data.success && data.matches) {
         // Calculate wins/losses from actual match history
@@ -814,7 +817,7 @@ const RankedMode = () => {
     }
   };
 
-  // Fetch leaderboard with pagination
+  // Fetch leaderboard with pagination (filtered by current season)
   const fetchLeaderboard = async (page = 1, force = false) => {
     if (force) {
       setRefreshingLeaderboard(true);
@@ -822,18 +825,10 @@ const RankedMode = () => {
       setLoadingLeaderboard(true);
     }
     try {
-      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?limit=${LEADERBOARD_PER_PAGE}&page=${page}${force ? '&force=true' : ''}`;
-      console.log('[Leaderboard] Fetching:', url);
+      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?season=${currentSeason}&limit=${LEADERBOARD_PER_PAGE}&page=${page}${force ? '&force=true' : ''}`;
       
       const response = await fetch(url, { credentials: 'include' });
       const data = await response.json();
-      
-      console.log('[Leaderboard] Response:', {
-        success: data.success,
-        rankingsCount: data.rankings?.length,
-        pagination: data.pagination,
-        selectedMode
-      });
       
       if (data.success) {
         setLeaderboard(data.rankings);
@@ -1888,10 +1883,11 @@ const RankedMode = () => {
     };
   }, [cancellationTimeoutId]);
 
-  // Fetch leaderboard when page changes
+  // Fetch leaderboard when page changes (only after season is loaded)
   useEffect(() => {
+    if (!seasonLoaded) return;
     fetchLeaderboard(leaderboardPage);
-  }, [leaderboardPage, selectedMode]);
+  }, [leaderboardPage, selectedMode, seasonLoaded]);
 
   // Handle leaderboard page change
   const handleLeaderboardPageChange = (newPage) => {
@@ -1902,11 +1898,11 @@ const RankedMode = () => {
 
   // Initial load
   useEffect(() => {
+    setSeasonLoaded(false);
     fetchMyRanking();
-    fetchCalculatedStats(); // Fetch accurate stats from match history
     fetchActiveMatchesStats();
     fetchMatchmakingStatus();
-    fetchRankThresholds(); // Fetch dynamic rank thresholds from config
+    fetchRankThresholds(); // Fetch dynamic rank thresholds from config (sets seasonLoaded)
     fetchRankedRewards(); // Fetch ranked rewards per game mode
     fetchSeasonRewardsInfo(); // Fetch season rewards info and countdown
     if (isAuthenticated) {
@@ -1920,6 +1916,13 @@ const RankedMode = () => {
     const statsInterval = setInterval(fetchActiveMatchesStats, 30000);
     return () => clearInterval(statsInterval);
   }, [isAuthenticated, selectedMode, selectedGameMode]);
+
+  // Fetch calculated stats and leaderboard AFTER season is loaded (uses currentSeason for filtering)
+  useEffect(() => {
+    if (!seasonLoaded) return;
+    fetchCalculatedStats();
+    fetchLeaderboard(leaderboardPage);
+  }, [seasonLoaded, isAuthenticated, selectedMode, currentSeason]);
 
   // Check active match when user becomes available (after login or page load)
   useEffect(() => {
