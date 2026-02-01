@@ -312,5 +312,42 @@ rankedMatchSchema.methods.getOpponentReferent = function(userId) {
   return null;
 };
 
+// Pre-save hook pour valider qu'il n'y a pas de joueur en double dans les deux équipes
+rankedMatchSchema.pre('save', function(next) {
+  // Récupérer les joueurs réels (non fake) de chaque équipe
+  const team1RealPlayers = this.players
+    .filter(p => p.team === 1 && !p.isFake && p.user)
+    .map(p => p.user.toString());
+  
+  const team2RealPlayers = this.players
+    .filter(p => p.team === 2 && !p.isFake && p.user)
+    .map(p => p.user.toString());
+  
+  // Vérifier les doublons entre les deux équipes
+  const duplicates = team1RealPlayers.filter(playerId => team2RealPlayers.includes(playerId));
+  
+  if (duplicates.length > 0) {
+    console.error(`[RankedMatch] CRITICAL: Duplicate players detected in both teams: ${duplicates.join(', ')}`);
+    const error = new Error(`Duplicate player(s) detected in both teams: ${duplicates.join(', ')}`);
+    error.code = 'DUPLICATE_PLAYER';
+    return next(error);
+  }
+  
+  // Vérifier les doublons au sein de la même équipe
+  const allPlayerIds = this.players
+    .filter(p => !p.isFake && p.user)
+    .map(p => p.user.toString());
+  
+  const uniquePlayerIds = new Set(allPlayerIds);
+  if (uniquePlayerIds.size !== allPlayerIds.length) {
+    console.error(`[RankedMatch] CRITICAL: Same player appears multiple times in the match`);
+    const error = new Error('Same player appears multiple times in the match');
+    error.code = 'DUPLICATE_PLAYER';
+    return next(error);
+  }
+  
+  next();
+});
+
 export default mongoose.model('RankedMatch', rankedMatchSchema);
 

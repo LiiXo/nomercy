@@ -62,6 +62,11 @@ const TEAM_HISTORY_DURATION_MS = 30 * 60 * 1000; // 30 minutes d'historique
 // Cleanup interval reference
 let cleanupInterval = null;
 
+// Rate limiting pour éviter les doubles join rapides (anti race condition)
+// Structure: Map<userId, timestamp>
+const recentJoinAttempts = new Map();
+const JOIN_RATE_LIMIT_MS = 2000; // 2 secondes entre chaque tentative de join
+
 /**
  * Initialise le service avec Socket.io
  */
@@ -412,6 +417,27 @@ const checkGGSecureStatus = async (userId) => {
  */
 export const joinQueue = async (userId, gameMode, mode) => {
   try {
+    // Rate limiting: Empêcher les double-joins rapides (anti race condition)
+    const userIdStr = userId.toString();
+    const lastJoinAttempt = recentJoinAttempts.get(userIdStr);
+    const now = Date.now();
+    
+    if (lastJoinAttempt && (now - lastJoinAttempt) < JOIN_RATE_LIMIT_MS) {
+      console.warn(`[Ranked Matchmaking] Rate limit hit for user ${userIdStr}`);
+      return { success: false, message: 'Veuillez patienter avant de rejoindre la file.' };
+    }
+    recentJoinAttempts.set(userIdStr, now);
+    
+    // Nettoyage périodique des anciennes entrées de rate limit
+    if (recentJoinAttempts.size > 1000) {
+      const cutoff = now - JOIN_RATE_LIMIT_MS * 10;
+      for (const [key, timestamp] of recentJoinAttempts.entries()) {
+        if (timestamp < cutoff) {
+          recentJoinAttempts.delete(key);
+        }
+      }
+    }
+    
     // Vérifier que le mode est activé
     const settings = await AppSettings.getSettings();
     
@@ -845,13 +871,67 @@ const createMatchFromQueue = async (gameMode, mode) => {
       
     }
     
+    // VALIDATION: Vérifier qu'il n'y a pas de doublons dans playersForMatch avant de générer les équipes
+    const playerIdsSet = new Set();
+    const uniquePlayersForMatch = [];
+    for (const player of playersForMatch) {
+      const playerId = player.userId?.toString();
+      if (playerId && !playerId.startsWith('fake-')) {
+        if (playerIdsSet.has(playerId)) {
+          console.warn(`[Ranked Matchmaking] DUPLICATE PLAYER DETECTED in queue: ${player.username} (${playerId})`);
+          continue; // Skip duplicate
+        }
+        playerIdsSet.add(playerId);
+      }
+      uniquePlayersForMatch.push(player);
+    }
+    
+    // S'assurer qu'on a toujours assez de joueurs après suppression des doublons
+    if (uniquePlayersForMatch.length < 4) {
+      console.error(`[Ranked Matchmaking] Not enough unique players after dedup: ${uniquePlayersForMatch.length}`);
+      // Remettre les joueurs dans la file
+      const queue = getQueue(gameMode, mode);
+      for (const player of uniquePlayersForMatch) {
+        if (!queue.some(p => p.userId.toString() === player.userId.toString())) {
+          queue.push(player);
+        }
+      }
+      broadcastQueueUpdate(gameMode, mode);
+      return;
+    }
+    
+    // Recalculer teamSize si nécessaire après dedup
+    if (uniquePlayersForMatch.length % 2 !== 0) {
+      uniquePlayersForMatch.pop(); // Retirer le dernier si nombre impair
+    }
+    teamSize = uniquePlayersForMatch.length / 2;
+    
     // Générer des équipes diversifiées en évitant les compositions récentes
     const { team1: team1Players, team2: team2Players } = generateDiverseTeams(
-      playersForMatch, 
+      uniquePlayersForMatch, 
       teamSize, 
       gameMode, 
       mode
     );
+    
+    // VALIDATION FINALE: Vérifier qu'aucun joueur n'est dans les deux équipes
+    const team1PlayerIds = new Set(team1Players.map(p => p.userId?.toString()).filter(Boolean));
+    const team2PlayerIds = new Set(team2Players.map(p => p.userId?.toString()).filter(Boolean));
+    
+    for (const playerId of team1PlayerIds) {
+      if (playerId && !playerId.startsWith('fake-') && team2PlayerIds.has(playerId)) {
+        console.error(`[Ranked Matchmaking] CRITICAL: Player ${playerId} found in BOTH teams! Aborting match creation.`);
+        // Remettre les joueurs dans la file
+        const queue = getQueue(gameMode, mode);
+        for (const player of uniquePlayersForMatch) {
+          if (!queue.some(p => p.userId.toString() === player.userId.toString())) {
+            queue.push(player);
+          }
+        }
+        broadcastQueueUpdate(gameMode, mode);
+        return;
+      }
+    }
     
     // Sauvegarder cette composition dans l'historique pour les futurs matchs
     const team1Ids = team1Players.map(p => p.userId?.toString()).filter(Boolean);

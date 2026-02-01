@@ -818,14 +818,15 @@ const RankedMode = () => {
   };
 
   // Fetch leaderboard with pagination (filtered by current season)
-  const fetchLeaderboard = async (page = 1, force = false) => {
+  const fetchLeaderboard = async (page = 1, force = false, season = null) => {
+    if (!season) return;
     if (force) {
       setRefreshingLeaderboard(true);
     } else {
       setLoadingLeaderboard(true);
     }
     try {
-      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?season=${currentSeason}&limit=${LEADERBOARD_PER_PAGE}&page=${page}${force ? '&force=true' : ''}`;
+      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?season=${season}&limit=${LEADERBOARD_PER_PAGE}&page=${page}${force ? '&force=true' : ''}`;
       
       const response = await fetch(url, { credentials: 'include' });
       const data = await response.json();
@@ -846,7 +847,7 @@ const RankedMode = () => {
 
   // Force refresh leaderboard (bypass cache)
   const handleRefreshLeaderboard = () => {
-    fetchLeaderboard(leaderboardPage, true);
+    fetchLeaderboard(leaderboardPage, true, currentSeason);
   };
 
   // Check active match and handle reconnection to appropriate phase
@@ -1885,9 +1886,9 @@ const RankedMode = () => {
 
   // Fetch leaderboard when page changes (only after season is loaded)
   useEffect(() => {
-    if (!seasonLoaded) return;
-    fetchLeaderboard(leaderboardPage);
-  }, [leaderboardPage, selectedMode, seasonLoaded]);
+    if (!seasonLoaded || !currentSeason) return;
+    fetchLeaderboard(leaderboardPage, false, currentSeason);
+  }, [leaderboardPage, selectedMode, seasonLoaded, currentSeason]);
 
   // Handle leaderboard page change
   const handleLeaderboardPageChange = (newPage) => {
@@ -1921,7 +1922,7 @@ const RankedMode = () => {
   useEffect(() => {
     if (!seasonLoaded || !currentSeason) return;
     fetchCalculatedStats(currentSeason);
-    fetchLeaderboard(leaderboardPage);
+    fetchLeaderboard(leaderboardPage, false, currentSeason);
   }, [seasonLoaded, isAuthenticated, selectedMode, currentSeason]);
 
   // Check active match when user becomes available (after login or page load)
@@ -2532,8 +2533,8 @@ const RankedMode = () => {
                         </p>
                       </div>
 
-                      {/* Right: Stats */}
-                      <div className="flex items-center gap-6 sm:gap-8">
+                      {/* Right: Stats - Hidden for now */}
+                      {/* <div className="flex items-center gap-6 sm:gap-8">
                         <div className="text-center">
                           <p className="text-2xl sm:text-3xl font-black text-green-400">{calculatedStats.wins}</p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.wins}</p>
@@ -2550,7 +2551,7 @@ const RankedMode = () => {
                           </p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.winRate}</p>
                         </div>
-                      </div>
+                      </div> */}
                     </div>
                     
                     {/* Progress Bar to Next Rank */}
