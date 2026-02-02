@@ -463,7 +463,8 @@ const RankedMode = () => {
   const [matchmakingEnabled, setMatchmakingEnabled] = useState(true);
   
   // Current season from config
-  const [currentSeason, setCurrentSeason] = useState(1);
+  // Season = current month (1 = January, 2 = February, etc.)
+  const [currentSeason, setCurrentSeason] = useState(() => new Date().getMonth() + 1);
   const [seasonLoaded, setSeasonLoaded] = useState(false);
   
   // Season rewards and countdown
@@ -613,10 +614,8 @@ const RankedMode = () => {
         setRanks(buildRanksFromThresholds(thresholds, language));
       }
       
-      // Fetch current season
-      if (appSettingsData.success && appSettingsData.rankedSettings?.currentSeason) {
-        setCurrentSeason(appSettingsData.rankedSettings.currentSeason);
-      }
+      // Season is now calculated automatically (current month)
+      // No need to fetch from AppSettings anymore
       
       // Fetch main config for points loss per rank (configured in admin panel)
       const configRes = await fetch(`${API_URL}/config`);
@@ -688,7 +687,7 @@ const RankedMode = () => {
       if (data.success) {
         setSeasonRewardsInfo(data.rewards);
         setNextResetDate(new Date(data.nextResetDate));
-        setCurrentSeason(data.currentSeason);
+        // Season is calculated automatically from current month, no override needed
       }
     } catch (err) {
       console.error('Error fetching season rewards info:', err);

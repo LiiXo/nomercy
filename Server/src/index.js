@@ -216,6 +216,24 @@ const startServer = async () => {
       socket.leave(roomName);
     });
 
+    socket.on('joinStrickerMatch', (matchId) => {
+      const roomName = `stricker-match-${matchId}`;
+      socket.join(roomName);
+      
+      // Vérifier le statut GGSecure du joueur qui rejoint
+      // Cela permet de détecter si un joueur a désactivé GGSecure pendant la recherche
+      if (socket.userId) {
+        checkPlayerGGSecureOnJoin(matchId, socket.userId, 'stricker').catch(err => {
+          console.error('[Socket] Error checking GGSecure on join for Stricker match:', err);
+        });
+      }
+    });
+
+    socket.on('leaveStrickerMatch', (matchId) => {
+      const roomName = `stricker-match-${matchId}`;
+      socket.leave(roomName);
+    });
+
     // Map vote for ranked matches
     socket.on('mapVote', async ({ matchId, mapIndex }) => {
       if (socket.userId && matchId !== undefined && mapIndex !== undefined) {
@@ -393,8 +411,8 @@ const startServer = async () => {
       // Schedule monthly ladder season reset (runs at 00:05 on the 1st of each month)
       scheduleMonthlyLadderReset();
       
-      // Schedule automatic ranked season reset (runs at 10:00 AM on the 1st of each month)
-      scheduleAutomaticSeasonReset();
+      // DISABLED: Automatic ranked season reset - now manual via admin panel
+      // scheduleAutomaticSeasonReset();
       
       // Start GGSecure monitoring for active matches
       startGGSecureMonitoring();

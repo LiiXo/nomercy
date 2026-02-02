@@ -7,6 +7,7 @@
 
 import Match from '../models/Match.js';
 import RankedMatch from '../models/RankedMatch.js';
+import StrickerMatch from '../models/StrickerMatch.js';
 import User from '../models/User.js';
 
 // Stockage du statut de connexion des joueurs par match
@@ -122,7 +123,9 @@ const sendConnectionMessage = async (player, match, matchType, isConnected) => {
     // Émettre l'événement socket.io
     if (io) {
       const eventName = isConnected ? 'playerGGSecureReconnect' : 'playerGGSecureDisconnect';
-      const roomName = matchType === 'ladder' ? `match-${match._id}` : `ranked-match-${match._id}`;
+      const roomName = matchType === 'ladder' ? `match-${match._id}` : 
+                     matchType === 'ranked' ? `ranked-match-${match._id}` : 
+                     `stricker-match-${match._id}`;
       
       io.to(roomName).emit(eventName, {
         matchId: match._id,
@@ -148,8 +151,21 @@ const sendConnectionMessage = async (player, match, matchType, isConnected) => {
           }
         }
       });
-    } else {
+    } else if (matchType === 'ranked') {
       await RankedMatch.findByIdAndUpdate(match._id, {
+        $push: {
+          chat: {
+            isSystem: true,
+            messageType: messageType,
+            username: player.username,
+            team: player.team,
+            createdAt: now
+          }
+        }
+      });
+    } else {
+      // matchType === 'stricker'
+      await StrickerMatch.findByIdAndUpdate(match._id, {
         $push: {
           chat: {
             isSystem: true,
@@ -257,12 +273,51 @@ const monitorRankedMatches = async () => {
 };
 
 /**
+ * Surveille les joueurs PC dans les matchs Stricker actifs
+ */
+const monitorStrickerMatches = async () => {
+  try {
+    // Récupérer tous les matchs Stricker actifs (pending, ready, in_progress)
+    const activeMatches = await StrickerMatch.find({
+      status: { $in: ['pending', 'ready', 'in_progress'] }
+    })
+      .populate('players.user', 'username platform _id')
+      .lean();
+
+    for (const match of activeMatches) {
+      // Collecter tous les joueurs PC du match
+      const pcPlayers = [];
+      
+      if (match.players) {
+        for (const player of match.players) {
+          if (player.user && player.user.platform === 'PC' && !player.isFake) {
+            pcPlayers.push({
+              userId: player.user._id.toString(),
+              username: player.user.username,
+              team: player.team
+            });
+          }
+        }
+      }
+
+      // Vérifier le statut de chaque joueur PC
+      for (const player of pcPlayers) {
+        await checkPlayerInMatch(player, match, 'stricker');
+      }
+    }
+  } catch (error) {
+    console.error('[GGSecure Monitoring] Error monitoring Stricker matches:', error);
+  }
+};
+
+/**
  * Fonction principale de surveillance
  */
 const monitorAllMatches = async () => {
   await Promise.all([
     monitorLadderMatches(),
-    monitorRankedMatches()
+    monitorRankedMatches(),
+    monitorStrickerMatches()
   ]);
 };
 
@@ -327,6 +382,53 @@ export const checkRankedMatchGGSecureStatus = async (match) => {
 };
 
 /**
+ * Vérifie immédiatement le statut GGSecure pour un match Stricker spécifique
+ * Appelé lors de la création d'un match pour notifier les joueurs sans GGSecure
+ * @param {Object} match - Le document match avec players populés
+ */
+export const checkStrickerMatchGGSecureStatus = async (match) => {
+  if (!io) {
+    console.warn('[GGSecure Monitoring] Cannot check - Socket.io not initialized');
+    return;
+  }
+  
+  try {
+    
+    // Collecter tous les joueurs réels du match (non-fake)
+    // La vérification de la plateforme PC est faite dans checkGGSecureStatus
+    const realPlayers = [];
+    
+    if (match.players) {
+      for (const player of match.players) {
+        // Gérer les deux cas: match populé ou non populé
+        const userObj = player.user;
+        const userId = userObj?._id || userObj;
+        const username = player.username || userObj?.username;
+        
+        // Ne vérifier que les vrais joueurs (non fake)
+        if (userId && !player.isFake && !userId.toString().startsWith('fake-')) {
+          realPlayers.push({
+            userId: userId.toString(),
+            username: username,
+            team: player.team
+          });
+        }
+      }
+    }
+    
+    
+    // Vérifier le statut de chaque joueur réel
+    // checkPlayerInMatch vérifiera si c'est un joueur PC via checkGGSecureStatus
+    for (const player of realPlayers) {
+      await checkPlayerInMatch(player, match, 'stricker');
+    }
+    
+  } catch (error) {
+    console.error('[GGSecure Monitoring] Error in immediate Stricker match check:', error);
+  }
+};
+
+/**
  * Démarre la surveillance
  */
 export const startGGSecureMonitoring = () => {
@@ -353,15 +455,28 @@ export const startGGSecureMonitoring = () => {
  * @param {string} matchId - L'ID du match
  * @param {string} userId - L'ID du joueur
  */
-export const checkPlayerGGSecureOnJoin = async (matchId, userId) => {
+export const checkPlayerGGSecureOnJoin = async (matchId, userId, matchType = 'ranked') => {
   if (!io) {
     console.warn('[GGSecure Monitoring] Cannot check - Socket.io not initialized');
     return;
   }
   
   try {
+    let match;
+    let MatchModel;
+    
+    // Select the appropriate model based on matchType
+    if (matchType === 'stricker') {
+      MatchModel = StrickerMatch;
+    } else if (matchType === 'ranked') {
+      MatchModel = RankedMatch;
+    } else {
+      // Default to ranked for backward compatibility
+      MatchModel = RankedMatch;
+    }
+    
     // Récupérer le match pour avoir les infos du joueur
-    const match = await RankedMatch.findById(matchId)
+    match = await MatchModel.findById(matchId)
       .populate('players.user', 'username platform _id')
       .lean();
     
@@ -399,7 +514,7 @@ export const checkPlayerGGSecureOnJoin = async (matchId, userId) => {
       playerConnectionStatus.set(statusKey, {
         isConnected: false,
         lastCheck: new Date(),
-        matchType: 'ranked'
+        matchType: matchType
       });
       
       // Envoyer le message seulement si c'est un changement ou première détection
@@ -410,15 +525,15 @@ export const checkPlayerGGSecureOnJoin = async (matchId, userId) => {
           team: team
         };
         
-        await sendConnectionMessage(player, match, 'ranked', false);
-        console.log(`[GGSecure Monitoring] Player ${username} joined match ${matchId} without GGSecure - notified`);
+        await sendConnectionMessage(player, match, matchType, false);
+        console.log(`[GGSecure Monitoring] Player ${username} joined ${matchType} match ${matchId} without GGSecure - notified`);
       }
     } else {
       // Joueur connecté, initialiser le statut
       playerConnectionStatus.set(statusKey, {
         isConnected: true,
         lastCheck: new Date(),
-        matchType: 'ranked'
+        matchType: matchType
       });
     }
   } catch (error) {
@@ -430,6 +545,8 @@ export default {
   initGGSecureMonitoring,
   startGGSecureMonitoring,
   checkRankedMatchGGSecureStatus,
-  checkPlayerGGSecureOnJoin
+  checkStrickerMatchGGSecureStatus,
+  checkPlayerGGSecureOnJoin,
+  monitorStrickerMatches
 };
 

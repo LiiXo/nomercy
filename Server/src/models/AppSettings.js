@@ -171,13 +171,15 @@ const appSettingsSchema = new mongoose.Schema({
     // Double XP sur le mode classé (double les points gagnés en victoire)
     doubleXP: {
       enabled: { type: Boolean, default: false },
-      expiresAt: { type: Date, default: null },
+      startsAt: { type: Date, default: null },  // Date de début programmée
+      expiresAt: { type: Date, default: null }, // Date de fin
       enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-      enabledAt: { type: Date, default: null }
+      enabledAt: { type: Date, default: null }  // Date de création de l'événement
     },
     // Double Gold (double les pièces gagnées)
     doubleGold: {
       enabled: { type: Boolean, default: false },
+      startsAt: { type: Date, default: null },
       expiresAt: { type: Date, default: null },
       enabledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
       enabledAt: { type: Date, default: null }

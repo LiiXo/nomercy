@@ -487,12 +487,53 @@ router.post('/admin/reset-ranked-leaderboard/:mode', verifyToken, requireAdmin, 
   }
 });
 
+// RAZ TOTAL CLASSÉ - Reset ALL ranked stats for BOTH modes (admin only)
+router.post('/admin/reset-all-ranked', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    // Reset all rankings for ALL modes (hardcore + cdl)
+    const result = await Ranking.updateMany(
+      {},  // All rankings
+      { 
+        $set: { 
+          points: 0, 
+          wins: 0, 
+          losses: 0,
+          kills: 0,
+          deaths: 0,
+          currentStreak: 0,
+          bestStreak: 0,
+          rank: 0,
+          division: 'bronze'
+        } 
+      }
+    );
+
+    // Log to Discord
+    await logAdminAction(req.user, 'RAZ TOTAL CLASSÉ', 'Tous les modes', {
+      fields: [
+        { name: 'Action', value: 'Remise à zéro complète du mode classé' },
+        { name: 'Rankings réinitialisés', value: result.modifiedCount.toString() },
+        { name: 'Modes affectés', value: 'Hardcore + CDL' }
+      ]
+    });
+    
+    res.json({ 
+      success: true, 
+      message: `RAZ TOTAL CLASSÉ: ${result.modifiedCount} classements réinitialisés (Hardcore + CDL).`,
+      resetCount: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Error resetting all ranked:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // ==================== EVENTS ROUTES (ADMIN ONLY) ====================
 
-// Toggle Double XP event (admin only)
+// Toggle/Schedule Double XP event (admin only)
 router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { enabled, durationHours = 24 } = req.body;
+    const { enabled, startsAt, expiresAt } = req.body;
     
     let settings = await AppSettings.findOne();
     if (!settings) {
@@ -505,10 +546,14 @@ router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, re
     }
     
     if (enabled) {
-      // Enable double XP for specified duration
+      // Programmer ou activer double XP
+      const startDate = startsAt ? new Date(startsAt) : new Date();
+      const endDate = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      
       settings.events.doubleXP = {
         enabled: true,
-        expiresAt: new Date(Date.now() + durationHours * 60 * 60 * 1000),
+        startsAt: startDate,
+        expiresAt: endDate,
         enabledBy: req.user._id,
         enabledAt: new Date()
       };
@@ -517,6 +562,7 @@ router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, re
       // Disable double XP
       settings.events.doubleXP = {
         enabled: false,
+        startsAt: null,
         expiresAt: null,
         enabledBy: null,
         enabledAt: null
@@ -528,16 +574,21 @@ router.post('/admin/events/double-xp', verifyToken, requireAdmin, async (req, re
     await settings.save();
 
     // Log to Discord
+    const isScheduled = startsAt && new Date(startsAt) > new Date();
     await logAdminAction(req.user, 'Toggle Event', 'Double XP', {
       fields: [
-        { name: 'État', value: enabled ? `Activé (${durationHours}h)` : 'Désactivé' },
-        { name: 'Expiration', value: enabled ? settings.events.doubleXP.expiresAt.toLocaleString('fr-FR') : 'N/A' }
+        { name: 'État', value: enabled ? (isScheduled ? 'Programmé' : 'Activé') : 'Désactivé' },
+        { name: 'Début', value: enabled ? settings.events.doubleXP.startsAt.toLocaleString('fr-FR') : 'N/A' },
+        { name: 'Fin', value: enabled ? settings.events.doubleXP.expiresAt.toLocaleString('fr-FR') : 'N/A' }
       ]
     });
     
     res.json({ 
       success: true, 
-      message: enabled ? `Événement Double XP activé pour ${durationHours}h` : 'Événement Double XP désactivé',
+      message: enabled 
+        ? (isScheduled ? `Événement Double XP programmé du ${settings.events.doubleXP.startsAt.toLocaleString('fr-FR')} au ${settings.events.doubleXP.expiresAt.toLocaleString('fr-FR')}` 
+                       : `Événement Double XP activé jusqu'au ${settings.events.doubleXP.expiresAt.toLocaleString('fr-FR')}`)
+        : 'Événement Double XP désactivé',
       event: settings.events.doubleXP
     });
   } catch (error) {
@@ -608,19 +659,30 @@ router.get('/admin/events', verifyToken, requireAdmin, async (req, res) => {
   try {
     const settings = await AppSettings.getSettings();
     
-    // Check if events are still valid (not expired)
+    // Check if events are currently active (within start/end window)
     const now = new Date();
+    
+    const isDoubleXPActive = settings.events?.doubleXP?.enabled && 
+      (!settings.events?.doubleXP?.startsAt || new Date(settings.events.doubleXP.startsAt) <= now) &&
+      (!settings.events?.doubleXP?.expiresAt || new Date(settings.events.doubleXP.expiresAt) > now);
+    
+    const isDoubleGoldActive = settings.events?.doubleGold?.enabled && 
+      (!settings.events?.doubleGold?.startsAt || new Date(settings.events.doubleGold.startsAt) <= now) &&
+      (!settings.events?.doubleGold?.expiresAt || new Date(settings.events.doubleGold.expiresAt) > now);
+    
     const events = {
       doubleXP: {
-        enabled: settings.events?.doubleXP?.enabled && 
-                 (!settings.events?.doubleXP?.expiresAt || new Date(settings.events.doubleXP.expiresAt) > now),
+        enabled: settings.events?.doubleXP?.enabled || false,
+        active: isDoubleXPActive,  // Currently active (within time window)
+        startsAt: settings.events?.doubleXP?.startsAt,
         expiresAt: settings.events?.doubleXP?.expiresAt,
         enabledBy: settings.events?.doubleXP?.enabledBy,
         enabledAt: settings.events?.doubleXP?.enabledAt
       },
       doubleGold: {
-        enabled: settings.events?.doubleGold?.enabled && 
-                 (!settings.events?.doubleGold?.expiresAt || new Date(settings.events.doubleGold.expiresAt) > now),
+        enabled: settings.events?.doubleGold?.enabled || false,
+        active: isDoubleGoldActive,
+        startsAt: settings.events?.doubleGold?.startsAt,
         expiresAt: settings.events?.doubleGold?.expiresAt,
         enabledBy: settings.events?.doubleGold?.enabledBy,
         enabledAt: settings.events?.doubleGold?.enabledAt

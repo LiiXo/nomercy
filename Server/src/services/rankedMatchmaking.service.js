@@ -423,7 +423,9 @@ export const joinQueue = async (userId, gameMode, mode) => {
     const now = Date.now();
     
     if (lastJoinAttempt && (now - lastJoinAttempt) < JOIN_RATE_LIMIT_MS) {
-      console.warn(`[Ranked Matchmaking] Rate limit hit for user ${userIdStr}`);
+      const timeSinceLastAttempt = now - lastJoinAttempt;
+      const timeRemaining = JOIN_RATE_LIMIT_MS - timeSinceLastAttempt;
+      console.warn(`[Ranked Matchmaking] Rate limit hit | user: ${userIdStr} | mode: ${mode} | gameMode: ${gameMode} | retry in: ${timeRemaining}ms | last attempt: ${timeSinceLastAttempt}ms ago`);
       return { success: false, message: 'Veuillez patienter avant de rejoindre la file.' };
     }
     recentJoinAttempts.set(userIdStr, now);
@@ -524,12 +526,14 @@ export const joinQueue = async (userId, gameMode, mode) => {
       }
     }
     
-    // Récupérer ou créer le ranking
-    let ranking = await Ranking.findOne({ user: userId, mode });
+    // Récupérer ou créer le ranking (avec la saison courante)
+    const currentSeason = new Date().getMonth() + 1;
+    let ranking = await Ranking.findOne({ user: userId, mode, season: currentSeason });
     if (!ranking) {
       ranking = await Ranking.create({
         user: userId,
         mode,
+        season: currentSeason,
         points: 0,
         wins: 0,
         losses: 0,
@@ -1470,12 +1474,14 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       };
     }
     
-    // Récupérer ou créer le ranking pour le staff
-    let ranking = await Ranking.findOne({ user: userId, mode });
+    // Récupérer ou créer le ranking pour le staff (avec la saison courante)
+    const currentSeason = new Date().getMonth() + 1;
+    let ranking = await Ranking.findOne({ user: userId, mode, season: currentSeason });
     if (!ranking) {
       ranking = await Ranking.create({
         user: userId,
         mode,
+        season: currentSeason,
         points: 0,
         wins: 0,
         losses: 0,
@@ -2568,12 +2574,14 @@ export const joinStaffQueue = async (userId, gameMode, mode) => {
       };
     }
     
-    // Récupérer ou créer le ranking
-    let ranking = await Ranking.findOne({ user: userId, mode });
+    // Récupérer ou créer le ranking (avec la saison courante)
+    const currentSeason = new Date().getMonth() + 1;
+    let ranking = await Ranking.findOne({ user: userId, mode, season: currentSeason });
     if (!ranking) {
       ranking = await Ranking.create({
         user: userId,
         mode,
+        season: currentSeason,
         points: 0,
         wins: 0,
         losses: 0,
@@ -2950,6 +2958,7 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
     }
     
     // Créer le match
+    // Note: isTestMatch: false pour que les matchs de la file staff comptent comme des matchs officiels
     const newMatch = new RankedMatch({
       gameMode,
       mode,
@@ -2960,7 +2969,7 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
       hostTeam: 1,
       mapVoteOptions,
       status: 'pending',
-      isTestMatch: true
+      isTestMatch: false
     });
     
     await newMatch.save();
@@ -2999,7 +3008,7 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
           yourTeam: playerTeam,
           isReferent,
           isHost,
-          isTestMatch: true,
+          isTestMatch: false,
           hasRosterSelection: false,
           players: playersForAnimation,
           mapVoteOptions

@@ -72,7 +72,7 @@ const AdminPanel = () => {
   const ITEMS_PER_PAGE = 20;
   
   // Matches tab sub-tab state
-  const [matchesSubTab, setMatchesSubTab] = useState('ladder'); // 'ladder' or 'ranked'
+  const [matchesSubTab, setMatchesSubTab] = useState('ranked'); // 'ranked' or 'stricker'
   const [matchesFilter, setMatchesFilter] = useState('all'); // all, pending, completed, disputed
   
   // Maps tab filter
@@ -135,10 +135,17 @@ const AdminPanel = () => {
   
   // Events states (Double XP, Double Gold)
   const [events, setEvents] = useState({
-    doubleXP: { enabled: false, expiresAt: null },
-    doubleGold: { enabled: false, expiresAt: null }
+    doubleXP: { enabled: false, startsAt: null, expiresAt: null, active: false },
+    doubleGold: { enabled: false, startsAt: null, expiresAt: null, active: false }
   });
   const [loadingEvents, setLoadingEvents] = useState(false);
+  
+  // Scheduled event form state
+  const [showScheduleEventModal, setShowScheduleEventModal] = useState(false);
+  const [scheduleEventData, setScheduleEventData] = useState({
+    startsAt: '',
+    expiresAt: ''
+  });
   
   // Update editedConfig when config changes
   // Ensure all expected game modes are present for ranked rewards
@@ -206,7 +213,7 @@ const AdminPanel = () => {
     }
   }, [userIsAdmin]);
   
-  // Toggle Double XP event
+  // Toggle Double XP event (instant toggle)
   const handleToggleDoubleXP = async () => {
     setLoadingEvents(true);
     try {
@@ -214,7 +221,7 @@ const AdminPanel = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ enabled: !events.doubleXP?.enabled, durationHours: 24 })
+        body: JSON.stringify({ enabled: !events.doubleXP?.enabled })
       });
       const data = await response.json();
       if (data.success) {
@@ -227,6 +234,64 @@ const AdminPanel = () => {
       setError('Erreur lors de la mise à jour');
     } finally {
       setLoadingEvents(false);
+    }
+  };
+  
+  // Schedule Double XP event with start/end dates
+  const handleScheduleDoubleXP = async () => {
+    if (!scheduleEventData.startsAt || !scheduleEventData.expiresAt) {
+      setError('Veuillez remplir les dates de début et de fin');
+      return;
+    }
+    setLoadingEvents(true);
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/events/double-xp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          enabled: true,
+          startsAt: scheduleEventData.startsAt,
+          expiresAt: scheduleEventData.expiresAt
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message);
+        setShowScheduleEventModal(false);
+        setScheduleEventData({ startsAt: '', expiresAt: '' });
+        fetchEvents();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la programmation');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+  
+  // RAZ TOTAL CLASSÉ - Reset all ranked stats for both modes
+  const handleResetAllRanked = async () => {
+    if (!window.confirm('\u26a0\ufe0f RAZ TOTAL CLASS\u00c9 \u26a0\ufe0f\n\nCette action va remettre \u00e0 z\u00e9ro:\n- Tous les points\n- Toutes les victoires\n- Toutes les d\u00e9faites\n\nPour TOUS les joueurs en mode Hardcore ET CDL.\n\nCette action est IRR\u00c9VERSIBLE!\n\nContinuer?')) {
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/app-settings/admin/reset-all-ranked`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message);
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la remise \u00e0 z\u00e9ro');
+    } finally {
+      setSaving(false);
     }
   };
   
@@ -550,10 +615,10 @@ const AdminPanel = () => {
           break;
         case 'matches':
           // Charger les matchs selon le sous-onglet actif
-          if (matchesSubTab === 'ranked') {
-            await fetchAdminRankedMatches();
+          if (matchesSubTab === 'stricker') {
+            await fetchStrickerMatches();
           } else {
-            await fetchLadderMatches();
+            await fetchAdminRankedMatches();
           }
           break;
         case 'seasons':
@@ -4146,106 +4211,174 @@ Cette action est irréversible!`)) {
             Événements Temporaires (Mode Classé)
           </h3>
           <p className="text-gray-400 text-sm mb-4">
-            Activez des événements spéciaux pour booster les récompenses en mode classé. Durée: 24h.
+            Programmez ou activez des événements spéciaux pour booster les récompenses en mode classé.
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Double XP Event */}
-            <div className={`p-4 rounded-xl border transition-all ${
-              events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
-                ? 'bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/20'
+          {/* Double XP Event - Full width with scheduling */}
+          <div className={`p-4 rounded-xl border transition-all mb-4 ${
+            events.doubleXP?.active
+              ? 'bg-purple-500/20 border-purple-500/50 shadow-lg shadow-purple-500/20'
+              : events.doubleXP?.enabled
+                ? 'bg-purple-500/10 border-purple-500/30'
                 : 'bg-dark-800/50 border-white/10'
-            }`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${
-                    events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
-                      ? 'bg-purple-500/30'
-                      : 'bg-dark-700'
-                  }`}>
-                    <TrendingUp className="w-6 h-6 text-purple-400" />
-                  </div>
-                  <div>
-                    <h4 className="text-white font-bold">Double XP</h4>
-                    <p className="text-gray-400 text-xs">Points doublés en victoire</p>
-                  </div>
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${
+                  events.doubleXP?.active ? 'bg-purple-500/30' : 'bg-dark-700'
+                }`}>
+                  <TrendingUp className="w-6 h-6 text-purple-400" />
                 </div>
+                <div>
+                  <h4 className="text-white font-bold flex items-center gap-2">
+                    Double Points
+                    {events.doubleXP?.active && (
+                      <span className="px-2 py-0.5 bg-green-500 text-white text-xs rounded-full">ACTIF</span>
+                    )}
+                    {events.doubleXP?.enabled && !events.doubleXP?.active && (
+                      <span className="px-2 py-0.5 bg-yellow-500 text-black text-xs rounded-full">PROGRAMMÉ</span>
+                    )}
+                  </h4>
+                  <p className="text-gray-400 text-xs">Points doublés en victoire en mode classé</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowScheduleEventModal(true)}
+                  disabled={loadingEvents}
+                  className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 text-sm rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Programmer
+                </button>
                 <button
                   onClick={handleToggleDoubleXP}
                   disabled={loadingEvents}
                   className={`relative w-14 h-7 rounded-full transition-colors ${
-                    events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
-                      ? 'bg-purple-500'
-                      : 'bg-dark-700'
+                    events.doubleXP?.enabled ? 'bg-purple-500' : 'bg-dark-700'
                   }`}
                 >
                   <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                    events.doubleXP?.enabled && (!events.doubleXP?.expiresAt || new Date(events.doubleXP.expiresAt) > new Date())
-                      ? 'translate-x-7'
-                      : 'translate-x-1'
+                    events.doubleXP?.enabled ? 'translate-x-7' : 'translate-x-1'
                   }`} />
                 </button>
               </div>
-              {events.doubleXP?.enabled && events.doubleXP?.expiresAt && new Date(events.doubleXP.expiresAt) > new Date() && (
-                <div className="flex items-center gap-2 text-purple-400 text-sm">
-                  <Clock className="w-4 h-4" />
-                  <span>{formatEventTimeRemaining(events.doubleXP.expiresAt)}</span>
-                </div>
-              )}
             </div>
-            
-            {/* Double Gold Event */}
-            <div className={`p-4 rounded-xl border transition-all ${
-              events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
-                ? 'bg-yellow-500/20 border-yellow-500/50 shadow-lg shadow-yellow-500/20'
-                : 'bg-dark-800/50 border-white/10'
-            }`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${
-                    events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
-                      ? 'bg-yellow-500/30'
-                      : 'bg-dark-700'
-                  }`}>
-                    <Coins className="w-6 h-6 text-yellow-400" />
+            {events.doubleXP?.enabled && (
+              <div className="flex flex-wrap gap-4 text-sm">
+                {events.doubleXP?.startsAt && (
+                  <div className="flex items-center gap-2 text-purple-400">
+                    <Calendar className="w-4 h-4" />
+                    <span>Début: {new Date(events.doubleXP.startsAt).toLocaleString('fr-FR')}</span>
                   </div>
-                  <div>
-                    <h4 className="text-white font-bold">Double Gold</h4>
-                    <p className="text-gray-400 text-xs">Gold doublé (victoire + défaite)</p>
+                )}
+                {events.doubleXP?.expiresAt && (
+                  <div className="flex items-center gap-2 text-purple-400">
+                    <Clock className="w-4 h-4" />
+                    <span>Fin: {new Date(events.doubleXP.expiresAt).toLocaleString('fr-FR')}</span>
                   </div>
-                </div>
-                <button
-                  onClick={handleToggleDoubleGold}
-                  disabled={loadingEvents}
-                  className={`relative w-14 h-7 rounded-full transition-colors ${
-                    events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
-                      ? 'bg-yellow-500'
-                      : 'bg-dark-700'
-                  }`}
-                >
-                  <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                    events.doubleGold?.enabled && (!events.doubleGold?.expiresAt || new Date(events.doubleGold.expiresAt) > new Date())
-                      ? 'translate-x-7'
-                      : 'translate-x-1'
-                  }`} />
-                </button>
+                )}
               </div>
-              {events.doubleGold?.enabled && events.doubleGold?.expiresAt && new Date(events.doubleGold.expiresAt) > new Date() && (
-                <div className="flex items-center gap-2 text-yellow-400 text-sm">
-                  <Clock className="w-4 h-4" />
-                  <span>{formatEventTimeRemaining(events.doubleGold.expiresAt)}</span>
+            )}
+          </div>
+          
+          {/* Double Gold Event */}
+          <div className={`p-4 rounded-xl border transition-all ${
+            events.doubleGold?.active
+              ? 'bg-yellow-500/20 border-yellow-500/50 shadow-lg shadow-yellow-500/20'
+              : 'bg-dark-800/50 border-white/10'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${
+                  events.doubleGold?.active ? 'bg-yellow-500/30' : 'bg-dark-700'
+                }`}>
+                  <Coins className="w-6 h-6 text-yellow-400" />
                 </div>
-              )}
+                <div>
+                  <h4 className="text-white font-bold">Double Gold</h4>
+                  <p className="text-gray-400 text-xs">Gold doublé (victoire + défaite)</p>
+                </div>
+              </div>
+              <button
+                onClick={handleToggleDoubleGold}
+                disabled={loadingEvents}
+                className={`relative w-14 h-7 rounded-full transition-colors ${
+                  events.doubleGold?.active ? 'bg-yellow-500' : 'bg-dark-700'
+                }`}
+              >
+                <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                  events.doubleGold?.active ? 'translate-x-7' : 'translate-x-1'
+                }`} />
+              </button>
             </div>
+            {events.doubleGold?.active && events.doubleGold?.expiresAt && (
+              <div className="flex items-center gap-2 text-yellow-400 text-sm">
+                <Clock className="w-4 h-4" />
+                <span>{formatEventTimeRemaining(events.doubleGold.expiresAt)}</span>
+              </div>
+            )}
           </div>
           
           <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
             <p className="text-yellow-400 text-sm">
-              💡 <strong>Double XP</strong> : Double les points classés gagnés en victoire.<br />
+              💡 <strong>Double Points</strong> : Double les points classés gagnés en victoire.<br />
               💰 <strong>Double Gold</strong> : Double le gold gagné (victoire ET consolation défaite).
             </p>
           </div>
         </div>
+        
+        {/* Schedule Event Modal */}
+        {showScheduleEventModal && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-900 border border-purple-500/30 rounded-xl p-6 max-w-md w-full">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-purple-400" />
+                Programmer Double Points
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Date et heure de début</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduleEventData.startsAt}
+                    onChange={(e) => setScheduleEventData(prev => ({ ...prev, startsAt: e.target.value }))}
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Date et heure de fin</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduleEventData.expiresAt}
+                    onChange={(e) => setScheduleEventData(prev => ({ ...prev, expiresAt: e.target.value }))}
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowScheduleEventModal(false);
+                    setScheduleEventData({ startsAt: '', expiresAt: '' });
+                  }}
+                  className="flex-1 py-3 bg-dark-700 hover:bg-dark-600 text-white rounded-xl transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleScheduleDoubleXP}
+                  disabled={loadingEvents || !scheduleEventData.startsAt || !scheduleEventData.expiresAt}
+                  className="flex-1 py-3 bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-xl transition-colors disabled:opacity-50"
+                >
+                  {loadingEvents ? 'Programmation...' : 'Programmer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Reset Rankings */}
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6">
@@ -4256,7 +4389,7 @@ Cette action est irréversible!`)) {
           <p className="text-gray-400 text-sm mb-4">
             Réinitialisez manuellement les classements (normalement fait automatiquement le 1er de chaque mois)
           </p>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-4">
             <button
               onClick={() => handleResetRankings('hardcore')}
               disabled={saving}
@@ -4273,7 +4406,28 @@ Cette action est irréversible!`)) {
               <RefreshCw className="w-5 h-5" />
               Reset CDL
             </button>
-                  </div>
+          </div>
+          
+          {/* RAZ TOTAL CLASSÉ */}
+          <div className="mt-6 pt-6 border-t border-red-500/20">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-4">
+              <p className="text-red-400 text-sm flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                <strong>⚠️ RAZ TOTAL CLASSÉ</strong> - Remet à zéro TOUS les points, victoires et défaites pour Hardcore ET CDL. Action irréversible!
+              </p>
+            </div>
+            <button
+              onClick={handleResetAllRanked}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? (
+                <><Loader2 className="w-5 h-5 animate-spin" /> En cours...</>
+              ) : (
+                <><RotateCcw className="w-5 h-5" /> RAZ TOTAL CLASSÉ</>
+              )}
+            </button>
+          </div>
                 </div>
 
         {/* Ladder Season Reset */}
@@ -5480,44 +5634,43 @@ Cette action est irréversible!`)) {
   };
 
   // ==================== MATCHES TAB ====================
-  const [ladderMatches, setLadderMatches] = useState([]);
   const [adminRankedMatches, setAdminRankedMatches] = useState([]);
+  const [strickerMatches, setStrickerMatches] = useState([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
-  const [matchToEdit, setMatchToEdit] = useState(null);
-  const [matchToDelete, setMatchToDelete] = useState(null);
   const [rankedMatchToDelete, setRankedMatchToDelete] = useState(null);
+  const [strickerMatchToDelete, setStrickerMatchToDelete] = useState(null);
 
-  const fetchLadderMatches = async () => {
+  const fetchStrickerMatches = async () => {
     setMatchesLoading(true);
     try {
       const params = new URLSearchParams({ limit: '50' });
       if (matchesFilter !== 'all') params.append('status', matchesFilter);
       
-      const response = await fetch(`${API_URL}/matches/admin/all?${params}`, {
+      const response = await fetch(`${API_URL}/stricker/admin/matches?${params}`, {
         credentials: 'include'
       });
       const data = await response.json();
       if (data.success) {
-        setLadderMatches(data.matches || []);
+        setStrickerMatches(data.matches || []);
       }
     } catch (err) {
-      console.error('Error fetching matches:', err);
+      console.error('Error fetching stricker matches:', err);
     } finally {
       setMatchesLoading(false);
     }
   };
 
-  const handleDeleteMatch = async (matchId) => {
+  const handleDeleteStrickerMatch = async (matchId) => {
     try {
-      const response = await fetch(`${API_URL}/matches/admin/${matchId}`, {
+      const response = await fetch(`${API_URL}/stricker/admin/matches/${matchId}`, {
         method: 'DELETE',
         credentials: 'include'
       });
       const data = await response.json();
       if (data.success) {
-        setSuccess('Match supprimé avec succès');
-        setMatchToDelete(null);
-        fetchLadderMatches();
+        setSuccess(data.message || 'Match Stricker supprimé avec succès');
+        setStrickerMatchToDelete(null);
+        fetchStrickerMatches();
       } else {
         setError(data.message || 'Erreur lors de la suppression');
       }
@@ -5526,9 +5679,9 @@ Cette action est irréversible!`)) {
     }
   };
 
-  const handleUpdateMatchStatus = async (matchId, status) => {
+  const handleUpdateStrickerMatchStatus = async (matchId, status) => {
     try {
-      const response = await fetch(`${API_URL}/matches/admin/${matchId}/status`, {
+      const response = await fetch(`${API_URL}/stricker/admin/matches/${matchId}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -5536,8 +5689,8 @@ Cette action est irréversible!`)) {
       });
       const data = await response.json();
       if (data.success) {
-        setSuccess('Statut du match mis à jour');
-        fetchLadderMatches();
+        setSuccess('Statut du match Stricker mis à jour');
+        fetchStrickerMatches();
       } else {
         setError(data.message || 'Erreur');
       }
@@ -5644,10 +5797,10 @@ Cette action est irréversible!`)) {
               <Swords className="w-5 sm:w-7 h-5 sm:h-7 text-purple-400" />
               Gestion des Matchs
             </h2>
-            <p className="text-gray-400 mt-1 text-xs sm:text-sm">Gérer les matchs ladder et classés</p>
+            <p className="text-gray-400 mt-1 text-xs sm:text-sm">Gérer les matchs classés et Stricker</p>
           </div>
           <button
-            onClick={matchesSubTab === 'ladder' ? fetchLadderMatches : fetchAdminRankedMatches}
+            onClick={matchesSubTab === 'ranked' ? fetchAdminRankedMatches : fetchStrickerMatches}
             className="flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors text-sm"
           >
             <RefreshCw className="w-4 h-4" />
@@ -5655,22 +5808,8 @@ Cette action est irréversible!`)) {
           </button>
         </div>
 
-        {/* Sub Tabs - Ladder vs Ranked */}
+        {/* Sub Tabs - Ranked vs Stricker */}
         <div className="flex gap-1 sm:gap-2 p-1 bg-dark-800/50 rounded-lg w-full sm:w-fit overflow-x-auto">
-          <button
-            onClick={() => {
-              setMatchesSubTab('ladder');
-              setMatchesFilter('all');
-            }}
-            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap ${
-              matchesSubTab === 'ladder' 
-                ? 'bg-purple-500 text-white' 
-                : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            <Shield className="w-4 h-4" />
-            <span className="hidden xs:inline">Matchs</span> Ladder
-          </button>
           <button
             onClick={() => {
               setMatchesSubTab('ranked');
@@ -5684,6 +5823,20 @@ Cette action est irréversible!`)) {
           >
             <Target className="w-4 h-4" />
             <span className="hidden xs:inline">Matchs</span> Classés
+          </button>
+          <button
+            onClick={() => {
+              setMatchesSubTab('stricker');
+              setMatchesFilter('all');
+            }}
+            className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm whitespace-nowrap ${
+              matchesSubTab === 'stricker' 
+                ? 'bg-lime-500 text-white' 
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Skull className="w-4 h-4" />
+            <span className="hidden xs:inline">Matchs</span> Stricker
           </button>
         </div>
 
@@ -5708,116 +5861,66 @@ Cette action est irréversible!`)) {
           ))}
         </div>
 
-        {/* Ladder Matches List */}
-        {matchesSubTab === 'ladder' && (
+        {/* Stricker Matches List */}
+        {matchesSubTab === 'stricker' && (
           <>
             {matchesLoading ? (
               <div className="flex items-center justify-center py-20">
-                <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+                <Loader2 className="w-8 h-8 text-lime-500 animate-spin" />
               </div>
-            ) : ladderMatches.length > 0 ? (
+            ) : strickerMatches.length > 0 ? (
               <div className="space-y-3">
-                {ladderMatches.map((match) => (
-                  <div key={match._id} className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-3 sm:p-4">
-                    {/* Mobile Layout */}
-                    <div className="sm:hidden space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
-                          LADDER
-                        </span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                          match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
-                          match.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
-                          match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
-                          'bg-gray-500/20 text-gray-400'
-                        }`}>
-                          {match.status}
-                        </span>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-white font-medium text-sm truncate">{match.challenger?.name || 'Équipe inconnue'}</div>
-                        <span className="text-gray-500 text-xs">vs</span>
-                        <div className="text-white font-medium text-sm truncate">{match.opponent?.name || 'En attente'}</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={`/match/${match._id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500/20 text-blue-400 rounded-lg text-xs"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          Voir
-                        </a>
-                        <select
-                          value={match.status}
-                          onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
-                          className="flex-1 px-2 py-1.5 bg-dark-900 border border-white/10 rounded-lg text-white text-xs"
-                        >
-                          <option value="pending">Attente</option>
-                          <option value="accepted">Accepté</option>
-                          <option value="in_progress">En cours</option>
-                          <option value="completed">Terminé</option>
-                          <option value="disputed">Litige</option>
-                          <option value="cancelled">Annulé</option>
-                        </select>
-                        <button
-                          onClick={() => setMatchToDelete(match)}
-                          className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    
-                    {/* Desktop Layout */}
-                    <div className="hidden sm:block">
+                {strickerMatches.map((match) => {
+                  const team1Name = match.team1Squad?.name || 'Équipe 1';
+                  const team2Name = match.team2Squad?.name || 'Équipe 2';
+                  return (
+                    <div key={match._id} className="bg-dark-800/50 border border-lime-500/20 rounded-xl p-4">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-4 flex-wrap">
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-400">
-                            LADDER
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-lime-500/20 text-lime-400">
+                            STRICKER
                           </span>
                           <div className="flex items-center gap-2">
-                            <div className="text-white font-medium">{match.challenger?.name || 'Équipe inconnue'}</div>
+                            <div className="text-white font-medium text-sm">{team1Name}</div>
                             <span className="text-gray-500">vs</span>
-                            <div className="text-white font-medium">{match.opponent?.name || 'En attente'}</div>
+                            <div className="text-white font-medium text-sm">{team2Name}</div>
                           </div>
                           <span className={`px-2 py-1 rounded text-xs font-medium ${
                             match.status === 'completed' ? 'bg-green-500/20 text-green-400' :
                             match.status === 'pending' ? 'bg-yellow-500/20 text-yellow-400' :
+                            match.status === 'ready' ? 'bg-blue-500/20 text-blue-400' :
                             match.status === 'in_progress' ? 'bg-blue-500/20 text-blue-400' :
                             match.status === 'disputed' ? 'bg-red-500/20 text-red-400' :
                             match.status === 'cancelled' ? 'bg-gray-500/20 text-gray-400' :
-                            'bg-blue-500/20 text-blue-400'
+                            'bg-gray-500/20 text-gray-400'
                           }`}>
                             {match.status}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <a
-                            href={`/match/${match._id}`}
+                            href={`/stricker/match/${match._id}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+                            className="flex items-center gap-2 px-3 py-2 bg-lime-500/20 text-lime-400 rounded-lg hover:bg-lime-500/30 transition-colors text-sm"
                           >
                             <ExternalLink className="w-4 h-4" />
                             Voir
                           </a>
                           <select
                             value={match.status}
-                            onChange={(e) => handleUpdateMatchStatus(match._id, e.target.value)}
+                            onChange={(e) => handleUpdateStrickerMatchStatus(match._id, e.target.value)}
                             className="px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm"
                           >
                             <option value="pending">En attente</option>
-                            <option value="accepted">Accepté</option>
+                            <option value="ready">Prêt</option>
                             <option value="in_progress">En cours</option>
                             <option value="completed">Terminé</option>
                             <option value="disputed">Litige</option>
                             <option value="cancelled">Annulé</option>
                           </select>
                           <button
-                            onClick={() => setMatchToDelete(match)}
+                            onClick={() => setStrickerMatchToDelete(match)}
                             className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -5827,21 +5930,38 @@ Cette action est irréversible!`)) {
                       <div className="mt-2 text-gray-500 text-sm space-y-1">
                         <div>
                           Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
-                          Ladder: {match.ladderId || 'N/A'} • 
-                          Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
+                          Mode: Search & Destroy • 
+                          Format: 5v5
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-xs">
+                          {match.startedAt && (
+                            <span className="text-green-400">
+                              🕐 Début: {new Date(match.startedAt).toLocaleDateString('fr-FR')} {new Date(match.startedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {match.completedAt && (
+                            <span className="text-blue-400">
+                              🏁 Fin: {new Date(match.completedAt).toLocaleDateString('fr-FR')} {new Date(match.completedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                          {match.startedAt && match.completedAt && (
+                            <span className="text-purple-400">
+                              ⏱️ Durée: {Math.round((new Date(match.completedAt) - new Date(match.startedAt)) / 60000)} min
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
-              <div className="text-center py-12 sm:py-20">
-                <Swords className="w-10 sm:w-12 h-10 sm:h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400 text-sm sm:text-base">Aucun match ladder trouvé</p>
+              <div className="text-center py-20">
+                <Skull className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">Aucun match Stricker trouvé</p>
                 <button
-                  onClick={fetchLadderMatches}
-                  className="mt-4 px-4 py-2 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors text-sm"
+                  onClick={fetchStrickerMatches}
+                  className="mt-4 px-4 py-2 bg-lime-500/20 text-lime-400 rounded-lg hover:bg-lime-500/30 transition-colors"
                 >
                   Charger les matchs
                 </button>
@@ -5983,23 +6103,36 @@ Cette action est irréversible!`)) {
           </>
         )}
 
-        {/* Delete Ladder Match Modal */}
-        {matchToDelete && (
+        {/* Delete Stricker Match Modal */}
+        {strickerMatchToDelete && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
             <div className="bg-dark-900 rounded-xl border border-red-500/30 p-6 max-w-md w-full">
-              <h3 className="text-lg font-bold text-white mb-4">Supprimer le match ladder ?</h3>
-              <p className="text-gray-400 mb-6">
-                Cette action est irréversible. Le match entre {matchToDelete.challenger?.name} et {matchToDelete.opponent?.name || 'N/A'} sera définitivement supprimé.
+              <h3 className="text-lg font-bold text-white mb-4">Supprimer le match Stricker ?</h3>
+              <p className="text-gray-400 mb-4">
+                Cette action est irréversible. Le match sera définitivement supprimé.
               </p>
+              {strickerMatchToDelete.status === 'completed' && (
+                <div className="p-3 bg-yellow-500/20 border border-yellow-500/30 rounded-lg mb-4">
+                  <p className="text-yellow-400 text-sm">
+                    ⚠️ Ce match est terminé. La suppression va <strong>rembourser</strong> les récompenses :
+                  </p>
+                  <ul className="text-yellow-400/80 text-xs mt-2 space-y-1">
+                    <li>• Points Stricker (retirés aux gagnants, restitutés aux perdants)</li>
+                    <li>• Gold gagné (retiré à tous)</li>
+                    <li>• XP gagnée (retirée aux gagnants)</li>
+                    <li>• Victoires/Défaites (retirées des stats)</li>
+                  </ul>
+                </div>
+              )}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setMatchToDelete(null)}
+                  onClick={() => setStrickerMatchToDelete(null)}
                   className="flex-1 py-3 bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors"
                 >
                   Annuler
                 </button>
                 <button
-                  onClick={() => handleDeleteMatch(matchToDelete._id)}
+                  onClick={() => handleDeleteStrickerMatch(strickerMatchToDelete._id)}
                   className="flex-1 py-3 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition-colors"
                 >
                   Supprimer
@@ -6787,6 +6920,21 @@ Cette action est irréversible!`)) {
                   min={0}
                 />
               </div>
+            </div>
+            
+            {/* Platform selector */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Plateforme</label>
+              <select
+                value={formData.platform || ''}
+                onChange={(e) => setFormData({ ...formData, platform: e.target.value || null })}
+                className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500/50"
+              >
+                <option value="">Non définie</option>
+                <option value="PC">PC</option>
+                <option value="PlayStation">PlayStation</option>
+                <option value="Xbox">Xbox</option>
+              </select>
             </div>
             
             {/* Ladder Stats (Match Ladder - Escouade vs Escouade) */}

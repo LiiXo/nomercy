@@ -269,7 +269,29 @@ const userSchema = new mongoose.Schema({
       type: Number,
       default: null
     },
-    reason: String
+    reason: String,
+    // Season stats (for ranked trophies)
+    position: {
+      type: Number,
+      default: null
+    },
+    wins: {
+      type: Number,
+      default: null
+    },
+    losses: {
+      type: Number,
+      default: null
+    },
+    points: {
+      type: Number,
+      default: null
+    },
+    mode: {
+      type: String,
+      enum: ['hardcore', 'cdl', null],
+      default: null
+    }
   }],
 
   // Iris Anticheat - Hardware binding

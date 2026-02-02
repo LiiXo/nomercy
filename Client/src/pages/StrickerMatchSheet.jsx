@@ -119,7 +119,7 @@ const StrickerMatchSheet = ({ strickerMode = 'hardcore' }) => {
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { user, isAuthenticated } = useAuth();
-  const { socket } = useSocket();
+  const { socket, joinStrickerMatch, leaveStrickerMatch } = useSocket();
   const chatRef = useRef(null);
 
   const t = translations[language] || translations.en;
@@ -202,6 +202,19 @@ const StrickerMatchSheet = ({ strickerMode = 'hardcore' }) => {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Join/Leave Stricker match room
+  useEffect(() => {
+    if (matchId && socket) {
+      joinStrickerMatch(matchId);
+      
+      return () => {
+        if (socket) {
+          leaveStrickerMatch(matchId);
+        }
+      };
+    }
+  }, [matchId, socket, joinStrickerMatch, leaveStrickerMatch]);
 
   // Send chat message
   const handleSendMessage = async () => {

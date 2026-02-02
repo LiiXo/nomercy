@@ -62,26 +62,27 @@ const getDivisionFromPoints = (points, thresholds) => {
 };
 
 /**
- * Calculate all player stats from match history for a specific season
+ * Calculate all player stats from match history for a specific season and mode
  * Uses running total that never goes below 0
  */
-const calculateSeasonStatsFromHistory = async (seasonNumber) => {
+const calculateSeasonStatsFromHistory = async (seasonNumber, mode) => {
   const currentYear = new Date().getFullYear();
   const seasonMonth = seasonNumber;
   const seasonStartDate = new Date(Date.UTC(currentYear, seasonMonth - 1, 1, 9, 0, 0)); // 10:00 AM French time
   const seasonEndDate = new Date(Date.UTC(currentYear, seasonMonth, 1, 9, 0, 0));
 
-  console.log(`[SEASON RESET] Calculating stats from ${seasonStartDate.toISOString()} to ${seasonEndDate.toISOString()}`);
+  console.log(`[SEASON RESET] Calculating ${mode} stats from ${seasonStartDate.toISOString()} to ${seasonEndDate.toISOString()}`);
 
-  // Get all matches for the season, sorted chronologically
+  // Get all matches for the season and mode, sorted chronologically
   const matches = await RankedMatch.find({
     status: 'completed',
     'result.winner': { $exists: true, $ne: null },
     completedAt: { $gte: seasonStartDate, $lt: seasonEndDate },
-    isTestMatch: { $ne: true }
+    isTestMatch: { $ne: true },
+    mode: mode
   })
   .sort({ completedAt: 1 })
-  .select('players result completedAt')
+  .select('players result completedAt mode')
   .lean();
 
   // Build player stats with proper running total
@@ -104,7 +105,8 @@ const calculateSeasonStatsFromHistory = async (seasonNumber) => {
           wins: 0,
           losses: 0,
           totalMatches: 0,
-          runningPoints: 0
+          runningPoints: 0,
+          hasWon: false
         });
       }
 
@@ -113,12 +115,16 @@ const calculateSeasonStatsFromHistory = async (seasonNumber) => {
 
       if (isWin) {
         stats.wins++;
+        stats.hasWon = true;
+        // Use fixed +30 for wins
+        stats.runningPoints += 30;
       } else {
         stats.losses++;
+        // Only subtract if player has won at least once (don't go negative from start)
+        if (stats.hasWon) {
+          stats.runningPoints = Math.max(0, stats.runningPoints - 15);
+        }
       }
-
-      // Running total that never goes below 0
-      stats.runningPoints = Math.max(0, stats.runningPoints + pointsChange);
     }
   }
 
@@ -153,28 +159,29 @@ const calculateSeasonStatsFromHistory = async (seasonNumber) => {
 };
 
 /**
- * Generate trophy data for a ranked season
+ * Generate trophy data for a ranked season (includes mode)
  */
-const generateRankedSeasonTrophyData = (seasonNumber, division) => {
+const generateRankedSeasonTrophyData = (seasonNumber, division, mode) => {
   const rarity = DIVISION_RARITY[division];
   const divisionName = DIVISION_NAMES[division];
+  const modeName = mode === 'cdl' ? 'CDL' : 'Hardcore';
 
   const translations = {
     fr: {
-      name: `${divisionName.fr} - Saison ${seasonNumber}`,
-      description: `Trophée attribué aux joueurs ayant atteint le rang ${divisionName.fr} lors de la saison ${seasonNumber} du mode classé.`
+      name: `${divisionName.fr} - Saison ${seasonNumber} ${modeName}`,
+      description: `Trophée attribué aux joueurs ayant atteint le rang ${divisionName.fr} lors de la saison ${seasonNumber} du mode classé ${modeName}.`
     },
     en: {
-      name: `${divisionName.en} - Season ${seasonNumber}`,
-      description: `Trophy awarded to players who reached ${divisionName.en} rank during ranked mode season ${seasonNumber}.`
+      name: `${divisionName.en} - Season ${seasonNumber} ${modeName}`,
+      description: `Trophy awarded to players who reached ${divisionName.en} rank during ${modeName} ranked mode season ${seasonNumber}.`
     },
     de: {
-      name: `${divisionName.de} - Saison ${seasonNumber}`,
-      description: `Trophäe für Spieler, die in der Ranglisten-Saison ${seasonNumber} den ${divisionName.de}-Rang erreicht haben.`
+      name: `${divisionName.de} - Saison ${seasonNumber} ${modeName}`,
+      description: `Trophäe für Spieler, die in der ${modeName}-Ranglisten-Saison ${seasonNumber} den ${divisionName.de}-Rang erreicht haben.`
     },
     it: {
-      name: `${divisionName.it} - Stagione ${seasonNumber}`,
-      description: `Trofeo assegnato ai giocatori che hanno raggiunto il rango ${divisionName.it} durante la stagione ${seasonNumber} della modalità classificata.`
+      name: `${divisionName.it} - Stagione ${seasonNumber} ${modeName}`,
+      description: `Trofeo assegnato ai giocatori che hanno raggiunto il rango ${divisionName.it} durante la stagione ${seasonNumber} della modalità classificata ${modeName}.`
     }
   };
 
@@ -202,7 +209,7 @@ const getCurrentRankedSeasonNumber = async () => {
 /**
  * Create a trophy for a specific user (for testing purposes)
  */
-export const createAndAssignTrophyToUser = async (userId, division, seasonNumber = null) => {
+export const createAndAssignTrophyToUser = async (userId, division, seasonNumber = null, mode = 'hardcore') => {
   // Get season number
   const season = seasonNumber || await getCurrentRankedSeasonNumber();
 
@@ -213,8 +220,8 @@ export const createAndAssignTrophyToUser = async (userId, division, seasonNumber
 
   const divisionLower = division.toLowerCase();
 
-  // Generate trophy data
-  const trophyData = generateRankedSeasonTrophyData(season, divisionLower);
+  // Generate trophy data with mode
+  const trophyData = generateRankedSeasonTrophyData(season, divisionLower, mode);
   
   // Check if trophy already exists
   let trophy = await Trophy.findOne({ name: trophyData.name });
@@ -230,13 +237,17 @@ export const createAndAssignTrophyToUser = async (userId, division, seasonNumber
     throw new Error('User not found');
   }
 
-  // Check if user already has this trophy
-  const hasTrophy = user.trophies?.some(t => t.trophy?.toString() === trophy._id.toString());
+  // Check if user already has this trophy for this mode/season
+  const hasTrophy = user.trophies?.some(t => 
+    t.trophy?.toString() === trophy._id.toString() &&
+    t.season === season &&
+    t.mode === mode
+  );
   if (hasTrophy) {
     return { user, trophy, alreadyHad: true };
   }
 
-  // Add trophy to user
+  // Add trophy to user with mode info
   if (!user.trophies) {
     user.trophies = [];
   }
@@ -244,7 +255,8 @@ export const createAndAssignTrophyToUser = async (userId, division, seasonNumber
     trophy: trophy._id,
     earnedAt: new Date(),
     season: season,
-    reason: `${DIVISION_NAMES[divisionLower].fr} - Saison ${season} Mode Classé`
+    reason: `${DIVISION_NAMES[divisionLower].fr} - Saison ${season} ${mode === 'cdl' ? 'CDL' : 'Hardcore'}`,
+    mode: mode
   });
 
   await user.save();
@@ -254,12 +266,12 @@ export const createAndAssignTrophyToUser = async (userId, division, seasonNumber
 
 /**
  * Reset ranked season - distribute rewards based on match history
+ * Processes BOTH modes (hardcore and cdl) separately
  * @param {string} adminId - Admin user ID (optional)
  * @param {number} seasonNumber - Season number to reset (the ending season)
  */
 export const resetRankedSeason = async (adminId = null, seasonNumber = null) => {
   // Get the season that is ending
-  // If not provided, use current month (when called on 1st of new month, pass the previous month)
   const endingSeason = seasonNumber || new Date().getMonth() + 1;
   
   console.log(`[SEASON RESET] Starting reset for season ${endingSeason}`);
@@ -268,107 +280,135 @@ export const resetRankedSeason = async (adminId = null, seasonNumber = null) => 
   const settings = await AppSettings.getSettings();
   const rankThresholds = settings?.rankedSettings?.rankPointsThresholds || DEFAULT_RANK_THRESHOLDS;
 
-  // Calculate stats from match history for the ending season
-  const playerStats = await calculateSeasonStatsFromHistory(endingSeason);
-  
-  console.log(`[SEASON RESET] Found ${playerStats.length} active players`);
-
   const results = {
     seasonNumber: endingSeason,
-    totalPlayers: playerStats.length,
-    trophiesDistributed: 0,
-    goldDistributed: 0,
-    top5: [],
-    divisionCounts: {}
+    modes: {},
+    totalTrophiesDistributed: 0,
+    totalGoldDistributed: 0
   };
 
-  // Create trophies for each eligible division
-  const trophyCache = {};
-  for (const division of ELIGIBLE_DIVISIONS) {
-    const trophyData = generateRankedSeasonTrophyData(endingSeason, division);
+  // Process each mode separately
+  const modes = ['hardcore', 'cdl'];
+  
+  for (const mode of modes) {
+    console.log(`\n[SEASON RESET] Processing mode: ${mode}`);
     
-    // Check if trophy already exists
-    let trophy = await Trophy.findOne({ name: trophyData.name });
-    if (!trophy) {
-      trophy = new Trophy(trophyData);
-      await trophy.save();
-      console.log(`[SEASON RESET] Created trophy: ${trophyData.name}`);
+    // Calculate stats from match history for the ending season and mode
+    const playerStats = await calculateSeasonStatsFromHistory(endingSeason, mode);
+    
+    console.log(`[SEASON RESET] Found ${playerStats.length} active ${mode} players`);
+
+    const modeResults = {
+      totalPlayers: playerStats.length,
+      trophiesDistributed: 0,
+      goldDistributed: 0,
+      top5: [],
+      divisionCounts: {}
+    };
+
+    // Create trophies for each eligible division (per mode)
+    const trophyCache = {};
+    for (const division of ELIGIBLE_DIVISIONS) {
+      const trophyData = generateRankedSeasonTrophyData(endingSeason, division, mode);
+      
+      // Check if trophy already exists
+      let trophy = await Trophy.findOne({ name: trophyData.name });
+      if (!trophy) {
+        trophy = new Trophy(trophyData);
+        await trophy.save();
+        console.log(`[SEASON RESET] Created trophy: ${trophyData.name}`);
+      }
+      trophyCache[division] = trophy;
+      modeResults.divisionCounts[division] = 0;
     }
-    trophyCache[division] = trophy;
-    results.divisionCounts[division] = 0;
-  }
 
-  // Process each player based on calculated stats from match history
-  for (let i = 0; i < playerStats.length; i++) {
-    const playerStat = playerStats[i];
-    const position = i + 1;
-    const user = await User.findById(playerStat._id);
-    
-    if (!user || user.isBanned) continue;
-
-    const points = playerStat.calculatedPoints;
-    const division = getDivisionFromPoints(points, rankThresholds);
-
-    // Check if player is eligible for trophy (platinum+)
-    if (ELIGIBLE_DIVISIONS.includes(division)) {
-      const trophy = trophyCache[division];
+    // Process each player based on calculated stats from match history
+    for (let i = 0; i < playerStats.length; i++) {
+      const playerStat = playerStats[i];
+      const position = i + 1;
+      const user = await User.findById(playerStat._id);
       
-      // Check if user already has this trophy
-      const hasTrophy = user.trophies?.some(t => t.trophy?.toString() === trophy._id.toString());
-      
-      if (!hasTrophy) {
-        if (!user.trophies) {
-          user.trophies = [];
+      if (!user || user.isBanned) continue;
+
+      const points = playerStat.calculatedPoints;
+      const division = getDivisionFromPoints(points, rankThresholds);
+
+      // Check if player is eligible for trophy (platinum+)
+      if (ELIGIBLE_DIVISIONS.includes(division)) {
+        const trophy = trophyCache[division];
+        
+        // Check if user already has this EXACT trophy (same season, same mode, same division)
+        const hasTrophy = user.trophies?.some(t => 
+          t.trophy?.toString() === trophy._id.toString() && 
+          t.season === endingSeason && 
+          t.mode === mode
+        );
+        
+        if (!hasTrophy) {
+          if (!user.trophies) {
+            user.trophies = [];
+          }
+          // Add trophy with full stats
+          user.trophies.push({
+            trophy: trophy._id,
+            earnedAt: new Date(),
+            season: endingSeason,
+            reason: `${DIVISION_NAMES[division].fr} - Saison ${endingSeason} ${mode === 'cdl' ? 'CDL' : 'Hardcore'}`,
+            position: position,
+            wins: playerStat.wins,
+            losses: playerStat.losses,
+            points: points,
+            mode: mode
+          });
+          modeResults.trophiesDistributed++;
+          modeResults.divisionCounts[division]++;
+          console.log(`[SEASON RESET] Trophy ${division} (${mode}) given to ${user.username} - #${position} (${playerStat.wins}W/${playerStat.losses}L, ${points}pts)`);
         }
-        user.trophies.push({
-          trophy: trophy._id,
-          earnedAt: new Date(),
-          season: endingSeason,
-          reason: `${DIVISION_NAMES[division].fr} - Saison ${endingSeason} Mode Classé`
+      }
+
+      // Top 5 gold rewards per mode
+      if (position <= 5) {
+        const goldReward = RANKED_REWARD_GOLD[position];
+        user.goldCoins = (user.goldCoins || 0) + goldReward;
+        modeResults.goldDistributed += goldReward;
+        modeResults.top5.push({
+          position,
+          username: user.username,
+          points: points,
+          wins: playerStat.wins,
+          losses: playerStat.losses,
+          division: division,
+          goldReward
         });
-        results.trophiesDistributed++;
-        results.divisionCounts[division]++;
-        console.log(`[SEASON RESET] Trophy ${division} given to ${user.username}`);
+        console.log(`[SEASON RESET] Top ${position} ${mode}: ${user.username} - ${goldReward} gold`);
       }
+
+      await user.save();
     }
 
-    // Top 5 gold rewards
-    if (position <= 5) {
-      const goldReward = RANKED_REWARD_GOLD[position];
-      user.goldCoins = (user.goldCoins || 0) + goldReward;
-      results.goldDistributed += goldReward;
-      results.top5.push({
-        position,
-        username: user.username,
-        points: points,
-        wins: playerStat.wins,
-        losses: playerStat.losses,
-        division: division,
-        goldReward
-      });
-      console.log(`[SEASON RESET] Top ${position}: ${user.username} - ${goldReward} gold`);
-    }
+    // Reset Ranking documents for this mode
+    await Ranking.updateMany(
+      { mode: mode },
+      {
+        $set: {
+          points: 0,
+          wins: 0,
+          losses: 0,
+          kills: 0,
+          deaths: 0,
+          currentStreak: 0,
+          bestStreak: 0,
+          division: 'bronze',
+          rank: 0,
+          season: endingSeason + 1
+        }
+      }
+    );
 
-    await user.save();
+    results.modes[mode] = modeResults;
+    results.totalTrophiesDistributed += modeResults.trophiesDistributed;
+    results.totalGoldDistributed += modeResults.goldDistributed;
   }
-
-  // Optional: Clear old Ranking model data (not used for display anymore, but good for cleanup)
-  await Ranking.updateMany(
-    {},
-    {
-      $set: {
-        points: 0,
-        wins: 0,
-        losses: 0,
-        kills: 0,
-        deaths: 0,
-        currentStreak: 0,
-        bestStreak: 0,
-        division: 'bronze',
-        rank: 0
-      }
-    }
-  );
 
   // Increment the season number in AppSettings for the new season
   const newSeasonNumber = endingSeason + 1;
@@ -379,7 +419,10 @@ export const resetRankedSeason = async (adminId = null, seasonNumber = null) => 
   );
   console.log(`[SEASON RESET] Season number incremented to ${newSeasonNumber}`);
 
-  console.log(`[SEASON RESET] Complete! Trophies: ${results.trophiesDistributed}, Gold: ${results.goldDistributed}`);
+  console.log(`\n[SEASON RESET] Complete!`);
+  console.log(`Total trophies: ${results.totalTrophiesDistributed}`);
+  console.log(`Total gold: ${results.totalGoldDistributed}`);
+  
   return results;
 };
 

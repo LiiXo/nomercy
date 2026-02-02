@@ -205,6 +205,7 @@ const MatchSheet = () => {
   
   // Création de salons vocaux Discord (admin/staff)
   const [creatingVoiceChannels, setCreatingVoiceChannels] = useState(false);
+  const [refundingPlayer, setRefundingPlayer] = useState(null); // Player ID being refunded
   
   // MVP voting state (voting is now handled in RankedMatchReport)
   const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
@@ -332,6 +333,12 @@ const MatchSheet = () => {
       changeMvpVote: 'Changer mon vote MVP',
       waitingMvpVotes: 'En attente des votes MVP',
       mvpConfirmed: 'MVP confirmé !',
+      refund: 'Rembourser',
+      refunding: 'Remboursement...',
+      refundSuccess: 'Points remboursés avec succès !',
+      refundError: 'Erreur lors du remboursement',
+      refundConfirm: 'Rembourser les points perdus pour ce joueur ?',
+      alreadyRefunded: 'Déjà remboursé',
     },
     en: {
       back: 'Back',
@@ -449,6 +456,12 @@ const MatchSheet = () => {
       changeMvpVote: 'Change my MVP vote',
       waitingMvpVotes: 'Waiting for MVP votes',
       mvpConfirmed: 'MVP confirmed!',
+      refund: 'Refund',
+      refunding: 'Refunding...',
+      refundSuccess: 'Points refunded successfully!',
+      refundError: 'Refund error',
+      refundConfirm: 'Refund lost points for this player?',
+      alreadyRefunded: 'Already refunded',
     },
     de: {
       back: 'Zurück',
@@ -1706,6 +1719,44 @@ const MatchSheet = () => {
       alert('Erreur lors du vote MVP');
     } finally {
       setSubmittingMvpVote(false);
+    }
+  };
+
+  // Refund player points (admin/staff only)
+  const handleRefundPlayer = async (playerId, playerUsername) => {
+    if (!isStaff) return;
+    
+    const confirmMessage = language === 'fr' 
+      ? `Rembourser les points perdus pour ${playerUsername} ?`
+      : `Refund lost points for ${playerUsername}?`;
+    
+    if (!confirm(confirmMessage)) return;
+    
+    setRefundingPlayer(playerId);
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/admin/${matchId}/refund-player/${playerId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      console.log('[MatchSheet] Refund response:', data);
+      
+      if (data.success) {
+        alert(data.message || t.refundSuccess);
+        // Update match data
+        setMatch(data.match);
+        // Refresh match data to get updated info
+        fetchMatchData(false);
+      } else {
+        alert(data.message || t.refundError);
+      }
+    } catch (err) {
+      console.error('Error refunding player:', err);
+      alert(t.refundError);
+    } finally {
+      setRefundingPlayer(null);
     }
   };
 
@@ -3133,6 +3184,13 @@ const MatchSheet = () => {
                                         match.team1Referent.toString() === player._id.toString());
                           // Obtenir le rang du joueur
                           const playerRank = getRankFromPoints(p.points || 0, language);
+                          // Check if player lost and can be refunded
+                          const playerTeam = Number(p.team);
+                          const winnerTeam = Number(match.result?.winner);
+                          const isLoser = match.status === 'completed' && match.result?.winner && playerTeam !== winnerTeam;
+                          const canRefund = isStaff && isLoser && !p.isFake && !p.refunded && (p.rewards?.pointsChange || 0) < 0;
+                          const alreadyRefunded = p.refunded;
+                          const playerId = player._id?.toString() || player._id;
                           return (
                             <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                               <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
@@ -3161,6 +3219,21 @@ const MatchSheet = () => {
                                   </span>
                                 )}
                                 {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                                {alreadyRefunded && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                                    ✓ {t.alreadyRefunded}
+                                  </span>
+                                )}
+                                {canRefund && (
+                                  <button
+                                    onClick={() => handleRefundPlayer(playerId, player.username || p.username)}
+                                    disabled={refundingPlayer === playerId}
+                                    className="text-[9px] px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-all disabled:opacity-50 font-medium"
+                                    title={t.refundConfirm}
+                                  >
+                                    {refundingPlayer === playerId ? t.refunding : t.refund}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -3211,6 +3284,13 @@ const MatchSheet = () => {
                                         match.team2Referent.toString() === player._id.toString());
                           // Obtenir le rang du joueur
                           const playerRank = getRankFromPoints(p.points || 0, language);
+                          // Check if player lost and can be refunded
+                          const playerTeam = Number(p.team);
+                          const winnerTeam = Number(match.result?.winner);
+                          const isLoser = match.status === 'completed' && match.result?.winner && playerTeam !== winnerTeam;
+                          const canRefund = isStaff && isLoser && !p.isFake && !p.refunded && (p.rewards?.pointsChange || 0) < 0;
+                          const alreadyRefunded = p.refunded;
+                          const playerId = player._id?.toString() || player._id;
                           return (
                             <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                               <img src={avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
@@ -3239,6 +3319,21 @@ const MatchSheet = () => {
                                   </span>
                                 )}
                                 {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                                {alreadyRefunded && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                                    ✓ {t.alreadyRefunded}
+                                  </span>
+                                )}
+                                {canRefund && (
+                                  <button
+                                    onClick={() => handleRefundPlayer(playerId, player.username || p.username)}
+                                    disabled={refundingPlayer === playerId}
+                                    className="text-[9px] px-2 py-1 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/30 transition-all disabled:opacity-50 font-medium"
+                                    title={t.refundConfirm}
+                                  >
+                                    {refundingPlayer === playerId ? t.refunding : t.refund}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );

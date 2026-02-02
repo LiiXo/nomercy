@@ -55,24 +55,24 @@ async function distributeRankedRewards(match) {
     const rewards = await getRankedMatchRewards(match.gameMode, match.mode);
     const { pointsWin, pointsLoss, coinsWin, coinsLoss, xpWinMin, xpWinMax } = rewards;
     
-    // Récupérer la configuration des points perdus par rang depuis Config
-    const Config = (await import('../models/Config.js')).default;
-    const config = await Config.getOrCreate();
-    
-    // Récupérer les seuils de rang depuis AppSettings
+    // Récupérer les seuils de rang et points perdus par rang depuis AppSettings
     const AppSettings = (await import('../models/AppSettings.js')).default;
     const appSettings = await AppSettings.getSettings();
     const rankThresholds = appSettings?.rankedSettings?.rankPointsThresholds || null;
     
     // Vérifier les événements actifs (Double XP, Double Gold)
+    // Un événement est actif si: enabled=true ET (startsAt <= now OU pas de startsAt) ET (expiresAt > now OU pas d'expiresAt)
     const now = new Date();
+    
     const doubleXPEnabled = appSettings?.events?.doubleXP?.enabled;
-    const doubleXPExpired = appSettings?.events?.doubleXP?.expiresAt && new Date(appSettings.events.doubleXP.expiresAt) <= now;
-    const isDoubleXP = doubleXPEnabled && !doubleXPExpired;
+    const doubleXPStarted = !appSettings?.events?.doubleXP?.startsAt || new Date(appSettings.events.doubleXP.startsAt) <= now;
+    const doubleXPNotExpired = !appSettings?.events?.doubleXP?.expiresAt || new Date(appSettings.events.doubleXP.expiresAt) > now;
+    const isDoubleXP = doubleXPEnabled && doubleXPStarted && doubleXPNotExpired;
     
     const doubleGoldEnabled = appSettings?.events?.doubleGold?.enabled;
-    const doubleGoldExpired = appSettings?.events?.doubleGold?.expiresAt && new Date(appSettings.events.doubleGold.expiresAt) <= now;
-    const isDoubleGold = doubleGoldEnabled && !doubleGoldExpired;
+    const doubleGoldStarted = !appSettings?.events?.doubleGold?.startsAt || new Date(appSettings.events.doubleGold.startsAt) <= now;
+    const doubleGoldNotExpired = !appSettings?.events?.doubleGold?.expiresAt || new Date(appSettings.events.doubleGold.expiresAt) > now;
+    const isDoubleGold = doubleGoldEnabled && doubleGoldStarted && doubleGoldNotExpired;
     
     // Log détaillé des événements pour debug
     
@@ -82,30 +82,17 @@ async function distributeRankedRewards(match) {
     }
     
     
-    // Default values for points loss per rank - ensures all ranks have valid negative values
-    const DEFAULT_POINTS_LOSS = {
-      bronze: -10,
-      silver: -12,
-      gold: -15,
-      platinum: -18,
-      diamond: -20,
-      master: -22,
-      grandmaster: -25,
-      champion: -30
+    // Points perdus par rang - HARDCODÉ (ne lit plus depuis la DB)
+    const pointsLossPerRank = {
+      bronze: -15,
+      silver: -20,
+      gold: -25,
+      platinum: -30,
+      diamond: -35,
+      master: -40,
+      grandmaster: -45,
+      champion: -50
     };
-    
-    // Merge config values with defaults, ensuring each rank has a valid negative value
-    const pointsLossPerRank = { ...DEFAULT_POINTS_LOSS };
-    if (config?.rankedPointsLossPerRank) {
-      Object.keys(DEFAULT_POINTS_LOSS).forEach(rank => {
-        const value = config.rankedPointsLossPerRank[rank];
-        // Only use the config value if it's a negative number (valid loss)
-        if (typeof value === 'number' && value < 0) {
-          pointsLossPerRank[rank] = value;
-        }
-      });
-    } else {
-    }
     
     // S'assurer que winningTeam est un Number pour les comparaisons
     const winningTeam = Number(match.result.winner);
@@ -2166,6 +2153,109 @@ router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, 
     });
   } catch (error) {
     console.error('Error updating ranked match status:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Refund points for a specific player in a completed ranked match (admin/staff/arbitre)
+router.post('/admin/:matchId/refund-player/:playerId', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const { matchId, playerId } = req.params;
+    
+    const match = await RankedMatch.findById(matchId)
+      .populate('players.user', 'username');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    if (match.status !== 'completed' || !match.result?.winner) {
+      return res.status(400).json({ success: false, message: 'Seuls les matchs complétés peuvent être remboursés' });
+    }
+    
+    // Find the player in the match
+    const playerIndex = match.players.findIndex(p => {
+      const pUserId = p.user?._id?.toString() || p.user?.toString();
+      return pUserId === playerId;
+    });
+    
+    if (playerIndex === -1) {
+      return res.status(404).json({ success: false, message: 'Joueur non trouvé dans ce match' });
+    }
+    
+    const player = match.players[playerIndex];
+    const userId = player.user?._id || player.user;
+    
+    // Check if player is a loser
+    const playerTeam = Number(player.team);
+    const winnerTeam = Number(match.result.winner);
+    const isWinner = playerTeam === winnerTeam;
+    
+    if (isWinner) {
+      return res.status(400).json({ success: false, message: 'Impossible de rembourser un joueur gagnant' });
+    }
+    
+    // Check if already refunded
+    if (player.refunded) {
+      return res.status(400).json({ success: false, message: 'Ce joueur a déjà été remboursé' });
+    }
+    
+    // Get the points that were lost (negative value)
+    const pointsLost = player.rewards?.pointsChange || 0;
+    
+    if (pointsLost >= 0) {
+      return res.status(400).json({ success: false, message: 'Ce joueur n\'a pas perdu de points dans ce match' });
+    }
+    
+    // Find the user and their ranking
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+    
+    const currentSeasonRefund = new Date().getMonth() + 1;
+    let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: currentSeasonRefund });
+    if (!ranking) {
+      return res.status(404).json({ success: false, message: 'Classement du joueur non trouvé' });
+    }
+    
+    // Refund the points (add back the absolute value of points lost)
+    const refundAmount = Math.abs(pointsLost);
+    ranking.points = Math.max(0, (ranking.points || 0) + refundAmount);
+    ranking.losses = Math.max(0, (ranking.losses || 0) - 1);
+    
+    await ranking.save();
+    
+    // Mark player as refunded in the match
+    match.players[playerIndex].refunded = true;
+    match.players[playerIndex].refundedAt = new Date();
+    match.players[playerIndex].refundedBy = req.user._id;
+    match.players[playerIndex].refundAmount = refundAmount;
+    
+    await match.save();
+    
+    // Repopulate match
+    await match.populate([
+      { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
+      { path: 'team1Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'team2Referent', select: 'username avatar discordAvatar discordId' },
+      { path: 'chat.user', select: 'username roles' }
+    ]);
+    
+    // Notify via socket
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ranked-match-${matchId}`).emit('rankedMatchUpdate', match);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `${refundAmount} points remboursés à ${user.username}`,
+      refundAmount,
+      match
+    });
+  } catch (error) {
+    console.error('Error refunding player:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

@@ -34,6 +34,11 @@ const rankedPlayerSchema = new mongoose.Schema({
     oldPoints: { type: Number, default: 0 },
     newPoints: { type: Number, default: 0 }
   },
+  // Refund info (for staff refunding losing players)
+  refunded: { type: Boolean, default: false },
+  refundedAt: { type: Date, default: null },
+  refundedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  refundAmount: { type: Number, default: 0 },
   // Date d'entrée dans la file d'attente (pour savoir qui éjecter)
   queueJoinedAt: {
     type: Date,

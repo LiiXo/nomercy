@@ -7,6 +7,7 @@ import Config from '../models/Config.js';
 import AppSettings from '../models/AppSettings.js';
 import Map from '../models/Map.js';
 import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
+import ggsecureMonitoring from '../services/ggsecureMonitoring.service.js';
 
 const router = express.Router();
 
@@ -326,6 +327,10 @@ async function createStrickerMatch() {
       }
     }
     
+    // Vérifier immédiatement le statut GGSecure des joueurs PC et notifier sur la feuille de match
+    ggsecureMonitoring.checkStrickerMatchGGSecureStatus(match).catch(err => {
+      console.error('[STRICKER] Error in immediate GGSecure check:', err);
+    });
     
     return match;
   } catch (error) {
@@ -793,6 +798,163 @@ router.get('/history/recent', verifyToken, checkStrickerAccess, async (req, res)
     });
   } catch (error) {
     console.error('Stricker recent history error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== ADMIN ENDPOINTS ====================
+
+// Get all stricker matches (admin/staff/arbitre only)
+router.get('/admin/matches', verifyToken, checkStrickerAccess, async (req, res) => {
+  try {
+    const { status, limit = 50, page = 1 } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const query = {};
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    
+    const matches = await StrickerMatch.find(query)
+      .populate('team1Squad', 'name tag logo')
+      .populate('team2Squad', 'name tag logo')
+      .populate('players.user', 'username avatarUrl')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip(skip);
+    
+    const total = await StrickerMatch.countDocuments(query);
+    
+    res.json({
+      success: true,
+      matches,
+      total,
+      pages: Math.ceil(total / parseInt(limit))
+    });
+  } catch (error) {
+    console.error('Admin stricker matches error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Delete a stricker match (admin/staff/arbitre only)
+router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    
+    const match = await StrickerMatch.findById(matchId)
+      .populate('team1Squad')
+      .populate('team2Squad')
+      .populate('players.user');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    // If match is completed, refund rewards
+    if (match.status === 'completed' && match.winner) {
+      const config = await Config.getOrCreate();
+      const rewards = config.strickerMatchRewards?.['Search & Destroy'] || {};
+      
+      // Refund points and stats
+      for (const player of match.players) {
+        if (!player.user) continue;
+        
+        const user = await User.findById(player.user._id);
+        if (!user) continue;
+        
+        const isWinner = player.team === match.winner;
+        
+        // Refund stricker points
+        if (isWinner) {
+          user.statsStricker = user.statsStricker || {};
+          user.statsStricker.points = Math.max(0, (user.statsStricker.points || 0) - (rewards.pointsWin || 35));
+          user.statsStricker.wins = Math.max(0, (user.statsStricker.wins || 0) - 1);
+        } else {
+          user.statsStricker = user.statsStricker || {};
+          user.statsStricker.points = Math.max(0, (user.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
+          user.statsStricker.losses = Math.max(0, (user.statsStricker.losses || 0) - 1);
+        }
+        
+        // Refund gold coins
+        const coinsToRefund = isWinner ? (rewards.coinsWin || 80) : (rewards.coinsLoss || 25);
+        user.goldCoins = Math.max(0, (user.goldCoins || 0) - coinsToRefund);
+        
+        await user.save();
+      }
+      
+      // Refund squad stats
+      if (match.team1Squad) {
+        const squad1 = await Squad.findById(match.team1Squad._id);
+        if (squad1) {
+          squad1.statsStricker = squad1.statsStricker || {};
+          if (match.winner === 1) {
+            squad1.statsStricker.wins = Math.max(0, (squad1.statsStricker.wins || 0) - 1);
+            squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) - (rewards.pointsWin || 35));
+          } else {
+            squad1.statsStricker.losses = Math.max(0, (squad1.statsStricker.losses || 0) - 1);
+            squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
+          }
+          await squad1.save();
+        }
+      }
+      
+      if (match.team2Squad) {
+        const squad2 = await Squad.findById(match.team2Squad._id);
+        if (squad2) {
+          squad2.statsStricker = squad2.statsStricker || {};
+          if (match.winner === 2) {
+            squad2.statsStricker.wins = Math.max(0, (squad2.statsStricker.wins || 0) - 1);
+            squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) - (rewards.pointsWin || 35));
+          } else {
+            squad2.statsStricker.losses = Math.max(0, (squad2.statsStricker.losses || 0) - 1);
+            squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
+          }
+          await squad2.save();
+        }
+      }
+    }
+    
+    await StrickerMatch.findByIdAndDelete(matchId);
+    
+    res.json({
+      success: true,
+      message: 'Match Stricker supprimé avec succès. Les récompenses ont été remboursées.'
+    });
+  } catch (error) {
+    console.error('Admin delete stricker match error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update stricker match status (admin/staff/arbitre only)
+router.patch('/admin/matches/:matchId/status', verifyToken, checkStrickerAccess, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { status } = req.body;
+    
+    const validStatuses = ['pending', 'ready', 'in_progress', 'completed', 'disputed', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Statut invalide' });
+    }
+    
+    const match = await StrickerMatch.findByIdAndUpdate(
+      matchId,
+      { status },
+      { new: true }
+    );
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Statut mis à jour',
+      match
+    });
+  } catch (error) {
+    console.error('Admin update stricker match status error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
