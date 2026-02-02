@@ -1718,9 +1718,12 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
         const Ranking = (await import('../models/Ranking.js')).default;
         const RankedMatch = (await import('../models/RankedMatch.js')).default;
         
+        // Get current season
+        const currentSeasonReset = new Date().getMonth() + 1;
+        
         // Get current losses if keeping them
-        const hardcoreRanking = await Ranking.findOne({ user: userId, mode: 'hardcore', season: 1 });
-        const cdlRanking = await Ranking.findOne({ user: userId, mode: 'cdl', season: 1 });
+        const hardcoreRanking = await Ranking.findOne({ user: userId, mode: 'hardcore', season: currentSeasonReset });
+        const cdlRanking = await Ranking.findOne({ user: userId, mode: 'cdl', season: currentSeasonReset });
         
         const hardcoreLosses = hardcoreRanking?.losses || 0;
         const cdlLosses = cdlRanking?.losses || 0;
@@ -1797,9 +1800,12 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
         // Deduct ranked points
         const Ranking = (await import('../models/Ranking.js')).default;
         
+        // Get current season
+        const currentSeasonPoints = new Date().getMonth() + 1;
+        
         // Get current rankings
-        const hardcoreRanking = await Ranking.findOne({ user: userId, mode: 'hardcore', season: 1 });
-        const cdlRanking = await Ranking.findOne({ user: userId, mode: 'cdl', season: 1 });
+        const hardcoreRanking = await Ranking.findOne({ user: userId, mode: 'hardcore', season: currentSeasonPoints });
+        const cdlRanking = await Ranking.findOne({ user: userId, mode: 'cdl', season: currentSeasonPoints });
         
         const currentTotal = (hardcoreRanking?.points || 0) + (cdlRanking?.points || 0);
         const pointsToRemove = currentTotal - newPoints;
@@ -2096,8 +2102,9 @@ router.get('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
     
     // Get ranked ladder points and stats
     const Ranking = (await import('../models/Ranking.js')).default;
-    const hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: 1 });
-    const cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: 1 });
+    const currentSeasonAdmin = new Date().getMonth() + 1;
+    const hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: currentSeasonAdmin });
+    const cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: currentSeasonAdmin });
     
     const userObj = user.toObject();
     userObj.rankedPoints = {
@@ -2210,12 +2217,13 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
     // Update ranked ladder points and stats if provided
     if (rankedPoints !== undefined || rankedStats !== undefined) {
       const Ranking = (await import('../models/Ranking.js')).default;
+      const currentSeason = new Date().getMonth() + 1;
       
       // Update hardcore ranking
       if (rankedPoints?.hardcore !== undefined || rankedStats?.hardcore !== undefined) {
-        let hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: 1 });
+        let hardcoreRanking = await Ranking.findOne({ user: req.params.userId, mode: 'hardcore', season: currentSeason });
         if (!hardcoreRanking) {
-          hardcoreRanking = new Ranking({ user: req.params.userId, mode: 'hardcore', season: 1, points: 0 });
+          hardcoreRanking = new Ranking({ user: req.params.userId, mode: 'hardcore', season: currentSeason, points: 0 });
         }
         if (rankedPoints?.hardcore !== undefined) {
           hardcoreRanking.points = rankedPoints.hardcore;
@@ -2231,9 +2239,9 @@ router.put('/admin/:userId', verifyToken, requireAdmin, async (req, res) => {
       
       // Update CDL ranking
       if (rankedPoints?.cdl !== undefined || rankedStats?.cdl !== undefined) {
-        let cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: 1 });
+        let cdlRanking = await Ranking.findOne({ user: req.params.userId, mode: 'cdl', season: currentSeason });
         if (!cdlRanking) {
-          cdlRanking = new Ranking({ user: req.params.userId, mode: 'cdl', season: 1, points: 0 });
+          cdlRanking = new Ranking({ user: req.params.userId, mode: 'cdl', season: currentSeason, points: 0 });
         }
         if (rankedPoints?.cdl !== undefined) {
           cdlRanking.points = rankedPoints.cdl;
@@ -2519,7 +2527,8 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
               
               
               // Refund ranking points (pointsLost is negative, so we subtract it to add back)
-              const ranking = await Ranking.findOne({ user: teammateUserId, mode: match.mode, season: 1 });
+              const currentSeasonAbandon = new Date().getMonth() + 1;
+              const ranking = await Ranking.findOne({ user: teammateUserId, mode: match.mode, season: currentSeasonAbandon });
               if (ranking) {
                 const oldPoints = ranking.points;
                 // Points change was negative (loss), so subtracting adds them back
@@ -2561,7 +2570,8 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
             abandonmentProcessed = true;
             
             // Apply 60 points penalty to the abandoning player
-            const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: 1 });
+            const currentSeasonPenalty = new Date().getMonth() + 1;
+            const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: currentSeasonPenalty });
             if (abandonerRanking) {
               const oldAbandonerPoints = abandonerRanking.points;
               abandonerRanking.points = Math.max(0, abandonerRanking.points - 60);
@@ -2570,7 +2580,8 @@ router.post('/admin/:userId/warn', verifyToken, requireArbitre, async (req, res)
             
           } else {
             // Even if the team won, apply the 60 points penalty to the abandoning player
-            const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: 1 });
+            const currentSeasonPenalty2 = new Date().getMonth() + 1;
+            const abandonerRanking = await Ranking.findOne({ user: user._id, mode: match.mode, season: currentSeasonPenalty2 });
             if (abandonerRanking) {
               const oldAbandonerPoints = abandonerRanking.points;
               abandonerRanking.points = Math.max(0, abandonerRanking.points - 60);

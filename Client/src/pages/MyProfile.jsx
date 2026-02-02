@@ -112,7 +112,7 @@ const MyProfile = () => {
   const fetchRanking = async () => {
     setLoadingRanking(true);
     try {
-      // Fetch rankings for BOTH modes and thresholds in parallel
+      // Fetch rankings for BOTH modes and thresholds in parallel (no season filter - show all time stats)
       const [hardcoreRes, cdlRes, settingsRes] = await Promise.all([
         fetch(`${API_URL}/rankings/me/hardcore`, { credentials: 'include' }),
         fetch(`${API_URL}/rankings/me/cdl`, { credentials: 'include' }),

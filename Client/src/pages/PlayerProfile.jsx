@@ -282,7 +282,7 @@ const PlayerProfile = () => {
         
         setPlayerData(userData.user);
         
-        // Fetch rankings for BOTH modes to show the highest rank
+        // Fetch rankings for BOTH modes to show the highest rank (no season filter - show all time stats)
         try {
           const [hardcoreRes, cdlRes] = await Promise.all([
             fetch(`${API_URL}/rankings/user/${userData.user.id}/hardcore`),

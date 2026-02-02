@@ -46,6 +46,9 @@ const startServer = async () => {
   // Import monthly reset service for ladder season reset
   const { scheduleMonthlyLadderReset } = await import('./services/monthlyReset.service.js');
   
+  // Import ranked season reset service for automatic season reset
+  const { scheduleAutomaticSeasonReset } = await import('./services/rankedSeasonReset.service.js');
+  
   // Import ranked matchmaking service
   const { initMatchmaking, handleMapVote, handleRosterPick } = await import('./services/rankedMatchmaking.service.js');
   
@@ -389,6 +392,9 @@ const startServer = async () => {
       
       // Schedule monthly ladder season reset (runs at 00:05 on the 1st of each month)
       scheduleMonthlyLadderReset();
+      
+      // Schedule automatic ranked season reset (runs at 10:00 AM on the 1st of each month)
+      scheduleAutomaticSeasonReset();
       
       // Start GGSecure monitoring for active matches
       startGGSecureMonitoring();

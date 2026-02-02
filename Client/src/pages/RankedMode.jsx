@@ -778,15 +778,17 @@ const RankedMode = () => {
     }
   };
 
-  // Fetch player ranking
-  const fetchMyRanking = async () => {
+  // Fetch player ranking (filtered by season for accurate wins/losses)
+  const fetchMyRanking = async (season = null) => {
     if (!isAuthenticated) {
       setLoadingRanking(false);
       return;
     }
     setLoadingRanking(true);
     try {
-      const response = await fetch(`${API_URL}/rankings/me/${selectedMode}`, { credentials: 'include' });
+      // Pass season parameter to filter wins/losses by current season
+      const seasonParam = season ? `?season=${season}` : '';
+      const response = await fetch(`${API_URL}/rankings/me/${selectedMode}${seasonParam}`, { credentials: 'include' });
       const data = await response.json();
       if (data.success) setMyRanking(data.ranking);
     } catch (err) {
@@ -1900,7 +1902,7 @@ const RankedMode = () => {
   // Initial load
   useEffect(() => {
     setSeasonLoaded(false);
-    fetchMyRanking();
+    // Note: fetchMyRanking is now called in the seasonLoaded effect below with proper season filtering
     fetchActiveMatchesStats();
     fetchMatchmakingStatus();
     fetchRankThresholds(); // Fetch dynamic rank thresholds from config (sets seasonLoaded)
@@ -1918,9 +1920,10 @@ const RankedMode = () => {
     return () => clearInterval(statsInterval);
   }, [isAuthenticated, selectedMode, selectedGameMode]);
 
-  // Fetch calculated stats and leaderboard AFTER season is loaded (uses currentSeason for filtering)
+  // Fetch ranking, calculated stats and leaderboard AFTER season is loaded (uses currentSeason for filtering)
   useEffect(() => {
     if (!seasonLoaded || !currentSeason) return;
+    fetchMyRanking(currentSeason); // Now with proper season filtering
     fetchCalculatedStats(currentSeason);
     fetchLeaderboard(leaderboardPage, false, currentSeason);
   }, [seasonLoaded, isAuthenticated, selectedMode, currentSeason]);
@@ -2533,25 +2536,25 @@ const RankedMode = () => {
                         </p>
                       </div>
 
-                      {/* Right: Stats - Hidden for now */}
-                      {/* <div className="flex items-center gap-6 sm:gap-8">
+                      {/* Right: Stats - Season Stats (from myRanking, calculated from match history) */}
+                      <div className="flex items-center gap-6 sm:gap-8">
                         <div className="text-center">
-                          <p className="text-2xl sm:text-3xl font-black text-green-400">{calculatedStats.wins}</p>
+                          <p className="text-2xl sm:text-3xl font-black text-green-400">{myRanking.wins || 0}</p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.wins}</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-2xl sm:text-3xl font-black text-red-400">{calculatedStats.losses}</p>
+                          <p className="text-2xl sm:text-3xl font-black text-red-400">{myRanking.losses || 0}</p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.losses}</p>
                         </div>
                         <div className="text-center">
                           <p className="text-2xl sm:text-3xl font-black text-yellow-400">
-                            {calculatedStats.total > 0 
-                              ? Math.round((calculatedStats.wins / calculatedStats.total) * 100) 
+                            {(myRanking.wins || 0) + (myRanking.losses || 0) > 0 
+                              ? Math.round(((myRanking.wins || 0) / ((myRanking.wins || 0) + (myRanking.losses || 0))) * 100) 
                               : 0}%
                           </p>
                           <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.winRate}</p>
                         </div>
-                      </div> */}
+                      </div>
                     </div>
                     
                     {/* Progress Bar to Next Rank */}
@@ -3699,7 +3702,9 @@ const RankedMode = () => {
                                 <img src={rank.image} alt={rank.name} className="w-5 h-5 object-contain" />
                                 <span className="text-xs text-gray-400">{rank.name}</span>
                               </div>
-                              <p className="text-gray-300 font-bold text-lg mt-1">{player.points} pts</p>
+                              <p className="text-gray-300 font-bold text-lg mt-1">
+                                {player.points} pts
+                              </p>
                               <p className="text-xs text-gray-500">
                                 <span className="text-green-400">{player.wins}V</span> / <span className="text-red-400">{player.losses}D</span>
                               </p>
@@ -3760,7 +3765,9 @@ const RankedMode = () => {
                                 <img src={rank.image} alt={rank.name} className="w-6 h-6 object-contain" />
                                 <span className="text-sm text-yellow-200">{rank.name}</span>
                               </div>
-                              <p className="text-yellow-400 font-bold text-xl mt-1 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">{player.points} pts</p>
+                              <p className="text-yellow-400 font-bold text-xl mt-1 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
+                                {player.points} pts
+                              </p>
                               <p className="text-xs text-gray-400">
                                 <span className="text-green-400">{player.wins}V</span> / <span className="text-red-400">{player.losses}D</span>
                               </p>
@@ -3817,7 +3824,9 @@ const RankedMode = () => {
                                 <img src={rank.image} alt={rank.name} className="w-5 h-5 object-contain" />
                                 <span className="text-xs text-orange-200">{rank.name}</span>
                               </div>
-                              <p className="text-orange-400 font-bold text-lg mt-1">{player.points} pts</p>
+                              <p className="text-orange-400 font-bold text-lg mt-1">
+                                {player.points} pts
+                              </p>
                               <p className="text-xs text-gray-500">
                                 <span className="text-green-400">{player.wins}V</span> / <span className="text-red-400">{player.losses}D</span>
                               </p>
@@ -3905,7 +3914,9 @@ const RankedMode = () => {
                       
                       {/* Stats */}
                       <div className="text-right flex-shrink-0">
-                        <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{player.points} pts</p>
+                        <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>
+                          {player.points} pts
+                        </p>
                         <p className="text-xs text-gray-500">
                           <span className="text-green-400">{player.wins}V</span>
                           <span className="mx-1">/</span>
@@ -4017,9 +4028,9 @@ const RankedMode = () => {
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{myRanking.points} pts</p>
                         <p className="text-xs text-gray-500">
-                          <span className="text-green-400">{calculatedStats.wins}V</span>
+                          <span className="text-green-400">{myRanking.wins || 0}V</span>
                           <span className="mx-1">/</span>
-                          <span className="text-red-400">{calculatedStats.losses}D</span>
+                          <span className="text-red-400">{myRanking.losses || 0}D</span>
                         </p>
                       </div>
                     </button>
@@ -4076,9 +4087,9 @@ const RankedMode = () => {
                       <div className="text-right flex-shrink-0">
                         <p className={`font-bold ${isHardcore ? 'text-red-400' : 'text-cyan-400'}`}>{myRanking.points} pts</p>
                         <p className="text-xs text-gray-500">
-                          <span className="text-green-400">{calculatedStats.wins}V</span>
+                          <span className="text-green-400">{myRanking.wins || 0}V</span>
                           <span className="mx-1">/</span>
-                          <span className="text-red-400">{calculatedStats.losses}D</span>
+                          <span className="text-red-400">{myRanking.losses || 0}D</span>
                         </p>
                       </div>
                     </button>

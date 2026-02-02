@@ -39,7 +39,7 @@ const getPublicSettings = async (req, res) => {
         duoTrioTimeRestriction: { enabled: true, startHour: 0, endHour: 20 }
       },
       rankedSettings: {
-        currentSeason: settings.rankedSettings?.currentSeason || 1,
+        currentSeason: new Date().getMonth() + 1, // Dynamic: February = 2, etc.
         bestOf: settings.rankedSettings?.bestOf || 3,
         // Important: inclure les seuils de rang pour le calcul des rangs côté client
         rankPointsThresholds: settings.rankedSettings?.rankPointsThresholds || DEFAULT_RANK_THRESHOLDS,

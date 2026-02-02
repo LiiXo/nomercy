@@ -157,7 +157,9 @@ async function distributeRankedRewards(match) {
         }
         
         // ========== METTRE À JOUR LE CLASSEMENT LADDER CLASSÉ (Ranking) ==========
-        let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        // Get current season from month (Season 1 = January, Season 2 = February, etc.)
+        const currentSeason = new Date().getMonth() + 1;
+        let ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: currentSeason });
         
         // ========== CHECK FOR ACTIVE BOOSTERS ==========
         // Now using match-count-based boosters (count decrements after each match)
@@ -236,7 +238,7 @@ async function distributeRankedRewards(match) {
           ranking = new Ranking({ 
             user: userId, 
             mode: match.mode, 
-            season: 1, 
+            season: currentSeason, 
             points: 0, 
             wins: 0, 
             losses: 0 
@@ -1120,7 +1122,8 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
           await mvpUser.save();
 
           // Add bonus points to ranking
-          let mvpRanking = await Ranking.findOne({ user: mvpWinner, mode: match.mode, season: 1 });
+          const currentSeasonMvp = new Date().getMonth() + 1;
+          let mvpRanking = await Ranking.findOne({ user: mvpWinner, mode: match.mode, season: currentSeasonMvp });
           if (mvpRanking) {
             mvpRanking.points = (mvpRanking.points || 0) + match.mvp.bonusPoints;
             await mvpRanking.save();
@@ -1896,7 +1899,8 @@ router.post('/admin/:matchId/cancel', verifyToken, requireArbitre, async (req, r
         
         
         // Mettre à jour le Ranking (points du ladder classé + wins/losses)
-        const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        const currentSeasonCancel = new Date().getMonth() + 1;
+        const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: currentSeasonCancel });
         if (ranking) {
           // Retirer les points (mais ne pas descendre en dessous de 0)
           ranking.points = Math.max(0, ranking.points - pointsChange);
@@ -2272,7 +2276,8 @@ router.delete('/admin/:matchId', verifyToken, requireArbitre, async (req, res) =
         
         
         // Mettre à jour le Ranking (points du ladder classé + wins/losses)
-        const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: 1 });
+        const currentSeasonDelete = new Date().getMonth() + 1;
+        const ranking = await Ranking.findOne({ user: userId, mode: match.mode, season: currentSeasonDelete });
         if (ranking) {
           // Retirer les points (mais ne pas descendre en dessous de 0)
           ranking.points = Math.max(0, ranking.points - pointsChange);
