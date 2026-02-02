@@ -24,8 +24,9 @@ function isCacheValid(cachedData) {
 
 // ==================== PUBLIC ROUTES ====================
 
-// Helper function to calculate wins/losses from RankedMatch history
-async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null, season = null) {
+// Helper function to calculate wins/losses/points from RankedMatch history
+// This ensures stats are filtered by season correctly
+async function calculateStatsFromHistory(userId, mode, statsResetAt = null, season = null) {
   try {
     const query = {
       'players.user': userId,
@@ -56,6 +57,7 @@ async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null,
     
     let wins = 0;
     let losses = 0;
+    let points = 0;
     
     for (const match of matches) {
       const player = match.players.find(p => {
@@ -73,21 +75,33 @@ async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null,
       } else {
         losses++;
       }
+      
+      // Add points change from this match (can be positive or negative)
+      if (player.rewards && typeof player.rewards.pointsChange === 'number') {
+        points += player.rewards.pointsChange;
+      }
     }
     
-    return { wins, losses };
+    // Points cannot go below 0
+    points = Math.max(0, points);
+    
+    return { wins, losses, points };
   } catch (error) {
-    console.error(`Error calculating wins/losses for user ${userId}:`, error);
-    return { wins: 0, losses: 0 };
+    console.error(`Error calculating stats for user ${userId}:`, error);
+    return { wins: 0, losses: 0, points: 0 };
   }
 }
 
-// Get leaderboard (shows all players with points, wins/losses filtered by current season)
+// Alias for backward compatibility
+async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null, season = null) {
+  return calculateStatsFromHistory(userId, mode, statsResetAt, season);
+}
+
+// Get leaderboard (shows players ranked by points from current season's matches)
 router.get('/leaderboard/:mode', async (req, res) => {
   try {
     const { mode } = req.params;
     const { season = 1, limit = 100, page = 1, all = 'false', force = 'false' } = req.query;
-
 
     if (!['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
@@ -101,61 +115,68 @@ router.get('/leaderboard/:mode', async (req, res) => {
       return res.json(cachedData.data);
     }
 
-    // Build query - NO season filter for rankings (show all players with points)
-    // Wins/losses will be calculated filtered by season
-    const showAll = all === 'true';
-    const query = { mode };
-    
-    if (!showAll) {
-      // Only players who have points > 0 (ranked players)
-      query.points = { $gt: 0 };
-    }
-
     const parsedLimit = parseInt(limit);
     const parsedPage = parseInt(page);
-    const skip = (parsedPage - 1) * parsedLimit;
+    const parsedSeason = parseInt(season);
+    const showAll = all === 'true';
 
-    // First, let's check how many rankings exist for this mode
-    const totalInDb = await Ranking.countDocuments({ mode });
-    const withPointsInDb = await Ranking.countDocuments({ mode, points: { $gt: 0 } });
-
-    // Fetch more than needed to account for filtered users, then slice
-    const overFetchMultiplier = 2;
-    const rankings = await Ranking.find(query)
+    // Get all rankings for this mode (we need to recalculate stats for all)
+    const rankings = await Ranking.find({ mode })
       .populate({
         path: 'user',
         select: 'username avatar discordAvatar discordId isBanned isDeleted statsResetAt'
-      })
-      .sort({ points: -1, wins: -1, _id: 1 })
-      .limit(parsedLimit * overFetchMultiplier + skip)
-      .skip(0); // Skip will be handled after filtering
+      });
 
-
-    // Filter out rankings with null users, banned, deleted, or no username
+    // Filter out invalid users
     const validRankings = rankings.filter(r => {
-      if (!r.user) {
-        return false;
-      }
-      if (!r.user.username) {
-        return false;
-      }
-      if (r.user.isBanned === true) {
-        return false;
-      }
-      if (r.user.isDeleted === true) {
-        return false;
-      }
+      if (!r.user) return false;
+      if (!r.user.username) return false;
+      if (r.user.isBanned === true) return false;
+      if (r.user.isDeleted === true) return false;
       return true;
     });
-    
-    // Apply pagination on filtered results
-    const paginatedRankings = validRankings.slice(skip, skip + parsedLimit);
 
-    // Calculate accurate wins/losses from match history for each player (filtered by season)
-    const rankedDataPromises = paginatedRankings.map(async (r, index, arr) => {
-      const currentPoints = r.points;
-      
-      // Check if tied with adjacent players
+    // Calculate stats from match history for each player (filtered by season)
+    const playersWithStats = await Promise.all(
+      validRankings.map(async (r) => {
+        const statsResetAt = r.user?.statsResetAt || null;
+        const { wins, losses, points } = await calculateStatsFromHistory(
+          r.user._id, 
+          mode, 
+          statsResetAt, 
+          parsedSeason
+        );
+        
+        return {
+          ...r.toJSON(),
+          wins,
+          losses,
+          points, // Use calculated points from season's matches
+          hasActivity: wins > 0 || losses > 0
+        };
+      })
+    );
+
+    // Filter players based on showAll flag
+    let filteredPlayers;
+    if (showAll) {
+      // Show all players, even those without activity in current season
+      filteredPlayers = playersWithStats;
+    } else {
+      // Only show players with points > 0 in current season
+      filteredPlayers = playersWithStats.filter(p => p.points > 0);
+    }
+
+    // Sort by points (descending), then wins (descending), then by _id for consistency
+    filteredPlayers.sort((a, b) => {
+      if (b.points !== a.points) return b.points - a.points;
+      if (b.wins !== a.wins) return b.wins - a.wins;
+      return a._id.toString().localeCompare(b._id.toString());
+    });
+
+    // Calculate ties and assign ranks
+    filteredPlayers = filteredPlayers.map((player, index, arr) => {
+      const currentPoints = player.points;
       const prevPoints = index > 0 ? arr[index - 1].points : null;
       const nextPoints = index < arr.length - 1 ? arr[index + 1].points : null;
       
@@ -163,29 +184,21 @@ router.get('/leaderboard/:mode', async (req, res) => {
       const isTiedWithNext = nextPoints !== null && nextPoints === currentPoints;
       const hasTie = isTiedWithPrev || isTiedWithNext;
       
-      // Calculate actual wins/losses from RankedMatch history (filtered by current season)
-      const statsResetAt = r.user?.statsResetAt || null;
-      const { wins, losses } = await calculateWinsLossesFromHistory(r.user._id, mode, statsResetAt, parseInt(season));
-      
-      const jsonData = r.toJSON();
       return {
-        ...jsonData,
-        wins,  // Override with calculated wins from match history
-        losses,  // Override with calculated losses from match history
-        rank: skip + index + 1,
+        ...player,
+        rank: index + 1,
         hasTie
       };
     });
-    
-    const rankedData = await Promise.all(rankedDataPromises);
 
-    // Count all valid (non-banned) users
-    const total = validRankings.length;
-
+    // Apply pagination
+    const total = filteredPlayers.length;
+    const skip = (parsedPage - 1) * parsedLimit;
+    const paginatedPlayers = filteredPlayers.slice(skip, skip + parsedLimit);
 
     const responseData = {
       success: true,
-      rankings: rankedData,
+      rankings: paginatedPlayers,
       pagination: {
         page: parsedPage,
         limit: parsedLimit,
@@ -458,12 +471,13 @@ router.get('/user/:userId/:mode', async (req, res) => {
   try {
     const { userId, mode } = req.params;
     const { season = 1 } = req.query;
+    const parsedSeason = parseInt(season);
 
     const ranking = await Ranking.findOne({ 
       user: userId, 
       mode, 
-      season: parseInt(season) 
-    }).populate('user', 'username avatar discordAvatar discordId isBanned statsResetAt');
+      season: parsedSeason 
+    }).populate('user', 'username avatar discordAvatar discordId isBanned isDeleted statsResetAt');
 
     if (!ranking || !ranking.user) {
       return res.status(404).json({ success: false, message: 'Ranking not found' });
@@ -474,60 +488,93 @@ router.get('/user/:userId/:mode', async (req, res) => {
       return res.status(403).json({ success: false, message: 'User is banned' });
     }
 
-    // Calculate accurate wins/losses from RankedMatch history (filtered by season)
+    // Calculate accurate stats from RankedMatch history (filtered by season)
     const statsResetAt = ranking.user.statsResetAt || null;
-    const { wins, losses } = await calculateWinsLossesFromHistory(userId, mode, statsResetAt, parseInt(season));
+    const { wins, losses, points } = await calculateStatsFromHistory(
+      userId, 
+      mode, 
+      statsResetAt, 
+      parsedSeason
+    );
 
-    // Get user's position - count only non-banned users with better stats
-    const allHigherRankings = await Ranking.find({
-      mode,
-      season: parseInt(season),
-      $or: [
-        { points: { $gt: ranking.points } },
-        { 
-          points: ranking.points, 
-          wins: { $gt: ranking.wins } 
-        },
-        { 
-          points: ranking.points, 
-          wins: ranking.wins,
-          _id: { $lt: ranking._id } // Tiebreaker final: oldest entry wins
-        }
-      ]
-    }).populate({
-      path: 'user',
-      select: 'isBanned',
-      match: { isBanned: { $ne: true } }
-    });
+    // Check if player has played any matches
+    const hasPlayed = wins > 0 || losses > 0;
 
-    // Count only those with valid (non-banned) users
-    const higherRanked = allHigherRankings.filter(r => r.user !== null).length;
-    
-    // Check for ties - find if any other player has the exact same points
-    const playersWithSamePoints = await Ranking.find({
-      mode,
-      season: parseInt(season),
-      points: ranking.points,
-      _id: { $ne: ranking._id }
-    }).populate({
-      path: 'user',
-      select: 'isBanned',
-      match: { isBanned: { $ne: true } }
-    });
-    
-    const hasTie = playersWithSamePoints.some(r => r.user !== null);
+    // Calculate position based on calculated points
+    let rank = null;
+    let hasTie = false;
+
+    if (hasPlayed && points > 0) {
+      // Get all rankings for this mode to calculate positions
+      const allRankings = await Ranking.find({ mode })
+        .populate({
+          path: 'user',
+          select: 'username isBanned isDeleted statsResetAt'
+        });
+
+      // Filter valid users
+      const validRankings = allRankings.filter(r => {
+        if (!r.user) return false;
+        if (r.user.isBanned === true) return false;
+        if (r.user.isDeleted === true) return false;
+        return true;
+      });
+
+      // Calculate stats for all players
+      const playersWithStats = await Promise.all(
+        validRankings.map(async (r) => {
+          const userStatsResetAt = r.user?.statsResetAt || null;
+          const stats = await calculateStatsFromHistory(
+            r.user._id,
+            mode,
+            userStatsResetAt,
+            parsedSeason
+          );
+          return {
+            odId: r.user._id.toString(),
+            odIdRanking: r._id.toString(),
+            points: stats.points,
+            wins: stats.wins
+          };
+        })
+      );
+
+      // Filter to only players with points > 0 and sort
+      const rankedPlayers = playersWithStats
+        .filter(p => p.points > 0)
+        .sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.wins !== a.wins) return b.wins - a.wins;
+          return a.odIdRanking.localeCompare(b.odIdRanking);
+        });
+
+      // Find user's position
+      const userIndex = rankedPlayers.findIndex(p => p.odId === userId.toString());
+      if (userIndex !== -1) {
+        rank = userIndex + 1;
+        // Check for ties
+        const userPoints = rankedPlayers[userIndex].points;
+        const prevPoints = userIndex > 0 ? rankedPlayers[userIndex - 1].points : null;
+        const nextPoints = userIndex < rankedPlayers.length - 1 ? rankedPlayers[userIndex + 1].points : null;
+        hasTie = (prevPoints !== null && prevPoints === userPoints) || 
+                 (nextPoints !== null && nextPoints === userPoints);
+      }
+    }
     
     res.json({
       success: true,
       ranking: {
         ...ranking.toJSON(),
-        wins,  // Override with calculated wins from match history
-        losses,  // Override with calculated losses from match history
-        rank: higherRanked + 1,
-        hasTie // true if another player has the same points
+        wins,
+        losses,
+        points, // Use calculated points from season's matches
+        rank,
+        hasPlayed,
+        hasTie
       }
     });
   } catch (error) {
+    console.error('Error fetching user ranking:', error);
     res.status(500).json({ success: false, message: 'Error fetching ranking' });
   }
 });
@@ -537,11 +584,12 @@ router.get('/me/:mode', verifyToken, async (req, res) => {
   try {
     const { mode } = req.params;
     const { season = 1 } = req.query;
+    const parsedSeason = parseInt(season);
 
     let ranking = await Ranking.findOne({ 
       user: req.user._id, 
       mode, 
-      season: parseInt(season) 
+      season: parsedSeason 
     });
 
     if (!ranking) {
@@ -549,75 +597,99 @@ router.get('/me/:mode', verifyToken, async (req, res) => {
       ranking = new Ranking({
         user: req.user._id,
         mode,
-        season: parseInt(season)
+        season: parsedSeason
       });
       await ranking.save();
     }
 
-    // Calculate accurate wins/losses from RankedMatch history (filtered by season)
+    // Calculate accurate stats from RankedMatch history (filtered by season)
     const statsResetAt = req.user.statsResetAt || null;
-    const { wins, losses } = await calculateWinsLossesFromHistory(req.user._id, mode, statsResetAt, parseInt(season));
-
-    // Get position - with tiebreakers, excluding banned users
-    const allHigherRankings = await Ranking.find({
-      mode,
-      season: parseInt(season),
-      $or: [
-        { points: { $gt: ranking.points } },
-        { 
-          points: ranking.points, 
-          wins: { $gt: ranking.wins } 
-        },
-        { 
-          points: ranking.points, 
-          wins: ranking.wins,
-          _id: { $lt: ranking._id }
-        }
-      ]
-    }).populate({
-      path: 'user',
-      select: 'isBanned',
-      match: { isBanned: { $ne: true } }
-    });
-
-    // Count only those with valid (non-banned) users
-    const higherRanked = allHigherRankings.filter(r => r.user !== null).length;
+    const { wins, losses, points } = await calculateStatsFromHistory(
+      req.user._id, 
+      mode, 
+      statsResetAt, 
+      parsedSeason
+    );
 
     // Check if player has played any matches (from actual history)
     const hasPlayed = wins > 0 || losses > 0;
 
-    // Check if tied with adjacent players
+    // To calculate position, we need to get all players' calculated stats
+    // This is necessary because position depends on calculated points, not stored points
+    let rank = null;
     let hasTie = false;
-    if (hasPlayed) {
-      const playerRank = higherRanked + 1;
-      
-      // Check for tie with player above (same points)
-      const playerAbove = await Ranking.findOne({
-        mode,
-        season: parseInt(season),
-        points: ranking.points,
-        _id: { $ne: ranking._id }
-      }).populate({
-        path: 'user',
-        select: 'isBanned',
-        match: { isBanned: { $ne: true } }
+
+    if (hasPlayed && points > 0) {
+      // Get all rankings for this mode to calculate positions
+      const allRankings = await Ranking.find({ mode })
+        .populate({
+          path: 'user',
+          select: 'username isBanned isDeleted statsResetAt'
+        });
+
+      // Filter valid users
+      const validRankings = allRankings.filter(r => {
+        if (!r.user) return false;
+        if (r.user.isBanned === true) return false;
+        if (r.user.isDeleted === true) return false;
+        return true;
       });
-      
-      hasTie = playerAbove && playerAbove.user !== null;
+
+      // Calculate stats for all players
+      const playersWithStats = await Promise.all(
+        validRankings.map(async (r) => {
+          const userStatsResetAt = r.user?.statsResetAt || null;
+          const stats = await calculateStatsFromHistory(
+            r.user._id,
+            mode,
+            userStatsResetAt,
+            parsedSeason
+          );
+          return {
+            odId: r.user._id.toString(),
+            odIdRanking: r._id.toString(),
+            points: stats.points,
+            wins: stats.wins
+          };
+        })
+      );
+
+      // Filter to only players with points > 0 and sort
+      const rankedPlayers = playersWithStats
+        .filter(p => p.points > 0)
+        .sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points;
+          if (b.wins !== a.wins) return b.wins - a.wins;
+          return a.odIdRanking.localeCompare(b.odIdRanking);
+        });
+
+      // Find current user's position
+      const myIndex = rankedPlayers.findIndex(p => p.odId === req.user._id.toString());
+      if (myIndex !== -1) {
+        rank = myIndex + 1;
+        // Check for ties (same points as adjacent players)
+        const myPoints = rankedPlayers[myIndex].points;
+        const prevPoints = myIndex > 0 ? rankedPlayers[myIndex - 1].points : null;
+        const nextPoints = myIndex < rankedPlayers.length - 1 ? rankedPlayers[myIndex + 1].points : null;
+        hasTie = (prevPoints !== null && prevPoints === myPoints) || 
+                 (nextPoints !== null && nextPoints === myPoints);
+      }
     }
 
     res.json({
       success: true,
       ranking: {
         ...ranking.toJSON(),
-        wins,  // Override with calculated wins from match history
-        losses,  // Override with calculated losses from match history
-        rank: hasPlayed ? higherRanked + 1 : null,  // null rank if not played yet
+        wins,
+        losses,
+        points, // Use calculated points from season's matches
+        rank: hasPlayed ? rank : null,
         hasPlayed,
-        hasTie // true if tied with another player at same points
+        hasTie
       }
     });
   } catch (error) {
+    console.error('Error fetching my ranking:', error);
     res.status(500).json({ success: false, message: 'Error fetching ranking' });
   }
 });

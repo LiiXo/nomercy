@@ -50,7 +50,7 @@ const startServer = async () => {
   const { initMatchmaking, handleMapVote, handleRosterPick } = await import('./services/rankedMatchmaking.service.js');
   
   // Import GGSecure monitoring service
-  const { initGGSecureMonitoring, startGGSecureMonitoring } = await import('./services/ggsecureMonitoring.service.js');
+  const { initGGSecureMonitoring, startGGSecureMonitoring, checkPlayerGGSecureOnJoin } = await import('./services/ggsecureMonitoring.service.js');
 
   // Import Discord bot service
   const { initDiscordBot, setShuttingDown } = await import('./services/discordBot.service.js');
@@ -198,6 +198,14 @@ const startServer = async () => {
     socket.on('joinRankedMatch', (matchId) => {
       const roomName = `ranked-match-${matchId}`;
       socket.join(roomName);
+      
+      // Vérifier le statut GGSecure du joueur qui rejoint
+      // Cela permet de détecter si un joueur a désactivé GGSecure pendant la recherche
+      if (socket.userId) {
+        checkPlayerGGSecureOnJoin(matchId, socket.userId).catch(err => {
+          console.error('[Socket] Error checking GGSecure on join:', err);
+        });
+      }
     });
 
     socket.on('leaveRankedMatch', (matchId) => {

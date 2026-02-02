@@ -347,9 +347,89 @@ export const startGGSecureMonitoring = () => {
   setTimeout(monitorAllMatches, 5000); // Attendre 5 secondes après le démarrage
 };
 
+/**
+ * Vérifie le statut GGSecure d'un joueur spécifique quand il rejoint la room du match
+ * Appelé depuis le handler socket 'joinRankedMatch'
+ * @param {string} matchId - L'ID du match
+ * @param {string} userId - L'ID du joueur
+ */
+export const checkPlayerGGSecureOnJoin = async (matchId, userId) => {
+  if (!io) {
+    console.warn('[GGSecure Monitoring] Cannot check - Socket.io not initialized');
+    return;
+  }
+  
+  try {
+    // Récupérer le match pour avoir les infos du joueur
+    const match = await RankedMatch.findById(matchId)
+      .populate('players.user', 'username platform _id')
+      .lean();
+    
+    if (!match || !['pending', 'ready', 'in_progress'].includes(match.status)) {
+      return;
+    }
+    
+    // Trouver le joueur dans le match
+    const playerInfo = match.players?.find(p => {
+      const playerId = (p.user?._id || p.user)?.toString();
+      return playerId === userId.toString();
+    });
+    
+    if (!playerInfo || playerInfo.isFake) {
+      return; // Joueur non trouvé ou fake player
+    }
+    
+    const userObj = playerInfo.user;
+    const username = playerInfo.username || userObj?.username;
+    const team = playerInfo.team;
+    
+    // Vérifier le statut GGSecure (cette fonction vérifie déjà si c'est un joueur PC)
+    const status = await checkGGSecureStatus(userId);
+    
+    if (!status.required) {
+      return; // Pas un joueur PC, pas besoin de vérifier
+    }
+    
+    const statusKey = `${matchId}-${userId}`;
+    const previousStatus = playerConnectionStatus.get(statusKey);
+    
+    // Si déconnecté et pas encore notifié (ou première vérification)
+    if (!status.connected) {
+      // Initialiser ou mettre à jour le statut
+      playerConnectionStatus.set(statusKey, {
+        isConnected: false,
+        lastCheck: new Date(),
+        matchType: 'ranked'
+      });
+      
+      // Envoyer le message seulement si c'est un changement ou première détection
+      if (!previousStatus || previousStatus.isConnected !== false) {
+        const player = {
+          userId: userId.toString(),
+          username: username,
+          team: team
+        };
+        
+        await sendConnectionMessage(player, match, 'ranked', false);
+        console.log(`[GGSecure Monitoring] Player ${username} joined match ${matchId} without GGSecure - notified`);
+      }
+    } else {
+      // Joueur connecté, initialiser le statut
+      playerConnectionStatus.set(statusKey, {
+        isConnected: true,
+        lastCheck: new Date(),
+        matchType: 'ranked'
+      });
+    }
+  } catch (error) {
+    console.error('[GGSecure Monitoring] Error checking player on join:', error);
+  }
+};
+
 export default {
   initGGSecureMonitoring,
   startGGSecureMonitoring,
-  checkRankedMatchGGSecureStatus
+  checkRankedMatchGGSecureStatus,
+  checkPlayerGGSecureOnJoin
 };
 
