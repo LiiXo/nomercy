@@ -8,20 +8,6 @@ import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.midd
 
 const router = express.Router();
 
-// Cache for leaderboard with 15-minute expiration
-const leaderboardCache = new Map();
-const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes in milliseconds
-
-// Helper to get cache key
-function getLeaderboardCacheKey(mode, season, limit, page, all) {
-  return `${mode}_${season}_${limit}_${page}_${all}`;
-}
-
-// Helper to check if cache is valid
-function isCacheValid(cachedData) {
-  return cachedData && (Date.now() - cachedData.timestamp) < CACHE_DURATION;
-}
-
 // ==================== PUBLIC ROUTES ====================
 
 // Helper function to calculate wins/losses/points from RankedMatch history
@@ -99,7 +85,7 @@ async function calculateWinsLossesFromHistory(userId, mode, statsResetAt = null,
 router.get('/leaderboard/:mode', async (req, res) => {
   try {
     const { mode } = req.params;
-    const { season, limit = 100, page = 1, force = 'false' } = req.query;
+    const { season, limit = 100, page = 1 } = req.query;
 
     if (!['hardcore', 'cdl'].includes(mode)) {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
@@ -111,14 +97,6 @@ router.get('/leaderboard/:mode', async (req, res) => {
     const parsedLimit = parseInt(limit);
     const parsedPage = parseInt(page);
     const skip = (parsedPage - 1) * parsedLimit;
-
-    // Check cache first (unless force refresh is requested)
-    const cacheKey = getLeaderboardCacheKey(mode, parsedSeason, limit, page, 'ranking');
-    const cachedData = leaderboardCache.get(cacheKey);
-    
-    if (force !== 'true' && isCacheValid(cachedData)) {
-      return res.json(cachedData.data);
-    }
 
     // Get rankings directly from Ranking collection (single source of truth)
     const rankings = await Ranking.find({
@@ -172,7 +150,7 @@ router.get('/leaderboard/:mode', async (req, res) => {
       };
     });
 
-    const responseData = {
+    res.json({
       success: true,
       rankings: formattedRankings,
       pagination: {
@@ -180,18 +158,8 @@ router.get('/leaderboard/:mode', async (req, res) => {
         limit: parsedLimit,
         total,
         pages: Math.ceil(total / parsedLimit)
-      },
-      cached: false,
-      cacheTimestamp: Date.now()
-    };
-
-    // Store in cache
-    leaderboardCache.set(cacheKey, {
-      data: responseData,
-      timestamp: Date.now()
+      }
     });
-
-    res.json(responseData);
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     res.status(500).json({ success: false, message: 'Error fetching leaderboard' });

@@ -8,7 +8,7 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, RefreshCw
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map
 } from 'lucide-react';
 
 const API_URL = 'https://api-nomercy.ggsecure.io/api';
@@ -315,7 +315,7 @@ const RankedMode = () => {
   const [loadingRanking, setLoadingRanking] = useState(true);
   const [leaderboard, setLeaderboard] = useState([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
-  const [refreshingLeaderboard, setRefreshingLeaderboard] = useState(false);
+
   
   // Calculated stats from match history (for accurate display)
   const [calculatedStats, setCalculatedStats] = useState({ wins: 0, losses: 0, total: 0 });
@@ -819,15 +819,11 @@ const RankedMode = () => {
   };
 
   // Fetch leaderboard with pagination (filtered by current season)
-  const fetchLeaderboard = async (page = 1, force = false, season = null) => {
+  const fetchLeaderboard = async (page = 1, season = null) => {
     if (!season) return;
-    if (force) {
-      setRefreshingLeaderboard(true);
-    } else {
-      setLoadingLeaderboard(true);
-    }
+    setLoadingLeaderboard(true);
     try {
-      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?season=${season}&limit=${LEADERBOARD_PER_PAGE}&page=${page}${force ? '&force=true' : ''}`;
+      const url = `${API_URL}/rankings/leaderboard/${selectedMode}?season=${season}&limit=${LEADERBOARD_PER_PAGE}&page=${page}`;
       
       const response = await fetch(url, { credentials: 'include' });
       const data = await response.json();
@@ -842,13 +838,7 @@ const RankedMode = () => {
       console.error('Error fetching leaderboard:', err);
     } finally {
       setLoadingLeaderboard(false);
-      setRefreshingLeaderboard(false);
     }
-  };
-
-  // Force refresh leaderboard (bypass cache)
-  const handleRefreshLeaderboard = () => {
-    fetchLeaderboard(leaderboardPage, true, currentSeason);
   };
 
   // Check active match and handle reconnection to appropriate phase
@@ -1888,7 +1878,7 @@ const RankedMode = () => {
   // Fetch leaderboard when page changes (only after season is loaded)
   useEffect(() => {
     if (!seasonLoaded || !currentSeason) return;
-    fetchLeaderboard(leaderboardPage, false, currentSeason);
+    fetchLeaderboard(leaderboardPage, currentSeason);
   }, [leaderboardPage, selectedMode, seasonLoaded, currentSeason]);
 
   // Handle leaderboard page change
@@ -1924,7 +1914,7 @@ const RankedMode = () => {
     if (!seasonLoaded || !currentSeason) return;
     fetchMyRanking(currentSeason); // Now with proper season filtering
     fetchCalculatedStats(currentSeason);
-    fetchLeaderboard(leaderboardPage, false, currentSeason);
+    fetchLeaderboard(leaderboardPage, currentSeason);
   }, [seasonLoaded, isAuthenticated, selectedMode, currentSeason]);
 
   // Check active match when user becomes available (after login or page load)
@@ -2065,7 +2055,6 @@ const RankedMode = () => {
       goldRewardsTop5: 'Récompenses Gold (Top 5)',
       trophyRewards: 'Trophées de rang',
       andAbove: 'et plus',
-      leaderboardUpdateNotice: 'Le classement est mis à jour toutes les 15 minutes',
       activeMatchFound: 'Match en cours détecté',
       activeMatchFoundDesc: 'Vous avez un match en cours. Voulez-vous rejoindre la feuille de match ?',
       joinMatchSheet: 'Rejoindre le match',
@@ -2168,7 +2157,6 @@ const RankedMode = () => {
       goldRewardsTop5: 'Gold Rewards (Top 5)',
       trophyRewards: 'Rank Trophies',
       andAbove: 'and above',
-      leaderboardUpdateNotice: 'Leaderboard is updated every 15 minutes',
       activeMatchFound: 'Active Match Detected',
       activeMatchFoundDesc: 'You have an active match. Do you want to join the match sheet?',
       joinMatchSheet: 'Join Match',
@@ -2260,7 +2248,6 @@ const RankedMode = () => {
       goldRewardsTop5: 'Gold-Belohnungen (Top 5)',
       trophyRewards: 'Rang-Trophäen',
       andAbove: 'und höher',
-      leaderboardUpdateNotice: 'Die Bestenliste wird alle 15 Minuten aktualisiert',
       activeMatchFound: 'Aktives Spiel erkannt',
       activeMatchFoundDesc: 'Sie haben ein aktives Spiel. Möchten Sie dem Match-Blatt beitreten?',
       joinMatchSheet: 'Spiel beitreten',
@@ -2352,7 +2339,6 @@ const RankedMode = () => {
       goldRewardsTop5: 'Ricompense Gold (Top 5)',
       trophyRewards: 'Trofei di grado',
       andAbove: 'e superiori',
-      leaderboardUpdateNotice: 'La classifica viene aggiornata ogni 15 minuti',
       activeMatchFound: 'Partita attiva rilevata',
       activeMatchFoundDesc: 'Hai una partita in corso. Vuoi unirti al foglio partita?',
       joinMatchSheet: 'Unisciti alla partita',
@@ -3632,21 +3618,7 @@ const RankedMode = () => {
                   </div>
                   {t.leaderboard} - Top 100
                 </h3>
-                {/* Refresh button */}
-                <button
-                  onClick={handleRefreshLeaderboard}
-                  disabled={refreshingLeaderboard || loadingLeaderboard}
-                  className={`p-2 rounded-xl border transition-all duration-200 ${isHardcore ? 'border-red-500/30 hover:border-red-500/60 hover:bg-red-500/10' : 'border-cyan-500/30 hover:border-cyan-500/60 hover:bg-cyan-500/10'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  title={language === 'fr' ? 'Actualiser le classement' : 'Refresh leaderboard'}
-                >
-                  <RefreshCw className={`w-4 h-4 ${isHardcore ? 'text-red-400' : 'text-cyan-400'} ${refreshingLeaderboard ? 'animate-spin' : ''}`} />
-                </button>
               </div>
-              {/* Update notice */}
-              <p className="text-xs text-gray-400 mt-2 flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5" />
-                {t.leaderboardUpdateNotice}
-              </p>
             </div>
 
             {loadingLeaderboard ? (
