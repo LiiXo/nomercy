@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits, Events } from 'discord.js';
+import { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits, Events, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 
 // Discord channel IDs
 const ADMIN_LOG_CHANNEL_ID = '1463997106204184690';
@@ -74,6 +74,64 @@ export const initDiscordBot = async () => {
     // Run cleanup once at startup, then every 24 hours
     cleanupSummonChannels();
     summonCleanupInterval = setInterval(cleanupSummonChannels, 24 * 60 * 60 * 1000);
+  });
+
+  // Handle button interactions
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isButton()) return;
+    
+    const customId = interaction.customId;
+    
+    // Handle cancel stricker match button
+    if (customId.startsWith('cancel_stricker_match_')) {
+      const matchId = customId.replace('cancel_stricker_match_', '');
+      
+      try {
+        // Dynamically import StrickerMatch model to avoid circular dependencies
+        const { default: StrickerMatch } = await import('../models/StrickerMatch.js');
+        
+        const match = await StrickerMatch.findById(matchId)
+          .populate('team1Squad', 'name')
+          .populate('team2Squad', 'name');
+        
+        if (!match) {
+          await interaction.reply({ content: '❌ Match non trouvé.', ephemeral: true });
+          return;
+        }
+        
+        if (match.status === 'completed' || match.status === 'cancelled') {
+          await interaction.reply({ content: '❌ Ce match est déjà terminé ou annulé.', ephemeral: true });
+          return;
+        }
+        
+        // Cancel the match
+        match.status = 'cancelled';
+        match.cancelledAt = new Date();
+        match.cancelledBy = 'discord_arbitrator';
+        match.cancelReason = 'Annulé par arbitre via Discord (roster non sélectionné)';
+        await match.save();
+        
+        // Update the original message to show it's been cancelled
+        const cancelledEmbed = new EmbedBuilder()
+          .setColor(0x00FF00) // Green
+          .setTitle('✅ MATCH ANNULÉ')
+          .setDescription(`Le match a été annulé avec succès par un arbitre.`)
+          .addFields(
+            { name: '🎮 Match', value: `${match.team1Squad?.name || 'Équipe 1'} vs ${match.team2Squad?.name || 'Équipe 2'}`, inline: false },
+            { name: '📋 Match ID', value: `\`${matchId}\``, inline: true },
+            { name: '👮 Annulé par', value: interaction.user.tag, inline: true },
+            { name: '⏰ Date', value: new Date().toLocaleString('fr-FR'), inline: true }
+          )
+          .setTimestamp()
+          .setFooter({ text: 'NoMercy Stricker' });
+        
+        await interaction.update({ embeds: [cancelledEmbed], components: [] });
+        
+      } catch (error) {
+        console.error('[Discord Bot] Error cancelling stricker match:', error);
+        await interaction.reply({ content: '❌ Erreur lors de l\'annulation du match.', ephemeral: true });
+      }
+    }
   });
 
   client.on('error', (error) => {

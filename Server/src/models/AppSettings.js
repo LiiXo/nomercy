@@ -168,6 +168,11 @@ const appSettingsSchema = new mongoose.Schema({
   
   // Stricker mode settings
   strickerSettings: {
+    // Season configuration
+    currentSeason: { type: Number, default: 1, min: 1 },
+    seasonDurationMonths: { type: Number, default: 2 }, // Reset every 2 months
+    seasonStartDate: { type: Date, default: () => new Date() },
+    
     // Points par match (victoire)
     pointsPerWin: { type: Number, default: 30 },
     

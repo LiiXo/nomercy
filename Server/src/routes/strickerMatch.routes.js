@@ -508,17 +508,17 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       
       console.log(`[STRICKER] Challenge: ${challengerSquad.tag} vs ${targetEntry.squadTag}`);
       
-      // Get random maps
+      // Get ALL stricker maps for ban phase (each team bans 1, then random from remaining)
       let maps = await Map.find({
         isActive: true,
         'strickerConfig.ranked.enabled': true
-      }).limit(3);
+      });
       
       if (maps.length === 0) {
         maps = await Map.find({
           isActive: true,
           'rankedConfig.searchAndDestroy.enabled': true
-        }).limit(3);
+        });
       }
       
       // Create the match
@@ -577,6 +577,16 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         if (strickerQueue[i].squadId === challengerSquadId || strickerQueue[i].squadId === targetSquadId) {
           strickerQueue.splice(i, 1);
         }
+      }
+      
+      // Emit socket event to notify both teams
+      const io = req.app.get('io');
+      if (io) {
+        io.to('stricker-mode').emit('strickerMatchCreated', {
+          matchId: match._id,
+          team1Squad: challengerSquad._id,
+          team2Squad: targetEntry.squad?._id || targetSquadId
+        });
       }
       
       // GGSecure check
@@ -651,11 +661,11 @@ async function createStrickerMatch() {
     
     console.log(`[STRICKER] Creating match: ${team1Entry.squadTag} vs ${team2Entry.squadTag}`);
     
-    // Get random maps for stricker mode
+    // Get ALL stricker maps for ban phase (each team bans 1, then random from remaining)
     const maps = await Map.find({
       isActive: true,
       'strickerConfig.ranked.enabled': true
-    }).limit(3);
+    });
     
     // If no maps with stricker config, try regular ranked maps
     let mapOptions = maps;
@@ -663,7 +673,7 @@ async function createStrickerMatch() {
       mapOptions = await Map.find({
         isActive: true,
         'rankedConfig.searchAndDestroy.enabled': true
-      }).limit(3);
+      });
     }
     
     // Create the match with squad info
@@ -1599,6 +1609,10 @@ async function distributeStrickerRewards(match) {
     
     const winningTeam = match.result.winner;
     
+    // Award cranes (skulls) to both squads - 20 cranes per match
+    const CRANES_PER_MATCH = 20;
+    const squadsAwarded = new Set();
+    
     // Process each player
     for (const player of match.players) {
       if (player.isFake || !player.user) continue;
@@ -1631,7 +1645,9 @@ async function distributeStrickerRewards(match) {
       await user.save();
       
       // Update squad stats if player has a squad
+      let cranesAwarded = 0;
       if (player.squad) {
+        const squadId = player.squad.toString();
         const squad = await Squad.findById(player.squad);
         if (squad) {
           if (!squad.statsStricker) squad.statsStricker = { points: 0, wins: 0, losses: 0 };
@@ -1644,6 +1660,14 @@ async function distributeStrickerRewards(match) {
             squad.statsStricker.losses = (squad.statsStricker.losses || 0) + 1;
           }
           
+          // Award cranes only once per squad per match
+          if (!squadsAwarded.has(squadId)) {
+            squad.cranes = (squad.cranes || 0) + CRANES_PER_MATCH;
+            squadsAwarded.add(squadId);
+            cranesAwarded = CRANES_PER_MATCH;
+            console.log(`[STRICKER] Squad ${squad.tag} received ${CRANES_PER_MATCH} cranes (total: ${squad.cranes})`);
+          }
+          
           await squad.save();
         }
       }
@@ -1654,7 +1678,8 @@ async function distributeStrickerRewards(match) {
         goldEarned: goldChange,
         xpEarned: xpChange,
         oldPoints,
-        newPoints: user.statsStricker.points
+        newPoints: user.statsStricker.points,
+        cranesEarned: cranesAwarded
       };
     }
     
@@ -1841,10 +1866,9 @@ router.post('/match/:matchId/report-afk', verifyToken, checkStrickerAccess, asyn
     // Send Discord notification with embed
     const STRICKER_AFK_CHANNEL_ID = '1464005794289815746';
     const ARBITRATOR_ROLE_ID = '1461108156913680647';
-    const matchUrl = `https://nomercy.ggsecure.io/stricker/match/${matchId}`;
     
-    // Import EmbedBuilder dynamically or use the service
-    const { EmbedBuilder } = await import('discord.js');
+    // Import EmbedBuilder, ButtonBuilder, ActionRowBuilder dynamically
+    const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = await import('discord.js');
     
     const embed = new EmbedBuilder()
       .setColor(0xFF6600) // Orange
@@ -1856,15 +1880,23 @@ router.post('/match/:matchId/report-afk', verifyToken, checkStrickerAccess, asyn
         { name: '👤 Signalé par', value: `${req.user.username} (${reporterSquadName})`, inline: true },
         { name: '🚨 Équipe signalée', value: reportedSquadName, inline: true },
         { name: '📍 Phase', value: 'Sélection du roster', inline: true },
-        { name: '⏰ Date', value: new Date().toLocaleString('fr-FR'), inline: true },
-        { name: '\u200B', value: `[🔗 Annuler le match](${matchUrl})`, inline: false }
+        { name: '⏰ Date', value: new Date().toLocaleString('fr-FR'), inline: true }
       )
       .setTimestamp()
       .setFooter({ text: 'NoMercy Stricker' });
     
+    // Create cancel button
+    const cancelButton = new ButtonBuilder()
+      .setCustomId(`cancel_stricker_match_${matchId}`)
+      .setLabel('❌ Annuler le match')
+      .setStyle(ButtonStyle.Danger);
+    
+    const row = new ActionRowBuilder().addComponents(cancelButton);
+    
     await discordBot.sendToChannel(STRICKER_AFK_CHANNEL_ID, { 
       content: `<@&${ARBITRATOR_ROLE_ID}>`,
-      embeds: [embed] 
+      embeds: [embed],
+      components: [row]
     });
     
     res.json({
@@ -1923,7 +1955,9 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
         await user.save();
       }
       
-      // Refund squad stats
+      // Refund squad stats and cranes
+      const CRANES_PER_MATCH = 20;
+      
       if (match.team1Squad) {
         const squad1 = await Squad.findById(match.team1Squad._id);
         if (squad1) {
@@ -1935,6 +1969,8 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
             squad1.statsStricker.losses = Math.max(0, (squad1.statsStricker.losses || 0) - 1);
             squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
           }
+          // Refund cranes
+          squad1.cranes = Math.max(0, (squad1.cranes || 0) - CRANES_PER_MATCH);
           await squad1.save();
         }
       }
@@ -1950,6 +1986,8 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
             squad2.statsStricker.losses = Math.max(0, (squad2.statsStricker.losses || 0) - 1);
             squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
           }
+          // Refund cranes
+          squad2.cranes = Math.max(0, (squad2.cranes || 0) - CRANES_PER_MATCH);
           await squad2.save();
         }
       }

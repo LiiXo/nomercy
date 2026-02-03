@@ -217,7 +217,7 @@ const translations = {
 const StrickerMode = () => {
   const { language } = useLanguage();
   const { user, isAuthenticated, hasAdminAccess } = useAuth();
-  const { isConnected } = useSocket();
+  const { isConnected, on, joinStrickerMode, leaveStrickerMode } = useSocket();
   const navigate = useNavigate();
   
   const t = translations[language] || translations.en;
@@ -245,8 +245,9 @@ const StrickerMode = () => {
   const [loadingMaps, setLoadingMaps] = useState(false);
   const [rules, setRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
-  const [strickerStyle, setStrickerStyle] = useState('hardcore'); // 'hardcore' or 'cdl'
   const [ggsecureConnected, setGgsecureConnected] = useState(null); // GGSecure connection status for PC players
+  const [currentSeason, setCurrentSeason] = useState(null); // Current Stricker season info
+  const [seasonCountdown, setSeasonCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 }); // Countdown to next season
   const [recentMatches, setRecentMatches] = useState([
     // Test matches for preview
     { _id: 'test1', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'FTW', logo: '' }, team1Score: 6, team2Score: 4, winner: 'team1' },
@@ -377,6 +378,21 @@ const StrickerMode = () => {
     }
   }, [hasAccess]);
   
+  // Fetch current Stricker season
+  const fetchCurrentSeason = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/stricker/current`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCurrentSeason(data);
+      }
+    } catch (err) {
+      console.error('Error fetching stricker season:', err);
+    }
+  }, []);
+  
   // Check GGSecure status for PC players
   const checkGGSecure = async () => {
     if (user?.platform !== 'PC') return true;
@@ -485,8 +501,8 @@ const StrickerMode = () => {
       const data = await response.json();
       
       if (data.success) {
-        // Match created - will redirect via activeMatch
-        setActiveMatch(data.match);
+        // Match created - redirect immediately to match page
+        navigate(`/stricker/match/${data.match._id}`);
       } else {
         setError(data.message);
         // Refresh list in case squad left
@@ -501,6 +517,9 @@ const StrickerMode = () => {
   
   // Initial load
   useEffect(() => {
+    // Fetch season info regardless of access
+    fetchCurrentSeason();
+    
     if (hasAccess) {
       fetchMyRanking();
       fetchSquadLeaderboard();
@@ -511,7 +530,7 @@ const StrickerMode = () => {
     } else {
       setLoading(false);
     }
-  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad, fetchRecentMatches]);
+  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad, fetchRecentMatches, fetchCurrentSeason]);
   
   // Polling for matchmaking status - Always active for real-time updates
   useEffect(() => {
@@ -525,8 +544,60 @@ const StrickerMode = () => {
     return () => clearInterval(interval);
   }, [hasAccess, fetchMatchmakingStatus]);
   
-  // Don't auto-redirect to match - let user stay on page and show banner instead
-  // The user can click the banner to rejoin
+  // Socket: Join stricker-mode room and listen for match created
+  useEffect(() => {
+    if (!hasAccess || !isConnected) return;
+    
+    // Join the stricker-mode room to receive match notifications
+    joinStrickerMode();
+    
+    // Listen for match created (when another squad challenges us)
+    const unsubMatchCreated = on('strickerMatchCreated', (data) => {
+      console.log('[StrickerMode] Match created event received:', data);
+      
+      // Check if this match involves my squad
+      const mySquadId = mySquad?._id;
+      if (mySquadId && (data.team1Squad === mySquadId || data.team2Squad === mySquadId || 
+          data.team1Squad?.toString() === mySquadId || data.team2Squad?.toString() === mySquadId)) {
+        console.log('[StrickerMode] My squad is in this match, redirecting...');
+        navigate(`/stricker/match/${data.matchId}`);
+      }
+    });
+    
+    return () => {
+      leaveStrickerMode();
+      unsubMatchCreated();
+    };
+  }, [hasAccess, isConnected, mySquad, joinStrickerMode, leaveStrickerMode, on, navigate]);
+  
+  // Calculate countdown to next season using seasonEndDate from API
+  useEffect(() => {
+    if (!currentSeason?.seasonEndDate) return;
+    
+    const updateCountdown = () => {
+      const seasonEnd = new Date(currentSeason.seasonEndDate);
+      const now = new Date();
+      const diff = seasonEnd - now;
+      
+      if (diff <= 0) {
+        setSeasonCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+      
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      
+      setSeasonCountdown({ days, hours, minutes, seconds });
+    };
+    
+    // Update immediately and then every second
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    
+    return () => clearInterval(interval);
+  }, [currentSeason?.seasonEndDate]);
   
   // Loading state
   if (loading) {
@@ -594,12 +665,11 @@ const StrickerMode = () => {
     }
   };
   
-  // Fetch rules
+  // Fetch rules - uses generic stricker-snd rules (Stricker is always S&D mode)
   const fetchRules = async () => {
     setLoadingRules(true);
     try {
-      const subType = strickerStyle === 'cdl' ? 'stricker-cdl' : 'stricker-hardcore';
-      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/${subType}`, {
+      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/stricker-snd`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -630,10 +700,11 @@ const StrickerMode = () => {
       {/* Header */}
       <div className="relative overflow-hidden bg-gradient-to-br from-lime-600/20 via-green-600/10 to-dark-950 border-b border-lime-500/20">
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-5" />
-        <div className="relative max-w-7xl mx-auto px-4 py-8 sm:py-12">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="relative max-w-7xl mx-auto px-4 py-6 sm:py-8">
+          {/* Row 1: Title + Actions */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
             <div>
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-3 mb-1">
                 <div className="p-2 bg-lime-500/20 rounded-lg">
                   <Swords className="w-8 h-8 text-lime-400" />
                 </div>
@@ -694,6 +765,68 @@ const StrickerMode = () => {
               </button>
             </div>
           </div>
+          
+          {/* Row 2: Season Banner - Full Width */}
+          {currentSeason && (
+            <div className="bg-gradient-to-r from-lime-500/10 via-lime-500/20 to-lime-500/10 border border-lime-500/30 rounded-2xl p-5">
+              <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12">
+                {/* Season Info */}
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-lime-500/20 rounded-xl">
+                    <Trophy className="w-8 h-8 text-lime-400" />
+                  </div>
+                  <div className="text-center md:text-left">
+                    <p className="text-xs text-lime-400/60 uppercase tracking-widest font-semibold">
+                      {language === 'fr' ? 'Saison Actuelle' : 'Current Season'}
+                    </p>
+                    <p className="text-3xl font-black text-white">
+                      {language === 'fr' ? 'Saison' : 'Season'} {currentSeason.currentSeason}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Divider */}
+                <div className="hidden md:block w-px h-16 bg-lime-500/30" />
+                <div className="md:hidden w-32 h-px bg-lime-500/30" />
+                
+                {/* Countdown */}
+                <div className="text-center">
+                  <p className="text-xs text-lime-400/60 uppercase tracking-widest font-semibold mb-3">
+                    {language === 'fr' ? 'Prochaine saison dans' : 'Next season in'}
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="text-center">
+                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                        {String(seasonCountdown.days).padStart(2, '0')}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'JOURS' : 'DAYS'}</p>
+                    </div>
+                    <span className="text-2xl text-lime-500 font-bold">:</span>
+                    <div className="text-center">
+                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                        {String(seasonCountdown.hours).padStart(2, '0')}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'HEURES' : 'HOURS'}</p>
+                    </div>
+                    <span className="text-2xl text-lime-500 font-bold">:</span>
+                    <div className="text-center">
+                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                        {String(seasonCountdown.minutes).padStart(2, '0')}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'MIN' : 'MIN'}</p>
+                    </div>
+                    <span className="text-2xl text-lime-500 font-bold">:</span>
+                    <div className="text-center">
+                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                        {String(seasonCountdown.seconds).padStart(2, '0')}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'SEC' : 'SEC'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       
@@ -1388,15 +1521,12 @@ const StrickerMode = () => {
       {/* Rules Modal */}
       {showRulesModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowRulesModal(false)}>
-          <div className={`bg-dark-900 border ${strickerStyle === 'cdl' ? 'border-purple-500/30' : 'border-orange-500/30'} rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden`} onClick={(e) => e.stopPropagation()}>
-            <div className={`p-6 border-b ${strickerStyle === 'cdl' ? 'border-purple-500/20' : 'border-orange-500/20'}`}>
+          <div className="bg-dark-900 border border-lime-500/30 rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-lime-500/20">
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <BookOpen className={`w-7 h-7 ${strickerStyle === 'cdl' ? 'text-purple-400' : 'text-orange-400'}`} />
+                  <BookOpen className="w-7 h-7 text-lime-400" />
                   {t.strickerRules}
-                  <span className={`text-sm px-2 py-1 rounded ${strickerStyle === 'cdl' ? 'bg-purple-500/20 text-purple-400' : 'bg-orange-500/20 text-orange-400'}`}>
-                    {strickerStyle === 'cdl' ? 'CDL' : 'Hardcore'}
-                  </span>
                 </h2>
                 <button
                   onClick={() => setShowRulesModal(false)}
@@ -1410,7 +1540,7 @@ const StrickerMode = () => {
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-100px)]">
               {loadingRules ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className={`w-8 h-8 ${strickerStyle === 'cdl' ? 'text-purple-400' : 'text-orange-400'} animate-spin`} />
+                  <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
                 </div>
               ) : !rules ? (
                 <div className="text-center py-12 text-gray-400">
@@ -1420,12 +1550,12 @@ const StrickerMode = () => {
                 <div className="space-y-6">
                   {rules.title && rules.title[language] && (
                     <div className="mb-8">
-                      <h3 className={`text-3xl font-black ${strickerStyle === 'cdl' ? 'text-purple-400' : 'text-orange-400'}`}>{rules.title[language]}</h3>
+                      <h3 className="text-3xl font-black text-lime-400">{rules.title[language]}</h3>
                     </div>
                   )}
                   
                   {rules.sections && rules.sections.map((section, index) => (
-                    <div key={index} className={`bg-dark-800/50 rounded-xl p-6 border ${strickerStyle === 'cdl' ? 'border-purple-500/20' : 'border-orange-500/20'}`}>
+                    <div key={index} className="bg-dark-800/50 rounded-xl p-6 border border-lime-500/20">
                       <h4 className="text-xl font-bold text-white mb-4">{section.title[language]}</h4>
                       <div 
                         className="text-gray-300 prose prose-invert max-w-none"

@@ -1299,7 +1299,9 @@ router.post('/:matchId/accept', verifyToken, async (req, res) => {
     // Émettre via Socket.io pour mise à jour temps réel sur le dashboard
     const io = req.app.get('io');
     if (io) {
-      io.to('hardcore-dashboard').emit('matchAccepted', {
+      // Émettre vers le bon dashboard selon le mode du match
+      const dashboardRoom = match.mode === 'cdl' ? 'cdl-dashboard' : 'hardcore-dashboard';
+      io.to(dashboardRoom).emit('matchAccepted', {
         matchId: match._id,
         match: populatedMatch,
         ladderId: match.ladderId,

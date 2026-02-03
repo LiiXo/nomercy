@@ -246,6 +246,15 @@ const startServer = async () => {
       socket.leave(roomName);
     });
 
+    // Join/Leave Stricker mode room (for match created notifications)
+    socket.on('joinStrickerMode', () => {
+      socket.join('stricker-mode');
+    });
+
+    socket.on('leaveStrickerMode', () => {
+      socket.leave('stricker-mode');
+    });
+
     // Map vote for ranked matches
     socket.on('mapVote', async ({ matchId, mapIndex }) => {
       if (socket.userId && matchId !== undefined && mapIndex !== undefined) {

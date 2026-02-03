@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
@@ -53,6 +53,7 @@ const CDLDashboard = () => {
   const { language, t } = useLanguage();
   const { isAuthenticated, user } = useAuth();
   const { on, off, joinPage, leavePage, modeOnlineUsers, joinMode, leaveMode } = useSocket();
+  const navigate = useNavigate();
   const { 
     appSettings, 
     ladderRewards, 
@@ -701,6 +702,10 @@ const CDLDashboard = () => {
             console.log('[CDLDashboard] Adding to myActiveMatches:', data.match._id);
             return [data.match, ...prev];
           });
+          
+          // Rediriger vers la feuille de match si c'est mon match (match pris ou mon match accepté)
+          console.log('[CDLDashboard] Redirecting to match sheet:', data.match._id);
+          navigate(`/match/${data.match._id}`);
         }
         
         // Fallback: refresh active matches to ensure consistency
@@ -1019,6 +1024,7 @@ const CDLDashboard = () => {
       
       const action = pendingMatchAction;
       let actionSuccess = false;
+      const matchIdToRedirect = action?.type === 'accept' ? action.matchId : null;
       if (action?.type === 'post') actionSuccess = await handlePostMatch(action.ladderId, roster, action.gameMode);
       else if (action?.type === 'accept') actionSuccess = await handleAcceptMatch(action.matchId, action.ladderId, roster);
       
@@ -1030,6 +1036,12 @@ const CDLDashboard = () => {
         setHelperSearch('');
         setHelperSearchResults([]);
         setRosterError('');
+        
+        // Rediriger vers la feuille de match après acceptation réussie
+        if (matchIdToRedirect) {
+          console.log('[CDLDashboard] Redirecting to match sheet after accept:', matchIdToRedirect);
+          navigate(`/match/${matchIdToRedirect}`);
+        }
       }
     } catch (error) {
       console.error('Error confirming roster:', error);

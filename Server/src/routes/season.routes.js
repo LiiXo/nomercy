@@ -894,6 +894,100 @@ router.put('/admin/ranked/season-number', verifyToken, requireAdmin, async (req,
   }
 });
 
+// ==================== STRICKER SEASON ROUTES ====================
+
+import { resetStrickerSeason, getStrickerSeasonInfo } from '../services/strickerSeasonReset.service.js';
+
+// Get Stricker season info (admin only)
+router.get('/admin/stricker/info', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const info = await getStrickerSeasonInfo();
+    res.json({ success: true, ...info });
+  } catch (error) {
+    console.error('Get stricker season info error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Update Stricker season settings (admin only)
+router.put('/admin/stricker/settings', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { seasonNumber, seasonDurationMonths, seasonStartDate } = req.body;
+    
+    const updateFields = {};
+    if (seasonNumber && seasonNumber >= 1) {
+      updateFields['strickerSettings.currentSeason'] = seasonNumber;
+    }
+    if (seasonDurationMonths && seasonDurationMonths >= 1) {
+      updateFields['strickerSettings.seasonDurationMonths'] = seasonDurationMonths;
+    }
+    if (seasonStartDate) {
+      updateFields['strickerSettings.seasonStartDate'] = new Date(seasonStartDate);
+    }
+    
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucun paramètre valide fourni'
+      });
+    }
+    
+    await AppSettings.updateOne({}, { $set: updateFields }, { upsert: true });
+    
+    res.json({
+      success: true,
+      message: 'Paramètres Stricker mis à jour',
+      updated: updateFields
+    });
+  } catch (error) {
+    console.error('Update stricker settings error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reset Stricker season (admin only)
+router.post('/admin/stricker/reset', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await resetStrickerSeason(req.user._id);
+    
+    res.json({
+      success: true,
+      message: `Saison ${result.seasonNumber} Stricker terminée ! ${result.trophiesDistributed} trophées distribués.`,
+      result
+    });
+  } catch (error) {
+    console.error('Reset stricker season error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Erreur serveur' });
+  }
+});
+
+// Get public Stricker season info
+router.get('/stricker/current', async (req, res) => {
+  try {
+    const settings = await AppSettings.getSettings();
+    const strickerSettings = settings?.strickerSettings || {};
+    
+    const currentSeason = strickerSettings.currentSeason || 1;
+    const seasonDurationMonths = strickerSettings.seasonDurationMonths || 2;
+    const seasonStartDate = strickerSettings.seasonStartDate || new Date();
+    
+    // Calculate season end date
+    const seasonEndDate = new Date(seasonStartDate);
+    seasonEndDate.setMonth(seasonEndDate.getMonth() + seasonDurationMonths);
+    
+    res.json({
+      success: true,
+      currentSeason,
+      seasonDurationMonths,
+      seasonStartDate,
+      seasonEndDate
+    });
+  } catch (error) {
+    console.error('Get public stricker season error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 export default router;
 
 

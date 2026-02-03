@@ -6112,6 +6112,7 @@ Cette action est irréversible!`)) {
                     <li>• Gold gagné (retiré à tous)</li>
                     <li>• XP gagnée (retirée aux gagnants)</li>
                     <li>• Victoires/Défaites (retirées des stats)</li>
+                    <li>• Cranes (têtes de mort) gagnés (retirés aux escouades)</li>
                   </ul>
                 </div>
               )}
@@ -6188,6 +6189,14 @@ Cette action est irréversible!`)) {
   const [exportingRankings, setExportingRankings] = useState(false);
   const [rankedMatchmakingEnabled, setRankedMatchmakingEnabled] = useState(true);
   const [togglingMatchmaking, setTogglingMatchmaking] = useState(false);
+  
+  // Stricker Season States
+  const [strickerSeasonInfo, setStrickerSeasonInfo] = useState(null);
+  const [strickerResetLoading, setStrickerResetLoading] = useState(false);
+  const [showStrickerResetConfirm, setShowStrickerResetConfirm] = useState(false);
+  const [editingStrickerSeason, setEditingStrickerSeason] = useState(null);
+  const [editingStrickerStartDate, setEditingStrickerStartDate] = useState(null);
+  const [savingStrickerSeason, setSavingStrickerSeason] = useState(false);
 
   const fetchLadderSeasonHistory = async () => {
     setSeasonsLoading(true);
@@ -6415,6 +6424,76 @@ Cette action est irréversible!`)) {
       setError('Erreur lors de la mise à jour du numéro de saison');
     } finally {
       setSavingSeasonNumber(false);
+    }
+  };
+
+  // Stricker Season Functions
+  const fetchStrickerSeasonInfo = async () => {
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/stricker/info`, { credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        setStrickerSeasonInfo(data);
+      }
+    } catch (err) {
+      console.error('Error fetching stricker season info:', err);
+    }
+  };
+
+  const handleStrickerSeasonReset = async () => {
+    setStrickerResetLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/seasons/admin/stricker/reset`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(`Saison ${data.result.seasonNumber} Stricker terminée ! ${data.result.trophiesDistributed} trophées distribués, ${data.result.goldDistributed.toLocaleString()} gold distribué`);
+        setShowStrickerResetConfirm(false);
+        fetchStrickerSeasonInfo();
+      } else {
+        setError(data.message || 'Erreur lors du reset');
+      }
+    } catch (err) {
+      setError('Erreur lors du reset de la saison Stricker');
+    } finally {
+      setStrickerResetLoading(false);
+    }
+  };
+
+  const handleUpdateStrickerSeason = async (newSeasonNumber, newStartDate = null) => {
+    if (!newSeasonNumber || newSeasonNumber < 1) {
+      setError('Le numéro de saison doit être supérieur à 0');
+      return;
+    }
+    
+    setSavingStrickerSeason(true);
+    try {
+      const body = { seasonNumber: newSeasonNumber };
+      if (newStartDate) {
+        body.seasonStartDate = newStartDate;
+      }
+      
+      const response = await fetch(`${API_URL}/seasons/admin/stricker/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(`Saison Stricker mise à jour: Saison ${newSeasonNumber}`);
+        setEditingStrickerSeason(null);
+        setEditingStrickerStartDate(null);
+        fetchStrickerSeasonInfo();
+      } else {
+        setError(data.message || 'Erreur lors de la mise à jour');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour de la saison Stricker');
+    } finally {
+      setSavingStrickerSeason(false);
     }
   };
 
@@ -6718,7 +6797,229 @@ Cette action est irréversible!`)) {
           </div>
         </div>
 
-        {/* Confirmation Modal */}
+        {/* ==================== STRICKER SEASON SECTION ==================== */}
+        <div className="border-t border-white/10 pt-8 mt-8">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3 mb-6">
+            <Shield className="w-7 h-7 text-lime-400" />
+            Gestion de Saison Mode Stricker
+          </h2>
+          
+          {/* Stricker Season Number Configuration */}
+          <div className="bg-dark-800/50 border border-lime-500/30 rounded-xl p-6 mb-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-4">
+              <Calendar className="w-5 h-5 text-lime-400" />
+              Configuration de la Saison Stricker
+            </h3>
+            
+            {editingStrickerSeason !== null ? (
+              <div className="space-y-4">
+                {/* Season Number */}
+                <div>
+                  <label className="text-gray-400 text-sm mb-2 block">Numéro de saison</label>
+                  <input
+                    type="number"
+                    value={editingStrickerSeason}
+                    onChange={(e) => setEditingStrickerSeason(parseInt(e.target.value) || 1)}
+                    min="1"
+                    className="w-32 px-3 py-2 bg-dark-900 border border-lime-500/30 rounded-lg text-white text-center text-xl font-bold focus:outline-none focus:border-lime-500"
+                  />
+                </div>
+                
+                {/* Start Date */}
+                <div>
+                  <label className="text-gray-400 text-sm mb-2 block">Date de début de la saison (10h du matin)</label>
+                  <input
+                    type="date"
+                    value={editingStrickerStartDate || ''}
+                    onChange={(e) => setEditingStrickerStartDate(e.target.value)}
+                    className="px-4 py-2 bg-dark-900 border border-lime-500/30 rounded-lg text-white focus:outline-none focus:border-lime-500"
+                  />
+                  <p className="text-gray-500 text-xs mt-1">
+                    La prochaine saison commencera 2 mois après cette date
+                  </p>
+                </div>
+                
+                {/* Buttons */}
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    onClick={() => handleUpdateStrickerSeason(editingStrickerSeason, editingStrickerStartDate ? new Date(editingStrickerStartDate + 'T10:00:00').toISOString() : null)}
+                    disabled={savingStrickerSeason}
+                    className="px-4 py-2 bg-lime-500 hover:bg-lime-600 text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {savingStrickerSeason ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Sauvegarder
+                  </button>
+                  <button
+                    onClick={() => {
+                      setEditingStrickerSeason(null);
+                      setEditingStrickerStartDate(null);
+                    }}
+                    disabled={savingStrickerSeason}
+                    className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg transition-colors"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-4xl font-bold text-lime-400">
+                      {strickerSeasonInfo?.currentSeason || 1}
+                    </span>
+                    <span className="text-gray-400">Saison en cours</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!strickerSeasonInfo) fetchStrickerSeasonInfo();
+                      setEditingStrickerSeason(strickerSeasonInfo?.currentSeason || 1);
+                      // Format date for input (YYYY-MM-DD)
+                      if (strickerSeasonInfo?.seasonStartDate) {
+                        const d = new Date(strickerSeasonInfo.seasonStartDate);
+                        setEditingStrickerStartDate(d.toISOString().split('T')[0]);
+                      }
+                    }}
+                    className="px-4 py-2 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Modifier
+                  </button>
+                  <button
+                    onClick={fetchStrickerSeasonInfo}
+                    className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Actualiser
+                  </button>
+                </div>
+                <div className="text-gray-400 text-sm space-y-1">
+                  <p>
+                    <span className="text-gray-500">Début:</span>{' '}
+                    <span className="text-white font-medium">
+                      {strickerSeasonInfo?.seasonStartDate 
+                        ? new Date(strickerSeasonInfo.seasonStartDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        : 'Non défini'}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-gray-500">Fin estimée:</span>{' '}
+                    <span className="text-lime-400 font-medium">
+                      {strickerSeasonInfo?.seasonEndDate 
+                        ? new Date(strickerSeasonInfo.seasonEndDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        : 'N/A'}
+                    </span>
+                  </p>
+                  <p>
+                    <span className="text-gray-500">Durée:</span> {strickerSeasonInfo?.seasonDurationMonths || 2} mois
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Stricker RAZ Section */}
+          <div className="bg-dark-800/50 border border-lime-500/30 rounded-xl overflow-hidden">
+            <div className="p-6 bg-gradient-to-r from-lime-500/20 to-green-500/20 border-b border-white/10">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <RotateCcw className="w-5 h-5 text-lime-400" />
+                RAZ Saison Stricker
+              </h3>
+              <p className="text-gray-400 text-sm mt-1">
+                Terminer la saison et distribuer les récompenses aux top escouades
+              </p>
+            </div>
+            
+            <div className="p-6">
+              {/* What will happen */}
+              <div className="mb-6 space-y-4">
+                <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    Distribution des trophées - Top 3 Escouades
+                  </h4>
+                  <p className="text-gray-400 text-sm mb-3">
+                    Un trophée unique sera créé et distribué aux 3 meilleures escouades :
+                  </p>
+                  <div className="space-y-2">
+                    {[
+                      { pos: 1, gold: 50000, color: 'yellow' },
+                      { pos: 2, gold: 30000, color: 'gray' },
+                      { pos: 3, gold: 15000, color: 'orange' }
+                    ].map(({ pos, gold, color }) => {
+                      const topSquad = strickerSeasonInfo?.topSquads?.find(s => s.position === pos);
+                      return (
+                        <div key={pos} className={`flex items-center justify-between p-2 rounded-lg bg-${color}-500/10`}>
+                          <div className="flex items-center gap-3">
+                            <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold bg-${color}-500/30 text-${color}-400`}>
+                              {pos}
+                            </span>
+                            <span className="text-white">
+                              {topSquad ? `[${topSquad.tag}] ${topSquad.name}` : `Top ${pos}`}
+                            </span>
+                            {topSquad && (
+                              <span className="text-gray-500 text-xs">({topSquad.points} pts)</span>
+                            )}
+                          </div>
+                          <span className="flex items-center gap-1 text-yellow-400 font-semibold">
+                            <Coins className="w-4 h-4" />
+                            {gold.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4 text-red-400" />
+                    Remise à zéro
+                  </h4>
+                  <ul className="text-gray-400 text-sm space-y-1">
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                      Points Stricker de toutes les escouades remis à 0
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                      Victoires/Défaites Stricker remises à 0
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                      Tous les rangs Stricker redescendent à Recrues
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Stats */}
+                {strickerSeasonInfo && (
+                  <div className="p-4 bg-dark-900/50 rounded-lg border border-white/10">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-lime-400" />
+                      Statistiques actuelles
+                    </h4>
+                    <div className="text-center p-3 bg-dark-800 rounded-lg">
+                      <div className="text-2xl font-bold text-lime-400">{strickerSeasonInfo.totalSquads || 0}</div>
+                      <div className="text-gray-500 text-xs">Escouades actives</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Reset Button */}
+              <button
+                onClick={() => setShowStrickerResetConfirm(true)}
+                className="w-full py-4 px-6 bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-lime-500/30"
+              >
+                <RotateCcw className="w-5 h-5" />
+                RAZ Saison Stricker
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Ranked Confirmation Modal */}
         {showRankedResetConfirm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
             <div className="bg-dark-900 rounded-xl border border-purple-500/30 p-6 max-w-md w-full">
@@ -6745,6 +7046,43 @@ Cette action est irréversible!`)) {
                   className="flex-1 py-3 bg-purple-500 text-white font-bold rounded-lg hover:bg-purple-600 transition-colors flex items-center justify-center gap-2"
                 >
                   {rankedResetLoading ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> En cours...</>
+                  ) : (
+                    <><RotateCcw className="w-5 h-5" /> Confirmer RAZ</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stricker Reset Confirmation Modal */}
+        {showStrickerResetConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+            <div className="bg-dark-900 rounded-xl border border-lime-500/30 p-6 max-w-md w-full">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-lime-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <AlertTriangle className="w-8 h-8 text-lime-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Confirmer la RAZ Stricker</h3>
+                <p className="text-gray-400 text-sm">
+                  Cette action est irréversible. Les trophées de saison seront créés et distribués au Top 3 des escouades, le gold sera donné à leurs membres, et tous les stats Stricker seront remis à zéro.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowStrickerResetConfirm(false)}
+                  disabled={strickerResetLoading}
+                  className="flex-1 py-3 bg-dark-800 text-white rounded-lg hover:bg-dark-700 transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleStrickerSeasonReset}
+                  disabled={strickerResetLoading}
+                  className="flex-1 py-3 bg-lime-500 text-white font-bold rounded-lg hover:bg-lime-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  {strickerResetLoading ? (
                     <><Loader2 className="w-5 h-5 animate-spin" /> En cours...</>
                   ) : (
                     <><RotateCcw className="w-5 h-5" /> Confirmer RAZ</>

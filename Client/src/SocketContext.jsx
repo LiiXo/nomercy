@@ -217,6 +217,30 @@ export const SocketProvider = ({ children }) => {
     }
   }, []);
 
+  // Join Stricker mode room (for match created notifications)
+  const joinStrickerMode = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) return;
+
+    if (!joinedRoomsRef.current.has('stricker-mode')) {
+      console.log('[Socket] Joining Stricker mode room');
+      socket.emit('joinStrickerMode');
+      joinedRoomsRef.current.add('stricker-mode');
+    }
+  }, [isConnected]);
+
+  // Leave Stricker mode room
+  const leaveStrickerMode = useCallback(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    if (joinedRoomsRef.current.has('stricker-mode')) {
+      console.log('[Socket] Leaving Stricker mode room');
+      socket.emit('leaveStrickerMode');
+      joinedRoomsRef.current.delete('stricker-mode');
+    }
+  }, []);
+
   // Join a mode room (for tracking mode-specific online users)
   const joinMode = useCallback((mode) => {
     const socket = socketRef.current;
@@ -300,6 +324,8 @@ export const SocketProvider = ({ children }) => {
     leaveRankedMatch,
     joinStrickerMatch,
     leaveStrickerMatch,
+    joinStrickerMode,
+    leaveStrickerMode,
     joinMode,
     leaveMode,
     on,

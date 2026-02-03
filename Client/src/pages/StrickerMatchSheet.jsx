@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Users, Trophy, Shield, Crown, MessageCircle, 
   Send, Loader2, CheckCircle, XCircle, Phone, AlertTriangle,
-  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban
+  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Skull
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
@@ -143,10 +143,11 @@ const translations = {
     cancelNo: 'Non, continuer',
     waitingOpponentCancelVote: 'En attente de l\'autre équipe...',
     yourTeamWantsCancel: 'Votre équipe veut annuler',
-    opponentWantsCancel: 'L\'adversaire veut annuler',
+    opponentWantsCancel: 'demande l\'annulation',
     bothMustAgree: 'Les deux référents doivent être d\'accord',
     matchCancelledByAgreement: 'Match annulé d\'un commun accord',
     cancelRequestPending: 'Demande d\'annulation en cours',
+    doYouWantToCancel: 'Souhaitez-vous annuler ?',
     // Map ban
     mapBan: 'Bannissement de Maps',
     mapBanDesc: 'Chaque référent bannit 1 map, puis une map sera tirée au sort parmi les restantes',
@@ -239,10 +240,11 @@ const translations = {
     cancelNo: 'No, continue',
     waitingOpponentCancelVote: 'Waiting for other team...',
     yourTeamWantsCancel: 'Your team wants to cancel',
-    opponentWantsCancel: 'Opponent wants to cancel',
+    opponentWantsCancel: 'requests cancellation',
     bothMustAgree: 'Both referents must agree',
     matchCancelledByAgreement: 'Match cancelled by mutual agreement',
     cancelRequestPending: 'Cancellation request pending',
+    doYouWantToCancel: 'Do you want to cancel?',
     // Map ban
     mapBan: 'Map Ban',
     mapBanDesc: 'Each referent bans 1 map, then a map will be randomly selected from the remaining',
@@ -269,6 +271,7 @@ const StrickerMatchSheet = () => {
   const { user, isAuthenticated } = useAuth();
   const { socket, on, emit, joinStrickerMatch, leaveStrickerMatch } = useSocket();
   const chatRef = useRef(null);
+  const preMatchAudioRef = useRef(null);
 
   const t = translations[language] || translations.en;
 
@@ -320,6 +323,7 @@ const StrickerMatchSheet = () => {
   const [reportAfkCooldown, setReportAfkCooldown] = useState(0);
   const [reportingAfk, setReportingAfk] = useState(false);
   const [hasReportedAfk, setHasReportedAfk] = useState(false);
+  const [afkWaitCountdown, setAfkWaitCountdown] = useState(300); // 5 min wait before can report
 
   // Fetch match data
   const fetchMatch = useCallback(async () => {
@@ -517,6 +521,45 @@ const StrickerMatchSheet = () => {
     return () => clearInterval(timer);
   }, [preMatchPhase]);
 
+  // Pre-match background music
+  useEffect(() => {
+    const audio = preMatchAudioRef.current;
+    if (!audio) return;
+    
+    const isPreMatch = preMatchPhase === 'roster_selection' || preMatchPhase === 'map_vote';
+    
+    if (isPreMatch) {
+      // Play pre-match music
+      audio.volume = 0.3;
+      audio.play().catch(err => {
+        console.log('[Audio] Pre-match music autoplay blocked:', err);
+      });
+    } else {
+      // Fade out and stop when match starts or is cancelled
+      if (!audio.paused) {
+        const fadeOut = () => {
+          if (audio.volume > 0.05) {
+            audio.volume = Math.max(0, audio.volume - 0.05);
+            setTimeout(fadeOut, 100);
+          } else {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 0.3;
+          }
+        };
+        fadeOut();
+      }
+    }
+    
+    return () => {
+      // Cleanup on unmount
+      if (audio && !audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    };
+  }, [preMatchPhase]);
+
   // Select roster member
   const handleSelectRosterMember = async (memberId) => {
     if (!isReferent) return;
@@ -699,7 +742,7 @@ const StrickerMatchSheet = () => {
 
   // Handle report AFK team
   const handleReportAfk = async () => {
-    if (reportingAfk || hasReportedAfk || reportAfkCooldown > 0 || !isReferent) return;
+    if (reportingAfk || hasReportedAfk || reportAfkCooldown > 0 || afkWaitCountdown > 0 || !isReferent) return;
     
     setReportingAfk(true);
     try {
@@ -737,6 +780,27 @@ const StrickerMatchSheet = () => {
     
     return () => clearInterval(timer);
   }, [reportAfkCooldown]);
+
+  // Initial 5min wait countdown before can report AFK
+  useEffect(() => {
+    if (!match?.createdAt) return;
+    
+    const calculateWait = () => {
+      const matchStart = new Date(match.createdAt).getTime();
+      const now = Date.now();
+      const fiveMinutes = 5 * 60 * 1000; // 5 minutes in ms
+      const elapsed = now - matchStart;
+      const remaining = Math.max(0, Math.ceil((fiveMinutes - elapsed) / 1000));
+      setAfkWaitCountdown(remaining);
+    };
+    
+    calculateWait();
+    
+    if (afkWaitCountdown > 0) {
+      const timer = setInterval(calculateWait, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [match?.createdAt, afkWaitCountdown]);
 
   if (loading) {
     return (
@@ -785,6 +849,14 @@ const StrickerMatchSheet = () => {
     
     return (
       <div className="min-h-screen bg-dark-950 flex items-center justify-center p-4">
+        {/* Pre-match background music */}
+        <audio
+          ref={preMatchAudioRef}
+          src="/stricker.mp3.mp3"
+          loop
+          preload="auto"
+          className="hidden"
+        />
         <div className="max-w-6xl w-full">
           {/* Header */}
           <div className="text-center mb-8">
@@ -801,6 +873,79 @@ const StrickerMatchSheet = () => {
               }
             </p>
           </div>
+          
+          {/* Cancellation Bar - AT THE TOP */}
+          {isReferent && (() => {
+            const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
+            const opponentVote = myTeam === 1 ? cancellationVotes.team2 : cancellationVotes.team1;
+            const opponentTeamName = myTeam === 1 ? team2Name : team1Name;
+            const hasMyTeamVoted = myTeamVote !== null && myTeamVote !== undefined;
+            const hasOpponentVoted = opponentVote !== null && opponentVote !== undefined;
+            
+            // If opponent requested cancellation and we haven't voted yet - show dynamic prompt
+            if (opponentVote === true && !hasMyTeamVoted) {
+              return (
+                <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-5 h-5 text-orange-400" />
+                      <div className="text-center sm:text-left">
+                        <span className="text-orange-400 font-bold">{opponentTeamName}</span>
+                        <span className="text-white"> {t.opponentWantsCancel}</span>
+                        <p className="text-gray-400 text-sm">{t.doYouWantToCancel}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleCancelVote(true)}
+                        disabled={submittingCancelVote}
+                        className="px-5 py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-xl font-medium transition-colors disabled:opacity-50"
+                      >
+                        {submittingCancelVote ? <Loader2 className="w-5 h-5 animate-spin" /> : t.cancelYes}
+                      </button>
+                      <button
+                        onClick={() => handleCancelVote(false)}
+                        disabled={submittingCancelVote}
+                        className="px-5 py-2.5 bg-lime-500/20 hover:bg-lime-500/30 border border-lime-500/50 text-lime-400 rounded-xl font-medium transition-colors disabled:opacity-50"
+                      >
+                        {t.cancelNo}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            
+            // If my team requested cancellation - show waiting
+            if (myTeamVote === true) {
+              return (
+                <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                  <div className="flex items-center justify-center gap-3">
+                    <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+                    <span className="text-orange-400 font-medium">{t.waitingOpponentCancelVote}</span>
+                  </div>
+                </div>
+              );
+            }
+            
+            // No votes yet - show request button
+            if (!hasMyTeamVoted && !hasOpponentVoted) {
+              return (
+                <div className="mb-6 text-center">
+                  <button
+                    onClick={() => handleCancelVote(true)}
+                    disabled={submittingCancelVote}
+                    className="px-6 py-3 bg-dark-800 hover:bg-dark-700 border border-red-500/30 text-red-400 rounded-xl font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {submittingCancelVote ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                    {t.requestCancel}
+                  </button>
+                </div>
+              );
+            }
+            
+            return null;
+          })()}
           
           {/* Status indicator */}
           <div className="text-center mb-8">
@@ -838,7 +983,7 @@ const StrickerMatchSheet = () => {
               ) : (
                 <button
                   onClick={handleReportAfk}
-                  disabled={reportingAfk || reportAfkCooldown > 0}
+                  disabled={reportingAfk || reportAfkCooldown > 0 || afkWaitCountdown > 0}
                   className="px-6 py-3 bg-dark-800 hover:bg-dark-700 border border-orange-500/30 text-orange-400 rounded-xl font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
                 >
                   {reportingAfk ? (
@@ -846,9 +991,11 @@ const StrickerMatchSheet = () => {
                   ) : (
                     <AlertTriangle className="w-4 h-4" />
                   )}
-                  {reportAfkCooldown > 0 
-                    ? `${t.reportAfkCooldown} ${Math.floor(reportAfkCooldown / 60)}:${String(reportAfkCooldown % 60).padStart(2, '0')}`
-                    : t.reportAfk
+                  {afkWaitCountdown > 0
+                    ? `${t.reportAfkCooldown} ${Math.floor(afkWaitCountdown / 60)}:${String(afkWaitCountdown % 60).padStart(2, '0')}`
+                    : reportAfkCooldown > 0 
+                      ? `${t.reportAfkCooldown} ${Math.floor(reportAfkCooldown / 60)}:${String(reportAfkCooldown % 60).padStart(2, '0')}`
+                      : t.reportAfk
                   }
                 </button>
               )}
@@ -1024,80 +1171,6 @@ const StrickerMatchSheet = () => {
               </div>
             </div>
           </div>
-          
-          {/* Cancellation Section */}
-          {isReferent && (
-            <div className="mt-8 text-center">
-              {/* Cancel request button or vote dialog - only show if my team hasn't voted yet */}
-              {(() => {
-                const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
-                const hasMyTeamVoted = myTeamVote !== null && myTeamVote !== undefined;
-                
-                if (hasMyTeamVoted) return null;
-                
-                return !showCancelDialog ? (
-                  <button
-                    onClick={() => setShowCancelDialog(true)}
-                    className="px-6 py-3 bg-dark-800 hover:bg-dark-700 border border-red-500/30 text-red-400 rounded-xl font-medium transition-colors"
-                  >
-                    {t.requestCancel}
-                  </button>
-                ) : (
-                  <div className="bg-dark-900 border border-orange-500/30 rounded-xl p-6 inline-block">
-                    <h3 className="text-white font-bold mb-4">{t.cancelVote}</h3>
-                    <div className="flex items-center gap-4 justify-center">
-                      <button
-                        onClick={() => handleCancelVote(true)}
-                        disabled={submittingCancelVote}
-                        className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-xl font-medium transition-colors disabled:opacity-50"
-                      >
-                        {submittingCancelVote ? <Loader2 className="w-5 h-5 animate-spin" /> : t.cancelYes}
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleCancelVote(false);
-                          setShowCancelDialog(false);
-                        }}
-                        disabled={submittingCancelVote}
-                        className="px-6 py-3 bg-lime-500/20 hover:bg-lime-500/30 border border-lime-500/50 text-lime-400 rounded-xl font-medium transition-colors disabled:opacity-50"
-                      >
-                        {t.cancelNo}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-              
-              {/* Show cancel status */}
-              {(cancellationVotes.team1 !== null || cancellationVotes.team2 !== null) && (
-                <div className="mt-4 p-4 bg-dark-900 border border-orange-500/30 rounded-xl inline-block">
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className={`flex items-center gap-2 ${cancellationVotes.team1 === true ? 'text-orange-400' : 'text-gray-500'}`}>
-                      <span>{t.team1}:</span>
-                      {cancellationVotes.team1 === true ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : cancellationVotes.team1 === false ? (
-                        <XCircle className="w-4 h-4" />
-                      ) : (
-                        <Clock className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className={`flex items-center gap-2 ${cancellationVotes.team2 === true ? 'text-orange-400' : 'text-gray-500'}`}>
-                      <span>{t.team2}:</span>
-                      {cancellationVotes.team2 === true ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : cancellationVotes.team2 === false ? (
-                        <XCircle className="w-4 h-4" />
-                      ) : (
-                        <Clock className="w-4 h-4" />
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-gray-400 text-xs mt-2">{t.bothMustAgree}</p>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     );
@@ -1116,6 +1189,14 @@ const StrickerMatchSheet = () => {
     
     return (
       <div className="min-h-screen bg-dark-950 flex items-center justify-center p-4">
+        {/* Pre-match background music */}
+        <audio
+          ref={preMatchAudioRef}
+          src="/stricker.mp3.mp3"
+          loop
+          preload="auto"
+          className="hidden"
+        />
         <div className="max-w-4xl w-full">
           {/* Header */}
           <div className="text-center mb-8">
@@ -1126,6 +1207,79 @@ const StrickerMatchSheet = () => {
             <h1 className="text-3xl font-black text-white mb-2">{team1Name} vs {team2Name}</h1>
             <p className="text-gray-400">{t.mapBanDesc}</p>
           </div>
+          
+          {/* Cancellation Bar - AT THE TOP */}
+          {isReferent && (() => {
+            const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
+            const opponentVote = myTeam === 1 ? cancellationVotes.team2 : cancellationVotes.team1;
+            const opponentTeamName = myTeam === 1 ? team2Name : team1Name;
+            const hasMyTeamVoted = myTeamVote !== null && myTeamVote !== undefined;
+            const hasOpponentVoted = opponentVote !== null && opponentVote !== undefined;
+            
+            // If opponent requested cancellation and we haven't voted yet - show dynamic prompt
+            if (opponentVote === true && !hasMyTeamVoted) {
+              return (
+                <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <AlertTriangle className="w-5 h-5 text-orange-400" />
+                      <div className="text-center sm:text-left">
+                        <span className="text-orange-400 font-bold">{opponentTeamName}</span>
+                        <span className="text-white"> {t.opponentWantsCancel}</span>
+                        <p className="text-gray-400 text-sm">{t.doYouWantToCancel}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleCancelVote(true)}
+                        disabled={submittingCancelVote}
+                        className="px-5 py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-xl font-medium transition-colors disabled:opacity-50"
+                      >
+                        {submittingCancelVote ? <Loader2 className="w-5 h-5 animate-spin" /> : t.cancelYes}
+                      </button>
+                      <button
+                        onClick={() => handleCancelVote(false)}
+                        disabled={submittingCancelVote}
+                        className="px-5 py-2.5 bg-lime-500/20 hover:bg-lime-500/30 border border-lime-500/50 text-lime-400 rounded-xl font-medium transition-colors disabled:opacity-50"
+                      >
+                        {t.cancelNo}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            
+            // If my team requested cancellation - show waiting
+            if (myTeamVote === true) {
+              return (
+                <div className="mb-6 p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                  <div className="flex items-center justify-center gap-3">
+                    <Loader2 className="w-5 h-5 text-orange-400 animate-spin" />
+                    <span className="text-orange-400 font-medium">{t.waitingOpponentCancelVote}</span>
+                  </div>
+                </div>
+              );
+            }
+            
+            // No votes yet - show request button
+            if (!hasMyTeamVoted && !hasOpponentVoted) {
+              return (
+                <div className="mb-6 text-center">
+                  <button
+                    onClick={() => handleCancelVote(true)}
+                    disabled={submittingCancelVote}
+                    className="px-6 py-3 bg-dark-800 hover:bg-dark-700 border border-red-500/30 text-red-400 rounded-xl font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {submittingCancelVote ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                    {t.requestCancel}
+                  </button>
+                </div>
+              );
+            }
+            
+            return null;
+          })()}
           
           {/* Turn indicator */}
           <div className="text-center mb-8">
@@ -1237,80 +1391,6 @@ const StrickerMatchSheet = () => {
               );
             })}
           </div>
-          
-          {/* Cancellation Section */}
-          {isReferent && (
-            <div className="mt-8 text-center">
-              {/* Cancel request button or vote dialog - only show if my team hasn't voted yet */}
-              {(() => {
-                const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
-                const hasMyTeamVoted = myTeamVote !== null && myTeamVote !== undefined;
-                
-                if (hasMyTeamVoted) return null;
-                
-                return !showCancelDialog ? (
-                  <button
-                    onClick={() => setShowCancelDialog(true)}
-                    className="px-6 py-3 bg-dark-800 hover:bg-dark-700 border border-red-500/30 text-red-400 rounded-xl font-medium transition-colors"
-                  >
-                    {t.requestCancel}
-                  </button>
-                ) : (
-                  <div className="bg-dark-900 border border-orange-500/30 rounded-xl p-6 inline-block">
-                    <h3 className="text-white font-bold mb-4">{t.cancelVote}</h3>
-                    <div className="flex items-center gap-4 justify-center">
-                      <button
-                        onClick={() => handleCancelVote(true)}
-                        disabled={submittingCancelVote}
-                        className="px-6 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-xl font-medium transition-colors disabled:opacity-50"
-                      >
-                        {submittingCancelVote ? <Loader2 className="w-5 h-5 animate-spin" /> : t.cancelYes}
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleCancelVote(false);
-                          setShowCancelDialog(false);
-                        }}
-                        disabled={submittingCancelVote}
-                        className="px-6 py-3 bg-lime-500/20 hover:bg-lime-500/30 border border-lime-500/50 text-lime-400 rounded-xl font-medium transition-colors disabled:opacity-50"
-                      >
-                        {t.cancelNo}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-              
-              {/* Show cancel status */}
-              {(cancellationVotes.team1 !== null || cancellationVotes.team2 !== null) && (
-                <div className="mt-4 p-4 bg-dark-900 border border-orange-500/30 rounded-xl inline-block">
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className={`flex items-center gap-2 ${cancellationVotes.team1 === true ? 'text-orange-400' : 'text-gray-500'}`}>
-                      <span>{t.team1}:</span>
-                      {cancellationVotes.team1 === true ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : cancellationVotes.team1 === false ? (
-                        <XCircle className="w-4 h-4" />
-                      ) : (
-                        <Clock className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className={`flex items-center gap-2 ${cancellationVotes.team2 === true ? 'text-orange-400' : 'text-gray-500'}`}>
-                      <span>{t.team2}:</span>
-                      {cancellationVotes.team2 === true ? (
-                        <CheckCircle className="w-4 h-4" />
-                      ) : cancellationVotes.team2 === false ? (
-                        <XCircle className="w-4 h-4" />
-                      ) : (
-                        <Clock className="w-4 h-4" />
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-gray-400 text-xs mt-2">{t.bothMustAgree}</p>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     );
@@ -1467,13 +1547,19 @@ const StrickerMatchSheet = () => {
                 {didWin ? t.yourTeamWon : t.yourTeamLost}
               </p>
               {myPlayer?.rewards && (
-                <div className="flex items-center justify-center gap-6 mt-4">
+                <div className="flex items-center justify-center gap-4 sm:gap-6 mt-4 flex-wrap">
                   <div className={`px-4 py-2 rounded-lg ${didWin ? 'bg-lime-500/20 text-lime-400' : 'bg-red-500/20 text-red-400'}`}>
                     <span className="font-bold">{didWin ? '+' : ''}{myPlayer.rewards.pointsChange}</span> pts
                   </div>
                   <div className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400">
                     <span className="font-bold">+{myPlayer.rewards.goldEarned}</span> gold
                   </div>
+                  {myPlayer.rewards.cranesEarned > 0 && (
+                    <div className="px-4 py-2 rounded-lg bg-gray-500/20 text-gray-300 flex items-center gap-2">
+                      <Skull className="w-4 h-4" />
+                      <span className="font-bold">+{myPlayer.rewards.cranesEarned}</span> cranes
+                    </div>
+                  )}
                 </div>
               )}
             </div>

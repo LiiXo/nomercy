@@ -7,7 +7,7 @@ import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   ArrowLeft, Trophy, Medal, Shield, Users, Calendar, Crown, Loader2, 
   AlertCircle, TrendingUp, Target, UserPlus, Lock, Check, X, Send, Award,
-  Swords, Clock, Play, Star, ChevronLeft, ChevronRight
+  Swords, Clock, Play, Star, ChevronLeft, ChevronRight, Skull
 } from 'lucide-react';
 
 import { API_URL, UPLOADS_BASE_URL } from '../config';
@@ -813,6 +813,14 @@ const SquadProfile = () => {
                       <div className="text-center">
                         <p className="text-lg sm:text-xl font-bold text-red-400">{squad.statsStricker?.losses || 0}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
+                      </div>
+                      {/* Cranes (Skulls) Currency */}
+                      <div className="text-center pl-3 sm:pl-6 border-l border-lime-500/20">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Skull className="w-4 h-4 sm:w-5 sm:h-5 text-gray-300" />
+                          <p className="text-lg sm:text-xl font-bold text-gray-200">{squad.cranes || 0}</p>
+                        </div>
+                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">Cranes</p>
                       </div>
                     </div>
                   </div>
