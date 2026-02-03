@@ -10,7 +10,7 @@ import {
   Swords, Clock, Play, Star, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
 const SquadProfile = () => {
   const { squadId } = useParams();
@@ -543,7 +543,7 @@ const SquadProfile = () => {
             {squad.banner && (
               <div className="w-full h-32 sm:h-40 relative overflow-hidden">
                 <img 
-                  src={squad.banner.startsWith('/uploads') ? `https://api-nomercy.ggsecure.io${squad.banner}` : squad.banner}
+                  src={squad.banner.startsWith('/uploads') ? `${UPLOADS_BASE_URL}${squad.banner}` : squad.banner}
                   alt="Squad banner"
                   className="w-full h-full object-cover"
                   onError={(e) => { e.target.style.display = 'none'; }}

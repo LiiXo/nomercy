@@ -16,6 +16,36 @@ import GameMap from '../models/Map.js';
 import { createMatchVoiceChannels } from './discordBot.service.js';
 import { checkRankedMatchGGSecureStatus } from './ggsecureMonitoring.service.js';
 
+// API URL for constructing full avatar URLs
+const API_URL = 'https://api-nomercy.ggsecure.io';
+
+/**
+ * Construit l'URL complète de l'avatar d'un utilisateur
+ * Priorité: avatar personnalisé > avatar Discord > null
+ * @param {Object} user - L'objet utilisateur avec avatar, discordId, discordAvatar
+ * @returns {string|null} L'URL complète de l'avatar ou null
+ */
+const getFullAvatarUrl = (user) => {
+  if (!user) return null;
+  
+  // Avatar personnalisé (prioritaire)
+  if (user.avatar) {
+    // Si c'est un chemin d'upload, ajouter le préfixe API_URL
+    if (user.avatar.startsWith('/uploads/')) {
+      return `${API_URL}${user.avatar}`;
+    }
+    // Sinon c'est déjà une URL complète
+    return user.avatar;
+  }
+  
+  // Fallback: avatar Discord
+  if (user.discordId && user.discordAvatar) {
+    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png`;
+  }
+  
+  return null;
+};
+
 // Files d'attente par mode de jeu et mode (hardcore/cdl) - UNE SEULE FILE PAR MODE
 // Structure: { 'Search & Destroy_hardcore': [{ userId, username, rank, points, platform, joinedAt }] }
 const queues = {};
@@ -118,8 +148,8 @@ const cleanupTimedOutPlayers = () => {
       const [gameMode, mode] = key.split('_');
       broadcastQueueUpdate(gameMode, mode);
       
-      // Cancel timer if we dropped below minimum players
-      if (queue.length < 4) {
+      // Cancel timer if we dropped below minimum players (8 for 4v4)
+      if (queue.length < 8) {
         cancelMatchmakingTimer(gameMode, mode);
       }
     }
@@ -611,8 +641,8 @@ export const leaveQueue = async (userId, gameMode, mode) => {
     // Notifier les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
     
-    // Si on descend sous le minimum de joueurs (4), annuler le timer
-    if (queue.length < 4) {
+    // Si on descend sous le minimum de joueurs (8 pour 4v4), annuler le timer
+    if (queue.length < 8) {
       cancelMatchmakingTimer(gameMode, mode);
     } else {
       // Vérifier si on doit relancer le timer avec le nouveau format
@@ -735,7 +765,8 @@ const createMatchFromQueue = async (gameMode, mode) => {
   // Supprimer le timer
   delete queueTimers[timerKey];
   
-  if (queue.length < 4) {
+  // Minimum 8 joueurs pour un match 4v4
+  if (queue.length < 8) {
     return;
   }
   
@@ -1171,14 +1202,6 @@ const createMatchFromQueue = async (gameMode, mode) => {
       }
     });
     
-    // Populate pour envoyer aux clients (seulement les vrais joueurs)
-    if (team1ReferentId || team2ReferentId) {
-      await match.populate('players.user', 'username avatar discordId discordAvatar platform');
-      if (team1ReferentId) await match.populate('team1Referent', 'username');
-      if (team2ReferentId) await match.populate('team2Referent', 'username');
-    }
-    
-    
     // Ajouter un message système
     match.chat.push({
       isSystem: true,
@@ -1188,17 +1211,17 @@ const createMatchFromQueue = async (gameMode, mode) => {
     });
     await match.save();
     
+    // Populate APRÈS le save pour garder les données en mémoire
+    await match.populate('players.user', 'username avatar discordId discordAvatar platform');
+    if (team1ReferentId) await match.populate('team1Referent', 'username');
+    if (team2ReferentId) await match.populate('team2Referent', 'username');
+    
     // Préparer les données des joueurs pour l'animation de shuffle
     // Inclure tous les joueurs avec leurs infos pour l'animation côté client
     const playersForAnimation = matchPlayers.map((p, index) => {
       // Récupérer l'avatar depuis les données populées ou les données originales
       const populatedPlayer = match.players.find(mp => mp.username === p.username);
-      let avatar = null;
-      if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
-        avatar = `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
-      } else if (populatedPlayer?.user?.avatar) {
-        avatar = populatedPlayer.user.avatar;
-      }
+      const avatar = getFullAvatarUrl(populatedPlayer?.user);
       
       return {
         id: p.user?.toString() || `fake-${index}`,
@@ -1322,6 +1345,21 @@ const broadcastGlobalQueueCount = (mode) => {
     count: totalInQueue,
     mode
   });
+};
+
+/**
+ * Obtient le nombre total de joueurs en file d'attente pour un mode
+ * @param {string} mode - Mode (hardcore/cdl)
+ * @returns {number} Nombre total de joueurs
+ */
+export const getGlobalQueueCount = (mode) => {
+  let totalInQueue = 0;
+  for (const key in queues) {
+    if (key.endsWith(`_${mode}`)) {
+      totalInQueue += queues[key].length;
+    }
+  }
+  return totalInQueue;
 };
 
 /**
@@ -1770,12 +1808,6 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
       }
     });
     
-    // Populate pour envoyer au client
-    await match.populate('players.user', 'username avatar discordId discordAvatar platform');
-    if (team1ReferentId) await match.populate('team1Referent', 'username');
-    if (team2ReferentId) await match.populate('team2Referent', 'username');
-    
-    
     // Ajouter un message système
     const formatLabel = gameMode === 'Team Deathmatch' ? 'Mêlée générale (8 joueurs)' : 
                        gameMode === 'Duel' ? 'Duel (2 joueurs)' : 
@@ -1787,16 +1819,16 @@ export const startStaffTestMatch = async (userId, gameMode, mode, teamSize = 4) 
     });
     await match.save();
     
+    // Populate APRÈS le save pour garder les données en mémoire
+    await match.populate('players.user', 'username avatar discordId discordAvatar platform');
+    if (team1ReferentId) await match.populate('team1Referent', 'username');
+    if (team2ReferentId) await match.populate('team2Referent', 'username');
+    
     // Préparer les données des joueurs pour l'animation de shuffle (test match)
     // Tous les joueurs ont déjà leur équipe assignée
     const playersForAnimation = matchPlayers.map((p, index) => {
       const populatedPlayer = match.players.find(mp => mp.username === p.username);
-      let avatar = null;
-      if (populatedPlayer?.user?.discordId && populatedPlayer?.user?.discordAvatar) {
-        avatar = `https://cdn.discordapp.com/avatars/${populatedPlayer.user.discordId}/${populatedPlayer.user.discordAvatar}.png`;
-      } else if (populatedPlayer?.user?.avatar) {
-        avatar = populatedPlayer.user.avatar;
-      }
+      const avatar = getFullAvatarUrl(populatedPlayer?.user);
       
       return {
         id: p.user?.toString() || `fake-${index}`,
@@ -2262,12 +2294,7 @@ const processRosterPick = async (matchId, team, playerId, isRandom = false) => {
     
     // Fonction helper pour obtenir l'avatar d'un joueur
     const getPlayerAvatar = (player) => {
-      if (player.user?.discordId && player.user?.discordAvatar) {
-        return `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
-      } else if (player.user?.avatar) {
-        return player.user.avatar;
-      }
-      return null;
+      return getFullAvatarUrl(player.user);
     };
     
     if (io) {
@@ -2974,17 +3001,26 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
     
     await newMatch.save();
     
+    // Populate APRÈS le save pour garder les données en mémoire
+    await newMatch.populate('players.user', 'username avatar discordId discordAvatar platform');
+    
     // Préparer les données des joueurs pour l'animation (format identique au mode normal)
-    const playersForAnimation = matchPlayers.map((p, index) => ({
-      id: p.user?.toString() || `fake-${index}`,
-      username: p.username,
-      avatar: null, // Les bots n'ont pas d'avatar
-      team: p.team,
-      isReferent: p.isReferent,
-      isHost: p.team === hostTeam && p.isReferent,
-      isFake: p.isFake,
-      points: p.points || 0
-    }));
+    const playersForAnimation = matchPlayers.map((p, index) => {
+      // Récupérer l'avatar depuis les données populées
+      const populatedPlayer = newMatch.players.find(mp => mp.username === p.username);
+      const avatar = getFullAvatarUrl(populatedPlayer?.user);
+      
+      return {
+        id: p.user?.toString() || `fake-${index}`,
+        username: p.username,
+        avatar: avatar,
+        team: p.team,
+        isReferent: p.isReferent,
+        isHost: p.team === hostTeam && p.isReferent,
+        isFake: p.isFake,
+        points: p.points || 0
+      };
+    });
     
     const matchIdStr = newMatch._id.toString();
     

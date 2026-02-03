@@ -10,7 +10,7 @@ import {
   Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 // Stricker Ranks - 6 ranks with apple green theme
 const STRICKER_RANKS = {

@@ -6,6 +6,7 @@ import { useAuth } from '../AuthContext';
 import { getDefaultAvatar } from '../utils/avatar';
 import { Menu, X, Trophy, Home, ChevronDown, LogOut, Zap, Medal, User, Shield, Coins, Gift, Search, Loader2, Users, MessageSquare, ShoppingBag, Target } from 'lucide-react';
 import SpinWheel from './SpinWheel';
+import { API_URL } from '../config';
 
 const Navbar = () => {
   const { language, setLanguage, t } = useLanguage();
@@ -67,7 +68,7 @@ const Navbar = () => {
       
       setSearchLoading(true);
       try {
-        const response = await fetch(`https://api-nomercy.ggsecure.io/api/users/search?q=${encodeURIComponent(searchQuery)}&limit=5`);
+        const response = await fetch(`${API_URL}/users/search?q=${encodeURIComponent(searchQuery)}&limit=5`);
         const data = await response.json();
         if (data.success) {
           setSearchResults(data.users);
@@ -94,7 +95,7 @@ const Navbar = () => {
       }
       
       try {
-        const response = await fetch(`https://api-nomercy.ggsecure.io/api/squads/my-squad/requests-count?mode=${selectedMode}`, {
+        const response = await fetch(`${API_URL}/squads/my-squad/requests-count?mode=${selectedMode}`, {
           credentials: 'include'
         });
         const data = await response.json();
@@ -120,7 +121,7 @@ const Navbar = () => {
       }
       
       try {
-        const response = await fetch('https://api-nomercy.ggsecure.io/api/messages/unread-count', {
+        const response = await fetch(`${API_URL}/messages/unread-count`, {
           credentials: 'include'
         });
         const data = await response.json();
@@ -153,7 +154,7 @@ const Navbar = () => {
       }
       
       try {
-        const response = await fetch('https://api-nomercy.ggsecure.io/api/spin/status', {
+        const response = await fetch(`${API_URL}/spin/status`, {
           credentials: 'include'
         });
         const data = await response.json();
@@ -679,7 +680,7 @@ const Navbar = () => {
       <SpinWheel isOpen={showSpinWheel} onClose={() => { 
         setShowSpinWheel(false);
         // Refetch spin status after closing the wheel
-        fetch('https://api-nomercy.ggsecure.io/api/spin/status', { credentials: 'include' })
+        fetch(`${API_URL}/spin/status`, { credentials: 'include' })
           .then(res => res.json())
           .then(data => { if (data.success) setCanSpin(data.canSpin); })
           .catch(() => {});

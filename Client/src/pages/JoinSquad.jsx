@@ -5,7 +5,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { Users, Loader2, Check, X, AlertCircle, LogIn } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const JoinSquad = () => {
   const { inviteCode } = useParams();

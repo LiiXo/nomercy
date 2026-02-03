@@ -20,7 +20,7 @@ import {
   ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const AdminPanel = () => {
   const navigate = useNavigate();
@@ -404,8 +404,8 @@ const AdminPanel = () => {
     userId: null,
     username: '',
     reason: '',
-    duration: 'permanent', // 'permanent', '1h', '1d', '7d', '30d', 'custom'
-    customDays: 7
+    durationType: 'permanent', // 'hours', 'days', 'months', 'permanent'
+    durationValue: 1
   });
 
   // Squad trophy modal state
@@ -1389,8 +1389,8 @@ const AdminPanel = () => {
         userId: user._id,
         username: user.username,
         reason: '',
-        duration: 'permanent',
-        customDays: 7
+        durationType: 'hours',
+        durationValue: 1
       });
       setShowBanModal(true);
     }
@@ -1437,22 +1437,17 @@ const AdminPanel = () => {
     try {
       let endDate = null;
       const now = new Date();
+      const value = banData.durationValue || 1;
 
-      switch (banData.duration) {
-        case '1h':
-          endDate = new Date(now.getTime() + 1 * 60 * 60 * 1000);
+      switch (banData.durationType) {
+        case 'hours':
+          endDate = new Date(now.getTime() + value * 60 * 60 * 1000);
           break;
-        case '1d':
-          endDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        case 'days':
+          endDate = new Date(now.getTime() + value * 24 * 60 * 60 * 1000);
           break;
-        case '7d':
-          endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-          break;
-        case '30d':
-          endDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-          break;
-        case 'custom':
-          endDate = new Date(now.getTime() + banData.customDays * 24 * 60 * 60 * 1000);
+        case 'months':
+          endDate = new Date(now.getTime() + value * 30 * 24 * 60 * 60 * 1000);
           break;
         default: // permanent
           endDate = null;
@@ -1473,9 +1468,13 @@ const AdminPanel = () => {
       const data = await response.json();
 
       if (data.success) {
-        const durationText = banData.duration === 'permanent' ? 'définitivement' : 
-          banData.duration === 'custom' ? `pour ${banData.customDays} jours` :
-          `pour ${banData.duration}`;
+        let durationText = 'définitivement';
+        if (banData.durationType !== 'permanent') {
+          const unitText = banData.durationType === 'hours' ? (value > 1 ? 'heures' : 'heure') :
+            banData.durationType === 'days' ? (value > 1 ? 'jours' : 'jour') :
+            (value > 1 ? 'mois' : 'mois');
+          durationText = `pour ${value} ${unitText}`;
+        }
         setSuccess(`${banData.username} a été banni ${durationText}`);
         setShowBanModal(false);
         fetchUsers();
@@ -1643,10 +1642,14 @@ const AdminPanel = () => {
   // ==================== USER TROPHY MANAGEMENT ====================
   
   // Open user trophy management modal
-  const openUserTrophiesModal = (user) => {
+  const openUserTrophiesModal = async (user) => {
     setSelectedUserForTrophies(user);
     setUserTrophiesList(user.trophies || []);
     setShowUserTrophies(true);
+    // Fetch trophies list if not already loaded
+    if (trophies.length === 0) {
+      await fetchTrophies();
+    }
   };
 
   // Add trophy to user
@@ -6034,18 +6037,7 @@ Cette action est irréversible!`)) {
                             <option value="disputed">Litige</option>
                             <option value="cancelled">Annulé</option>
                           </select>
-                          <select
-                            value={match.season || 1}
-                            onChange={(e) => handleUpdateRankedMatchSeason(match._id, e.target.value)}
-                            className="px-3 py-2 bg-dark-900 border border-purple-500/30 rounded-lg text-purple-400 text-sm"
-                            title="Changer la saison"
-                          >
-                            <option value="1">Saison 1</option>
-                            <option value="2">Saison 2</option>
-                            <option value="3">Saison 3</option>
-                            <option value="4">Saison 4</option>
-                            <option value="5">Saison 5</option>
-                          </select>
+
                           <button
                             onClick={() => setRankedMatchToDelete(match)}
                             className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
@@ -6058,8 +6050,7 @@ Cette action est irréversible!`)) {
                         <div>
                           Créé le {new Date(match.createdAt).toLocaleDateString('fr-FR')} à {new Date(match.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })} • 
                           Mode: {match.gameMode || 'N/A'} • 
-                          Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'} •
-                          <span className="text-purple-400">Saison {match.season || 1}</span>
+                          Format: {match.teamSize ? `${match.teamSize}v${match.teamSize}` : 'N/A'}
                         </div>
                         <div className="flex flex-wrap gap-3 text-xs">
                           {match.startedAt && (
@@ -8599,6 +8590,7 @@ Cette action est irréversible!`)) {
             userIsAdmin={userIsAdmin}
             openUserPurchasesModal={openUserPurchasesModal}
             openGiveItemModal={openGiveItemModal}
+            openUserTrophiesModal={openUserTrophiesModal}
             currentUser={user}
           />
         );
@@ -8948,40 +8940,112 @@ Cette action est irréversible!`)) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Durée</label>
-                <select
-                  value={banData.duration}
-                  onChange={(e) => setBanData({ ...banData, duration: e.target.value })}
-                  className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50"
-                >
-                  <option value="1h">1 heure</option>
-                  <option value="1d">1 jour</option>
-                  <option value="7d">7 jours</option>
-                  <option value="30d">30 jours</option>
-                  <option value="custom">Personnalisé</option>
-                  <option value="permanent">Permanent</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Durée du ban</label>
+                <div className="flex gap-3">
+                  {/* Duration value input */}
+                  {banData.durationType !== 'permanent' && (
+                    <input
+                      type="number"
+                      value={banData.durationValue}
+                      onChange={(e) => setBanData({ ...banData, durationValue: Math.max(1, parseInt(e.target.value) || 1) })}
+                      min={1}
+                      max={banData.durationType === 'hours' ? 24 : banData.durationType === 'days' ? 365 : 12}
+                      className="w-24 px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50 text-center"
+                    />
+                  )}
+                  
+                  {/* Duration type selector */}
+                  <select
+                    value={banData.durationType}
+                    onChange={(e) => setBanData({ ...banData, durationType: e.target.value, durationValue: 1 })}
+                    className={`${banData.durationType === 'permanent' ? 'flex-1' : 'flex-1'} px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50`}
+                  >
+                    <option value="hours">Heure(s)</option>
+                    <option value="days">Jour(s)</option>
+                    <option value="months">Mois</option>
+                    <option value="permanent">Permanent</option>
+                  </select>
+                </div>
               </div>
 
-              {banData.duration === 'custom' && (
+              {/* Quick duration buttons */}
+              {banData.durationType !== 'permanent' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Nombre de jours</label>
-                  <input
-                    type="number"
-                    value={banData.customDays}
-                    onChange={(e) => setBanData({ ...banData, customDays: parseInt(e.target.value) || 1 })}
-                    min={1}
-                    max={365}
-                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-orange-500/50"
-                  />
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Raccourcis</label>
+                  <div className="flex flex-wrap gap-2">
+                    {banData.durationType === 'hours' && (
+                      <>
+                        {[1, 2, 3, 4, 6, 12, 24].map(h => (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => setBanData({ ...banData, durationValue: h })}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              banData.durationValue === h
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-dark-800 text-gray-300 hover:bg-dark-700'
+                            }`}
+                          >
+                            {h}h
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {banData.durationType === 'days' && (
+                      <>
+                        {[1, 2, 3, 7, 14, 30].map(d => (
+                          <button
+                            key={d}
+                            type="button"
+                            onClick={() => setBanData({ ...banData, durationValue: d })}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              banData.durationValue === d
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-dark-800 text-gray-300 hover:bg-dark-700'
+                            }`}
+                          >
+                            {d}j
+                          </button>
+                        ))}
+                      </>
+                    )}
+                    {banData.durationType === 'months' && (
+                      <>
+                        {[1, 2, 3, 6, 12].map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setBanData({ ...banData, durationValue: m })}
+                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                              banData.durationValue === m
+                                ? 'bg-orange-500 text-white'
+                                : 'bg-dark-800 text-gray-300 hover:bg-dark-700'
+                            }`}
+                          >
+                            {m} mois
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {banData.duration === 'permanent' && (
+              {banData.durationType === 'permanent' && (
                 <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
                   <p className="text-red-400 text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4" />
                     Le bannissement permanent empêchera définitivement l'utilisateur d'accéder à l'application.
+                  </p>
+                </div>
+              )}
+
+              {/* Ban duration summary */}
+              {banData.durationType !== 'permanent' && (
+                <div className="p-4 bg-orange-500/10 border border-orange-500/30 rounded-xl">
+                  <p className="text-orange-400 text-sm flex items-center gap-2">
+                    <Clock className="w-4 h-4" />
+                    L'utilisateur sera banni pour {banData.durationValue} {banData.durationType === 'hours' ? (banData.durationValue > 1 ? 'heures' : 'heure') : banData.durationType === 'days' ? (banData.durationValue > 1 ? 'jours' : 'jour') : 'mois'}.
                   </p>
                 </div>
               )}
@@ -9526,9 +9590,6 @@ Cette action est irréversible!`)) {
                           </div>
                           <div>
                             <p className="text-white font-medium text-sm">{trophyName}</p>
-                            {trophyEntry.season && (
-                              <p className="text-gray-500 text-xs">Saison {trophyEntry.season}</p>
-                            )}
                           </div>
                         </div>
                         <button

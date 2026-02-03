@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
@@ -11,7 +11,8 @@ import {
   Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
+import RankedMatchReport from '../components/RankedMatchReport';
 
 // Audio pour le matchmaking - Web Audio API avec plusieurs sons aléatoires
 let audioContext = null;
@@ -108,7 +109,7 @@ const playMatchFoundSound = () => {
     source.buffer = selectedBuffer;
     source.connect(gainNode);
     gainNode.connect(audioContext.destination);
-    gainNode.gain.value = 0.15;
+    gainNode.gain.value = 0.1;
     
     currentAudioSource = source;
     currentGainNode = gainNode;
@@ -309,6 +310,7 @@ const RankedMode = () => {
   const { user, isAuthenticated } = useAuth();
   const { on, isConnected, joinPage, leavePage, emit, modeOnlineUsers, joinMode, leaveMode, joinRankedMatch, leaveRankedMatch } = useSocket();
   const navigate = useNavigate();
+  const location = useLocation(); // Track navigation for pending MVP vote check
   
   // Player stats
   const [myRanking, setMyRanking] = useState(null);
@@ -341,6 +343,10 @@ const RankedMode = () => {
   const [activeMatch, setActiveMatch] = useState(null);
   const [showActiveMatchDialog, setShowActiveMatchDialog] = useState(false);
   const [savedActiveMatch, setSavedActiveMatch] = useState(null); // Save match info for dialog
+  
+  // Pending MVP vote state (for re-opening dialog when returning to page)
+  const [pendingMvpVote, setPendingMvpVote] = useState(null);
+  const [showPendingMvpReport, setShowPendingMvpReport] = useState(false);
   
   // Note: Using totalOnlineUsers from SocketContext for global online count
   
@@ -872,11 +878,14 @@ const RankedMode = () => {
           const team2ReferentId = match.team2Referent?._id?.toString() || match.team2Referent?.toString();
           
           // Obtenir les avatars des joueurs
+          // Priorité: avatar personnalisé > avatar Discord
           const getPlayerAvatar = (player) => {
-            if (player.user?.discordId && player.user?.discordAvatar) {
-              return `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
-            } else if (player.user?.avatar) {
+            if (player.user?.avatar) {
+              // Avatar personnalisé (prioritaire)
               return player.user.avatar;
+            } else if (player.user?.discordId && player.user?.discordAvatar) {
+              // Fallback: avatar Discord
+              return `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
             }
             return null;
           };
@@ -987,6 +996,52 @@ const RankedMode = () => {
       }
     } catch (err) {
       console.error('Error checking active match:', err);
+    }
+  };
+
+  // Check for pending MVP vote (user must vote before closing report)
+  const checkPendingMvpVote = async () => {
+    if (!isAuthenticated || !user) return;
+    try {
+      console.log('[RankedMode] Checking for pending MVP vote...');
+      const response = await fetch(`${API_URL}/ranked-matches/pending-mvp-vote`, { credentials: 'include' });
+      const data = await response.json();
+      
+      if (data.success && data.hasPendingVote) {
+        console.log('[RankedMode] Pending MVP vote found:', data);
+        setPendingMvpVote(data);
+        setShowPendingMvpReport(true);
+      } else {
+        setPendingMvpVote(null);
+        setShowPendingMvpReport(false);
+      }
+    } catch (err) {
+      console.error('Error checking pending MVP vote:', err);
+    }
+  };
+
+  // Handle MVP vote from pending report
+  const handlePendingMvpVote = async (mvpPlayerId) => {
+    if (!pendingMvpVote?.match?._id) return;
+    try {
+      const response = await fetch(`${API_URL}/ranked-matches/${pendingMvpVote.match._id}/mvp-vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ mvpPlayerId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('[RankedMode] MVP vote submitted successfully');
+        // Refresh pending vote status
+        await checkPendingMvpVote();
+      } else {
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error('Error submitting MVP vote:', err);
+      alert(language === 'fr' ? 'Erreur lors du vote MVP' : 'Error submitting MVP vote');
     }
   };
 
@@ -1923,6 +1978,14 @@ const RankedMode = () => {
       checkActiveMatch();
     }
   }, [user, isAuthenticated]);
+
+  // Check for pending MVP vote on page navigation (location.key changes with each navigation)
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      console.log('[RankedMode] Navigation detected - checking pending MVP vote');
+      checkPendingMvpVote();
+    }
+  }, [location.key, isAuthenticated, user]); // Runs on navigation AND auth changes
 
   // Show dialog when active match is detected
   useEffect(() => {
@@ -4989,6 +5052,40 @@ const RankedMode = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pending MVP Vote Report - Shows when user returns to page with pending MVP vote */}
+      {showPendingMvpReport && pendingMvpVote && (
+        <RankedMatchReport
+          show={showPendingMvpReport}
+          onClose={() => {
+            // Only close if user has voted
+            if (!pendingMvpVote.hasPendingVote) {
+              setShowPendingMvpReport(false);
+              setPendingMvpVote(null);
+            }
+          }}
+          isWinner={pendingMvpVote.isWinner}
+          rewards={pendingMvpVote.rewards}
+          oldRank={{ points: pendingMvpVote.rewards?.oldPoints || 0 }}
+          newRank={{ points: pendingMvpVote.rewards?.newPoints || 0 }}
+          mode={pendingMvpVote.match?.mode || selectedMode}
+          matchId={pendingMvpVote.match?._id}
+          isReferent={false}
+          doublePts={pendingMvpVote.rewards?.doublePts || false}
+          doubleGold={pendingMvpVote.rewards?.doubleGold || false}
+          isMvp={false}
+          mvpBonus={5}
+          mvpPlayer={pendingMvpVote.match?.mvp?.player || null}
+          players={pendingMvpVote.match?.players || []}
+          mvpVotingActive={true}
+          mvpConfirmed={pendingMvpVote.match?.mvp?.confirmed || false}
+          mvpVotes={pendingMvpVote.match?.mvp?.votes || []}
+          onMvpVote={handlePendingMvpVote}
+          isTestMatch={pendingMvpVote.match?.isTestMatch || false}
+          winningTeam={pendingMvpVote.winningTeam}
+          userTeam={pendingMvpVote.userTeam}
+        />
       )}
     </div>
   );

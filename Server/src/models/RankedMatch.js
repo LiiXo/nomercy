@@ -153,16 +153,22 @@ const rankedMatchSchema = new mongoose.Schema({
   },
   // MVP voting (after match winner is confirmed)
   mvp: {
-    // Selected MVP player
+    // Selected MVP player (real player)
     player: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
+      default: null
+    },
+    // Selected MVP player (fake/test player - username)
+    playerFake: {
+      type: String,
       default: null
     },
     // Votes for MVP
     votes: [{
       voter: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       votedFor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      votedForFake: { type: String, default: null }, // For fake player votes
       votedAt: { type: Date, default: Date.now }
     }],
     // MVP bonus points awarded

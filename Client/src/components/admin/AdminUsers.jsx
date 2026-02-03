@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe, History, Gift, ChevronDown, Users, Gavel, X, Star, Trophy, Minus, Loader2, Megaphone, Calendar, Clock, Send 
+  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe, History, Gift, ChevronDown, Users, Gavel, X, Star, Trophy, Minus, Loader2, Megaphone, Calendar, Clock, Send, FileText 
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../../config';
 
 const AdminUsers = ({ 
   users, 
@@ -26,6 +26,7 @@ const AdminUsers = ({
   userIsAdmin = false,
   openUserPurchasesModal,
   openGiveItemModal,
+  openUserTrophiesModal,
   currentUser
 }) => {
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -48,6 +49,10 @@ const AdminUsers = ({
     timeEnd: '',
     reason: ''
   });
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyUser, setHistoryUser] = useState(null);
+  const [historyData, setHistoryData] = useState({ warns: [], bans: [] });
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -213,6 +218,32 @@ const AdminUsers = ({
     });
   };
 
+  // Open history modal and fetch user sanction history
+  const openHistoryModal = async (user) => {
+    setHistoryUser(user);
+    setShowHistoryModal(true);
+    setLoadingHistory(true);
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${user._id}/sanction-history`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setHistoryData({
+          warns: data.warns || [],
+          bans: data.bans || []
+        });
+      } else {
+        setHistoryData({ warns: [], bans: [] });
+      }
+    } catch (err) {
+      console.error('Error fetching sanction history:', err);
+      setHistoryData({ warns: [], bans: [] });
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   const handleSendSummon = async () => {
     if (!summonUser || !summonData.date || !summonData.timeStart || !summonData.timeEnd || !summonData.reason.trim()) return;
     setSummonLoading(true);
@@ -266,6 +297,9 @@ const AdminUsers = ({
     if (userIsAdmin) {
       if (openUserPurchasesModal) {
         items.push({ label: 'Historique achats', icon: History, color: 'amber', action: () => openUserPurchasesModal(user) });
+      }
+      if (openUserTrophiesModal) {
+        items.push({ label: 'Gérer trophées', icon: Trophy, color: 'yellow', action: () => openUserTrophiesModal(user) });
       }
       if (openGiveItemModal) {
         items.push({ label: 'Donner objet', icon: Gift, color: 'green', action: () => openGiveItemModal(user) });
@@ -614,6 +648,18 @@ const AdminUsers = ({
 
             {/* Actions */}
             <div className="p-4 space-y-2">
+              {/* Historique des sanctions */}
+              <button
+                onClick={() => openHistoryModal(arbitrageUser)}
+                className="w-full flex items-center gap-3 p-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-xl text-cyan-400 transition-colors"
+              >
+                <FileText className="w-5 h-5" />
+                <div className="text-left">
+                  <p className="font-medium">Historique sanctions</p>
+                  <p className="text-xs text-cyan-400/70">Voir les warn/ban du joueur</p>
+                </div>
+              </button>
+
               {/* Convoquer */}
               <button
                 onClick={() => openSummonDialog(arbitrageUser)}
@@ -1110,6 +1156,162 @@ const AdminUsers = ({
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sanction History Modal */}
+      {showHistoryModal && historyUser && (
+        <div className="fixed inset-0 z-[10003] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setShowHistoryModal(false); setHistoryUser(null); }} />
+          <div className="relative bg-dark-900 border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center gap-3 p-4 border-b border-white/10 sticky top-0 bg-dark-900 z-10">
+              <div className="p-2 bg-cyan-500/20 rounded-xl">
+                <FileText className="w-5 h-5 text-cyan-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg font-bold text-white">Historique des sanctions</h3>
+                <p className="text-gray-400 text-sm truncate">{historyUser.username || historyUser.discordUsername}</p>
+              </div>
+              <button 
+                onClick={() => { setShowHistoryModal(false); setHistoryUser(null); }} 
+                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+                </div>
+              ) : (
+                <>
+                  {/* Avertissements */}
+                  <div className="mb-6">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-orange-400" />
+                      Avertissements ({historyData.warns.length})
+                    </h4>
+                    {historyData.warns.length === 0 ? (
+                      <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl text-center">
+                        <p className="text-gray-500 text-sm">Aucun avertissement</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {historyData.warns.map((warn, idx) => (
+                          <div key={idx} className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white text-sm">{warn.reason}</p>
+                                <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(warn.warnedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {new Date(warn.warnedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                  {warn.warnedBy && (
+                                    <span className="text-orange-400">
+                                      par {warn.warnedBy.username || warn.warnedBy.discordUsername || 'Admin'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bannissements */}
+                  <div className="mb-6">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Ban className="w-4 h-4 text-red-400" />
+                      Bannissements ({historyData.bans.length})
+                    </h4>
+                    {historyData.bans.length === 0 ? (
+                      <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl text-center">
+                        <p className="text-gray-500 text-sm">Aucun bannissement</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {historyData.bans.map((ban, idx) => (
+                          <div key={idx} className={`p-3 border rounded-xl ${ban.type === 'global' ? 'bg-red-500/10 border-red-500/20' : 'bg-purple-500/10 border-purple-500/20'}`}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`px-2 py-0.5 text-[10px] font-semibold rounded ${ban.type === 'global' ? 'bg-red-500/20 text-red-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                                    {ban.type === 'global' ? 'BAN GLOBAL' : 'BAN RANKED'}
+                                  </span>
+                                  {ban.active && (
+                                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-yellow-500/20 text-yellow-400 animate-pulse">
+                                      ACTIF
+                                    </span>
+                                  )}
+                                  {!ban.active && (
+                                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-green-500/20 text-green-400">
+                                      EXPIRÉ
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-white text-sm">{ban.reason || 'Aucune raison spécifiée'}</p>
+                                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-400">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {new Date(ban.bannedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  </span>
+                                  {ban.expiresAt ? (
+                                    <span className={`flex items-center gap-1 ${ban.active ? 'text-yellow-400' : 'text-gray-400'}`}>
+                                      <Clock className="w-3 h-3" />
+                                      Expire: {new Date(ban.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-400 flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      Permanent
+                                    </span>
+                                  )}
+                                  {ban.bannedBy && (
+                                    <span className={ban.type === 'global' ? 'text-red-400' : 'text-purple-400'}>
+                                      par {ban.bannedBy.username || ban.bannedBy.discordUsername || 'Admin'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Résumé */}
+                  <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl">
+                    <h4 className="text-white font-semibold mb-3">Résumé</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-orange-400">{historyData.warns.length}</p>
+                        <p className="text-gray-500 text-xs">Avertissements</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-red-400">{historyData.bans.filter(b => b.type === 'global').length}</p>
+                        <p className="text-gray-500 text-xs">Bans Globaux</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-purple-400">{historyData.bans.filter(b => b.type === 'ranked').length}</p>
+                        <p className="text-gray-500 text-xs">Bans Ranked</p>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

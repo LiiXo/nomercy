@@ -7,7 +7,7 @@ import {
   Swords, Calendar, Timer, ChevronDown, ChevronUp
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
 const RecentRankedMatches = () => {
   const navigate = useNavigate();
@@ -158,12 +158,13 @@ const RecentRankedMatches = () => {
   };
 
   const getAvatarUrl = (player, index) => {
-    if (player?.discordId && player?.discordAvatar) {
-      return `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
-    }
+    // Priorité: avatar personnalisé > avatar Discord
     if (player?.avatarUrl) {
       if (player.avatarUrl.startsWith('http')) return player.avatarUrl;
-      return `https://api-nomercy.ggsecure.io${player.avatarUrl}`;
+      return `${UPLOADS_BASE_URL}${player.avatarUrl}`;
+    }
+    if (player?.discordId && player?.discordAvatar) {
+      return `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`;
     }
     return `https://cdn.discordapp.com/embed/avatars/${index % 5}.png`;
   };

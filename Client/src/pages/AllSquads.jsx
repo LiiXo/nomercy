@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Lock, Medal, Target, TrendingUp, Shield
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const AllSquads = () => {
   const navigate = useNavigate();

@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { X, Loader2, Coins, Sparkles, Clock } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const SpinWheel = ({ isOpen, onClose }) => {
   const { language } = useLanguage();

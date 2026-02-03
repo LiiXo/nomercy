@@ -4,7 +4,7 @@ import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { ArrowLeft, Loader2, FileText, AlertCircle } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const GameModeRules = () => {
   const { mode } = useParams();

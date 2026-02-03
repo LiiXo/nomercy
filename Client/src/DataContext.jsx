@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from './config';
 
 const DataContext = createContext(null);
 

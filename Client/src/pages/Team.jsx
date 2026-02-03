@@ -4,7 +4,7 @@ import { useMode } from '../ModeContext';
 import { Heart, Users, Shield, Gavel, Loader2, Crown, Star } from 'lucide-react';
 import { getAvatarUrl } from '../utils/avatar';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 // Member Node Component
 const MemberNode = ({ member, size = 'normal', getCategoryColor, getMemberAvatar }) => {

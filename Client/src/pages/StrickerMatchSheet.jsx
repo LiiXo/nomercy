@@ -10,7 +10,7 @@ import { useLanguage } from '../LanguageContext';
 import { useSocket } from '../SocketContext';
 import { getUserAvatar } from '../utils/avatar';
 
-const API_URL = import.meta.env.VITE_API_URL;
+import { API_URL } from '../config';
 
 // Stricker Ranks
 const STRICKER_RANKS = {

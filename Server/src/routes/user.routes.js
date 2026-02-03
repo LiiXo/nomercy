@@ -1292,6 +1292,7 @@ router.get('/admin/all', verifyToken, requireArbitre, async (req, res) => {
     const users = await User.find(query)
       .populate('bannedBy', 'username discordUsername')
       .populate('squad', 'name tag')
+      .populate('trophies.trophy', 'name icon color rarity rarityName translations')
       .select('-__v')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
@@ -2702,6 +2703,89 @@ router.put('/admin/:userId/ranked-ban', verifyToken, requireArbitre, async (req,
     });
   } catch (error) {
     console.error('Toggle ranked ban error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur.'
+    });
+  }
+});
+
+// Admin: Get user sanction history (warns and bans) - accessible to admin, staff, arbitre
+router.get('/admin/:userId/sanction-history', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId)
+      .populate('warns.warnedBy', 'username discordUsername')
+      .populate('bannedBy', 'username discordUsername')
+      .populate('rankedBannedBy', 'username discordUsername')
+      .select('warns isBanned banReason bannedAt banExpiresAt bannedBy isRankedBanned rankedBanReason rankedBannedAt rankedBanExpiresAt rankedBannedBy banHistory');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé.'
+      });
+    }
+
+    // Prepare warns data
+    const warns = (user.warns || []).map(warn => ({
+      reason: warn.reason,
+      warnedAt: warn.warnedAt,
+      warnedBy: warn.warnedBy
+    })).sort((a, b) => new Date(b.warnedAt) - new Date(a.warnedAt));
+
+    // Prepare bans data from ban history and current ban status
+    const bans = [];
+    
+    // Add ban history if available
+    if (user.banHistory && user.banHistory.length > 0) {
+      user.banHistory.forEach(ban => {
+        bans.push({
+          type: ban.type || 'global',
+          reason: ban.reason,
+          bannedAt: ban.bannedAt,
+          expiresAt: ban.expiresAt,
+          bannedBy: ban.bannedBy,
+          active: false // Historical bans are no longer active
+        });
+      });
+    }
+    
+    // Add current global ban if active
+    if (user.isBanned && user.bannedAt) {
+      const isExpired = user.banExpiresAt && new Date(user.banExpiresAt) < new Date();
+      bans.push({
+        type: 'global',
+        reason: user.banReason,
+        bannedAt: user.bannedAt,
+        expiresAt: user.banExpiresAt,
+        bannedBy: user.bannedBy,
+        active: !isExpired
+      });
+    }
+    
+    // Add current ranked ban if active
+    if (user.isRankedBanned && user.rankedBannedAt) {
+      const isExpired = user.rankedBanExpiresAt && new Date(user.rankedBanExpiresAt) < new Date();
+      bans.push({
+        type: 'ranked',
+        reason: user.rankedBanReason,
+        bannedAt: user.rankedBannedAt,
+        expiresAt: user.rankedBanExpiresAt,
+        bannedBy: user.rankedBannedBy,
+        active: !isExpired
+      });
+    }
+    
+    // Sort bans by date (most recent first)
+    bans.sort((a, b) => new Date(b.bannedAt) - new Date(a.bannedAt));
+
+    res.json({
+      success: true,
+      warns,
+      bans
+    });
+  } catch (error) {
+    console.error('Get sanction history error:', error);
     res.status(500).json({
       success: false,
       message: 'Erreur serveur.'

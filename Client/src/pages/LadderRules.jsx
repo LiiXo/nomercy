@@ -7,7 +7,7 @@ import {
   Map, Clock, Users, Trophy, Shield, Target
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const LadderRules = () => {
   const { ladderId } = useParams();

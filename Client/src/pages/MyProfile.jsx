@@ -10,7 +10,7 @@ import {
   Swords, Eye, Settings, Trash2
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
 const MyProfile = () => {
   const navigate = useNavigate();
@@ -1044,7 +1044,7 @@ const MyProfile = () => {
           {user.banner && (
             <div className="w-full h-32 sm:h-48 relative overflow-hidden">
               <img 
-                src={`https://api-nomercy.ggsecure.io${user.banner}`}
+                src={`${UPLOADS_BASE_URL}${user.banner}`}
                 alt="Profile banner"
                 className="w-full h-full object-cover"
                 onError={(e) => { e.target.style.display = 'none'; }}
@@ -1264,7 +1264,7 @@ const MyProfile = () => {
                             avatarPreview?.startsWith('blob:') 
                               ? avatarPreview 
                               : avatarPreview?.startsWith('/uploads/') 
-                                ? `https://api-nomercy.ggsecure.io${avatarPreview}`
+                                ? `${UPLOADS_BASE_URL}${avatarPreview}`
                                 : user?.avatar || `https://cdn.discordapp.com/embed/avatars/0.png`
                           }
                           alt="Avatar preview"
@@ -1327,7 +1327,7 @@ const MyProfile = () => {
                   {bannerPreview && (
                     <div className="mb-2 sm:mb-3 relative rounded-lg sm:rounded-xl overflow-hidden border border-white/10">
                       <img 
-                        src={bannerPreview.startsWith('blob:') ? bannerPreview : `https://api-nomercy.ggsecure.io${bannerPreview}`}
+                        src={bannerPreview.startsWith('blob:') ? bannerPreview : `${UPLOADS_BASE_URL}${bannerPreview}`}
                         alt="Banner preview" 
                         className="w-full h-24 sm:h-32 object-cover"
                       />

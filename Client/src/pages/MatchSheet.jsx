@@ -12,7 +12,7 @@ import {
 import RankedMatchReport from '../components/RankedMatchReport';
 import LadderMatchReport from '../components/LadderMatchReport';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 // Active Booster Item showing remaining matches
 const ActiveBoosterItem = ({ booster, language, t, onExpire }) => {
@@ -1108,7 +1108,10 @@ const MatchSheet = () => {
           // MVP info
           isMvp: currentPlayer.rewards.isMvp || false,
           mvpBonus: currentPlayer.rewards.mvpBonus || 5,
-          mvpPlayer: match.mvp?.player || null
+          mvpPlayer: match.mvp?.player || null,
+          // NEW: Team info for MVP voting
+          winningTeam: winnerTeam,
+          userTeam: playerTeam
         });
         
         setTimeout(() => setShowMatchReport(true), 500);
@@ -3784,6 +3787,9 @@ const MatchSheet = () => {
           mvpVotes={match?.mvp?.votes || []}
           onMvpVote={handleMvpVote}
           isTestMatch={match?.isTestMatch || false}
+          // NEW: Team info for MVP voting (losers vote for winners)
+          winningTeam={matchReportData.winningTeam}
+          userTeam={matchReportData.userTeam}
         />
       )}
 

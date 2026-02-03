@@ -8,16 +8,10 @@ import {
   ChevronRight, Star, Shield, Crown, Medal, Flame, ArrowRight, Users, Check, Loader2
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
-// Sons aléatoires pour le rapport de combat
-const COMBAT_REPORT_SOUNDS = [
-  '/sound.mp3',
-  '/sound2.mp3',
-  '/sound3.mp3',
-  '/sound4.mp3',
-  '/sound5.mp3'
-];
+// Son pour le rapport de combat
+const COMBAT_REPORT_SOUND = '/soundRapport.mp3';
 
 // Définition des rangs par défaut (seuils dynamiques chargés depuis AppSettings)
 const DEFAULT_RANKS = [
@@ -86,7 +80,10 @@ const RankedMatchReport = ({
   mvpConfirmed = false,
   mvpVotes = [],
   onMvpVote = null,
-  isTestMatch = false
+  isTestMatch = false,
+  // NEW: Team info for MVP voting rules
+  winningTeam = null,
+  userTeam = null
 }) => {
   const navigate = useNavigate();
   const params = useParams();
@@ -98,18 +95,14 @@ const RankedMatchReport = ({
   const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
   const audioRef = useRef(null);
   
-  // Play random sound when combat report is shown
+  // Play sound when combat report is shown
   useEffect(() => {
     if (show) {
-      // Select a random sound
-      const randomIndex = Math.floor(Math.random() * COMBAT_REPORT_SOUNDS.length);
-      const soundUrl = COMBAT_REPORT_SOUNDS[randomIndex];
-      
-      console.log('[RankedMatchReport] 🎵 Playing sound:', soundUrl);
+      console.log('[RankedMatchReport] 🎵 Playing sound:', COMBAT_REPORT_SOUND);
       
       // Create and play audio
-      const audio = new Audio(soundUrl);
-      audio.volume = 0.5;
+      const audio = new Audio(COMBAT_REPORT_SOUND);
+      audio.volume = 0.1;
       audioRef.current = audio;
       
       audio.play().catch(err => {
@@ -130,39 +123,43 @@ const RankedMatchReport = ({
   const mvpT = {
     fr: {
       voteTitle: 'Votez pour le MVP',
-      voteSubtitle: 'Sélectionnez le meilleur joueur du match',
+      voteSubtitle: 'Sélectionnez le meilleur joueur de l\'équipe gagnante',
       votingProgress: 'Votes MVP',
       waitingVotes: 'En attente des autres votes...',
       mvpElected: 'MVP ÉLU',
       youVoted: 'Vous avez voté',
-      votes: 'votes'
+      votes: 'votes',
+      mustVote: 'Vous devez voter pour continuer'
     },
     en: {
       voteTitle: 'Vote for MVP',
-      voteSubtitle: 'Select the best player of the match',
+      voteSubtitle: 'Select the best player from the winning team',
       votingProgress: 'MVP Votes',
       waitingVotes: 'Waiting for other votes...',
       mvpElected: 'MVP ELECTED',
       youVoted: 'You voted',
-      votes: 'votes'
+      votes: 'votes',
+      mustVote: 'You must vote to continue'
     },
     de: {
       voteTitle: 'Für MVP stimmen',
-      voteSubtitle: 'Wählen Sie den besten Spieler des Spiels',
+      voteSubtitle: 'Wählen Sie den besten Spieler des Gewinnerteams',
       votingProgress: 'MVP-Stimmen',
       waitingVotes: 'Warten auf andere Stimmen...',
       mvpElected: 'MVP GEWÄHLT',
       youVoted: 'Sie haben gewählt',
-      votes: 'Stimmen'
+      votes: 'Stimmen',
+      mustVote: 'Sie müssen abstimmen, um fortzufahren'
     },
     it: {
       voteTitle: 'Vota per MVP',
-      voteSubtitle: 'Seleziona il miglior giocatore della partita',
+      voteSubtitle: 'Seleziona il miglior giocatore della squadra vincente',
       votingProgress: 'Voti MVP',
       waitingVotes: 'In attesa degli altri voti...',
       mvpElected: 'MVP ELETTO',
       youVoted: 'Hai votato',
-      votes: 'voti'
+      votes: 'voti',
+      mustVote: 'Devi votare per continuare'
     }
   };
   const t = mvpT[language] || mvpT.fr;
@@ -221,8 +218,21 @@ const RankedMatchReport = ({
   
   // MVP voting helpers
   const realPlayers = players.filter(p => !p.isFake);
-  const totalRealPlayers = realPlayers.length;
+  // For MVP voting, include all players (including fake/test players)
+  const allPlayers = players;
   const userId = (user?._id || user?.id)?.toString();
+  
+  // Determine winning and losing teams from props or isWinner
+  const effectiveWinningTeam = winningTeam || (isWinner ? userTeam : (userTeam === 1 ? 2 : 1));
+  const losingTeam = effectiveWinningTeam === 1 ? 2 : 1;
+  
+  // Only winning team players are candidates for MVP (include test players for voting)
+  const winningTeamPlayers = allPlayers.filter(p => p.team === effectiveWinningTeam);
+  // Losing team players are the voters (real players only for counting required votes)
+  const losingTeamPlayers = realPlayers.filter(p => p.team === losingTeam);
+  
+  // User is on losing team = must vote
+  const userIsOnLosingTeam = !isWinner;
   
   // Count votes per player
   const voteCount = {};
@@ -238,11 +248,17 @@ const RankedMatchReport = ({
   const myVote = myVoteObj ? (myVoteObj.votedFor?._id || myVoteObj.votedFor)?.toString() : null;
   const hasVoted = !!myVoteObj;
   
-  // Required votes (1 for test matches, all players for normal)
-  const requiredVotes = isTestMatch ? 1 : totalRealPlayers;
+  // Required votes = losing team players count (1 for test matches)
+  const requiredVotes = isTestMatch ? 1 : losingTeamPlayers.length;
   
-  // Show MVP voting if active and not confirmed
-  const showMvpVoting = mvpVotingActive && !mvpConfirmed && onMvpVote;
+  // Show MVP voting only if:
+  // 1. MVP voting is active and not confirmed
+  // 2. User is on the LOSING team (losers vote for winners)
+  // 3. onMvpVote callback is provided
+  const showMvpVoting = mvpVotingActive && !mvpConfirmed && onMvpVote && userIsOnLosingTeam;
+  
+  // User must vote before closing (losing team only)
+  const mustVoteBeforeClose = showMvpVoting && !hasVoted;
   
   // Handle MVP vote
   const handleMvpVote = async (mvpPlayerId) => {
@@ -326,13 +342,15 @@ const RankedMatchReport = ({
             : 'from-red-900/40 to-orange-900/40 border-red-500/50'
         } border-2 rounded-xl sm:rounded-2xl p-4 sm:p-8 backdrop-blur-xl shadow-2xl max-h-[90vh] sm:max-h-none overflow-y-auto`}>
           
-          {/* Bouton fermer */}
-          <button
-            onClick={handleClose}
-            className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-10"
-          >
-            <X className="w-5 h-5 text-white" />
-          </button>
+          {/* Bouton fermer - caché si vote MVP obligatoire et pas encore voté */}
+          {!mustVoteBeforeClose && (
+            <button
+              onClick={handleClose}
+              className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors z-10"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          )}
 
           {/* Header - Victoire ou Défaite */}
           <div className="text-center mb-4 sm:mb-8">
@@ -473,7 +491,7 @@ const RankedMatchReport = ({
               </div>
             )}
             
-            {/* MVP Voting Section */}
+            {/* MVP Voting Section - Only for LOSING team to vote for WINNING team players */}
             {showMvpVoting && (
               <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-purple-500/20 border-2 border-purple-500/50 rounded-lg sm:rounded-xl relative">
                 <div className="text-center mb-3 sm:mb-4">
@@ -486,21 +504,32 @@ const RankedMatchReport = ({
                   <p className="text-purple-400 text-xs mt-1">
                     {t.votingProgress}: {mvpVotes.length}/{requiredVotes}
                   </p>
+                  {/* Warning message if must vote */}
+                  {mustVoteBeforeClose && (
+                    <p className="text-orange-400 text-xs mt-2 font-medium animate-pulse">
+                      ⚠️ {t.mustVote}
+                    </p>
+                  )}
                 </div>
                 
                 {!hasVoted ? (
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                    {realPlayers.map((p, idx) => {
+                    {/* Only show WINNING team players as candidates */}
+                    {winningTeamPlayers.map((p, idx) => {
                       const player = p.user || p;
-                      const playerId = (player._id || player.id || p._id)?.toString();
+                      // Use user ID for real players, username for fake players (since subdocuments have _id: false)
+                      const playerId = p.isFake 
+                        ? `fake:${p.username}` 
+                        : (player._id || player.id || p._id)?.toString();
+                      const playerName = player.username || p.username || p.fakeName || 'Joueur';
                       // Build avatar URL properly
                       const avatar = player.avatarUrl || player.avatar 
                         ? (player.avatarUrl || player.avatar).startsWith('/uploads/')
-                          ? `https://api-nomercy.ggsecure.io${player.avatarUrl || player.avatar}`
+                          ? `${UPLOADS_BASE_URL}${player.avatarUrl || player.avatar}`
                           : (player.avatarUrl || player.avatar)
                         : player.discordAvatar && player.discordId
                           ? `https://cdn.discordapp.com/avatars/${player.discordId}/${player.discordAvatar}.png`
-                          : `https://ui-avatars.com/api/?name=${encodeURIComponent((player.username || p.username || 'U').charAt(0))}&background=6366f1&color=fff&size=128&bold=true`;
+                          : `https://ui-avatars.com/api/?name=${encodeURIComponent(playerName.charAt(0))}&background=6366f1&color=fff&size=128&bold=true`;
                       const playerVotes = voteCount[playerId] || 0;
                       
                       return (
@@ -516,7 +545,7 @@ const RankedMatchReport = ({
                             className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-purple-500/50 mb-1 sm:mb-2"
                           />
                           <span className="text-white text-xs sm:text-sm font-medium truncate max-w-full">
-                            {player.username || p.username}
+                            {playerName}
                           </span>
                           {playerVotes > 0 && (
                             <span className="text-purple-400 text-[10px] sm:text-xs mt-1">
@@ -646,20 +675,22 @@ const RankedMatchReport = ({
             </div>
           </div>
 
-          {/* Boutons d'action */}
-          <div className="mt-4 sm:mt-8 flex justify-center pb-2">
-            {/* Bouton continuer */}
-            <button
-              onClick={handleClose}
-              className={`px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-bold text-white transition-all hover:scale-105 active:scale-95 text-sm sm:text-base ${
-                isWinner 
-                  ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700' 
-                  : 'bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700'
-              }`}
-            >
-              Continuer
-            </button>
-          </div>
+          {/* Boutons d'action - cachés si vote MVP obligatoire et pas encore voté */}
+          {!mustVoteBeforeClose && (
+            <div className="mt-4 sm:mt-8 flex justify-center pb-2">
+              {/* Bouton continuer */}
+              <button
+                onClick={handleClose}
+                className={`px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg sm:rounded-xl font-bold text-white transition-all hover:scale-105 active:scale-95 text-sm sm:text-base ${
+                  isWinner 
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700' 
+                    : 'bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700'
+                }`}
+              >
+                Continuer
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

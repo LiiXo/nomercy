@@ -9,7 +9,7 @@ import {
   Loader2, AlertCircle, CheckCircle, X, Crown, Medal, ChevronRight, AlertTriangle, FileText, Clock, ScrollText, UserPlus, UserMinus, Info
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const Rankings = () => {
   const { t, language } = useLanguage();

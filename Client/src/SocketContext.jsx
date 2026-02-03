@@ -1,23 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
-
-// Determine socket URL based on environment
-// In development, connect to localhost. In production, use production URL.
-const getSocketUrl = () => {
-  // If VITE_API_URL is explicitly set, use it (removing /api if present)
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL.replace('/api', '');
-  }
-  // In development (when running locally), use localhost
-  if (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return 'http://localhost:5000';
-  }
-  // Otherwise use production URL
-  return 'https://api-nomercy.ggsecure.io';
-};
-
-const SOCKET_URL = getSocketUrl();
+import { SOCKET_URL } from './config';
 
 const SocketContext = createContext(null);
 

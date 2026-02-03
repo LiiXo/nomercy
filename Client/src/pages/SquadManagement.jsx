@@ -11,7 +11,7 @@ import {
   Link2, Copy, Image, Upload, Clock, Trophy, ChevronRight
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
 const SquadManagement = () => {
   const { user, isAdmin, isStaff } = useAuth();
@@ -1504,7 +1504,7 @@ const SquadManagement = () => {
                     {banner && (
                       <div className="mb-3 relative rounded-xl overflow-hidden border border-white/10">
                         <img 
-                          src={banner.startsWith('/uploads') ? `https://api-nomercy.ggsecure.io${banner}` : banner}
+                          src={banner.startsWith('/uploads') ? `${UPLOADS_BASE_URL}${banner}` : banner}
                           alt="Squad banner" 
                           className="w-full h-32 object-cover"
                         />

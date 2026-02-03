@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const Messages = () => {
   const navigate = useNavigate();

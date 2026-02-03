@@ -25,27 +25,43 @@ const router = express.Router();
  */
 async function distributeRankedRewards(match) {
   try {
-    // ========== PROTECTION CONTRE LES APPELS MULTIPLES ==========
-    // Vérifier si les récompenses ont déjà été distribuées pour éviter les doublons
-    if (match.rewardsDistributed === true) {
-      console.log(`[RANKED REWARDS] ⚠️ Match ${match._id}: Récompenses déjà distribuées, skip.`);
+    // ========== PROTECTION ATOMIQUE CONTRE LES RACE CONDITIONS ==========
+    // Utiliser findOneAndUpdate atomique pour marquer le match comme "en cours de distribution"
+    // Cela empêche deux requêtes simultanées de distribuer les récompenses
+    const lockResult = await RankedMatch.findOneAndUpdate(
+      { 
+        _id: match._id, 
+        rewardsDistributed: { $ne: true } // Seulement si pas déjà distribué
+      },
+      { 
+        $set: { rewardsDistributed: true } 
+      },
+      { new: false } // Retourner l'ancien document pour voir l'état avant modification
+    );
+    
+    // Si lockResult est null, cela signifie que le match avait déjà rewardsDistributed=true
+    // ou qu'un autre processus vient de le mettre à true (race condition évitée!)
+    if (!lockResult) {
+      console.log(`[RANKED REWARDS] ⚠️ Match ${match._id}: Récompenses déjà distribuées ou en cours, skip (atomic lock).`);
       return;
     }
     
-    // Vérifier aussi si au moins un joueur a déjà reçu des récompenses (double check)
-    // Note: pointsChange peut être 0 par défaut, donc on vérifie si oldPoints ou newPoints sont définis
+    console.log(`[RANKED REWARDS] 🔒 Match ${match._id}: Lock acquis, distribution des récompenses...`);
+    
+    // Mettre à jour l'objet match en mémoire pour refléter le changement
+    match.rewardsDistributed = true;
+    
+    // Double vérification: s'assurer qu'aucun joueur n'a déjà reçu des récompenses
+    // (protection supplémentaire au cas où)
     const hasExistingRewards = match.players.some(p => 
       p.rewards && 
-      (p.rewards.oldPoints !== undefined && p.rewards.oldPoints !== 0) ||
-      (p.rewards.newPoints !== undefined && p.rewards.newPoints !== 0)
+      ((p.rewards.oldPoints !== undefined && p.rewards.oldPoints !== 0) ||
+       (p.rewards.newPoints !== undefined && p.rewards.newPoints !== 0))
     );
     if (hasExistingRewards) {
-      console.log(`[RANKED REWARDS] ⚠️ Match ${match._id}: Des récompenses existent déjà, skip.`);
+      console.log(`[RANKED REWARDS] ⚠️ Match ${match._id}: Des récompenses existent déjà dans players, skip.`);
       return;
     }
-    
-    // Marquer immédiatement comme distribué pour éviter les race conditions
-    match.rewardsDistributed = true;
     
     // Note: Les matchs de test distribuent maintenant les récompenses pour permettre les tests
     if (match.isTestMatch) {
@@ -598,6 +614,103 @@ router.post('/matchmaking/leave', verifyToken, async (req, res) => {
   }
 });
 
+// Check for pending MVP vote (for when user returns to ranked mode page)
+// IMPORTANT: This route MUST be defined BEFORE /:matchId to avoid being caught by it
+router.get('/pending-mvp-vote', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    // Find ALL completed matches where:
+    // 1. User is a participant
+    // 2. MVP voting is active but not confirmed
+    // Sort by completedAt DESC to get the most recent match first
+    const pendingMatches = await RankedMatch.find({
+      'players.user': user._id,
+      status: 'completed',
+      'result.confirmed': true,
+      'mvp.votingActive': true,
+      'mvp.confirmed': { $ne: true }
+    }).sort({ completedAt: -1 }).populate([
+      { path: 'players.user', select: 'username avatar avatarUrl discordAvatar discordId activisionId platform' },
+      { path: 'mvp.player', select: 'username avatar avatarUrl discordAvatar discordId' },
+      { path: 'mvp.votes.voter', select: 'username' },
+      { path: 'mvp.votes.votedFor', select: 'username avatar avatarUrl discordAvatar discordId' }
+    ]);
+    
+    // Find the first match where user is on losing team and hasn't voted
+    let pendingMatch = null;
+    for (const match of pendingMatches) {
+      const winningTeam = match.result.winner;
+      const losingTeam = winningTeam === 1 ? 2 : 1;
+      const playerInMatch = match.players.find(p => 
+        p.user && (p.user._id || p.user).toString() === user._id.toString()
+      );
+      
+      // Check if user is on losing team
+      if (playerInMatch && playerInMatch.team === losingTeam) {
+        // Check if user hasn't voted yet
+        const hasVoted = match.mvp.votes.some(v => 
+          v.voter && (v.voter._id || v.voter).toString() === user._id.toString()
+        );
+        
+        if (!hasVoted) {
+          pendingMatch = match;
+          break;
+        }
+      }
+    }
+    
+    // Backward compatibility: use pendingMatch from the loop
+
+    if (!pendingMatch) {
+      return res.json({ success: true, hasPendingVote: false });
+    }
+
+    // We already verified in the loop that user is on losing team and hasn't voted
+    const winningTeam = pendingMatch.result.winner;
+    const losingTeam = winningTeam === 1 ? 2 : 1;
+    const playerInMatch = pendingMatch.players.find(p => 
+      p.user && (p.user._id || p.user).toString() === user._id.toString()
+    );
+
+    // Get match report data for the user
+    const isWinner = playerInMatch.team === winningTeam;
+    const rewards = playerInMatch.rewards || {};
+
+    // Get winning team players for voting (include fake players for test matches)
+    const winningTeamPlayers = pendingMatch.players.filter(p => p.team === winningTeam);
+    // Losing team real players only (for counting required votes)
+    const losingTeamPlayers = pendingMatch.players.filter(p => p.team === losingTeam && !p.isFake);
+
+    res.json({
+      success: true,
+      hasPendingVote: true,
+      match: {
+        _id: pendingMatch._id,
+        mode: pendingMatch.mode,
+        players: pendingMatch.players,
+        result: pendingMatch.result,
+        mvp: pendingMatch.mvp,
+        isTestMatch: pendingMatch.isTestMatch
+      },
+      userTeam: playerInMatch.team,
+      isWinner,
+      rewards,
+      winningTeam,
+      losingTeam,
+      winningTeamPlayers,
+      losingTeamPlayers,
+      requiredVotes: pendingMatch.isTestMatch ? 1 : losingTeamPlayers.length
+    });
+  } catch (error) {
+    console.error('Check pending MVP vote error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Obtenir un match classé par ID
 router.get('/:matchId', verifyToken, async (req, res) => {
   try {
@@ -859,8 +972,9 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
     let resultMessage = '';
     let matchCompleted = false;
 
-    // ========== PROTECTION CONTRE LES RACE CONDITIONS ==========
-    // Vérifier si les récompenses n'ont pas déjà été distribuées par une autre requête
+    // ========== EARLY EXIT - Vérification rapide (optimisation) ==========
+    // Cette vérification est une optimisation pour éviter le traitement inutile
+    // La vraie protection atomique contre les race conditions est dans distributeRankedRewards()
     if (match.rewardsDistributed === true) {
       await match.save(); // Sauvegarder quand même le vote
       return res.json({ 
@@ -981,6 +1095,7 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
 });
 
 // Vote for MVP (Most Valuable Player) after match winner is confirmed
+// NEW RULES: Only LOSING team votes for a player from the WINNING team
 router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
   try {
     const { matchId } = req.params;
@@ -1007,7 +1122,7 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
 
     // Check if winner voting is confirmed
     if (!match.result?.confirmed) {
-      return res.status(400).json({ success: false, message: 'Le résultat du match doit d’abord être confirmé' });
+      return res.status(400).json({ success: false, message: 'Le résultat du match doit d\'abord être confirmé' });
     }
 
     // MVP voting already confirmed
@@ -1023,14 +1138,39 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Vous ne faites pas partie de ce match' });
     }
 
-    // Verify the voted MVP player is in the match
+    // Get winning and losing teams
+    const winningTeam = match.result.winner; // 1 or 2
+    const losingTeam = winningTeam === 1 ? 2 : 1;
+    
+    // Only LOSING team can vote for MVP
+    if (playerInMatch && playerInMatch.team !== losingTeam && !isStaff) {
+      return res.status(403).json({ success: false, message: 'Seule l\'équipe perdante peut voter pour le MVP' });
+    }
+
+    // Check if mvpPlayerId is for a fake player (format: "fake:username")
+    const isFakeMvp = mvpPlayerId.toString().startsWith('fake:');
+    const fakeMvpUsername = isFakeMvp ? mvpPlayerId.toString().replace('fake:', '') : null;
+
+    // Verify the voted MVP player is in the WINNING team
+    // For fake players, we check by username; for real players, by user ID
     const mvpCandidate = match.players.find(p => {
-      const pUserId = p.user?._id || p.user;
-      return pUserId && pUserId.toString() === mvpPlayerId.toString();
+      if (isFakeMvp) {
+        // Match fake player by username
+        return p.isFake && p.username === fakeMvpUsername;
+      } else {
+        // Check by user ID for real players
+        const pUserId = p.user?._id || p.user;
+        return pUserId && pUserId.toString() === mvpPlayerId.toString();
+      }
     });
 
-    if (!mvpCandidate || mvpCandidate.isFake) {
-      return res.status(400).json({ success: false, message: 'Ce joueur n’est pas un participant valide de ce match' });
+    if (!mvpCandidate) {
+      return res.status(400).json({ success: false, message: 'Ce joueur n\'est pas un participant valide de ce match' });
+    }
+
+    // MVP candidate must be from winning team
+    if (mvpCandidate.team !== winningTeam) {
+      return res.status(400).json({ success: false, message: 'Le MVP doit être un joueur de l\'équipe gagnante' });
     }
 
     // Initialize MVP object if needed
@@ -1051,33 +1191,40 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
 
     if (existingVoteIndex !== -1) {
       // Update existing vote
-      match.mvp.votes[existingVoteIndex].votedFor = mvpPlayerId;
+      match.mvp.votes[existingVoteIndex].votedFor = isFakeMvp ? null : mvpPlayerId;
+      match.mvp.votes[existingVoteIndex].votedForFake = isFakeMvp ? fakeMvpUsername : null;
       match.mvp.votes[existingVoteIndex].votedAt = new Date();
     } else {
       // Add new vote
       match.mvp.votes.push({
         voter: user._id,
-        votedFor: mvpPlayerId,
+        votedFor: isFakeMvp ? null : mvpPlayerId,
+        votedForFake: isFakeMvp ? fakeMvpUsername : null,
         votedAt: new Date()
       });
     }
 
     // Count votes for each player
     const realPlayers = match.players.filter(p => !p.isFake);
-    const totalRealPlayers = realPlayers.length;
+    // Only losing team players can vote
+    const losingTeamPlayers = realPlayers.filter(p => p.team === losingTeam);
+    const totalLosingTeamPlayers = losingTeamPlayers.length;
     const voteCount = {};
 
+    // Count votes - handle both real players (votedFor) and fake players (votedForFake)
     match.mvp.votes.forEach(v => {
-      const votedForId = v.votedFor.toString();
-      voteCount[votedForId] = (voteCount[votedForId] || 0) + 1;
+      const votedForId = v.votedForFake ? `fake:${v.votedForFake}` : (v.votedFor ? v.votedFor.toString() : null);
+      if (votedForId) {
+        voteCount[votedForId] = (voteCount[votedForId] || 0) + 1;
+      }
     });
 
     // Check if enough votes to confirm MVP
     // In test matches, 1 vote is enough (like winner voting)
-    // In normal matches, all real players must vote
+    // In normal matches, all LOSING team players must vote
     const totalMvpVotes = match.mvp.votes.length;
     const isTestMatch = match.isTestMatch === true;
-    const requiredVotes = isTestMatch ? 1 : totalRealPlayers;
+    const requiredVotes = isTestMatch ? 1 : totalLosingTeamPlayers;
     
     let mvpMessage = '';
     let mvpConfirmed = false;
@@ -1095,48 +1242,61 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
       });
 
       if (mvpWinner) {
-        match.mvp.player = mvpWinner;
+        // Check if winner is a fake player
+        const isFakeMvpWinner = mvpWinner.startsWith('fake:');
+        const fakeMvpWinnerUsername = isFakeMvpWinner ? mvpWinner.replace('fake:', '') : null;
+
         match.mvp.confirmed = true;
         match.mvp.confirmedAt = new Date();
         mvpConfirmed = true;
 
-        // Award MVP bonus points to the winner
-        const mvpUser = await User.findById(mvpWinner);
-        if (mvpUser) {
-          // Update MVP count for the appropriate mode
-          const mvpCountField = match.mode === 'cdl' ? 'mvpCountCdl' : 'mvpCountHardcore';
-          mvpUser[mvpCountField] = (mvpUser[mvpCountField] || 0) + 1;
-          await mvpUser.save();
+        if (isFakeMvpWinner) {
+          // Fake player MVP - no bonus points, just store the username
+          match.mvp.player = null;
+          match.mvp.playerFake = fakeMvpWinnerUsername;
+          mvpMessage = `MVP désigné ! ${fakeMvpWinnerUsername} (Bot) a été élu MVP avec ${maxVotes} votes !`;
+        } else {
+          // Real player MVP - award bonus points
+          match.mvp.player = mvpWinner;
+          match.mvp.playerFake = null;
 
-          // Add bonus points to ranking
-          const currentSeasonMvp = new Date().getMonth() + 1;
-          let mvpRanking = await Ranking.findOne({ user: mvpWinner, mode: match.mode, season: currentSeasonMvp });
-          if (mvpRanking) {
-            mvpRanking.points = (mvpRanking.points || 0) + match.mvp.bonusPoints;
-            await mvpRanking.save();
-          }
+          const mvpUser = await User.findById(mvpWinner);
+          if (mvpUser) {
+            // Update MVP count for the appropriate mode
+            const mvpCountField = match.mode === 'cdl' ? 'mvpCountCdl' : 'mvpCountHardcore';
+            mvpUser[mvpCountField] = (mvpUser[mvpCountField] || 0) + 1;
+            await mvpUser.save();
 
-          // Update player's rewards in the match to show MVP bonus
-          const mvpPlayerIndex = match.players.findIndex(p => {
-            const pUserId = p.user?._id || p.user;
-            return pUserId && pUserId.toString() === mvpWinner.toString();
-          });
-
-          if (mvpPlayerIndex !== -1) {
-            if (!match.players[mvpPlayerIndex].rewards) {
-              match.players[mvpPlayerIndex].rewards = {};
+            // Add bonus points to ranking
+            const currentSeasonMvp = new Date().getMonth() + 1;
+            let mvpRanking = await Ranking.findOne({ user: mvpWinner, mode: match.mode, season: currentSeasonMvp });
+            if (mvpRanking) {
+              mvpRanking.points = (mvpRanking.points || 0) + match.mvp.bonusPoints;
+              await mvpRanking.save();
             }
-            match.players[mvpPlayerIndex].rewards.mvpBonus = match.mvp.bonusPoints;
-            match.players[mvpPlayerIndex].rewards.isMvp = true;
-            match.players[mvpPlayerIndex].rewards.newPoints = (match.players[mvpPlayerIndex].rewards.newPoints || match.players[mvpPlayerIndex].points || 0) + match.mvp.bonusPoints;
-            match.markModified('players');
-          }
 
-          mvpMessage = `MVP désigné ! ${mvpUser.username} a été élu MVP avec ${maxVotes} votes et reçoit +${match.mvp.bonusPoints} points bonus !`;
+            // Update player's rewards in the match to show MVP bonus
+            const mvpPlayerIndex = match.players.findIndex(p => {
+              const pUserId = p.user?._id || p.user;
+              return pUserId && pUserId.toString() === mvpWinner.toString();
+            });
+
+            if (mvpPlayerIndex !== -1) {
+              if (!match.players[mvpPlayerIndex].rewards) {
+                match.players[mvpPlayerIndex].rewards = {};
+              }
+              match.players[mvpPlayerIndex].rewards.mvpBonus = match.mvp.bonusPoints;
+              match.players[mvpPlayerIndex].rewards.isMvp = true;
+              match.players[mvpPlayerIndex].rewards.newPoints = (match.players[mvpPlayerIndex].rewards.newPoints || match.players[mvpPlayerIndex].points || 0) + match.mvp.bonusPoints;
+              match.markModified('players');
+            }
+
+            mvpMessage = `MVP désigné ! ${mvpUser.username} a été élu MVP avec ${maxVotes} votes et reçoit +${match.mvp.bonusPoints} points bonus !`;
+          }
         }
       }
     } else {
-      mvpMessage = `Vote MVP enregistré. ${totalMvpVotes}/${requiredVotes} votes (${isTestMatch ? 'mode test' : `${totalRealPlayers} joueurs`}).`;
+      mvpMessage = `Vote MVP enregistré. ${totalMvpVotes}/${requiredVotes} votes (${isTestMatch ? 'mode test' : `${totalLosingTeamPlayers} joueurs équipe perdante`}).`;
     }
 
     await match.save();
@@ -1173,7 +1333,10 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
       mvpStats: {
         votes: voteCount,
         totalVotes: totalMvpVotes,
-        totalPlayers: totalRealPlayers,
+        totalPlayers: totalLosingTeamPlayers,
+        requiredVotes,
+        winningTeam,
+        losingTeam,
         confirmed: mvpConfirmed,
         mvpWinner: mvpConfirmed ? match.mvp.player : null
       }

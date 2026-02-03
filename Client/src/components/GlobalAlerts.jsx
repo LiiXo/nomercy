@@ -4,7 +4,7 @@ import { X, AlertCircle, AlertTriangle, CheckCircle, Info, Wrench, ExternalLink 
 import { useLanguage } from '../LanguageContext';
 import { translations } from '../translations';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const GlobalAlerts = () => {
   const { language } = useLanguage();

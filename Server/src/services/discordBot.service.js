@@ -494,8 +494,11 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     // CDL: 4 users max per channel, Hardcore: 5 users max per channel
     const userLimit = mode === 'cdl' ? 4 : 5;
     
+    // Mode prefix for channel names
+    const modePrefix = mode === 'cdl' ? '[CDL]' : '[HC]';
+    
     // Create team 1 voice channel - No permission restrictions, everyone can join, limited based on mode
-    const team1ChannelName = `🔵 Blue #${matchCode}`;
+    const team1ChannelName = `${modePrefix} 🔵 Blue #${matchCode}`;
     const team1Channel = await guild.channels.create({
       name: team1ChannelName,
       type: ChannelType.GuildVoice,
@@ -505,7 +508,7 @@ export const createMatchVoiceChannels = async (matchId, team1DiscordIds = [], te
     });
 
     // Create team 2 voice channel - No permission restrictions, everyone can join, limited based on mode
-    const team2ChannelName = `🔴 Red #${matchCode}`;
+    const team2ChannelName = `${modePrefix} 🔴 Red #${matchCode}`;
     const team2Channel = await guild.channels.create({
       name: team2ChannelName,
       type: ChannelType.GuildVoice,

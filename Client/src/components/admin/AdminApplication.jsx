@@ -4,7 +4,7 @@ import {
   Trash2, Plus, Megaphone, Save, Loader2, Lock, Shield, X, RotateCcw
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../../config';
 
 const AdminApplication = ({ 
   appSettings, 

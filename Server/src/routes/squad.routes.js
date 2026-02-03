@@ -141,8 +141,8 @@ router.get('/my-squad', verifyToken, async (req, res) => {
         }
       }
     } else if (mode === 'stricker') {
-      // Stricker mode uses squadStricker field, with fallback to squadHardcore
-      squadId = user.squadStricker || user.squadHardcore;
+      // Stricker mode uses squadStricker field, with fallback to other squad fields
+      squadId = user.squadStricker || user.squadHardcore || user.squadCdl || user.squad;
     } else {
       // Fallback: try legacy field first, then check all mode-specific fields
       squadId = user.squad || user.squadHardcore || user.squadCdl || user.squadStricker;

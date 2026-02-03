@@ -5,7 +5,7 @@ import { useSocket } from '../SocketContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { Users, Clock, Check, X, Loader2, Swords, Shield } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const HelperConfirmationDialog = () => {
   const { user, isAuthenticated } = useAuth();

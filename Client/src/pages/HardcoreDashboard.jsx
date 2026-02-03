@@ -7,7 +7,7 @@ import { useData } from '../DataContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { Trophy, Users, Skull, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight, Lock, Star } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 // Countdown component - defined outside to prevent re-creation
 const ReadyCountdown = ({ createdAt, onExpire }) => {

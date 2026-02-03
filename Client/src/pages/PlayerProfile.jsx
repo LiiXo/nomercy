@@ -8,7 +8,7 @@ import ProfileAnimation from '../components/ProfileAnimation';
 
 import { getAvatarUrl, getDefaultAvatar, getUserAvatar } from '../utils/avatar';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
 const PlayerProfile = () => {
   const { playerId } = useParams();
@@ -594,7 +594,7 @@ const PlayerProfile = () => {
             {playerData.banner ? (
               <div className="w-full h-40 sm:h-48 relative overflow-hidden">
                 <img 
-                  src={`https://api-nomercy.ggsecure.io${playerData.banner}`}
+                  src={`${UPLOADS_BASE_URL}${playerData.banner}`}
                   alt="Profile banner"
                   className="w-full h-full object-cover"
                   onError={(e) => { e.target.style.display = 'none'; }}

@@ -8,7 +8,7 @@ import {
   FileText, ChevronRight, ChevronLeft, Check, Loader2
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const AnnouncementModal = () => {
   const { isAuthenticated, user } = useAuth();

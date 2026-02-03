@@ -4,7 +4,7 @@ import {
   GripVertical, ChevronDown, Loader2, AlertCircle, CheckCircle, Eye, EyeOff, Search
 } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../../config';
 
 const AdminTeam = () => {
   const [members, setMembers] = useState([]);

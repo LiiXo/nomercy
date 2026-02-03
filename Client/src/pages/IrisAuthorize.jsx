@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { Shield, CheckCircle, XCircle, Loader, AlertTriangle } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 export default function IrisAuthorize() {
   const { isAuthenticated, user, loading: authLoading } = useAuth();

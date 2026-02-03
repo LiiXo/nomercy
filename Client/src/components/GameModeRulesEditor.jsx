@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const MODES = [
   { value: 'hardcore', label: 'Hardcore', color: 'red' },

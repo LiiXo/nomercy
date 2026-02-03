@@ -11,7 +11,7 @@ import {
   Zap, Award, X, MessageSquare, Clock, ExternalLink
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL, UPLOADS_BASE_URL } from '../config';
 
 const MySquad = () => {
   const { user, isAuthenticated } = useAuth();
@@ -824,7 +824,7 @@ const MySquad = () => {
               {squad.banner ? (
                 <>
                   <img 
-                    src={squad.banner.startsWith('/uploads') ? `https://api-nomercy.ggsecure.io${squad.banner}` : squad.banner}
+                    src={squad.banner.startsWith('/uploads') ? `${UPLOADS_BASE_URL}${squad.banner}` : squad.banner}
                     alt="Squad banner"
                     className="absolute inset-0 w-full h-full object-cover"
                     onError={(e) => { e.target.style.display = 'none'; }}

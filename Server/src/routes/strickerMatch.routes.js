@@ -149,10 +149,18 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       .populate({
         path: 'squadHardcore',
         populate: { path: 'members.user', select: '_id username' }
+      })
+      .populate({
+        path: 'squadCdl',
+        populate: { path: 'members.user', select: '_id username' }
+      })
+      .populate({
+        path: 'squad',
+        populate: { path: 'members.user', select: '_id username' }
       });
     
-    // Check if user has a squad (stricker or hardcore fallback)
-    const squad = user.squadStricker || user.squadHardcore;
+    // Check if user has a squad (stricker, hardcore, cdl, or regular squad fallback)
+    const squad = user.squadStricker || user.squadHardcore || user.squadCdl || user.squad;
     if (!squad) {
       return res.status(400).json({ 
         success: false, 

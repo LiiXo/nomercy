@@ -6,7 +6,7 @@ import {
   Shield, Star, Users, Crown
 } from 'lucide-react';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const LadderMatchReport = ({ 
   show, 

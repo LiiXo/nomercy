@@ -49,8 +49,11 @@ const startServer = async () => {
   // Import ranked season reset service for automatic season reset
   const { scheduleAutomaticSeasonReset } = await import('./services/rankedSeasonReset.service.js');
   
+  // Import auto-unban service for automatic player unbanning when ban expires
+  const { scheduleAutoUnban } = await import('./services/autoUnban.service.js');
+  
   // Import ranked matchmaking service
-  const { initMatchmaking, handleMapVote, handleRosterPick } = await import('./services/rankedMatchmaking.service.js');
+  const { initMatchmaking, handleMapVote, handleRosterPick, getGlobalQueueCount } = await import('./services/rankedMatchmaking.service.js');
   
   // Import GGSecure monitoring service
   const { initGGSecureMonitoring, startGGSecureMonitoring, checkPlayerGGSecureOnJoin } = await import('./services/ggsecureMonitoring.service.js');
@@ -156,6 +159,15 @@ const startServer = async () => {
       const count = (pageViewers.get(page) || 0) + 1;
       pageViewers.set(page, count);
       io.to(page).emit('viewerCount', count);
+      
+      // If joining ranked-mode page, emit current queue count to this socket
+      if (page.startsWith('ranked-mode-')) {
+        const mode = page.replace('ranked-mode-', '');
+        if (mode === 'hardcore' || mode === 'cdl') {
+          const queueCount = getGlobalQueueCount(mode);
+          socket.emit('rankedGlobalQueueCount', { count: queueCount, mode });
+        }
+      }
     });
 
     socket.on('leavePage', ({ page }) => {
@@ -419,6 +431,9 @@ const startServer = async () => {
       
       // Initialize Discord Arbitrage bot
       initDiscordBot().catch(err => console.error('Discord bot init error:', err));
+      
+      // Schedule automatic unban checks (runs every minute)
+      scheduleAutoUnban();
       
       // Graceful shutdown handler - preserve Discord voice channels on restart
       const gracefulShutdown = async (signal) => {

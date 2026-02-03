@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Shield, CheckCircle, XCircle, Loader } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 export default function IrisCallback() {
   const [searchParams] = useSearchParams();

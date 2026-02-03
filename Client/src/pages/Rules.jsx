@@ -4,7 +4,7 @@ import { useMode } from '../ModeContext';
 import { ScrollText, Shield, Users, AlertTriangle, Trophy, Ban, MessageCircle, Clock, Gamepad2, ArrowLeft, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const API_URL = 'https://api-nomercy.ggsecure.io/api';
+import { API_URL } from '../config';
 
 const Rules = () => {
   const { language } = useLanguage();
