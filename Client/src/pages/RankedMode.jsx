@@ -5059,11 +5059,9 @@ const RankedMode = () => {
         <RankedMatchReport
           show={showPendingMvpReport}
           onClose={() => {
-            // Only close if user has voted
-            if (!pendingMvpVote.hasPendingVote) {
-              setShowPendingMvpReport(false);
-              setPendingMvpVote(null);
-            }
+            // Close dialog - RankedMatchReport component already handles the mustVoteBeforeClose logic internally
+            setShowPendingMvpReport(false);
+            setPendingMvpVote(null);
           }}
           isWinner={pendingMvpVote.isWinner}
           rewards={pendingMvpVote.rewards}

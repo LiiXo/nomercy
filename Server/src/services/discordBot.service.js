@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
+import { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBits, Events } from 'discord.js';
 
 // Discord channel IDs
 const ADMIN_LOG_CHANNEL_ID = '1463997106204184690';
@@ -64,7 +64,7 @@ export const initDiscordBot = async () => {
     ]
   });
 
-  client.once('ready', () => {
+  client.once(Events.ClientReady, () => {
     isReady = true;
     
     // Start summon channel cleanup interval (runs every 24 hours)

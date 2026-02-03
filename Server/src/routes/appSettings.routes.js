@@ -55,15 +55,20 @@ const getPublicSettings = async (req, res) => {
         }
       },
       // Événements actifs (Double XP, Double Gold)
+      // Un événement est actif si: enabled=true ET (startsAt est passé OU non défini) ET (expiresAt pas encore passé OU non défini)
       events: {
         doubleXP: {
           enabled: settings.events?.doubleXP?.enabled && 
+                   (!settings.events?.doubleXP?.startsAt || new Date(settings.events.doubleXP.startsAt) <= new Date()) &&
                    (!settings.events?.doubleXP?.expiresAt || new Date(settings.events.doubleXP.expiresAt) > new Date()),
+          startsAt: settings.events?.doubleXP?.startsAt,
           expiresAt: settings.events?.doubleXP?.expiresAt
         },
         doubleGold: {
           enabled: settings.events?.doubleGold?.enabled && 
+                   (!settings.events?.doubleGold?.startsAt || new Date(settings.events.doubleGold.startsAt) <= new Date()) &&
                    (!settings.events?.doubleGold?.expiresAt || new Date(settings.events.doubleGold.expiresAt) > new Date()),
+          startsAt: settings.events?.doubleGold?.startsAt,
           expiresAt: settings.events?.doubleGold?.expiresAt
         }
       },

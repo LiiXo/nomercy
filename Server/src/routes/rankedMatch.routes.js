@@ -623,16 +623,22 @@ router.get('/pending-mvp-vote', verifyToken, async (req, res) => {
       return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
     }
 
+    // MVP voting cutoff date - only require MVP votes for matches completed after this date
+    // This prevents old matches from blocking users
+    const mvpVotingCutoffDate = new Date('2026-02-03T00:00:00.000Z');
+
     // Find ALL completed matches where:
     // 1. User is a participant
     // 2. MVP voting is active but not confirmed
+    // 3. Match was completed AFTER the cutoff date (ignore old matches)
     // Sort by completedAt DESC to get the most recent match first
     const pendingMatches = await RankedMatch.find({
       'players.user': user._id,
       status: 'completed',
       'result.confirmed': true,
       'mvp.votingActive': true,
-      'mvp.confirmed': { $ne: true }
+      'mvp.confirmed': { $ne: true },
+      completedAt: { $gte: mvpVotingCutoffDate }
     }).sort({ completedAt: -1 }).populate([
       { path: 'players.user', select: 'username avatar avatarUrl discordAvatar discordId activisionId platform' },
       { path: 'mvp.player', select: 'username avatar avatarUrl discordAvatar discordId' },

@@ -37,8 +37,8 @@ const newSquadApprovalSchema = new mongoose.Schema({
   }],
   expiresAt: {
     type: Date,
-    required: true,
-    index: true
+    required: true
+    // TTL index defined below, don't set index: true here to avoid duplicate
   }
 }, {
   timestamps: true
