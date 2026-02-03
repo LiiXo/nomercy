@@ -797,5 +797,6 @@ export default {
   deleteMatchVoiceChannels,
   setShuttingDown,
   getShuttingDown,
-  sendPlayerSummon
+  sendPlayerSummon,
+  sendToChannel
 };

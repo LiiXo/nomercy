@@ -43,6 +43,7 @@ import MyPurchases from './pages/MyPurchases';
 import GameModeRulesEditor from './components/GameModeRulesEditor';
 import RecentRankedMatches from './pages/RecentRankedMatches';
 import StrickerMode from './pages/StrickerMode';
+import StrickerMatchSheet from './pages/StrickerMatchSheet';
 import Team from './pages/Team';
 
 // Loading component
@@ -562,6 +563,18 @@ function AppContent() {
               <StrickerRoute>
                 <PageTransition>
                   <StrickerMode />
+                </PageTransition>
+              </StrickerRoute>
+            } 
+          />
+
+          {/* Stricker Match Sheet - Admin, Staff, Arbitre only */}
+          <Route 
+            path="/stricker/match/:matchId" 
+            element={
+              <StrickerRoute>
+                <PageTransition>
+                  <StrickerMatchSheet />
                 </PageTransition>
               </StrickerRoute>
             } 

@@ -166,6 +166,56 @@ const appSettingsSchema = new mongoose.Schema({
     }
   },
   
+  // Stricker mode settings
+  strickerSettings: {
+    // Points par match (victoire)
+    pointsPerWin: { type: Number, default: 30 },
+    
+    // Points perdus par défaite
+    pointsPerLoss: { type: Number, default: -15 },
+    
+    // Seuils de points par rang Stricker
+    rankPointsThresholds: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({
+        recrues: { min: 0, max: 499 },
+        operateurs: { min: 500, max: 999 },
+        veterans: { min: 1000, max: 1499 },
+        commandants: { min: 1500, max: 1999 },
+        seigneurs: { min: 2000, max: 2499 },
+        immortel: { min: 2500, max: null }
+      })
+    },
+    
+    // Points perdus selon différence de rang (si on perd contre un rang plus bas)
+    // Index = différence de rangs (0 = même rang, 1 = 1 rang de différence, etc.)
+    pointsLossPerRankDiff: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({
+        0: -15,  // Même rang
+        1: -12,  // 1 rang de différence
+        2: -9,   // 2 rangs de différence
+        3: -6,   // 3 rangs de différence
+        4: -3,   // 4 rangs de différence
+        5: -1    // 5 rangs de différence (max)
+      })
+    },
+    
+    // Bonus de points si une équipe plus faible bat une plus forte
+    // Index = différence de rangs
+    bonusPointsForUpset: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({
+        0: 0,    // Même rang, pas de bonus
+        1: 5,    // 1 rang de différence
+        2: 10,   // 2 rangs de différence
+        3: 15,   // 3 rangs de différence
+        4: 20,   // 4 rangs de différence
+        5: 30    // 5 rangs de différence (max)
+      })
+    }
+  },
+  
   // Événements temporaires (Double XP, Double Gold, etc.)
   events: {
     // Double XP sur le mode classé (double les points gagnés en victoire)

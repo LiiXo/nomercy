@@ -1,302 +1,121 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, 
-  List, ListOrdered, Type, Heading1, Heading2, Heading3, 
-  Save, X, Plus, Edit2, Trash2, Loader2, Eye, Code,
-  ChevronDown, ChevronUp
+  Bold, Italic, Underline, List, ListOrdered, Type, Heading2, Heading3, 
+  Save, X, Plus, Edit2, Trash2, Loader2, Eye, ChevronDown, ChevronUp, 
+  Flame, Swords, Target
 } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
 
 import { API_URL } from '../config';
 
-const MODES = [
-  { value: 'hardcore', label: 'Hardcore', color: 'red' },
-  { value: 'cdl', label: 'CDL', color: 'cyan' },
-  { value: 'stricker', label: 'Stricker', color: 'lime' }
+// Rule destinations
+const RULE_DESTINATIONS = [
+  { 
+    id: 'ranked-hardcore',
+    label: 'Ranked Hardcore',
+    icon: Flame,
+    color: 'orange',
+    mode: 'hardcore',
+    location: 'ranked',
+    description: { fr: 'Mode Classé Hardcore', en: 'Hardcore Ranked mode' },
+    subTypes: [
+      { value: 'snd', label: { fr: '💣 Recherche & Destruction', en: '💣 Search & Destroy' } }
+    ]
+  },
+  { 
+    id: 'ranked-cdl',
+    label: 'Ranked CDL',
+    icon: Target,
+    color: 'cyan',
+    mode: 'cdl',
+    location: 'ranked',
+    description: { fr: 'Mode Classé CDL', en: 'CDL Ranked mode' },
+    subTypes: [
+      { value: 'hardpoint', label: { fr: '📍 Hardpoint', en: '📍 Hardpoint' } },
+      { value: 'snd', label: { fr: '💣 Recherche & Destruction', en: '💣 Search & Destroy' } }
+    ]
+  },
+  { 
+    id: 'stricker-hardcore',
+    label: 'Stricker Hardcore',
+    icon: Swords,
+    color: 'lime',
+    mode: 'stricker',
+    location: 'ranked',
+    description: { fr: 'Mode Stricker 5v5 (Hardcore)', en: 'Stricker 5v5 mode (Hardcore)' },
+    subTypes: [
+      { value: 'stricker-hardcore', label: { fr: '💣 S&D 5v5 Hardcore', en: '💣 S&D 5v5 Hardcore' } }
+    ]
+  },
+  { 
+    id: 'stricker-cdl',
+    label: 'Stricker CDL',
+    icon: Swords,
+    color: 'purple',
+    mode: 'stricker',
+    location: 'ranked',
+    description: { fr: 'Mode Stricker 5v5 (CDL)', en: 'Stricker 5v5 mode (CDL)' },
+    subTypes: [
+      { value: 'stricker-cdl', label: { fr: '💣 S&D 5v5 CDL', en: '💣 S&D 5v5 CDL' } }
+    ]
+  }
 ];
-
-// Translations for locations
-const getLocationLabels = (lang) => {
-  const translations = {
-    fr: {
-      rankings: { label: '📊 Classements', sublabel: 'Dialog règles dans la page Rankings' },
-      ranked: { label: '🎮 Mode Classé', sublabel: 'Dialog règles dans la page Ranked' },
-      stricker: { label: '🎯 Mode Stricker', sublabel: 'Dialog règles dans la page Stricker' }
-    },
-    en: {
-      rankings: { label: '📊 Rankings', sublabel: 'Rules dialog in Rankings page' },
-      ranked: { label: '🎮 Ranked Mode', sublabel: 'Rules dialog in Ranked page' },
-      stricker: { label: '🎯 Stricker Mode', sublabel: 'Rules dialog in Stricker page' }
-    },
-    it: {
-      rankings: { label: '📊 Classifiche', sublabel: 'Dialog regole nella pagina Classifiche' },
-      ranked: { label: '🎮 Modalità Classificata', sublabel: 'Dialog regole nella pagina Classificata' },
-      stricker: { label: '🎯 Modalità Stricker', sublabel: 'Dialog regole nella pagina Stricker' }
-    },
-    de: {
-      rankings: { label: '📊 Rangliste', sublabel: 'Regeln-Dialog in der Rangliste-Seite' },
-      ranked: { label: '🎮 Ranglisten-Modus', sublabel: 'Regeln-Dialog in der Ranglisten-Seite' },
-      stricker: { label: '🎯 Stricker-Modus', sublabel: 'Regeln-Dialog in der Stricker-Seite' }
-    }
-  };
-  return translations[lang] || translations.en;
-};
-
-// Sub-types based on location and mode
-// Hardcore ranked: Duel, TDM (Mêlée Générale), S&D (Recherche et Destruction)
-// CDL ranked: Hardpoint (Points Stratégiques), S&D (Recherche et Destruction)
-// Stricker: S&D only (5v5)
-const getSubTypeLabels = (lang, mode = 'hardcore') => {
-  const translations = {
-    fr: {
-      rankings: [
-        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Ladder Chill' },
-        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Ladder Compétitif' }
-      ],
-      ranked_hardcore: [
-        { value: 'duel', label: '⚔️ Duel 1v1', sublabel: 'Mode Duel' },
-        { value: 'tdm', label: '💀 Mêlée Générale', sublabel: 'Team Deathmatch' },
-        { value: 'snd', label: '💣 Recherche & Destruction', sublabel: 'Search and Destroy' }
-      ],
-      ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Points Stratégiques', sublabel: 'Hardpoint' },
-        { value: 'snd', label: '💣 Recherche & Destruction', sublabel: 'Search and Destroy' }
-      ],
-      ranked_stricker: [
-        { value: 'stricker-snd', label: '💣 Recherche & Destruction 5v5', sublabel: 'Mode Stricker S&D' }
-      ]
-    },
-    en: {
-      rankings: [
-        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Chill Ladder' },
-        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Compétitif Ladder' }
-      ],
-      ranked_hardcore: [
-        { value: 'duel', label: '⚔️ Duel 1v1', sublabel: 'Duel Mode' },
-        { value: 'tdm', label: '💀 Team Deathmatch', sublabel: 'Team Deathmatch' },
-        { value: 'snd', label: '💣 Search & Destroy', sublabel: 'Search and Destroy' }
-      ],
-      ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint Mode' },
-        { value: 'snd', label: '💣 Search & Destroy', sublabel: 'Search and Destroy' }
-      ],
-      ranked_stricker: [
-        { value: 'stricker-snd', label: '💣 Search & Destroy 5v5', sublabel: 'Stricker S&D Mode' }
-      ]
-    },
-    it: {
-      rankings: [
-        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Classifica Chill' },
-        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Classifica Compétitif' }
-      ],
-      ranked_hardcore: [
-        { value: 'duel', label: '⚔️ Duello 1v1', sublabel: 'Modalità Duello' },
-        { value: 'tdm', label: '💀 Mischia Generale', sublabel: 'Team Deathmatch' },
-        { value: 'snd', label: '💣 Cerca e Distruggi', sublabel: 'Cerca e Distruggi' }
-      ],
-      ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Punti Strategici', sublabel: 'Hardpoint' },
-        { value: 'snd', label: '💣 Cerca e Distruggi', sublabel: 'Cerca e Distruggi' }
-      ],
-      ranked_stricker: [
-        { value: 'stricker-snd', label: '💣 Cerca e Distruggi 5v5', sublabel: 'Modalità Stricker S&D' }
-      ]
-    },
-    de: {
-      rankings: [
-        { value: 'duo-trio', label: '👥 Chill', sublabel: 'Chill-Rangliste' },
-        { value: 'squad-team', label: '👥👥 Compétitif', sublabel: 'Compétitif-Rangliste' }
-      ],
-      ranked_hardcore: [
-        { value: 'duel', label: '⚔️ Duell 1v1', sublabel: 'Duell-Modus' },
-        { value: 'tdm', label: '💀 Team Deathmatch', sublabel: 'Team Deathmatch' },
-        { value: 'snd', label: '💣 Suchen & Zerstören', sublabel: 'Suchen & Zerstören' }
-      ],
-      ranked_cdl: [
-        { value: 'hardpoint', label: '📍 Hardpoint', sublabel: 'Hardpoint-Modus' },
-        { value: 'snd', label: '💣 Suchen & Zerstören', sublabel: 'Suchen & Zerstören' }
-      ],
-      ranked_stricker: [
-        { value: 'stricker-snd', label: '💣 Suchen & Zerstören 5v5', sublabel: 'Stricker S&D-Modus' }
-      ]
-    }
-  };
-  const t = translations[lang] || translations.en;
-  // Return the appropriate list based on location and mode
-  return {
-    rankings: t.rankings,
-    ranked: mode === 'cdl' ? t.ranked_cdl : mode === 'stricker' ? t.ranked_stricker : t.ranked_hardcore
-  };
-};
 
 const LANGUAGES = [
-  { code: 'fr', label: 'Français' },
-  { code: 'en', label: 'English' },
-  { code: 'it', label: 'Italiano' },
-  { code: 'de', label: 'Deutsch' }
+  { code: 'fr', label: 'FR' },
+  { code: 'en', label: 'EN' },
+  { code: 'it', label: 'IT' },
+  { code: 'de', label: 'DE' }
 ];
 
-// Translations object
 const translations = {
   fr: {
-    destinationTitle: '📍 Destination d\'affichage des règles',
-    subTypeTitleRankings: '🎯 Type de Ladder',
-    subTypeTitleRanked: '🎯 Mode de Jeu',
-    existingSections: 'Sections existantes',
-    newSection: 'Nouvelle section',
-    editSection: 'Modifier la section',
+    selectDestination: 'Destination',
+    selectGameMode: 'Mode de jeu',
+    existingSections: 'Sections',
+    addSection: 'Ajouter une section',
+    editSection: 'Modifier',
     cancel: 'Annuler',
-    sectionTitle: 'Titre de la section',
+    sectionTitle: 'Titre',
     content: 'Contenu',
     preview: 'Aperçu',
-    previewPlaceholder: 'Le contenu apparaîtra ici...',
     save: 'Sauvegarder',
     saving: 'Sauvegarde...',
-    updateSection: 'Mettre à jour la section',
-    addSection: 'Ajouter la section',
+    update: 'Mettre à jour',
+    add: 'Ajouter',
     sectionUpdated: 'Section mise à jour',
     sectionAdded: 'Section ajoutée',
     sectionDeleted: 'Section supprimée',
-    errorLoading: 'Erreur lors du chargement des règles',
-    errorSaving: 'Erreur lors de la sauvegarde',
-    errorUpdating: 'Erreur lors de la mise à jour',
-    errorAdding: 'Erreur lors de l\'ajout',
-    errorDeleting: 'Erreur lors de la suppression',
-    requiredFields: 'Le titre et le contenu en FR et EN sont obligatoires',
-    confirmDelete: 'Êtes-vous sûr de vouloir supprimer cette section ?',
-    // Tooltips
-    bold: 'Gras',
-    italic: 'Italique',
-    underline: 'Souligné',
-    alignLeft: 'Aligner à gauche',
-    alignCenter: 'Centrer',
-    alignRight: 'Aligner à droite',
-    bulletList: 'Liste à puces',
-    numberedList: 'Liste numérotée',
-    heading1: 'Titre 1',
-    heading2: 'Titre 2',
-    heading3: 'Titre 3',
-    paragraph: 'Paragraphe normal'
+    errorLoading: 'Erreur de chargement',
+    errorSaving: 'Erreur de sauvegarde',
+    requiredFields: 'Titre et contenu (FR, EN) requis',
+    confirmDelete: 'Supprimer cette section ?',
+    noSections: 'Aucune section configurée',
+    noSectionsDesc: 'Cliquez sur "Ajouter une section" pour créer des règles.'
   },
   en: {
-    destinationTitle: '📍 Rules Display Destination',
-    subTypeTitleRankings: '🎯 Ladder Type',
-    subTypeTitleRanked: '🎯 Game Mode',
-    existingSections: 'Existing sections',
-    newSection: 'New section',
-    editSection: 'Edit section',
+    selectDestination: 'Destination',
+    selectGameMode: 'Game mode',
+    existingSections: 'Sections',
+    addSection: 'Add section',
+    editSection: 'Edit',
     cancel: 'Cancel',
-    sectionTitle: 'Section title',
+    sectionTitle: 'Title',
     content: 'Content',
     preview: 'Preview',
-    previewPlaceholder: 'Content will appear here...',
     save: 'Save',
     saving: 'Saving...',
-    updateSection: 'Update section',
-    addSection: 'Add section',
+    update: 'Update',
+    add: 'Add',
     sectionUpdated: 'Section updated',
     sectionAdded: 'Section added',
     sectionDeleted: 'Section deleted',
-    errorLoading: 'Error loading rules',
-    errorSaving: 'Error saving',
-    errorUpdating: 'Error updating',
-    errorAdding: 'Error adding',
-    errorDeleting: 'Error deleting',
-    requiredFields: 'Title and content (FR, EN) are required',
-    confirmDelete: 'Are you sure you want to delete this section?',
-    // Tooltips
-    bold: 'Bold',
-    italic: 'Italic',
-    underline: 'Underline',
-    alignLeft: 'Align left',
-    alignCenter: 'Center',
-    alignRight: 'Align right',
-    bulletList: 'Bullet list',
-    numberedList: 'Numbered list',
-    heading1: 'Heading 1',
-    heading2: 'Heading 2',
-    heading3: 'Heading 3',
-    paragraph: 'Normal paragraph'
-  },
-  it: {
-    destinationTitle: '📍 Destinazione di visualizzazione delle regole',
-    subTypeTitleRankings: '🎯 Tipo di Classifica',
-    subTypeTitleRanked: '🎯 Modalità di Gioco',
-    existingSections: 'Sezioni esistenti',
-    newSection: 'Nuova sezione',
-    editSection: 'Modifica sezione',
-    cancel: 'Annulla',
-    sectionTitle: 'Titolo della sezione',
-    content: 'Contenuto',
-    preview: 'Anteprima',
-    previewPlaceholder: 'Il contenuto apparirà qui...',
-    save: 'Salva',
-    saving: 'Salvataggio...',
-    updateSection: 'Aggiorna sezione',
-    addSection: 'Aggiungi sezione',
-    sectionUpdated: 'Sezione aggiornata',
-    sectionAdded: 'Sezione aggiunta',
-    sectionDeleted: 'Sezione eliminata',
-    errorLoading: 'Errore nel caricamento delle regole',
-    errorSaving: 'Errore nel salvataggio',
-    errorUpdating: 'Errore nell\'aggiornamento',
-    errorAdding: 'Errore nell\'aggiunta',
-    errorDeleting: 'Errore nell\'eliminazione',
-    requiredFields: 'Il titolo e il contenuto (FR, EN) sono obbligatori',
-    confirmDelete: 'Sei sicuro di voler eliminare questa sezione?',
-    // Tooltips
-    bold: 'Grassetto',
-    italic: 'Corsivo',
-    underline: 'Sottolineato',
-    alignLeft: 'Allinea a sinistra',
-    alignCenter: 'Centra',
-    alignRight: 'Allinea a destra',
-    bulletList: 'Elenco puntato',
-    numberedList: 'Elenco numerato',
-    heading1: 'Titolo 1',
-    heading2: 'Titolo 2',
-    heading3: 'Titolo 3',
-    paragraph: 'Paragrafo normale'
-  },
-  de: {
-    destinationTitle: '📍 Regeln-Anzeigeziel',
-    subTypeTitleRankings: '🎯 Ranglisten-Typ',
-    subTypeTitleRanked: '🎯 Spielmodus',
-    existingSections: 'Vorhandene Abschnitte',
-    newSection: 'Neuer Abschnitt',
-    editSection: 'Abschnitt bearbeiten',
-    cancel: 'Abbrechen',
-    sectionTitle: 'Abschnittstitel',
-    content: 'Inhalt',
-    preview: 'Vorschau',
-    previewPlaceholder: 'Der Inhalt wird hier angezeigt...',
-    save: 'Speichern',
-    saving: 'Speichern...',
-    updateSection: 'Abschnitt aktualisieren',
-    addSection: 'Abschnitt hinzufügen',
-    sectionUpdated: 'Abschnitt aktualisiert',
-    sectionAdded: 'Abschnitt hinzugefügt',
-    sectionDeleted: 'Abschnitt gelöscht',
-    errorLoading: 'Fehler beim Laden der Regeln',
-    errorSaving: 'Fehler beim Speichern',
-    errorUpdating: 'Fehler beim Aktualisieren',
-    errorAdding: 'Fehler beim Hinzufügen',
-    errorDeleting: 'Fehler beim Löschen',
-    requiredFields: 'Titel und Inhalt (FR, EN) sind erforderlich',
-    confirmDelete: 'Sind Sie sicher, dass Sie diesen Abschnitt löschen möchten?',
-    // Tooltips
-    bold: 'Fett',
-    italic: 'Kursiv',
-    underline: 'Unterstrichen',
-    alignLeft: 'Links ausrichten',
-    alignCenter: 'Zentrieren',
-    alignRight: 'Rechts ausrichten',
-    bulletList: 'Aufzählungsliste',
-    numberedList: 'Nummerierte Liste',
-    heading1: 'Überschrift 1',
-    heading2: 'Überschrift 2',
-    heading3: 'Überschrift 3',
-    paragraph: 'Normaler Absatz'
+    errorLoading: 'Loading error',
+    errorSaving: 'Save error',
+    requiredFields: 'Title and content (FR, EN) required',
+    confirmDelete: 'Delete this section?',
+    noSections: 'No sections configured',
+    noSectionsDesc: 'Click "Add section" to create rules.'
   }
 };
 
@@ -304,9 +123,8 @@ const GameModeRulesEditor = () => {
   const { language } = useLanguage();
   const t = (key) => translations[language]?.[key] || translations.en[key] || key;
   
-  const [selectedMode, setSelectedMode] = useState('hardcore');
-  const [selectedLocation, setSelectedLocation] = useState('rankings');
-  const [selectedSubType, setSelectedSubType] = useState('duo-trio');
+  const [selectedDestination, setSelectedDestination] = useState(RULE_DESTINATIONS[0]);
+  const [selectedSubType, setSelectedSubType] = useState(RULE_DESTINATIONS[0].subTypes[0].value);
   const [selectedLang, setSelectedLang] = useState('fr');
   const [rules, setRules] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -315,61 +133,46 @@ const GameModeRulesEditor = () => {
   const [error, setError] = useState('');
   const [expandedSections, setExpandedSections] = useState({});
   
-  // Section editor states
+  // Editor state
+  const [showEditor, setShowEditor] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
   const [sectionForm, setSectionForm] = useState({
     title: { fr: '', en: '', it: '', de: '' },
-    content: { fr: '', en: '', it: '', de: '' },
-    icon: 'fileText'
+    content: { fr: '', en: '', it: '', de: '' }
   });
   
   const editorRef = useRef(null);
 
   useEffect(() => {
     fetchRules();
-  }, [selectedMode, selectedLocation, selectedSubType]);
-  
-  // Reset subType when location or mode changes
-  useEffect(() => {
-    if (selectedLocation === 'rankings') {
-      setSelectedSubType('duo-trio');
-    } else {
-      // For ranked, set default based on mode
-      if (selectedMode === 'cdl') {
-        setSelectedSubType('hardpoint');
-      } else if (selectedMode === 'stricker') {
-        setSelectedSubType('stricker-snd');
-      } else {
-        setSelectedSubType('duel');
-      }
-    }
-  }, [selectedLocation, selectedMode]);
+  }, [selectedDestination, selectedSubType]);
 
-  // Update editor content when language changes
   useEffect(() => {
-    if (editorRef.current) {
+    setSelectedSubType(selectedDestination.subTypes[0].value);
+  }, [selectedDestination]);
+
+  useEffect(() => {
+    if (editorRef.current && showEditor) {
       const currentContent = sectionForm.content[selectedLang] || '';
-      // Only update if content is different to avoid cursor issues
       if (editorRef.current.innerHTML !== currentContent) {
         editorRef.current.innerHTML = currentContent;
       }
     }
-  }, [selectedLang]);
+  }, [selectedLang, showEditor]);
 
   const fetchRules = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/game-mode-rules/${selectedMode}/${selectedLocation}/${selectedSubType}`, {
-        credentials: 'include'
-      });
+      const response = await fetch(
+        `${API_URL}/game-mode-rules/${selectedDestination.mode}/${selectedDestination.location}/${selectedSubType}`,
+        { credentials: 'include' }
+      );
       const data = await response.json();
       if (data.success) {
         setRules(data.rules);
         if (data.rules?.sections) {
           const expanded = {};
-          data.rules.sections.forEach(section => {
-            expanded[section._id] = true;
-          });
+          data.rules.sections.forEach(section => { expanded[section._id] = false; });
           setExpandedSections(expanded);
         }
       }
@@ -398,54 +201,31 @@ const GameModeRulesEditor = () => {
     setSuccess('');
 
     try {
-      if (editingSection) {
-        // Update existing section
-        const response = await fetch(
-          `${API_URL}/game-mode-rules/admin/${selectedMode}/${selectedLocation}/${selectedSubType}/section/${editingSection._id}`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(sectionForm)
-          }
-        );
-        const data = await response.json();
-        if (data.success) {
-          setRules(data.rules);
-          setSuccess(t('sectionUpdated'));
-          resetSectionForm();
-        } else {
-          setError(data.message || t('errorUpdating'));
-        }
+      const url = editingSection
+        ? `${API_URL}/game-mode-rules/admin/${selectedDestination.mode}/${selectedDestination.location}/${selectedSubType}/section/${editingSection._id}`
+        : `${API_URL}/game-mode-rules/admin/${selectedDestination.mode}/${selectedDestination.location}/${selectedSubType}/section`;
+      
+      const response = await fetch(url, {
+        method: editingSection ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(sectionForm)
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setRules(data.rules);
+        setSuccess(editingSection ? t('sectionUpdated') : t('sectionAdded'));
+        closeEditor();
       } else {
-        // Add new section
-        const response = await fetch(
-          `${API_URL}/game-mode-rules/admin/${selectedMode}/${selectedLocation}/${selectedSubType}/section`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(sectionForm)
-          }
-        );
-        const data = await response.json();
-        if (data.success) {
-          setRules(data.rules);
-          setSuccess(t('sectionAdded'));
-          resetSectionForm();
-        } else {
-          setError(data.message || t('errorAdding'));
-        }
+        setError(data.message || t('errorSaving'));
       }
     } catch (err) {
       console.error('Error saving section:', err);
       setError(t('errorSaving'));
     } finally {
       setSaving(false);
-      setTimeout(() => {
-        setSuccess('');
-        setError('');
-      }, 3000);
+      setTimeout(() => { setSuccess(''); setError(''); }, 3000);
     }
   };
 
@@ -454,46 +234,46 @@ const GameModeRulesEditor = () => {
 
     try {
       const response = await fetch(
-        `${API_URL}/game-mode-rules/admin/${selectedMode}/${selectedLocation}/${selectedSubType}/section/${sectionId}`,
-        {
-          method: 'DELETE',
-          credentials: 'include'
-        }
+        `${API_URL}/game-mode-rules/admin/${selectedDestination.mode}/${selectedDestination.location}/${selectedSubType}/section/${sectionId}`,
+        { method: 'DELETE', credentials: 'include' }
       );
       const data = await response.json();
       if (data.success) {
         setRules(data.rules);
         setSuccess(t('sectionDeleted'));
-      } else {
-        setError(data.message || t('errorDeleting'));
+        setTimeout(() => setSuccess(''), 3000);
       }
     } catch (err) {
       console.error('Error deleting section:', err);
-      setError(t('errorDeleting'));
     }
   };
 
-  const resetSectionForm = () => {
+  const closeEditor = () => {
+    setShowEditor(false);
     setEditingSection(null);
     setSectionForm({
       title: { fr: '', en: '', it: '', de: '' },
-      content: { fr: '', en: '', it: '', de: '' },
-      icon: 'fileText'
+      content: { fr: '', en: '', it: '', de: '' }
     });
-    // Clear editor content
-    if (editorRef.current) {
-      editorRef.current.innerHTML = '';
-    }
+    if (editorRef.current) editorRef.current.innerHTML = '';
+  };
+
+  const openAddSection = () => {
+    setEditingSection(null);
+    setSectionForm({
+      title: { fr: '', en: '', it: '', de: '' },
+      content: { fr: '', en: '', it: '', de: '' }
+    });
+    setShowEditor(true);
+    setTimeout(() => {
+      if (editorRef.current) editorRef.current.innerHTML = '';
+    }, 0);
   };
 
   const startEditSection = (section) => {
     setEditingSection(section);
-    setSectionForm({
-      title: section.title,
-      content: section.content,
-      icon: section.icon || 'fileText'
-    });
-    // Update editor content after a small delay to ensure state is updated
+    setSectionForm({ title: section.title, content: section.content });
+    setShowEditor(true);
     setTimeout(() => {
       if (editorRef.current) {
         editorRef.current.innerHTML = section.content[selectedLang] || '';
@@ -502,398 +282,298 @@ const GameModeRulesEditor = () => {
   };
 
   const toggleSection = (sectionId) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [sectionId]: !prev[sectionId]
-    }));
+    setExpandedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
-  const getModeColor = () => {
-    const mode = MODES.find(m => m.value === selectedMode);
-    return mode?.color || 'purple';
+  const colors = {
+    orange: { bg: 'bg-orange-500', bgLight: 'bg-orange-500/20', border: 'border-orange-500', text: 'text-orange-400' },
+    cyan: { bg: 'bg-cyan-500', bgLight: 'bg-cyan-500/20', border: 'border-cyan-500', text: 'text-cyan-400' },
+    lime: { bg: 'bg-lime-500', bgLight: 'bg-lime-500/20', border: 'border-lime-500', text: 'text-lime-400' },
+    purple: { bg: 'bg-purple-500', bgLight: 'bg-purple-500/20', border: 'border-purple-500', text: 'text-purple-400' }
   };
+  const c = colors[selectedDestination.color];
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header with mode selector */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          
-          {/* Mode selector */}
-          <div className="flex gap-2 w-full sm:w-auto">
-            {MODES.map(mode => (
-              <button
-                key={mode.value}
-                onClick={() => setSelectedMode(mode.value)}
-                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg font-medium transition-all text-sm ${
-                  selectedMode === mode.value
-                    ? `bg-${mode.color}-500 text-white shadow-lg shadow-${mode.color}-500/50`
-                    : 'bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-700'
-                }`}
-              >
-                {mode.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Location selector - Where rules will be displayed */}
-        <div className="bg-dark-800/50 rounded-xl p-3 sm:p-4 border border-white/10">
-          <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-3">{t('destinationTitle')}</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {['rankings', 'ranked'].map(locValue => {
-              const locLabels = getLocationLabels(language)[locValue];
+    <div className="space-y-3 sm:space-y-4">
+      {/* Destination & GameMode selectors - responsive */}
+      <div className="flex flex-col gap-3">
+        {/* Destination tabs - horizontally scrollable on mobile */}
+        <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0">
+          <div className="flex gap-1 bg-dark-800/50 rounded-lg p-1 min-w-max sm:min-w-0 sm:flex-wrap">
+            {RULE_DESTINATIONS.map(dest => {
+              const Icon = dest.icon;
+              const isSelected = selectedDestination.id === dest.id;
+              const destColor = colors[dest.color];
               return (
                 <button
-                  key={locValue}
-                  onClick={() => setSelectedLocation(locValue)}
-                  className={`p-3 sm:p-4 rounded-xl text-left transition-all border-2 ${
-                    selectedLocation === locValue
-                      ? locValue === 'rankings' 
-                        ? 'bg-purple-500/20 border-purple-500 shadow-lg shadow-purple-500/20'
-                        : 'bg-cyan-500/20 border-cyan-500 shadow-lg shadow-cyan-500/20'
-                      : 'bg-dark-900 border-white/10 hover:border-white/20'
+                  key={dest.id}
+                  onClick={() => setSelectedDestination(dest)}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                    isSelected ? `${destColor.bg} text-white` : 'text-gray-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <div className={`font-medium text-sm ${
-                    selectedLocation === locValue
-                      ? locValue === 'rankings' ? 'text-purple-400' : 'text-cyan-400'
-                      : 'text-white'
-                  }`}>
-                    {locLabels.label}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">{locLabels.sublabel}</div>
+                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                  <span>{dest.label}</span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        {/* SubType selector - Specific game mode or ladder type */}
-        <div className="bg-dark-800/50 rounded-xl p-3 sm:p-4 border border-white/10">
-          <h3 className="text-xs sm:text-sm font-medium text-gray-400 mb-3">
-            {selectedLocation === 'rankings' ? t('subTypeTitleRankings') : t('subTypeTitleRanked')}
-          </h3>
-          <div className={`grid grid-cols-1 sm:grid-cols-2 ${selectedLocation === 'ranked' && selectedMode === 'hardcore' ? 'lg:grid-cols-3' : ''} gap-2 sm:gap-3`}>
-            {getSubTypeLabels(language, selectedMode)[selectedLocation].map(sub => (
-              <button
-                key={sub.value}
-                onClick={() => setSelectedSubType(sub.value)}
-                className={`p-2 sm:p-3 rounded-xl text-left transition-all border-2 ${
-                  selectedSubType === sub.value
-                    ? selectedLocation === 'rankings'
-                      ? 'bg-purple-500/20 border-purple-500 shadow-lg shadow-purple-500/20'
-                      : 'bg-cyan-500/20 border-cyan-500 shadow-lg shadow-cyan-500/20'
-                    : 'bg-dark-900 border-white/10 hover:border-white/20'
-                }`}
-              >
-                <div className={`font-medium text-xs sm:text-sm ${
-                  selectedSubType === sub.value
-                    ? selectedLocation === 'rankings' ? 'text-purple-400' : 'text-cyan-400'
-                    : 'text-white'
-                }`}>
-                  {sub.label}
-                </div>
-                <div className="text-[10px] sm:text-xs text-gray-500 mt-0.5">{sub.sublabel}</div>
-              </button>
-            ))}
-          </div>
+        {/* SubType selector & Add button row */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {/* SubType selector */}
+          {selectedDestination.subTypes.length > 1 && (
+            <div className="flex gap-1 bg-dark-800/50 rounded-lg p-1">
+              {selectedDestination.subTypes.map(sub => (
+                <button
+                  key={sub.value}
+                  onClick={() => setSelectedSubType(sub.value)}
+                  className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                    selectedSubType === sub.value
+                      ? `${c.bg} text-white`
+                      : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {sub.label[language] || sub.label.en}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Add section button */}
+          {!showEditor && (
+            <button
+              onClick={openAddSection}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 ${c.bgLight} ${c.text} rounded-lg text-xs sm:text-sm font-medium hover:opacity-80 transition-all ml-auto`}
+            >
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">{t('addSection')}</span>
+              <span className="xs:hidden">+</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Success/Error messages */}
+      {/* Messages */}
       {success && (
-        <div className="p-4 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400">
+        <div className="p-2.5 sm:p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400 text-xs sm:text-sm">
           {success}
         </div>
       )}
       {error && (
-        <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400">
+        <div className="p-2.5 sm:p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-xs sm:text-sm">
           {error}
         </div>
       )}
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+        <div className="flex justify-center py-8 sm:py-12">
+          <Loader2 className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 animate-spin" />
         </div>
       ) : (
         <>
-          {/* Existing sections */}
-          {rules?.sections && rules.sections.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-base sm:text-lg font-semibold text-white">
-                {t('existingSections')} ({rules.sections.length})
-              </h3>
-              {rules.sections.sort((a, b) => a.order - b.order).map(section => (
-                <div
-                  key={section._id}
-                  className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden"
+          {/* Editor panel (shown when adding/editing) */}
+          {showEditor && (
+            <div className={`bg-dark-900 rounded-xl border-2 ${editingSection ? 'border-amber-500/50' : c.border} p-3 sm:p-4`}>
+              <div className="flex items-start sm:items-center justify-between gap-2 mb-3 sm:mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-white leading-tight">
+                  {editingSection ? (
+                    <span className="flex flex-col sm:flex-row sm:items-center gap-1">
+                      <span>{t('editSection')}:</span>
+                      <span className="text-sm sm:text-base text-gray-300 truncate max-w-[150px] sm:max-w-none">
+                        {editingSection.title.fr || editingSection.title.en}
+                      </span>
+                    </span>
+                  ) : t('addSection')}
+                </h3>
+                <button
+                  onClick={closeEditor}
+                  className="flex items-center gap-1 px-2 sm:px-3 py-1 sm:py-1.5 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg text-xs sm:text-sm flex-shrink-0"
                 >
-                  <div className="flex items-center justify-between p-3 sm:p-4 bg-dark-800/50 gap-2">
-                    <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                      <button
-                        onClick={() => toggleSection(section._id)}
-                        className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
-                      >
-                        {expandedSections[section._id] ? (
-                          <ChevronUp className="w-4 h-4 sm:w-5 sm:h-5" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
-                        )}
-                      </button>
-                      <h4 className="text-white font-medium text-sm sm:text-base truncate">
-                        {section.title.fr || section.title.en}
-                      </h4>
-                    </div>
-                    <div className="flex gap-1 sm:gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => startEditSection(section)}
-                        className="p-1.5 sm:p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteSection(section._id)}
-                        className="p-1.5 sm:p-2 hover:bg-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {expandedSections[section._id] && (
-                    <div className="p-3 sm:p-4 space-y-3">
-                      {LANGUAGES.map(lang => (
-                        <div key={lang.code} className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500 font-medium">{lang.label}</span>
-                          </div>
-                          <div className="text-xs sm:text-sm text-gray-400">
-                            <strong>{language === 'fr' ? 'Titre:' : language === 'en' ? 'Title:' : language === 'it' ? 'Titolo:' : 'Titel:'}</strong> {section.title[lang.code] || '-'}
-                          </div>
-                          <div 
-                            className="text-xs sm:text-sm text-gray-300 prose prose-invert prose-sm max-w-none"
-                            dangerouslySetInnerHTML={{ __html: section.content[lang.code] || '-' }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">{t('cancel')}</span>
+                </button>
+              </div>
+
+              {/* Language tabs - scrollable on mobile */}
+              <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 mb-3 sm:mb-4">
+                <div className="flex gap-1 min-w-max sm:min-w-0">
+                  {LANGUAGES.map(lang => (
+                    <button
+                      key={lang.code}
+                      onClick={() => setSelectedLang(lang.code)}
+                      className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                        selectedLang === lang.code ? `${c.bg} text-white` : 'bg-dark-800 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+                {/* Left: Title + Editor */}
+                <div className="space-y-2 sm:space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      {t('sectionTitle')} ({selectedLang.toUpperCase()})
+                      {(selectedLang === 'fr' || selectedLang === 'en') && <span className="text-red-400 ml-1">*</span>}
+                    </label>
+                    <input
+                      type="text"
+                      value={sectionForm.title[selectedLang]}
+                      onChange={(e) => setSectionForm({
+                        ...sectionForm,
+                        title: { ...sectionForm.title, [selectedLang]: e.target.value }
+                      })}
+                      className="w-full px-2.5 sm:px-3 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-white/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">
+                      {t('content')} ({selectedLang.toUpperCase()})
+                      {(selectedLang === 'fr' || selectedLang === 'en') && <span className="text-red-400 ml-1">*</span>}
+                    </label>
+                    {/* Toolbar - scrollable on mobile */}
+                    <div className="overflow-x-auto">
+                      <div className="flex gap-0.5 p-1 bg-dark-800 border border-white/10 rounded-t-lg min-w-max">
+                        <button type="button" onClick={() => applyFormat('bold')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><Bold className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => applyFormat('italic')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><Italic className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => applyFormat('underline')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><Underline className="w-4 h-4" /></button>
+                        <div className="w-px bg-white/10 mx-0.5" />
+                        <button type="button" onClick={() => applyFormat('insertUnorderedList')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><List className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => applyFormat('insertOrderedList')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><ListOrdered className="w-4 h-4" /></button>
+                        <div className="w-px bg-white/10 mx-0.5" />
+                        <button type="button" onClick={() => applyFormat('formatBlock', '<h2>')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><Heading2 className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => applyFormat('formatBlock', '<h3>')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><Heading3 className="w-4 h-4" /></button>
+                        <button type="button" onClick={() => applyFormat('formatBlock', '<p>')} className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"><Type className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onInput={(e) => setSectionForm({
+                        ...sectionForm,
+                        content: { ...sectionForm.content, [selectedLang]: e.currentTarget.innerHTML }
+                      })}
+                      className="w-full min-h-[140px] sm:min-h-[180px] p-2.5 sm:p-3 bg-dark-800 border border-white/10 border-t-0 rounded-b-lg text-white text-sm focus:outline-none prose prose-invert max-w-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Right: Preview - hidden on mobile by default, can be toggled */}
+                <div className="space-y-2 sm:space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Eye className="w-4 h-4 text-gray-400" />
+                    <span className="text-xs font-medium text-gray-400">{t('preview')}</span>
+                  </div>
+                  <div className="p-3 sm:p-4 bg-dark-800/50 rounded-lg border border-white/10 min-h-[160px] sm:min-h-[240px]">
+                    <h3 className="text-base sm:text-lg font-bold text-white mb-2 sm:mb-3">{sectionForm.title[selectedLang] || '...'}</h3>
+                    <div 
+                      className="prose prose-invert max-w-none text-sm"
+                      dangerouslySetInnerHTML={{ __html: sectionForm.content[selectedLang] || '<p class="text-gray-500">...</p>' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleSaveSection}
+                disabled={saving}
+                className={`w-full mt-3 sm:mt-4 flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 ${c.bg} hover:opacity-90 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium text-sm`}
+              >
+                {saving ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> {t('saving')}</>
+                ) : (
+                  <><Save className="w-4 h-4" /> {editingSection ? t('update') : t('add')}</>
+                )}
+              </button>
             </div>
           )}
 
-          {/* Section editor */}
-          <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3">
-              <h3 className="text-lg sm:text-xl font-semibold text-white">
-                {editingSection ? t('editSection') : t('newSection')}
-              </h3>
-              {editingSection && (
-                <button
-                  onClick={resetSectionForm}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors text-sm w-full sm:w-auto justify-center"
-                >
-                  <X className="w-4 h-4" />
-                  {t('cancel')}
-                </button>
-              )}
-            </div>
-
-            {/* Language tabs */}
-            <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-white/10 pb-2 overflow-x-auto">
-              {LANGUAGES.map(lang => (
-                <button
-                  key={lang.code}
-                  onClick={() => setSelectedLang(lang.code)}
-                  className={`px-3 sm:px-4 py-2 rounded-t-lg font-medium transition-colors text-sm whitespace-nowrap ${
-                    selectedLang === lang.code
-                      ? 'bg-purple-500 text-white'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {lang.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Title input */}
-            <div className="mb-4 sm:mb-6">
-              <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
-                {t('sectionTitle')} ({selectedLang.toUpperCase()})
-                {(selectedLang === 'fr' || selectedLang === 'en') && (
-                  <span className="text-red-400 ml-1">*</span>
-                )}
-              </label>
-              <input
-                type="text"
-                value={sectionForm.title[selectedLang]}
-                onChange={(e) => setSectionForm({
-                  ...sectionForm,
-                  title: { ...sectionForm.title, [selectedLang]: e.target.value }
-                })}
-                placeholder={`${t('sectionTitle')} ${LANGUAGES.find(l => l.code === selectedLang)?.label ? 'in ' + LANGUAGES.find(l => l.code === selectedLang).label : ''}`}
-                className="w-full px-3 sm:px-4 py-2 bg-dark-800 border border-white/10 rounded-lg text-white text-sm sm:text-base focus:outline-none focus:border-purple-500/50"
-              />
-            </div>
-
-            {/* Rich text editor toolbar */}
-            <div className="mb-2">
-              <label className="block text-xs sm:text-sm font-medium text-gray-300 mb-2">
-                {t('content')} ({selectedLang.toUpperCase()})
-                {(selectedLang === 'fr' || selectedLang === 'en') && (
-                  <span className="text-red-400 ml-1">*</span>
-                )}
-              </label>
-              <div className="flex flex-wrap gap-0.5 sm:gap-1 p-1 sm:p-2 bg-dark-800 border border-white/10 rounded-t-lg overflow-x-auto">
-                <button
-                  type="button"
-                  onClick={() => applyFormat('bold')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('bold')}
-                >
-                  <Bold className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('italic')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('italic')}
-                >
-                  <Italic className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('underline')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('underline')}
-                >
-                  <Underline className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <div className="w-px bg-white/10 mx-0.5 sm:mx-1"></div>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('justifyLeft')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('alignLeft')}
-                >
-                  <AlignLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('justifyCenter')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('alignCenter')}
-                >
-                  <AlignCenter className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('justifyRight')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('alignRight')}
-                >
-                  <AlignRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <div className="w-px bg-white/10 mx-0.5 sm:mx-1"></div>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('insertUnorderedList')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('bulletList')}
-                >
-                  <List className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('insertOrderedList')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('numberedList')}
-                >
-                  <ListOrdered className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <div className="w-px bg-white/10 mx-0.5 sm:mx-1"></div>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('formatBlock', '<h1>')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('heading1')}
-                >
-                  <Heading1 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('formatBlock', '<h2>')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('heading2')}
-                >
-                  <Heading2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('formatBlock', '<h3>')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('heading3')}
-                >
-                  <Heading3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyFormat('formatBlock', '<p>')}
-                  className="p-1.5 sm:p-2 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
-                  title={t('paragraph')}
-                >
-                  <Type className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
+          {/* Existing sections list */}
+          <div className={`bg-dark-900/50 rounded-xl border ${c.border}/30 p-3 sm:p-4`}>
+            <h3 className={`text-xs sm:text-sm font-semibold ${c.text} mb-2 sm:mb-3 flex items-center gap-2`}>
+              {t('existingSections')}
+              <span className="px-1.5 sm:px-2 py-0.5 bg-white/10 rounded text-xs text-gray-400">
+                {rules?.sections?.length || 0}
+              </span>
+            </h3>
+            
+            {!rules?.sections || rules.sections.length === 0 ? (
+              <div className="text-center py-6 sm:py-8">
+                <div className="text-gray-500 text-xs sm:text-sm">{t('noSections')}</div>
+                <div className="text-gray-600 text-xs mt-1">{t('noSectionsDesc')}</div>
               </div>
-            </div>
-
-            {/* Content editor */}
-            <div
-              ref={editorRef}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={(e) => {
-                setSectionForm({
-                  ...sectionForm,
-                  content: { ...sectionForm.content, [selectedLang]: e.currentTarget.innerHTML }
-                });
-              }}
-              className="w-full min-h-[200px] sm:min-h-[300px] p-3 sm:p-4 bg-dark-800 border border-white/10 rounded-b-lg text-white text-sm sm:text-base focus:outline-none focus:border-purple-500/50 prose prose-invert max-w-none overflow-y-auto"
-            />
-
-            {/* Preview toggle */}
-            <div className="mt-4 p-3 sm:p-4 bg-dark-800/50 rounded-lg border border-white/10">
-              <div className="flex items-center gap-2 mb-2">
-                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-                <span className="text-xs sm:text-sm font-medium text-gray-300">{t('preview')}</span>
+            ) : (
+              <div className="space-y-2">
+                {rules.sections.sort((a, b) => (a.order || 0) - (b.order || 0)).map(section => (
+                  <div
+                    key={section._id}
+                    className="bg-dark-800/50 rounded-lg border border-white/5 overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between p-2.5 sm:p-3 gap-2">
+                      <button
+                        onClick={() => toggleSection(section._id)}
+                        className="flex items-center gap-2 flex-1 text-left min-w-0"
+                      >
+                        {expandedSections[section._id] ? (
+                          <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                        )}
+                        <span className="text-white font-medium text-xs sm:text-sm truncate">
+                          {section.title.fr || section.title.en}
+                        </span>
+                      </button>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => startEditSection(section)}
+                          className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white transition-colors"
+                          title={t('editSection')}
+                        >
+                          <Edit2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSection(section._id)}
+                          className="p-1.5 hover:bg-red-500/20 rounded text-gray-400 hover:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {expandedSections[section._id] && (
+                      <div className="px-2.5 sm:px-3 pb-2.5 sm:pb-3 pt-0 border-t border-white/5 mt-0">
+                        {/* Language titles - 2 cols on mobile, 4 on desktop */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 mt-2.5 sm:mt-3">
+                          {LANGUAGES.map(lang => (
+                            <div key={lang.code} className="bg-dark-900/50 rounded-lg p-2">
+                              <div className="text-[10px] sm:text-xs text-gray-500 font-medium mb-0.5 sm:mb-1">{lang.label}</div>
+                              <div className="text-[11px] sm:text-xs text-gray-400 truncate" title={section.title[lang.code]}>
+                                {section.title[lang.code] || '-'}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Content preview */}
+                        <div className="mt-2.5 sm:mt-3 p-2.5 sm:p-3 bg-dark-900/50 rounded-lg">
+                          <div className="text-[10px] sm:text-xs text-gray-500 mb-1.5 sm:mb-2">Contenu (FR)</div>
+                          <div 
+                            className="prose prose-invert prose-sm max-w-none text-gray-300 text-xs sm:text-sm [&>*]:mb-1 [&>*:last-child]:mb-0"
+                            dangerouslySetInnerHTML={{ __html: section.content.fr || section.content.en || '-' }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div 
-                className="prose prose-invert max-w-none text-xs sm:text-sm"
-                dangerouslySetInnerHTML={{ __html: sectionForm.content[selectedLang] || `<p class="text-gray-500">${t('previewPlaceholder')}</p>` }}
-              />
-            </div>
-
-            {/* Save button */}
-            <button
-              onClick={handleSaveSection}
-              disabled={saving}
-              className="w-full mt-4 sm:mt-6 flex items-center justify-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 bg-purple-500 hover:bg-purple-600 disabled:bg-gray-600 text-white rounded-lg transition-colors font-medium text-sm sm:text-base"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
-                  {t('saving')}
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 sm:w-5 sm:h-5" />
-                  {editingSection ? t('updateSection') : t('addSection')}
-                </>
-              )}
-            </button>
+            )}
           </div>
         </>
       )}

@@ -18,13 +18,13 @@ const gameModeRulesSchema = new mongoose.Schema({
   
   // Sub-type for more specific targeting
   // For rankings: 'duo-trio' or 'squad-team'
-  // For ranked: 'duel', 'tdm', 'domination', 'snd', 'hardpoint'
-  // For stricker: 'stricker-snd'
+  // For ranked: 'snd', 'hardpoint'
+  // For stricker: 'stricker-hardcore', 'stricker-cdl'
   subType: {
     type: String,
     required: true,
-    enum: ['duo-trio', 'squad-team', 'duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd'],
-    default: 'duel'
+    enum: ['duo-trio', 'squad-team', 'duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd', 'stricker-hardcore', 'stricker-cdl'],
+    default: 'snd'
   },
   
   // Title of the rules page

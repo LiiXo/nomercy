@@ -7,7 +7,7 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, Skull
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -18,7 +18,9 @@ const STRICKER_RANKS = {
     key: 'recrues', 
     name: 'Recrues', 
     min: 0, 
-    max: 499, 
+    max: 249, 
+    pointsWin: 30,
+    pointsLoss: -15,
     color: '#7ED321', 
     gradient: 'from-lime-600 to-green-700', 
     icon: Shield, 
@@ -27,8 +29,10 @@ const STRICKER_RANKS = {
   operateurs: { 
     key: 'operateurs', 
     name: 'Opérateurs', 
-    min: 500, 
-    max: 999, 
+    min: 250, 
+    max: 499, 
+    pointsWin: 30,
+    pointsLoss: -20,
     color: '#7ED321', 
     gradient: 'from-lime-500 to-green-600', 
     icon: Shield, 
@@ -37,8 +41,10 @@ const STRICKER_RANKS = {
   veterans: { 
     key: 'veterans', 
     name: 'Vétérans', 
-    min: 1000, 
-    max: 1499, 
+    min: 500, 
+    max: 749, 
+    pointsWin: 30,
+    pointsLoss: -25,
     color: '#7ED321', 
     gradient: 'from-lime-400 to-green-500', 
     icon: Medal, 
@@ -47,8 +53,10 @@ const STRICKER_RANKS = {
   commandants: { 
     key: 'commandants', 
     name: 'Commandants', 
-    min: 1500, 
-    max: 1999, 
+    min: 750, 
+    max: 999, 
+    pointsWin: 30,
+    pointsLoss: -30,
     color: '#7ED321', 
     gradient: 'from-green-400 to-emerald-500', 
     icon: Medal, 
@@ -57,8 +65,10 @@ const STRICKER_RANKS = {
   seigneurs: { 
     key: 'seigneurs', 
     name: 'Seigneurs de Guerre', 
-    min: 2000, 
-    max: 2499, 
+    min: 1000, 
+    max: 1499, 
+    pointsWin: 30,
+    pointsLoss: -40,
     color: '#7ED321', 
     gradient: 'from-emerald-400 to-teal-500', 
     icon: Crown, 
@@ -67,8 +77,10 @@ const STRICKER_RANKS = {
   immortel: { 
     key: 'immortel', 
     name: 'Immortel', 
-    min: 2500, 
+    min: 1500, 
     max: null, 
+    pointsWin: 30,
+    pointsLoss: -50,
     color: '#7ED321', 
     gradient: 'from-teal-400 via-emerald-500 to-lime-600', 
     icon: Zap, 
@@ -78,11 +90,11 @@ const STRICKER_RANKS = {
 
 // Helper to get rank from points
 const getStrickerRank = (points) => {
-  if (points >= 2500) return STRICKER_RANKS.immortel;
-  if (points >= 2000) return STRICKER_RANKS.seigneurs;
-  if (points >= 1500) return STRICKER_RANKS.commandants;
-  if (points >= 1000) return STRICKER_RANKS.veterans;
-  if (points >= 500) return STRICKER_RANKS.operateurs;
+  if (points >= 1500) return STRICKER_RANKS.immortel;
+  if (points >= 1000) return STRICKER_RANKS.seigneurs;
+  if (points >= 750) return STRICKER_RANKS.commandants;
+  if (points >= 500) return STRICKER_RANKS.veterans;
+  if (points >= 250) return STRICKER_RANKS.operateurs;
   return STRICKER_RANKS.recrues;
 };
 
@@ -92,7 +104,7 @@ const translations = {
     title: 'Mode Stricker',
     subtitle: 'Recherche et Destruction 5v5',
     restricted: 'Accès réservé aux administrateurs, staff et arbitres',
-    myRank: 'Mon Rang',
+    myRank: 'Mon Escouade',
     points: 'Points',
     wins: 'Victoires',
     losses: 'Défaites',
@@ -122,56 +134,33 @@ const translations = {
     online: 'En ligne',
     squadsSearching: 'escouade(s) en recherche',
     needLeaderOrOfficer: 'Seul le leader ou un officier peut lancer la recherche',
-    youAre: 'Vous êtes'
-  },
-  en: {
-    title: 'Stricker Mode',
-    subtitle: 'Search and Destroy 5v5',
-    restricted: 'Access restricted to administrators, staff and referees',
-    myRank: 'My Rank',
-    points: 'Points',
-    wins: 'Wins',
-    losses: 'Losses',
-    winRate: 'Win Rate',
-    squadLeaderboard: 'Squad Leaderboard',
-    noSquad: 'No squad',
-    joinQueue: 'Search for match',
-    leaveQueue: 'Leave queue',
-    inQueue: 'Searching...',
-    playersInQueue: 'players in queue',
-    matchFound: 'Match found!',
-    format: 'Format',
-    gameMode: 'Game Mode',
-    searchDestroy: 'Search and Destroy',
-    loading: 'Loading...',
-    noAccess: 'Access denied',
-    backToHome: 'Back to home',
-    nextRank: 'Next rank',
-    pointsToNext: 'points to next rank',
-    position: 'Position',
-    squadName: 'Squad',
-    squadPoints: 'Squad points',
-    needSquad: 'You must be in a squad to play',
-    needMoreMembers: 'Your squad must have at least 5 members',
-    currentMembers: 'current members',
-    ranksTitle: 'Rank Progression',
-    online: 'Online',
-    squadsSearching: 'squad(s) searching',
-    needLeaderOrOfficer: 'Only the leader or an officer can start the search',
-    youAre: 'You are',
+    youAre: 'Vous êtes',
+    joinTheFight: 'Rejoindre le combat !',
+    crushThem: 'Aller les défoncer !',
     viewMaps: 'Voir les cartes',
     viewRules: 'Voir les règles',
     availableMaps: 'Cartes disponibles',
     strickerRules: 'Règles du Mode Stricker',
     noMaps: 'Aucune carte disponible',
     close: 'Fermer',
-    noRules: 'Aucune règle disponible pour le moment'
+    noRules: 'Aucune règle disponible pour le moment',
+    recentMatches: 'Derniers matchs',
+    vs: 'vs',
+    victory: 'Victoire',
+    defeat: 'Défaite',
+    squadsChallenging: 'Escouades en recherche',
+    challenge: 'Défier',
+    mustChallenge: 'Une escouade vous attend !',
+    unknownSquad: 'Escouade mystère',
+    activeMatchFound: 'Match en cours détecté',
+    activeMatchDesc: 'Vous avez un match en cours. Vous devez le terminer avant d\'en lancer un autre.',
+    rejoin: 'Rejoindre le match'
   },
   en: {
     title: 'Stricker Mode',
     subtitle: 'Search and Destroy 5v5',
     restricted: 'Access restricted to administrators, staff and referees',
-    myRank: 'My Rank',
+    myRank: 'My Squad',
     points: 'Points',
     wins: 'Wins',
     losses: 'Losses',
@@ -202,13 +191,26 @@ const translations = {
     squadsSearching: 'squad(s) searching',
     needLeaderOrOfficer: 'Only the leader or an officer can start the search',
     youAre: 'You are',
+    joinTheFight: 'Join the fight!',
+    crushThem: 'Go crush them!',
     viewMaps: 'View Maps',
     viewRules: 'View Rules',
     availableMaps: 'Available Maps',
     strickerRules: 'Stricker Mode Rules',
     noMaps: 'No maps available',
     close: 'Close',
-    noRules: 'No rules available at the moment'
+    noRules: 'No rules available at the moment',
+    recentMatches: 'Recent matches',
+    vs: 'vs',
+    victory: 'Victory',
+    defeat: 'Defeat',
+    squadsChallenging: 'Squads looking for a match',
+    challenge: 'Challenge',
+    mustChallenge: 'A squad is waiting for you!',
+    unknownSquad: 'Mystery squad',
+    activeMatchFound: 'Active match detected',
+    activeMatchDesc: 'You have a match in progress. You must finish it before starting another.',
+    rejoin: 'Rejoin match'
   }
 };
 
@@ -235,12 +237,27 @@ const StrickerMode = () => {
   const [mySquad, setMySquad] = useState(null);
   const [onlineCount, setOnlineCount] = useState(0);
   const [squadsSearching, setSquadsSearching] = useState(0);
+  const [searchingSquads, setSearchingSquads] = useState([]); // List of squads to challenge
+  const [challengingSquad, setChallengingSquad] = useState(null); // Squad being challenged
   const [showMapsModal, setShowMapsModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [availableMaps, setAvailableMaps] = useState([]);
   const [loadingMaps, setLoadingMaps] = useState(false);
   const [rules, setRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
+  const [strickerStyle, setStrickerStyle] = useState('hardcore'); // 'hardcore' or 'cdl'
+  const [ggsecureConnected, setGgsecureConnected] = useState(null); // GGSecure connection status for PC players
+  const [recentMatches, setRecentMatches] = useState([
+    // Test matches for preview
+    { _id: 'test1', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'FTW', logo: '' }, team1Score: 6, team2Score: 4, winner: 'team1' },
+    { _id: 'test3', team1Squad: { tag: 'PRO', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 3, team2Score: 6, winner: 'team1' },
+    { _id: 'test4', team1Squad: { tag: 'ACE', logo: '' }, team2Squad: { tag: 'VIP', logo: '' }, team1Score: 6, team2Score: 5, winner: 'team1' },
+    { _id: 'test5', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'GOD', logo: '' }, team1Score: 6, team2Score: 3, winner: 'team1' },
+    { _id: 'test6', team1Squad: { tag: 'TOP', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 4, team2Score: 6, winner: 'team1' },
+    { _id: 'test7', team1Squad: { tag: 'REX', logo: '' }, team2Squad: { tag: 'ZAP', logo: '' }, team1Score: 6, team2Score: 1, winner: 'team1' },
+    { _id: 'test8', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'OOF', logo: '' }, team1Score: 6, team2Score: 0, winner: 'team1' },
+    { _id: 'test9', team1Squad: { tag: 'WAR', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 5, team2Score: 6, winner: 'team1' },
+  ]);
   
   // Check access
   const hasAccess = isAuthenticated && hasAdminAccess();
@@ -299,6 +316,7 @@ const StrickerMode = () => {
         setActiveMatch(data.match || null);
         setOnlineCount(data.onlineCount || 0);
         setSquadsSearching(data.squadsSearching || 0);
+        setSearchingSquads(data.searchingSquads || []);
       }
     } catch (err) {
       console.error('Error fetching matchmaking status:', err);
@@ -342,12 +360,55 @@ const StrickerMode = () => {
     }
   }, [hasAccess]);
   
+  // Fetch recent matches
+  const fetchRecentMatches = useCallback(async () => {
+    if (!hasAccess) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/stricker/matches/recent?limit=10`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setRecentMatches(data.matches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching recent matches:', err);
+    }
+  }, [hasAccess]);
+  
+  // Check GGSecure status for PC players
+  const checkGGSecure = async () => {
+    if (user?.platform !== 'PC') return true;
+    
+    try {
+      const response = await fetch(`${API_URL}/users/anticheat-status/${user._id || user.id}`, { credentials: 'include' });
+      const data = await response.json();
+      const connected = data.isOnline || data.reason === 'not_pc' || data.reason === 'api_key_missing';
+      setGgsecureConnected(connected);
+      return connected;
+    } catch {
+      setGgsecureConnected(true);
+      return true;
+    }
+  };
+  
   // Join queue
   const handleJoinQueue = async () => {
     if (!hasAccess || joiningQueue) return;
     
     setJoiningQueue(true);
     setError(null);
+    
+    // Check GGSecure for PC players
+    if (user?.platform === 'PC') {
+      const connected = await checkGGSecure();
+      if (!connected) {
+        setError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
+        setJoiningQueue(false);
+        return;
+      }
+    }
     
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/join`, {
@@ -387,11 +448,54 @@ const StrickerMode = () => {
       if (data.success) {
         setInQueue(false);
         setQueueSize(data.queueSize || 0);
+        // Refresh status immediately
+        fetchMatchmakingStatus();
       }
     } catch (err) {
       console.error('Error leaving queue:', err);
     } finally {
       setLeavingQueue(false);
+    }
+  };
+  
+  // Challenge a squad
+  const handleChallengeSquad = async (targetSquadId) => {
+    if (!hasAccess || challengingSquad) return;
+    
+    setChallengingSquad(targetSquadId);
+    setError(null);
+    
+    // Check GGSecure for PC players
+    if (user?.platform === 'PC') {
+      const connected = await checkGGSecure();
+      if (!connected) {
+        setError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
+        setChallengingSquad(null);
+        return;
+      }
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/stricker/matchmaking/challenge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ targetSquadId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        // Match created - will redirect via activeMatch
+        setActiveMatch(data.match);
+      } else {
+        setError(data.message);
+        // Refresh list in case squad left
+        fetchMatchmakingStatus();
+      }
+    } catch (err) {
+      setError('Erreur lors du défi');
+    } finally {
+      setChallengingSquad(null);
     }
   };
   
@@ -403,28 +507,26 @@ const StrickerMode = () => {
       fetchMatchmakingStatus();
       fetchConfig();
       fetchMySquad();
+      fetchRecentMatches();
     } else {
       setLoading(false);
     }
-  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad]);
+  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad, fetchRecentMatches]);
   
-  // Polling for matchmaking status
+  // Polling for matchmaking status - Always active for real-time updates
   useEffect(() => {
-    if (!hasAccess || !inQueue) return;
+    if (!hasAccess) return;
     
+    // Poll more frequently for real-time feel
     const interval = setInterval(() => {
       fetchMatchmakingStatus();
-    }, 3000);
+    }, 3000); // Every 3 seconds
     
     return () => clearInterval(interval);
-  }, [hasAccess, inQueue, fetchMatchmakingStatus]);
+  }, [hasAccess, fetchMatchmakingStatus]);
   
-  // Redirect to match if active
-  useEffect(() => {
-    if (activeMatch) {
-      navigate(`/stricker/match/${activeMatch._id}`);
-    }
-  }, [activeMatch, navigate]);
+  // Don't auto-redirect to match - let user stay on page and show banner instead
+  // The user can click the banner to rejoin
   
   // Loading state
   if (loading) {
@@ -496,7 +598,8 @@ const StrickerMode = () => {
   const fetchRules = async () => {
     setLoadingRules(true);
     try {
-      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/stricker-snd`, {
+      const subType = strickerStyle === 'cdl' ? 'stricker-cdl' : 'stricker-hardcore';
+      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/${subType}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -518,9 +621,7 @@ const StrickerMode = () => {
   };
   
   const handleShowRules = () => {
-    if (!rules) {
-      fetchRules();
-    }
+    fetchRules();
     setShowRulesModal(true);
   };
   
@@ -542,19 +643,27 @@ const StrickerMode = () => {
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
-              {/* Online count */}
-              <div className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-green-400 font-bold">{onlineCount}</span>
-                <span className="text-green-400/70 text-sm">{t.online}</span>
-              </div>
-              
-              {/* Squads searching */}
-              {squadsSearching > 0 && (
-                <div className="px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
-                  <span className="text-amber-400 font-bold">{squadsSearching}</span>
-                  <span className="text-amber-400/70 text-sm">{t.squadsSearching}</span>
+              {/* My Squad Display */}
+              {mySquad && (
+                <div 
+                  onClick={() => navigate(`/squad/${mySquad._id}`)}
+                  className="px-4 py-2 bg-lime-500/10 border border-lime-500/30 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-lime-500/20 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden border border-lime-500/30">
+                    {mySquad.logo ? (
+                      <img 
+                        src={mySquad.logo} 
+                        alt={mySquad.name} 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Users className="w-5 h-5 text-lime-400" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-white font-bold text-sm">{mySquad.name}</p>
+                    <p className="text-lime-400 text-xs">[{mySquad.tag}]</p>
+                  </div>
                 </div>
               )}
               
@@ -589,6 +698,74 @@ const StrickerMode = () => {
       </div>
       
       <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Recent Matches Ticker */}
+        {recentMatches.length > 0 && (
+          <div className="mb-6 bg-dark-900/80 border border-lime-500/20 rounded-xl overflow-hidden">
+            <div className="flex items-center">
+              <div className="px-4 py-3 bg-lime-500/10 border-r border-lime-500/20 flex-shrink-0">
+                <span className="text-lime-400 font-bold text-sm whitespace-nowrap">{t.recentMatches}</span>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <div className="flex animate-scroll-left">
+                  {[...recentMatches, ...recentMatches, ...recentMatches, ...recentMatches].map((match, index) => {
+                    const team1Won = match.winner === 'team1';
+                    const team1Score = match.team1Score || 0;
+                    const team1ScoreDisplay = team1Score === 2 ? '✓' : team1Score;
+                    const team2Score = match.team2Score || 0;
+                    const team2ScoreDisplay = team2Score === 2 ? '✓' : team2Score;
+                    return (
+                      <div 
+                        key={`${match._id}-${index}`}
+                        className="flex items-center gap-3 px-6 py-3 border-r border-lime-500/10 flex-shrink-0 hover:bg-lime-500/5 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/stricker/match/${match._id}`)}
+                      >
+                        {/* Team 1 */}
+                        <div className="flex items-center gap-2">
+                          {match.team1Squad?.logo && (
+                            <img 
+                              src={match.team1Squad.logo} 
+                              alt={match.team1Squad.tag}
+                              className="w-6 h-6 rounded object-cover"
+                            />
+                          )}
+                          <span className={`font-bold text-sm ${team1Won ? 'text-green-400' : 'text-gray-400'}`}>
+                            [{match.team1Squad?.tag || '???'}]
+                          </span>
+                        </div>
+                        
+                        {/* Score */}
+                        <div className="flex items-center gap-1">
+                          <span className={`font-black ${team1Won ? 'text-green-400' : 'text-red-400'}`}>
+                            {team1ScoreDisplay}
+                          </span>
+                          <span className="text-gray-500">-</span>
+                          <span className={`font-black ${!team1Won ? 'text-green-400' : 'text-red-400'}`}>
+                            {team2ScoreDisplay}
+                          </span>
+                        </div>
+                        
+                        {/* Team 2 */}
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-sm ${!team1Won ? 'text-green-400' : 'text-gray-400'}`}>
+                            [{match.team2Squad?.tag || '???'}]
+                          </span>
+                          {match.team2Squad?.logo && (
+                            <img 
+                              src={match.team2Squad.logo} 
+                              alt={match.team2Squad.tag}
+                              className="w-6 h-6 rounded object-cover"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* My Rank Card */}
           <div className="lg:col-span-1">
@@ -687,6 +864,30 @@ const StrickerMode = () => {
                 </div>
               )}
               
+              {/* Active Match Banner */}
+              {activeMatch && (
+                <div className="mb-4 p-4 bg-gradient-to-r from-orange-500/20 via-amber-500/20 to-orange-500/20 border border-orange-500/40 rounded-xl">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
+                        <Swords className="w-5 h-5 text-orange-400" />
+                      </div>
+                      <div>
+                        <p className="text-orange-300 font-bold">{t.activeMatchFound}</p>
+                        <p className="text-orange-400/70 text-sm">{t.activeMatchDesc}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/stricker/match/${activeMatch._id}`)}
+                      className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <Play className="w-4 h-4" />
+                      {t.rejoin}
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               {/* Squad Requirement Warning */}
               {(!mySquad || (mySquad.members?.length || 0) < 5 || (mySquad && (mySquad.members?.length || 0) >= 5 && !isLeaderOrOfficer)) && (
                 <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
@@ -725,11 +926,10 @@ const StrickerMode = () => {
                 <div className="flex-1">
                   {inQueue ? (
                     <div className="text-center">
-                      <div className="flex items-center justify-center gap-2 mb-2">
+                      <div className="flex items-center justify-center gap-2 mb-4">
                         <Loader2 className="w-5 h-5 text-lime-400 animate-spin" />
                         <span className="text-lime-400 font-bold">{t.inQueue}</span>
                       </div>
-                      <p className="text-gray-400 text-sm mb-4">{queueSize} {t.playersInQueue}</p>
                       <button
                         onClick={handleLeaveQueue}
                         disabled={leavingQueue}
@@ -741,6 +941,27 @@ const StrickerMode = () => {
                           <Square className="w-5 h-5" />
                         )}
                         {t.leaveQueue}
+                      </button>
+                    </div>
+                  ) : activeMatch ? (
+                    /* Block buttons when there's an active match */
+                    <button
+                      disabled={true}
+                      className="w-full px-6 py-4 font-bold rounded-xl bg-dark-800 text-gray-500 cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      <Lock className="w-5 h-5" />
+                      {t.joinQueue}
+                    </button>
+                  ) : searchingSquads.length > 0 ? (
+                    /* Block search button when squads are available - force challenge */
+                    <div className="text-center">
+                      <p className="text-orange-400 font-medium mb-2">{t.mustChallenge}</p>
+                      <button
+                        disabled={true}
+                        className="w-full px-6 py-4 font-bold rounded-xl bg-dark-800 text-gray-500 cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        <Lock className="w-5 h-5" />
+                        {t.joinQueue}
                       </button>
                     </div>
                   ) : (
@@ -765,6 +986,81 @@ const StrickerMode = () => {
                   )}
                 </div>
               </div>
+              
+              {/* List of squads looking for a match */}
+              {searchingSquads.length > 0 && !inQueue && !activeMatch && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                    <Flame className="w-5 h-5 text-orange-400" />
+                    {t.squadsChallenging}
+                  </h3>
+                  <div className="space-y-2">
+                    {searchingSquads.map((squad) => {
+                      // Get rank from points using hardcoded STRICKER_RANKS
+                      const points = squad.points || 0;
+                      const squadRank = getStrickerRank(points);
+                      
+                      const getBorderColor = () => {
+                        if (points < 250) return 'border-green-500/40';
+                        if (points < 500) return 'border-lime-500/40';
+                        if (points < 750) return 'border-yellow-500/40';
+                        if (points < 1000) return 'border-orange-500/40';
+                        if (points < 1500) return 'border-red-500/40';
+                        return 'border-rose-500/40';
+                      };
+                      const getSkullColor = () => {
+                        if (points < 250) return 'text-green-400';
+                        if (points < 500) return 'text-lime-400';
+                        if (points < 750) return 'text-yellow-400';
+                        if (points < 1000) return 'text-orange-400';
+                        if (points < 1500) return 'text-red-400';
+                        return 'text-rose-400';
+                      };
+                      const getButtonGradient = () => {
+                        if (points < 250) return 'from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600';
+                        if (points < 500) return 'from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600';
+                        if (points < 750) return 'from-yellow-500 to-amber-500 hover:from-yellow-600 hover:to-amber-600';
+                        if (points < 1000) return 'from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600';
+                        if (points < 1500) return 'from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600';
+                        return 'from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700';
+                      };
+                      
+                      return (
+                        <div 
+                          key={squad.squadId}
+                          className={`flex items-center justify-between p-4 bg-dark-800/80 border ${getBorderColor()} rounded-xl`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 h-12 rounded-lg bg-dark-700 flex items-center justify-center ${getSkullColor()}`}>
+                              <Skull className="w-7 h-7" />
+                            </div>
+                            <div>
+                              <p className="text-green-400 font-bold">+{squadRank.pointsWin} pts</p>
+                              <p className="text-red-400 text-sm">{squadRank.pointsLoss} pts</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => handleChallengeSquad(squad.squadId)}
+                            disabled={challengingSquad === squad.squadId || !canStartMatch}
+                            className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
+                              canStartMatch
+                                ? `bg-gradient-to-r ${getButtonGradient()} text-white`
+                                : 'bg-dark-700 text-gray-500 cursor-not-allowed'
+                            }`}
+                          >
+                            {challengingSquad === squad.squadId ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Swords className="w-4 h-4" />
+                            )}
+                            {t.challenge}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Squad Leaderboard */}
@@ -840,6 +1136,75 @@ const StrickerMode = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+        
+        {/* Points System Table */}
+        <div className="mt-10">
+          <div className="flex items-center justify-center gap-3 mb-6">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-lime-500/30 to-transparent" />
+            <h2 className="text-xl font-black text-white flex items-center gap-3">
+              <Coins className="w-6 h-6 text-lime-400" />
+              {language === 'fr' ? 'Système de Points' : 'Points System'}
+            </h2>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-lime-500/30 to-transparent" />
+          </div>
+          
+          {/* Horizontal Cards Layout */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {Object.values(STRICKER_RANKS).map((rank) => {
+              const isCurrentRank = currentRank.key === rank.key;
+              
+              return (
+                <div 
+                  key={rank.key}
+                  className={`relative overflow-hidden rounded-xl transition-all ${
+                    isCurrentRank 
+                      ? 'bg-gradient-to-br from-lime-500/20 to-green-500/10 border-2 border-lime-400 shadow-lg shadow-lime-500/20' 
+                      : 'bg-dark-900/80 border border-lime-500/20 hover:border-lime-500/40'
+                  }`}
+                >
+                  <div className="p-4 flex flex-col items-center">
+                    {/* Rank Logo */}
+                    <div className="relative w-16 h-16 mb-2">
+                      {isCurrentRank && (
+                        <div className="absolute inset-0 rounded-full bg-lime-500/30 blur-lg animate-pulse" />
+                      )}
+                      <img 
+                        src={rank.image} 
+                        alt={rank.name}
+                        className="relative w-full h-full object-contain drop-shadow-lg"
+                        onError={(e) => e.target.style.display = 'none'}
+                      />
+                    </div>
+                    
+                    {/* Rank Name */}
+                    <p className={`font-bold text-sm text-center truncate w-full ${isCurrentRank ? 'text-lime-400' : 'text-white'}`}>
+                      {rank.name}
+                    </p>
+                    
+                    {/* Points Range */}
+                    <p className="text-gray-500 text-xs mt-1">
+                      {rank.min} - {rank.max || '∞'}
+                    </p>
+                    
+                    {/* Loss Points Only */}
+                    <div className="mt-3">
+                      <p className="text-red-400 font-black text-xl">{rank.pointsLoss}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="mt-4 p-3 bg-lime-500/10 border border-lime-500/30 rounded-lg">
+            <p className="text-lime-400 text-sm text-center">
+              💡 {language === 'fr' 
+                ? 'Toutes les victoires rapportent +30 pts. Plus votre rang est élevé, plus vous perdez de points en cas de défaite.'
+                : 'All wins give +30 pts. The higher your rank, the more points you lose on defeat.'
+              }
+            </p>
           </div>
         </div>
         
@@ -1023,12 +1388,15 @@ const StrickerMode = () => {
       {/* Rules Modal */}
       {showRulesModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowRulesModal(false)}>
-          <div className="bg-dark-900 border border-purple-500/30 rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-purple-500/20">
+          <div className={`bg-dark-900 border ${strickerStyle === 'cdl' ? 'border-purple-500/30' : 'border-orange-500/30'} rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden`} onClick={(e) => e.stopPropagation()}>
+            <div className={`p-6 border-b ${strickerStyle === 'cdl' ? 'border-purple-500/20' : 'border-orange-500/20'}`}>
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <BookOpen className="w-7 h-7 text-purple-400" />
+                  <BookOpen className={`w-7 h-7 ${strickerStyle === 'cdl' ? 'text-purple-400' : 'text-orange-400'}`} />
                   {t.strickerRules}
+                  <span className={`text-sm px-2 py-1 rounded ${strickerStyle === 'cdl' ? 'bg-purple-500/20 text-purple-400' : 'bg-orange-500/20 text-orange-400'}`}>
+                    {strickerStyle === 'cdl' ? 'CDL' : 'Hardcore'}
+                  </span>
                 </h2>
                 <button
                   onClick={() => setShowRulesModal(false)}
@@ -1042,7 +1410,7 @@ const StrickerMode = () => {
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-100px)]">
               {loadingRules ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+                  <Loader2 className={`w-8 h-8 ${strickerStyle === 'cdl' ? 'text-purple-400' : 'text-orange-400'} animate-spin`} />
                 </div>
               ) : !rules ? (
                 <div className="text-center py-12 text-gray-400">
@@ -1052,12 +1420,12 @@ const StrickerMode = () => {
                 <div className="space-y-6">
                   {rules.title && rules.title[language] && (
                     <div className="mb-8">
-                      <h3 className="text-3xl font-black text-lime-400">{rules.title[language]}</h3>
+                      <h3 className={`text-3xl font-black ${strickerStyle === 'cdl' ? 'text-purple-400' : 'text-orange-400'}`}>{rules.title[language]}</h3>
                     </div>
                   )}
                   
                   {rules.sections && rules.sections.map((section, index) => (
-                    <div key={index} className="bg-dark-800/50 rounded-xl p-6 border border-purple-500/20">
+                    <div key={index} className={`bg-dark-800/50 rounded-xl p-6 border ${strickerStyle === 'cdl' ? 'border-purple-500/20' : 'border-orange-500/20'}`}>
                       <h4 className="text-xl font-bold text-white mb-4">{section.title[language]}</h4>
                       <div 
                         className="text-gray-300 prose prose-invert max-w-none"

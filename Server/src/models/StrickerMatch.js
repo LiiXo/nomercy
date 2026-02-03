@@ -228,6 +228,21 @@ const strickerMatchSchema = new mongoose.Schema({
     initiatedAt: Date,
     cancelledAt: Date
   },
+  // Votes d'annulation des référents (avant-match)
+  cancellationVotes: {
+    team1: { type: Boolean, default: null },
+    team2: { type: Boolean, default: null },
+    team1VotedAt: { type: Date, default: null },
+    team2VotedAt: { type: Date, default: null }
+  },
+  // Map bans by referents (each referent bans 1 map)
+  mapBans: {
+    team1BannedMap: { type: String, default: null },
+    team1BannedAt: { type: Date, default: null },
+    team2BannedMap: { type: String, default: null },
+    team2BannedAt: { type: Date, default: null },
+    currentTurn: { type: Number, enum: [1, 2], default: 1 } // Which referent's turn to ban
+  },
   // Match de test
   isTestMatch: {
     type: Boolean,

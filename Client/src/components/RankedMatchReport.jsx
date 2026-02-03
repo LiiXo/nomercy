@@ -228,11 +228,8 @@ const RankedMatchReport = ({
   
   // Only winning team players are candidates for MVP (include test players for voting)
   const winningTeamPlayers = allPlayers.filter(p => p.team === effectiveWinningTeam);
-  // Losing team players are the voters (real players only for counting required votes)
-  const losingTeamPlayers = realPlayers.filter(p => p.team === losingTeam);
-  
-  // User is on losing team = must vote
-  const userIsOnLosingTeam = !isWinner;
+  // ALL real players must vote for MVP
+  const allRealPlayers = realPlayers;
   
   // Count votes per player
   const voteCount = {};
@@ -248,17 +245,22 @@ const RankedMatchReport = ({
   const myVote = myVoteObj ? (myVoteObj.votedFor?._id || myVoteObj.votedFor)?.toString() : null;
   const hasVoted = !!myVoteObj;
   
-  // Required votes = losing team players count (1 for test matches)
-  const requiredVotes = isTestMatch ? 1 : losingTeamPlayers.length;
+  // Required votes = ALL real players count (1 for test matches)
+  const requiredVotes = isTestMatch ? 1 : allRealPlayers.length;
   
   // Show MVP voting only if:
   // 1. MVP voting is active and not confirmed
-  // 2. User is on the LOSING team (losers vote for winners)
+  // 2. ALL players can vote (both winning and losing team)
   // 3. onMvpVote callback is provided
-  const showMvpVoting = mvpVotingActive && !mvpConfirmed && onMvpVote && userIsOnLosingTeam;
+  const showMvpVoting = mvpVotingActive && !mvpConfirmed && onMvpVote;
   
-  // User must vote before closing (losing team only)
-  const mustVoteBeforeClose = showMvpVoting && !hasVoted;
+  // User must vote before closing if:
+  // - MVP voting callback is provided (meaning MVP voting is expected)
+  // - MVP has not been confirmed yet
+  // - User has not voted yet
+  // Note: We don't depend on mvpVotingActive here to avoid timing issues where
+  // the match data might not have votingActive=true yet when the report is first shown
+  const mustVoteBeforeClose = onMvpVote && !mvpConfirmed && !hasVoted;
   
   // Handle MVP vote
   const handleMvpVote = async (mvpPlayerId) => {

@@ -7,8 +7,11 @@ const router = express.Router();
 // Valid subTypes for each location
 const VALID_SUBTYPES = {
   rankings: ['duo-trio', 'squad-team'],
-  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint']
+  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd', 'stricker-hardcore', 'stricker-cdl']
 };
+
+// Valid modes
+const VALID_MODES = ['hardcore', 'cdl', 'stricker'];
 
 // ==================== PUBLIC ROUTES ====================
 
@@ -28,10 +31,10 @@ router.get('/:mode/:location/:subType', async (req, res) => {
   try {
     const { mode, location, subType } = req.params;
     
-    if (!['hardcore', 'cdl'].includes(mode)) {
+    if (!VALID_MODES.includes(mode)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Invalid mode. Must be: hardcore or cdl' 
+        message: `Invalid mode. Must be: ${VALID_MODES.join(', ')}` 
       });
     }
     
@@ -77,10 +80,10 @@ router.get('/:mode/:location', async (req, res) => {
   try {
     const { mode, location } = req.params;
     
-    if (!['hardcore', 'cdl'].includes(mode)) {
+    if (!VALID_MODES.includes(mode)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Invalid mode. Must be: hardcore or cdl' 
+        message: `Invalid mode. Must be: ${VALID_MODES.join(', ')}` 
       });
     }
     
@@ -130,7 +133,7 @@ router.post('/admin/:mode/:location/:subType', verifyToken, requireStaff, async 
     const { mode, location, subType } = req.params;
     const { title, sections, isActive } = req.body;
     
-    if (!['hardcore', 'cdl'].includes(mode)) {
+    if (!VALID_MODES.includes(mode)) {
       return res.status(400).json({ 
         success: false, 
         message: 'Invalid mode' 
@@ -210,10 +213,10 @@ router.post('/admin/:mode/:location/:subType/section', verifyToken, requireStaff
       });
     }
     
-    if (!['hardcore', 'cdl'].includes(mode)) {
+    if (!VALID_MODES.includes(mode)) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Invalid mode. Must be: hardcore or cdl' 
+        message: `Invalid mode. Must be: ${VALID_MODES.join(', ')}` 
       });
     }
     

@@ -5,6 +5,14 @@ export default {
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
+    screens: {
+      'xs': '420px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+    },
     extend: {
       colors: {
         // Neon accent colors
@@ -88,6 +96,7 @@ export default {
         'gradient': 'gradient 3s ease infinite',
         'spin-slow': 'spin 20s linear infinite',
         'shine': 'shine 2s ease-in-out infinite',
+        'marquee': 'marquee 30s linear infinite',
       },
       keyframes: {
         float: {
@@ -151,6 +160,10 @@ export default {
         shine: {
           '0%': { transform: 'translateX(-100%) skewX(-12deg)' },
           '100%': { transform: 'translateX(200%) skewX(-12deg)' },
+        },
+        marquee: {
+          '0%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(-50%)' },
         },
       },
       boxShadow: {

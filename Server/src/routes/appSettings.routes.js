@@ -77,6 +77,21 @@ const getPublicSettings = async (req, res) => {
         rankedSettings: {
           rankPointsThresholds: settings.rankedSettings?.rankPointsThresholds || DEFAULT_RANK_THRESHOLDS
         }
+      },
+      // Stricker mode settings
+      strickerSettings: settings.strickerSettings || {
+        pointsPerWin: 30,
+        pointsPerLoss: -15,
+        rankPointsThresholds: {
+          recrues: { min: 0, max: 499 },
+          operateurs: { min: 500, max: 999 },
+          veterans: { min: 1000, max: 1499 },
+          commandants: { min: 1500, max: 1999 },
+          seigneurs: { min: 2000, max: 2499 },
+          immortel: { min: 2500, max: null }
+        },
+        pointsLossPerRankDiff: { 0: -15, 1: -12, 2: -9, 3: -6, 4: -3, 5: -1 },
+        bonusPointsForUpset: { 0: 0, 1: 5, 2: 10, 3: 15, 4: 20, 5: 30 }
       }
     });
   } catch (error) {
@@ -107,7 +122,7 @@ router.get('/admin', verifyToken, requireStaff, async (req, res) => {
 // Update app settings (admin/staff)
 router.put('/admin', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { features, globalAlerts, maintenance, banner, staffAdminAccess, rankedSettings, ladderSettings } = req.body;
+    const { features, globalAlerts, maintenance, banner, staffAdminAccess, rankedSettings, ladderSettings, strickerSettings } = req.body;
     
     let settings = await AppSettings.findOne();
     if (!settings) {
@@ -183,6 +198,47 @@ router.put('/admin', verifyToken, requireStaff, async (req, res) => {
       }
       
       settings.markModified('rankedSettings');
+    }
+    
+    // Handle strickerSettings updates
+    if (strickerSettings) {
+      if (!settings.strickerSettings) {
+        settings.strickerSettings = {};
+      }
+      
+      // Update points per win/loss
+      if (typeof strickerSettings.pointsPerWin === 'number') {
+        settings.strickerSettings.pointsPerWin = strickerSettings.pointsPerWin;
+      }
+      if (typeof strickerSettings.pointsPerLoss === 'number') {
+        settings.strickerSettings.pointsPerLoss = strickerSettings.pointsPerLoss;
+      }
+      
+      // Update rank points thresholds
+      if (strickerSettings.rankPointsThresholds) {
+        settings.strickerSettings.rankPointsThresholds = {
+          ...settings.strickerSettings.rankPointsThresholds,
+          ...strickerSettings.rankPointsThresholds
+        };
+      }
+      
+      // Update points loss per rank difference
+      if (strickerSettings.pointsLossPerRankDiff) {
+        settings.strickerSettings.pointsLossPerRankDiff = {
+          ...settings.strickerSettings.pointsLossPerRankDiff,
+          ...strickerSettings.pointsLossPerRankDiff
+        };
+      }
+      
+      // Update bonus points for upset
+      if (strickerSettings.bonusPointsForUpset) {
+        settings.strickerSettings.bonusPointsForUpset = {
+          ...settings.strickerSettings.bonusPointsForUpset,
+          ...strickerSettings.bonusPointsForUpset
+        };
+      }
+      
+      settings.markModified('strickerSettings');
     }
     
     // Handle ladderSettings updates
