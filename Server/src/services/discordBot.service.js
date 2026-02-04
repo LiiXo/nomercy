@@ -512,7 +512,9 @@ export const logArbitratorCall = async (match, calledBy) => {
  * Sends notification when a player calls for an arbitrator during a Stricker match
  */
 export const logStrickerArbitratorCall = async (match, calledBy) => {
-  const matchUrl = `https://nomercy.ggsecure.io/stricker/match/${match._id}`;
+  // Use the match mode (hardcore or cdl) for the URL
+  const mode = match.mode || 'hardcore';
+  const matchUrl = `https://nomercy.ggsecure.io/${mode}/stricker/match/${match._id}`;
   
   // Get team names
   const team1Name = match.team1Squad?.name || 'Equipe 1';

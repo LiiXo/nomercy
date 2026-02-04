@@ -775,16 +775,30 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
     const { limit = 50, page = 1 } = req.query;
     const skip = (page - 1) * limit;
     
+    console.log('[STRICKER LEADERBOARD] Fetching squad leaderboard...');
+    
     // Get squads with stricker stats sorted by points
     const squads = await Squad.aggregate([
       {
         $match: {
           isActive: true,
-          'statsStricker.points': { $gt: 0 }
+          isDeleted: { $ne: true },
+          $or: [
+            { 'statsStricker.points': { $gt: 0 } },
+            { 'statsStricker.wins': { $gt: 0 } },
+            { 'statsStricker.losses': { $gt: 0 } }
+          ]
         }
       },
       {
-        $sort: { 'statsStricker.points': -1 }
+        $addFields: {
+          strickerPoints: { $ifNull: ['$statsStricker.points', 0] },
+          strickerWins: { $ifNull: ['$statsStricker.wins', 0] },
+          strickerLosses: { $ifNull: ['$statsStricker.losses', 0] }
+        }
+      },
+      {
+        $sort: { strickerPoints: -1, strickerWins: -1 }
       },
       {
         $skip: skip
@@ -807,24 +821,47 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
           tag: 1,
           logo: 1,
           stats: '$statsStricker',
+          strickerPoints: 1,
+          strickerWins: 1,
+          strickerLosses: 1,
           memberCount: { $size: '$members' },
           leader: { $arrayElemAt: ['$leaderInfo.username', 0] }
         }
       }
     ]);
     
+    console.log(`[STRICKER LEADERBOARD] Found ${squads.length} squads with Stricker stats`);
+    
+    // Debug: Show first 3 squads
+    if (squads.length > 0) {
+      console.log('[STRICKER LEADERBOARD] Sample squads:', squads.slice(0, 3).map(s => ({
+        tag: s.tag,
+        points: s.strickerPoints,
+        wins: s.strickerWins,
+        losses: s.strickerLosses,
+        hasStatsStricker: !!s.stats
+      })));
+    }
+    
     // Add rank position
     const leaderboard = squads.map((squad, index) => ({
       ...squad,
       position: skip + index + 1,
-      rank: getStrickerRank(squad.stats?.points || 0),
-      rankImage: STRICKER_RANKS[getStrickerRank(squad.stats?.points || 0)]?.image
+      rank: getStrickerRank(squad.stats?.points || squad.strickerPoints || 0),
+      rankImage: STRICKER_RANKS[getStrickerRank(squad.stats?.points || squad.strickerPoints || 0)]?.image
     }));
     
     const totalSquads = await Squad.countDocuments({
       isActive: true,
-      'statsStricker.points': { $gt: 0 }
+      isDeleted: { $ne: true },
+      $or: [
+        { 'statsStricker.points': { $gt: 0 } },
+        { 'statsStricker.wins': { $gt: 0 } },
+        { 'statsStricker.losses': { $gt: 0 } }
+      ]
     });
+    
+    console.log(`[STRICKER LEADERBOARD] Total squads in leaderboard: ${totalSquads}`);
     
     res.json({
       success: true,
@@ -937,6 +974,16 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
     const myTeam = userPlayer?.team || null;
     const isReferent = match.team1Referent?._id?.toString() === req.user._id.toString() ||
                        match.team2Referent?._id?.toString() === req.user._id.toString();
+    
+    console.log('[STRICKER GET MATCH] Debug:', {
+      matchId,
+      userId: req.user._id.toString(),
+      team1ReferentId: match.team1Referent?._id?.toString(),
+      team2ReferentId: match.team2Referent?._id?.toString(),
+      isReferent,
+      myTeam,
+      matchStatus: match.status
+    });
     
     // Get available members for roster selection if active
     let availableMembers = [];
@@ -1785,15 +1832,7 @@ router.post('/match/:matchId/result', verifyToken, checkStrickerAccess, async (r
         match.status = 'completed';
         match.completedAt = new Date();
         
-        // Activate MVP voting
-        match.mvp = {
-          votingActive: true,
-          confirmed: false,
-          bonusPoints: 5,
-          votes: []
-        };
-        
-        // Distribute rewards
+        // Distribute rewards (no MVP system for Stricker)
         await distributeStrickerRewards(match);
       } else {
         // Disagreement - mark as disputed
@@ -1845,8 +1884,9 @@ async function distributeStrickerRewards(match) {
     // Fixed points for victory (+30 for everyone)
     const POINTS_WIN = 30;
     
-    // Award munitions to both squads - 20 munitions per match
-    const CRANES_PER_MATCH = 20;
+    // Munitions rewards - Winners get 50, losers get 10 (consolation)
+    const CRANES_WIN = 50;
+    const CRANES_LOSS = 10;
     const squadsAwarded = new Set();
     
     // Process each player
@@ -1899,14 +1939,19 @@ async function distributeStrickerRewards(match) {
           }
           
           // Award munitions only once per squad per match
+          // Winners get 50 munitions, losers get 10 munitions (consolation)
           if (!squadsAwarded.has(squadId)) {
-            squad.cranes = (squad.cranes || 0) + CRANES_PER_MATCH;
+            const cranesReward = isWinner ? CRANES_WIN : CRANES_LOSS;
+            squad.cranes = (squad.cranes || 0) + cranesReward;
             squadsAwarded.add(squadId);
-            cranesAwarded = CRANES_PER_MATCH;
-            console.log(`[STRICKER] Squad ${squad.tag} received ${CRANES_PER_MATCH} munitions (total: ${squad.cranes})`);
+            cranesAwarded = cranesReward;
+            console.log(`[STRICKER] Squad ${squad.tag} (${squad._id}) ${isWinner ? 'WON' : 'LOST'} - Stats: ${oldSquadPoints} → ${squad.statsStricker.points} pts (${squadPointsChange > 0 ? '+' : ''}${squadPointsChange}), ${squad.statsStricker.wins}W/${squad.statsStricker.losses}L - Munitions: ${cranesReward} (total: ${squad.cranes})`);
           }
           
           await squad.save();
+          console.log(`[STRICKER] Squad ${squad.tag} saved successfully. Current statsStricker:`, squad.statsStricker);
+        } else {
+          console.warn(`[STRICKER] Squad ${squadId} not found for player ${user.username}`);
         }
       }
       
@@ -2024,7 +2069,12 @@ router.get('/history/recent', verifyToken, checkStrickerAccess, async (req, res)
     
     const matches = await StrickerMatch.find({
       status: 'completed',
-      isTestMatch: { $ne: true }
+      isTestMatch: { $ne: true },
+      winner: { $exists: true, $ne: null }, // Must have a winner
+      $or: [
+        { team1Score: { $gt: 0 } },
+        { team2Score: { $gt: 0 } }
+      ] // At least one team must have scored
     })
     .populate('players.user', 'username avatarUrl discordAvatar discordId')
     .populate('team1Squad', 'name tag logo')
@@ -2032,10 +2082,17 @@ router.get('/history/recent', verifyToken, checkStrickerAccess, async (req, res)
     .sort({ completedAt: -1 })
     .limit(Math.min(parseInt(limit), 50));
     
+    // Additional filter for safety - exclude any match without valid scores
+    const validMatches = matches.filter(match => {
+      return match.status === 'completed' && 
+             match.winner && 
+             (match.team1Score > 0 || match.team2Score > 0);
+    });
+    
     res.json({
       success: true,
-      matches,
-      total: matches.length
+      matches: validMatches,
+      total: validMatches.length
     });
   } catch (error) {
     console.error('Stricker recent history error:', error);
@@ -2200,7 +2257,9 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
       }
       
       // Refund squad stats and munitions
-      const CRANES_PER_MATCH = 20;
+      // Winners had 50 munitions, losers had 10 munitions
+      const CRANES_WIN = 50;
+      const CRANES_LOSS = 10;
       
       if (match.team1Squad) {
         const squad1 = await Squad.findById(match.team1Squad._id);
@@ -2209,12 +2268,14 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
           if (match.winner === 1) {
             squad1.statsStricker.wins = Math.max(0, (squad1.statsStricker.wins || 0) - 1);
             squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) - (rewards.pointsWin || 35));
+            // Refund winner munitions
+            squad1.cranes = Math.max(0, (squad1.cranes || 0) - CRANES_WIN);
           } else {
             squad1.statsStricker.losses = Math.max(0, (squad1.statsStricker.losses || 0) - 1);
             squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
+            // Refund loser munitions
+            squad1.cranes = Math.max(0, (squad1.cranes || 0) - CRANES_LOSS);
           }
-          // Refund munitions
-          squad1.cranes = Math.max(0, (squad1.cranes || 0) - CRANES_PER_MATCH);
           await squad1.save();
         }
       }
@@ -2226,12 +2287,14 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
           if (match.winner === 2) {
             squad2.statsStricker.wins = Math.max(0, (squad2.statsStricker.wins || 0) - 1);
             squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) - (rewards.pointsWin || 35));
+            // Refund winner munitions
+            squad2.cranes = Math.max(0, (squad2.cranes || 0) - CRANES_WIN);
           } else {
             squad2.statsStricker.losses = Math.max(0, (squad2.statsStricker.losses || 0) - 1);
             squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) + Math.abs(rewards.pointsLoss || 18));
+            // Refund loser munitions
+            squad2.cranes = Math.max(0, (squad2.cranes || 0) - CRANES_LOSS);
           }
-          // Refund munitions
-          squad2.cranes = Math.max(0, (squad2.cranes || 0) - CRANES_PER_MATCH);
           await squad2.save();
         }
       }
@@ -2277,195 +2340,6 @@ router.patch('/admin/matches/:matchId/status', verifyToken, checkStrickerAccess,
     });
   } catch (error) {
     console.error('Admin update stricker match status error:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-});
-
-// ==================== MVP VOTING ====================
-
-// Vote for MVP (Most Valuable Player) after match winner is confirmed
-// RULES: Losing team votes for a player from the WINNING team
-router.post('/match/:matchId/mvp-vote', verifyToken, checkStrickerAccess, async (req, res) => {
-  try {
-    const { matchId } = req.params;
-    const { mvpPlayerId } = req.body;
-    
-    if (!mvpPlayerId) {
-      return res.status(400).json({ success: false, message: 'ID du joueur MVP requis' });
-    }
-    
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Utilisateur non trouv\u00e9' });
-    }
-    
-    const match = await StrickerMatch.findById(matchId);
-    if (!match) {
-      return res.status(404).json({ success: false, message: 'Match non trouv\u00e9' });
-    }
-    
-    // Only allow MVP voting when match is completed
-    if (match.status !== 'completed') {
-      return res.status(400).json({ success: false, message: 'Le match doit \u00eatre termin\u00e9 pour voter pour le MVP' });
-    }
-    
-    // Check if MVP voting is active and not already confirmed
-    if (!match.mvp?.votingActive) {
-      return res.status(400).json({ success: false, message: 'Le vote MVP n\'est pas actif' });
-    }
-    
-    if (match.mvp?.confirmed) {
-      return res.status(400).json({ success: false, message: 'Le MVP a d\u00e9j\u00e0 \u00e9t\u00e9 \u00e9lu' });
-    }
-    
-    // Check if user is a participant in the match
-    const voterPlayer = match.players.find(p => 
-      p.user && p.user.toString() === req.user._id.toString()
-    );
-    
-    if (!voterPlayer) {
-      return res.status(403).json({ success: false, message: 'Vous n\'\u00eates pas un participant de ce match' });
-    }
-    
-    // Check if user has already voted
-    const hasVoted = match.mvp.votes.some(v => 
-      v.voter && v.voter.toString() === req.user._id.toString()
-    );
-    
-    if (hasVoted) {
-      return res.status(400).json({ success: false, message: 'Vous avez d\u00e9j\u00e0 vot\u00e9 pour le MVP' });
-    }
-    
-    // Determine winning and losing teams
-    const winningTeam = match.result.winner;
-    const losingTeam = winningTeam === 1 ? 2 : 1;
-    
-    // RULE: Only LOSING team can vote for MVP
-    if (voterPlayer.team !== losingTeam) {
-      return res.status(403).json({ success: false, message: 'Seule l\'\u00e9quipe perdante peut voter pour le MVP' });
-    }
-    
-    // Verify that the voted player is from the WINNING team
-    const votedPlayer = match.players.find(p => 
-      p.user && p.user.toString() === mvpPlayerId
-    );
-    
-    if (!votedPlayer) {
-      return res.status(400).json({ success: false, message: 'Joueur non trouv\u00e9 dans ce match' });
-    }
-    
-    if (votedPlayer.team !== winningTeam) {
-      return res.status(400).json({ success: false, message: 'Vous devez voter pour un joueur de l\'\u00e9quipe gagnante' });
-    }
-    
-    // Record the vote
-    match.mvp.votes.push({
-      voter: req.user._id,
-      votedFor: mvpPlayerId,
-      votedAt: new Date()
-    });
-    
-    // Count votes for each player
-    const voteCountMap = {};
-    for (const vote of match.mvp.votes) {
-      const key = vote.votedFor.toString();
-      voteCountMap[key] = (voteCountMap[key] || 0) + 1;
-    }
-    
-    // Get losing team player count
-    const losingTeamPlayers = match.players.filter(p => 
-      p.team === losingTeam && !p.isFake && p.user
-    );
-    const totalLosingTeamPlayers = losingTeamPlayers.length;
-    const totalMvpVotes = match.mvp.votes.length;
-    
-    // MVP is confirmed when majority of losing team has voted (50%+ of actual votes)
-    const requiredVotes = Math.ceil(totalLosingTeamPlayers / 2);
-    
-    let mvpConfirmed = false;
-    let mvpMessage = 'Vote MVP enregistr\u00e9';
-    
-    // Check if we have enough votes to determine MVP
-    if (totalMvpVotes >= requiredVotes) {
-      // Find player with most votes
-      let maxVotes = 0;
-      let mvpWinner = null;
-      
-      for (const [playerId, count] of Object.entries(voteCountMap)) {
-        if (count > maxVotes) {
-          maxVotes = count;
-          mvpWinner = playerId;
-        }
-      }
-      
-      if (mvpWinner && maxVotes >= Math.ceil(totalMvpVotes / 2)) {
-        // MVP confirmed!
-        match.mvp.confirmed = true;
-        match.mvp.player = mvpWinner;
-        match.mvp.votingActive = false;
-        mvpConfirmed = true;
-        mvpMessage = 'MVP \u00e9lu !';
-        
-        // Award MVP bonus points
-        const mvpUser = await User.findById(mvpWinner);
-        if (mvpUser) {
-          if (!mvpUser.statsStricker) mvpUser.statsStricker = { points: 0, wins: 0, losses: 0, xp: 0 };
-          mvpUser.statsStricker.points = (mvpUser.statsStricker.points || 0) + match.mvp.bonusPoints;
-          await mvpUser.save();
-          
-          // Update player rewards in match
-          const mvpPlayer = match.players.find(p => p.user?.toString() === mvpWinner);
-          if (mvpPlayer) {
-            mvpPlayer.rewards = mvpPlayer.rewards || {};
-            mvpPlayer.rewards.isMvp = true;
-            mvpPlayer.rewards.mvpBonus = match.mvp.bonusPoints;
-            mvpPlayer.rewards.newPoints = mvpUser.statsStricker.points;
-            match.markModified('players');
-          }
-          
-          console.log(`[STRICKER MVP] ${mvpUser.username} elected as MVP with ${maxVotes} votes, +${match.mvp.bonusPoints} bonus points`);
-        }
-      }
-    }
-    
-    await match.save();
-    
-    // Emit socket event for MVP vote update
-    const io = req.app.get('io');
-    if (io) {
-      const populatedMatch = await StrickerMatch.findById(matchId)
-        .populate('players.user', 'username avatarUrl discordAvatar discordId')
-        .populate('mvp.player', 'username avatarUrl discordAvatar discordId')
-        .populate('mvp.votes.voter', 'username')
-        .populate('mvp.votes.votedFor', 'username avatarUrl discordAvatar discordId');
-      
-      io.to(`stricker-match-${matchId}`).emit('strickerMatchUpdate', { matchId });
-      
-      if (mvpConfirmed) {
-        io.to(`stricker-match-${matchId}`).emit('strickerMvpConfirmed', {
-          matchId,
-          mvp: populatedMatch.mvp.player,
-          bonusPoints: match.mvp.bonusPoints,
-          voteCount: maxVotes
-        });
-      }
-    }
-    
-    res.json({
-      success: true,
-      message: mvpMessage,
-      mvpStats: {
-        votes: totalMvpVotes,
-        totalPlayers: totalLosingTeamPlayers,
-        requiredVotes,
-        winningTeam,
-        losingTeam,
-        confirmed: mvpConfirmed,
-        mvpWinner: mvpConfirmed ? match.mvp.player : null
-      }
-    });
-  } catch (error) {
-    console.error('Stricker MVP vote error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

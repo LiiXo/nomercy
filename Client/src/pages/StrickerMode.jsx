@@ -859,7 +859,7 @@ const StrickerMode = () => {
                       <div 
                         key={`${match._id}-${index}`}
                         className="flex items-center gap-3 px-6 py-3 border-r border-lime-500/10 flex-shrink-0 hover:bg-lime-500/5 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/stricker/match/${match._id}`)}
+                        onClick={() => navigate(`/${mode || 'hardcore'}/stricker/match/${match._id}`)}
                       >
                         {/* Team 1 */}
                         <div className="flex items-center gap-2">
@@ -1044,7 +1044,7 @@ const StrickerMode = () => {
                       </div>
                     </div>
                     <button
-                      onClick={() => navigate(`/stricker/match/${activeMatch._id}`)}
+                      onClick={() => navigate(`/${mode || 'hardcore'}/stricker/match/${activeMatch._id}`)}
                       className="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold rounded-xl transition-all flex items-center gap-2 whitespace-nowrap"
                     >
                       <Play className="w-4 h-4" />

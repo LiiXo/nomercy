@@ -169,10 +169,17 @@ const translations = {
     cranes: 'munitions',
     validateWinner: 'Valider le gagnant',
     validateWinnerDesc: 'Les deux r\u00e9f\u00e9rents doivent valider le gagnant',
-    onlyReferentCanVote: 'Seul le r\u00e9f\u00e9rent peut valider',
-    youAreReferent: 'Vous \u00eates r\u00e9f\u00e9rent',
-    waitingReferentVote: 'En attente de la validation des r\u00e9f\u00e9rents...',
-    bothMustValidate: 'Les deux r\u00e9f\u00e9rents doivent \u00eatre d\'accord'
+    onlyReferentCanVote: 'Seul le référent peut valider',
+    youAreReferent: 'Vous êtes référent',
+    waitingReferentVote: 'En attente de la validation des référents...',
+    bothMustValidate: 'Les deux référents doivent être d\'accord',
+    matchStartTime: 'Heure de début',
+    requestCancellation: 'Demander l\'annulation',
+    cancellationRequested: 'Annulation demandée',
+    waitingOpponentCancelResponse: 'En attente de la réponse adverse',
+    opponentRequestedCancellation: 'L\'équipe adverse demande l\'annulation',
+    acceptCancellation: 'Accepter',
+    refuseCancellation: 'Refuser'
   },
   en: {
     loading: 'Loading...',
@@ -276,7 +283,14 @@ const translations = {
     onlyReferentCanVote: 'Only the referent can validate',
     youAreReferent: 'You are the referent',
     waitingReferentVote: 'Waiting for referent validation...',
-    bothMustValidate: 'Both referents must agree'
+    bothMustValidate: 'Both referents must agree',
+    matchStartTime: 'Start time',
+    requestCancellation: 'Request cancellation',
+    cancellationRequested: 'Cancellation requested',
+    waitingOpponentCancelResponse: 'Waiting for opponent response',
+    opponentRequestedCancellation: 'Opponent team requests cancellation',
+    acceptCancellation: 'Accept',
+    refuseCancellation: 'Refuse'
   }
 };
 
@@ -359,6 +373,14 @@ const StrickerMatchSheet = () => {
       const data = await response.json();
       
       if (data.success) {
+        console.log('[StrickerMatchSheet] Match data:', {
+          status: data.match.status,
+          isReferent: data.isReferent,
+          myTeam: data.myTeam,
+          team1Referent: data.match.team1Referent,
+          team2Referent: data.match.team2Referent,
+          userId: user?._id
+        });
         setMatch(data.match);
         setMyTeam(data.myTeam);
         setIsReferent(data.isReferent);
@@ -620,11 +642,6 @@ const StrickerMatchSheet = () => {
           },
           oldRank: { points: rewards.oldPoints || 0 },
           newRank: { points: rewards.newPoints || 0 },
-          isMvp: rewards.isMvp || false,
-          mvpBonus: rewards.mvpBonus || 5,
-          mvpPlayer: match.mvp?.player || null,
-          winningTeam: winnerTeam,
-          userTeam: currentPlayer.team,
           squadName: myTeam === 1 ? match.team1Squad?.name : match.team2Squad?.name,
           cranesEarned: rewards.cranesEarned || 0
         });
@@ -635,29 +652,12 @@ const StrickerMatchSheet = () => {
     }
   }, [match, user, matchReportShown, myTeam]);
 
-  // MVP vote handler
-  const handleMvpVote = async (mvpPlayerId) => {
-    try {
-      const response = await fetch(`${API_URL}/stricker/match/${matchId}/mvp-vote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ mvpPlayerId })
-      });
-      const data = await response.json();
-      
-      if (data.success) {
-        fetchMatch(); // Refresh to get updated MVP status
-      }
-    } catch (err) {
-      console.error('Error voting for MVP:', err);
-    }
-  };
-
-  // Select roster member
+  // Select roster member with optimistic UI
+  const [selectingMember, setSelectingMember] = useState(null);
   const handleSelectRosterMember = async (memberId) => {
-    if (!isReferent) return;
+    if (!isReferent || selectingMember) return;
     
+    setSelectingMember(memberId);
     try {
       const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/select`, {
         method: 'POST',
@@ -668,17 +668,21 @@ const StrickerMatchSheet = () => {
       const data = await response.json();
       
       if (data.success) {
-        fetchMatch();
+        await fetchMatch();
       }
     } catch (err) {
       console.error('Error selecting roster member:', err);
+    } finally {
+      setSelectingMember(null);
     }
   };
 
-  // Deselect/remove roster member
+  // Deselect/remove roster member with optimistic UI
+  const [deselectingMember, setDeselectingMember] = useState(null);
   const handleDeselectRosterMember = async (memberId) => {
-    if (!isReferent) return;
+    if (!isReferent || deselectingMember) return;
     
+    setDeselectingMember(memberId);
     try {
       const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/deselect`, {
         method: 'POST',
@@ -689,10 +693,12 @@ const StrickerMatchSheet = () => {
       const data = await response.json();
       
       if (data.success) {
-        fetchMatch();
+        await fetchMatch();
       }
     } catch (err) {
       console.error('Error deselecting roster member:', err);
+    } finally {
+      setDeselectingMember(null);
     }
   };
 
@@ -1144,9 +1150,17 @@ const StrickerMatchSheet = () => {
                   const equippedTitle = playerUser.equippedTitle;
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
                   const canRemove = isReferent && myTeam === 1 && !player.isReferent;
+                  const isDeselecting = deselectingMember === (playerUser._id || player.user);
                   
                   return (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-lime-500/10 border border-lime-500/30 rounded-xl">
+                    <div 
+                      key={idx} 
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
+                        isDeselecting 
+                          ? 'bg-red-500/20 border border-red-500/50 scale-95 opacity-50' 
+                          : 'bg-lime-500/10 border border-lime-500/30 hover:bg-lime-500/15 hover:border-lime-500/50'
+                      }`}
+                    >
                       <img 
                         src={getUserAvatar(playerUser)} 
                         alt={player.username}
@@ -1169,10 +1183,15 @@ const StrickerMatchSheet = () => {
                       {canRemove && (
                         <button
                           onClick={() => handleDeselectRosterMember(playerUser._id || player.user)}
-                          className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          disabled={isDeselecting}
+                          className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/30 rounded-lg transition-all hover:scale-110 disabled:opacity-50"
                           title="Retirer du roster"
                         >
-                          <X className="w-4 h-4" />
+                          {isDeselecting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <X className="w-4 h-4" />
+                          )}
                         </button>
                       )}
                     </div>
@@ -1195,26 +1214,29 @@ const StrickerMatchSheet = () => {
                 <Users className="w-5 h-5 text-gray-400" />
                 {t.availableMembers}
               </h3>
-              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+              <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
                 {rosterSelection.availableMembers.map((member, idx) => {
                   const canSelect = canSelectPlayers;
                   const equippedTitle = member.equippedTitle;
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                  const isSelecting = selectingMember === member._id;
                   
                   return (
                     <div 
                       key={idx} 
-                      className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                        canSelect 
-                          ? 'bg-dark-800 border border-lime-500/30 hover:border-lime-500 cursor-pointer' 
-                          : 'bg-dark-800/50 border border-gray-700'
+                      className={`group flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
+                        isSelecting
+                          ? 'bg-lime-500/30 border border-lime-500 opacity-70'
+                          : canSelect 
+                            ? 'bg-dark-800 border border-lime-500/30 hover:border-lime-500 hover:bg-lime-500/10 cursor-pointer' 
+                            : 'bg-dark-800/50 border border-gray-700 opacity-50'
                       }`}
-                      onClick={() => canSelect && handleSelectRosterMember(member._id)}
+                      onClick={() => canSelect && !isSelecting && handleSelectRosterMember(member._id)}
                     >
                       <img 
                         src={getUserAvatar(member)} 
                         alt={member.username}
-                        className="w-10 h-10 rounded-full object-cover"
+                        className="w-10 h-10 rounded-full object-cover transition-transform"
                       />
                       <div className="flex-1 min-w-0">
                         <span className="text-white font-medium truncate block">{member.username}</span>
@@ -1227,10 +1249,14 @@ const StrickerMatchSheet = () => {
                           </span>
                         )}
                       </div>
-                      {canSelect && (
-                        <button className="px-3 py-1.5 bg-lime-500/20 text-lime-400 rounded-lg text-sm font-medium hover:bg-lime-500/30">
-                          {t.selectPlayer}
-                        </button>
+                      {(canSelect || isSelecting) && (
+                        <div className="px-3 py-1.5 bg-lime-500/20 text-lime-400 rounded-lg text-sm font-medium transition-all group-hover:bg-lime-500/30">
+                          {isSelecting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            t.selectPlayer
+                          )}
+                        </div>
                       )}
                     </div>
                   );
@@ -1262,9 +1288,17 @@ const StrickerMatchSheet = () => {
                   const equippedTitle = playerUser.equippedTitle;
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
                   const canRemove = isReferent && myTeam === 2 && !player.isReferent;
+                  const isDeselecting = deselectingMember === (playerUser._id || player.user);
                   
                   return (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                    <div 
+                      key={idx} 
+                      className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
+                        isDeselecting 
+                          ? 'bg-red-500/20 border border-red-500/50 scale-95 opacity-50' 
+                          : 'bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/15 hover:border-blue-500/50'
+                      }`}
+                    >
                       <img 
                         src={getUserAvatar(playerUser)} 
                         alt={player.username}
@@ -1287,10 +1321,15 @@ const StrickerMatchSheet = () => {
                       {canRemove && (
                         <button
                           onClick={() => handleDeselectRosterMember(playerUser._id || player.user)}
-                          className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          disabled={isDeselecting}
+                          className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/30 rounded-lg transition-all hover:scale-110 disabled:opacity-50"
                           title="Retirer du roster"
                         >
-                          <X className="w-4 h-4" />
+                          {isDeselecting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <X className="w-4 h-4" />
+                          )}
                         </button>
                       )}
                     </div>
@@ -1698,105 +1737,11 @@ const StrickerMatchSheet = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Team 1 Roster & Actions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column - Chat, Map & Voice */}
           <div className="space-y-4">
-            {/* Team 1 Roster */}
-            <div className={`bg-dark-900 border rounded-2xl p-5 ${winner === 1 ? 'border-lime-500/50' : 'border-lime-500/20'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-lime-400" />
-                  {team1Name}
-                </h3>
-                {match.hostTeam === 1 && (
-                  <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs font-bold">{t.host}</span>
-                )}
-              </div>
-              <div className="space-y-2">
-                {team1Players.map((player, idx) => {
-                  const isRef = player.isReferent;
-                  const equippedTitle = player.user?.equippedTitle;
-                  const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
-                  
-                  return (
-                    <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl ${isRef ? 'bg-lime-500/10 border border-lime-500/30' : 'bg-dark-800/50'}`}>
-                      {player.user ? (
-                        <img 
-                          src={getUserAvatar(player.user)} 
-                          alt={player.username}
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
-                          <Shield className="w-5 h-5 text-gray-500" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium truncate ${player.isFake ? 'text-gray-500' : 'text-white'}`}>
-                            {player.username}
-                          </span>
-                          {isRef && <Crown className="w-4 h-4 text-amber-400" />}
-                          {player.isFake && <span className="text-xs text-purple-400">(Bot)</span>}
-                        </div>
-                        {titleName && !player.isFake && (
-                          <span 
-                            className={getTitleStyles(equippedTitle?.rarity).className}
-                            style={getTitleStyles(equippedTitle?.rarity).style}
-                          >
-                            {titleName}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Selected Map */}
-            {match.selectedMap?.name && (
-              <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Map className="w-5 h-5 text-lime-400" />
-                  {t.selectedMap}
-                </h3>
-                <div className="text-center">
-                  {match.selectedMap.image && (
-                    <img 
-                      src={match.selectedMap.image} 
-                      alt={match.selectedMap.name}
-                      className="w-full h-32 object-cover rounded-lg mb-3"
-                    />
-                  )}
-                  <p className="text-2xl font-bold text-lime-400">{match.selectedMap.name}</p>
-                </div>
-              </div>
-            )}
-            
-            {/* Voice Channel */}
-            {match.team1VoiceChannel?.channelId && myTeam === 1 && (
-              <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Mic className="w-5 h-5 text-lime-400" />
-                  {t.joinVoiceChannel}
-                </h3>
-                <a
-                  href={`https://discord.com/channels/YOUR_SERVER_ID/${match.team1VoiceChannel.channelId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 rounded-xl transition-colors border border-lime-500/30"
-                >
-                  <Mic className="w-5 h-5" />
-                  {match.team1VoiceChannel.channelName || 'Team 1 Voice'}
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Center Column - Chat */}
-          <div className="lg:col-span-1">
-            <div className="bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-lime-500/20 p-4 h-full flex flex-col">
+            {/* Chat */}
+            <div className="bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-lime-500/20 p-4 flex flex-col">
               <h2 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2 uppercase tracking-wider">
                 <MessageCircle className="w-4 h-4" />
                 {t.chat}
@@ -1805,7 +1750,7 @@ const StrickerMatchSheet = () => {
               {/* Messages */}
               <div 
                 ref={chatRef}
-                className="flex-1 min-h-[400px] max-h-[500px] overflow-y-auto space-y-2 mb-4 p-3 bg-dark-800/50 rounded-xl"
+                className="flex-1 min-h-[350px] max-h-[450px] overflow-y-auto space-y-2 mb-4 p-3 bg-dark-800/50 rounded-xl"
               >
                 {messages.length === 0 ? (
                   <div className="text-center py-8 text-gray-500 text-sm">
@@ -1875,10 +1820,134 @@ const StrickerMatchSheet = () => {
                 </div>
               )}
             </div>
+
+            {/* Selected Map */}
+            {match.selectedMap?.name && (
+              <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-5">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <Map className="w-5 h-5 text-lime-400" />
+                  {t.selectedMap}
+                </h3>
+                <div className="text-center">
+                  {match.selectedMap.image && (
+                    <img 
+                      src={match.selectedMap.image} 
+                      alt={match.selectedMap.name}
+                      className="w-full h-32 object-cover rounded-lg mb-3"
+                    />
+                  )}
+                  <p className="text-2xl font-bold text-lime-400">{match.selectedMap.name}</p>
+                  {match.startedAt && (
+                    <div className="mt-3 pt-3 border-t border-lime-500/20">
+                      <div className="flex items-center justify-center gap-2 text-sm">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-400">{t.matchStartTime}:</span>
+                        <span className="text-white font-medium">
+                          {new Date(match.startedAt).toLocaleTimeString(language === 'fr' ? 'fr-FR' : 'en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Voice Channels */}
+            {match.team1VoiceChannel?.channelId && myTeam === 1 && (
+              <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-5">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <Mic className="w-5 h-5 text-lime-400" />
+                  {t.joinVoiceChannel}
+                </h3>
+                <a
+                  href={`https://discord.com/channels/YOUR_SERVER_ID/${match.team1VoiceChannel.channelId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 rounded-xl transition-colors border border-lime-500/30"
+                >
+                  <Mic className="w-5 h-5" />
+                  {match.team1VoiceChannel.channelName || 'Team 1 Voice'}
+                </a>
+              </div>
+            )}
+
+            {match.team2VoiceChannel?.channelId && myTeam === 2 && (
+              <div className="bg-dark-900 border border-blue-500/20 rounded-2xl p-5">
+                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
+                  <Mic className="w-5 h-5 text-blue-400" />
+                  {t.joinVoiceChannel}
+                </h3>
+                <a
+                  href={`https://discord.com/channels/YOUR_SERVER_ID/${match.team2VoiceChannel.channelId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors border border-blue-500/30"
+                >
+                  <Mic className="w-5 h-5" />
+                  {match.team2VoiceChannel.channelName || 'Team 2 Voice'}
+                </a>
+              </div>
+            )}
           </div>
 
-          {/* Right Column - Team 2 Roster & Actions */}
+          {/* Right Column - Teams Rosters & Actions */}
           <div className="space-y-4">
+            {/* Team 1 Roster */}
+            <div className={`bg-dark-900 border rounded-2xl p-5 ${winner === 1 ? 'border-lime-500/50' : 'border-lime-500/20'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-lime-400" />
+                  {team1Name}
+                </h3>
+                {match.hostTeam === 1 && (
+                  <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs font-bold">{t.host}</span>
+                )}
+              </div>
+              <div className="space-y-2">
+                {team1Players.map((player, idx) => {
+                  const isRef = player.isReferent;
+                  const equippedTitle = player.user?.equippedTitle;
+                  const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                  
+                  return (
+                    <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl ${isRef ? 'bg-lime-500/10 border border-lime-500/30' : 'bg-dark-800/50'}`}>
+                      {player.user ? (
+                        <img 
+                          src={getUserAvatar(player.user)} 
+                          alt={player.username}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
+                          <Shield className="w-5 h-5 text-gray-500" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`font-medium truncate ${player.isFake ? 'text-gray-500' : 'text-white'}`}>
+                            {player.username}
+                          </span>
+                          {isRef && <Crown className="w-4 h-4 text-amber-400" />}
+                          {player.isFake && <span className="text-xs text-purple-400">(Bot)</span>}
+                        </div>
+                        {titleName && !player.isFake && (
+                          <span 
+                            className={getTitleStyles(equippedTitle?.rarity).className}
+                            style={getTitleStyles(equippedTitle?.rarity).style}
+                          >
+                            {titleName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Team 2 Roster */}
             <div className={`bg-dark-900 border rounded-2xl p-5 ${winner === 2 ? 'border-blue-500/50' : 'border-blue-500/20'}`}>
               <div className="flex items-center justify-between mb-4">
@@ -1933,7 +2002,7 @@ const StrickerMatchSheet = () => {
             </div>
 
             {/* Result Voting - Referents Only */}
-            {(match.status === 'in_progress' || match.status === 'disputed') && myTeam && (
+            {(match.status === 'ready' || match.status === 'in_progress' || match.status === 'disputed') && isReferent && (
               <div className={`bg-gradient-to-br ${match.status === 'disputed' ? 'from-red-500/20 to-orange-500/10' : 'from-lime-500/20 to-green-500/10'} border-2 rounded-2xl p-5 ${match.status === 'disputed' ? 'border-red-500/50' : 'border-lime-500/50'}`}>
                 <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
                   <Trophy className={`w-6 h-6 ${match.status === 'disputed' ? 'text-red-400' : 'text-lime-400'}`} />
@@ -1994,47 +2063,39 @@ const StrickerMatchSheet = () => {
                 
                 {/* Voting buttons - Only for referents */}
                 {match.status !== 'disputed' && (
-                  isReferent ? (
-                    myVote ? (
-                      <div className="text-center py-4 bg-dark-800/50 rounded-xl">
-                        <CheckCircle className="w-12 h-12 text-lime-400 mx-auto mb-2" />
-                        <p className="text-lime-400 font-medium">
-                          {t.yourTeamVoted}: <span className="font-bold">{myVote === 1 ? team1Name : team2Name}</span>
-                        </p>
-                        <p className="text-gray-500 text-sm mt-2">
-                          {t.waitingOtherTeam}
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="flex items-center justify-center gap-2 mb-3">
-                          <Crown className="w-4 h-4 text-amber-400" />
-                          <span className="text-amber-400 text-sm font-medium">{t.youAreReferent}</span>
-                        </div>
-                        <p className="text-center text-gray-400 text-sm mb-3">{t.reportResult}</p>
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            onClick={() => handleSubmitResult(1)}
-                            disabled={submittingResult}
-                            className="py-4 bg-lime-500/20 hover:bg-lime-500/40 text-lime-400 font-bold rounded-xl border-2 border-lime-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
-                          >
-                            {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team1Name}
-                          </button>
-                          <button
-                            onClick={() => handleSubmitResult(2)}
-                            disabled={submittingResult}
-                            className="py-4 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 font-bold rounded-xl border-2 border-blue-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
-                          >
-                            {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team2Name}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  ) : (
+                  myVote ? (
                     <div className="text-center py-4 bg-dark-800/50 rounded-xl">
-                      <Clock className="w-8 h-8 text-gray-500 mx-auto mb-2" />
-                      <p className="text-gray-400">{t.waitingReferentVote}</p>
-                      <p className="text-gray-500 text-xs mt-1">{t.onlyReferentCanVote}</p>
+                      <CheckCircle className="w-12 h-12 text-lime-400 mx-auto mb-2" />
+                      <p className="text-lime-400 font-medium">
+                        {t.yourTeamVoted}: <span className="font-bold">{myVote === 1 ? team1Name : team2Name}</span>
+                      </p>
+                      <p className="text-gray-500 text-sm mt-2">
+                        {t.waitingOtherTeam}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-center gap-2 mb-3">
+                        <Crown className="w-4 h-4 text-amber-400" />
+                        <span className="text-amber-400 text-sm font-medium">{t.youAreReferent}</span>
+                      </div>
+                      <p className="text-center text-gray-400 text-sm mb-3">{t.reportResult}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          onClick={() => handleSubmitResult(1)}
+                          disabled={submittingResult}
+                          className="py-4 bg-lime-500/20 hover:bg-lime-500/40 text-lime-400 font-bold rounded-xl border-2 border-lime-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
+                        >
+                          {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team1Name}
+                        </button>
+                        <button
+                          onClick={() => handleSubmitResult(2)}
+                          disabled={submittingResult}
+                          className="py-4 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 font-bold rounded-xl border-2 border-blue-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
+                        >
+                          {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team2Name}
+                        </button>
+                      </div>
                     </div>
                   )
                 )}
@@ -2077,23 +2138,82 @@ const StrickerMatchSheet = () => {
                 )}
               </div>
             )}
-            
-            {/* Voice Channel for Team 2 */}
-            {match.team2VoiceChannel?.channelId && myTeam === 2 && (
-              <div className="bg-dark-900 border border-blue-500/20 rounded-2xl p-5">
+
+            {/* Match Cancellation Request - Referents Only */}
+            {(match.status === 'ready' || match.status === 'in_progress') && isReferent && (
+              <div className="bg-dark-900 border border-red-500/20 rounded-2xl p-5">
                 <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Mic className="w-5 h-5 text-blue-400" />
-                  {t.joinVoiceChannel}
+                  <X className="w-5 h-5 text-red-400" />
+                  {t.requestCancellation}
                 </h3>
-                <a
-                  href={`https://discord.com/channels/YOUR_SERVER_ID/${match.team2VoiceChannel.channelId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors border border-blue-500/30"
-                >
-                  <Mic className="w-5 h-5" />
-                  {match.team2VoiceChannel.channelName || 'Team 2 Voice'}
-                </a>
+                
+                {(() => {
+                  const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
+                  const opponentVote = myTeam === 1 ? cancellationVotes.team2 : cancellationVotes.team1;
+                  const opponentTeamName = myTeam === 1 ? team2Name : team1Name;
+                  
+                  // Opponent requested cancellation - show accept/refuse buttons
+                  if (opponentVote === true && myTeamVote !== true) {
+                    return (
+                      <div>
+                        <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+                          <p className="text-orange-400 text-sm">
+                            <span className="font-bold">{opponentTeamName}</span> {t.opponentRequestedCancellation}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => handleCancelVote(true)}
+                            disabled={submittingCancelVote}
+                            className="py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-lg font-medium transition-colors disabled:opacity-50"
+                          >
+                            {submittingCancelVote ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t.acceptCancellation}
+                          </button>
+                          <button
+                            onClick={() => handleCancelVote(false)}
+                            disabled={submittingCancelVote}
+                            className="py-2.5 bg-dark-700 hover:bg-dark-600 border border-gray-600 text-gray-300 rounded-lg font-medium transition-colors disabled:opacity-50"
+                          >
+                            {t.refuseCancellation}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // My team requested cancellation - show waiting
+                  if (myTeamVote === true) {
+                    return (
+                      <div className="text-center py-2">
+                        <div className="flex items-center justify-center gap-2 text-orange-400 mb-2">
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                          <span className="font-medium">{t.cancellationRequested}</span>
+                        </div>
+                        <p className="text-gray-400 text-xs">
+                          {t.waitingOpponentCancelResponse}
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  // No cancellation request - show request button
+                  return (
+                    <button
+                      onClick={() => handleCancelVote(true)}
+                      disabled={submittingCancelVote}
+                      className="w-full py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
+                    >
+                      {submittingCancelVote ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <X className="w-4 h-4" />
+                          {t.requestCancellation}
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -2111,17 +2231,6 @@ const StrickerMatchSheet = () => {
           newRank={matchReportData.newRank}
           matchId={matchId}
           isReferent={isReferent}
-          isMvp={match?.mvp?.confirmed && (match?.mvp?.player?._id?.toString() || match?.mvp?.player?.toString()) === (user?._id?.toString() || user?.id?.toString())}
-          mvpBonus={match?.mvp?.bonusPoints || 5}
-          mvpPlayer={match?.mvp?.player || null}
-          players={match?.players || []}
-          mvpVotingActive={match?.mvp?.votingActive || false}
-          mvpConfirmed={match?.mvp?.confirmed || false}
-          mvpVotes={match?.mvp?.votes || []}
-          onMvpVote={handleMvpVote}
-          isTestMatch={match?.isTestMatch || false}
-          winningTeam={match?.result?.winner}
-          userTeam={matchReportData.userTeam}
           squadName={matchReportData.squadName}
           cranesEarned={matchReportData.cranesEarned}
         />

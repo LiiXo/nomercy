@@ -7,7 +7,7 @@ const router = express.Router();
 // Valid subTypes for each location
 const VALID_SUBTYPES = {
   rankings: ['duo-trio', 'squad-team'],
-  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd', 'stricker-hardcore', 'stricker-cdl']
+  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd']
 };
 
 // Valid modes
