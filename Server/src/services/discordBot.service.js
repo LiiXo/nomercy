@@ -482,16 +482,16 @@ export const logArbitratorCall = async (match, calledBy) => {
   
   const embed = new EmbedBuilder()
     .setColor(0xFF6600) // Orange
-    .setTitle('🚨 APPEL ARBITRE')
+    .setTitle('\u{1F6A8} APPEL ARBITRE')
     .setDescription(`Un joueur demande l'intervention d'un arbitre !`)
     .addFields(
-      { name: '👤 Appelé par', value: calledBy?.username || 'Inconnu', inline: true },
-      { name: '🎮 Mode', value: modeLabel, inline: true },
-      { name: '📊 Format', value: formatLabel, inline: true },
-      { name: '🎯 Mode de jeu', value: match.gameMode || 'N/A', inline: true },
-      { name: '🆔 Match ID', value: match._id?.toString() || 'N/A', inline: true },
-      { name: '📋 Statut', value: match.status || 'N/A', inline: true },
-      { name: '🎙️ Salons vocaux', value: `**E1:** ${team1VoiceChannel}\n**E2:** ${team2VoiceChannel}`, inline: false }
+      { name: '\u{1F464} Appel\u00e9 par', value: calledBy?.username || 'Inconnu', inline: true },
+      { name: '\u{1F3AE} Mode', value: modeLabel, inline: true },
+      { name: '\u{1F4CA} Format', value: formatLabel, inline: true },
+      { name: '\u{1F3AF} Mode de jeu', value: match.gameMode || 'N/A', inline: true },
+      { name: '\u{1F194} Match ID', value: match._id?.toString() || 'N/A', inline: true },
+      { name: '\u{1F4CB} Statut', value: match.status || 'N/A', inline: true },
+      { name: '\u{1F399}\u{FE0F} Salons vocaux', value: `**E1:** ${team1VoiceChannel}\n**E2:** ${team2VoiceChannel}`, inline: false }
     )
     .setTimestamp()
     .setFooter({ text: 'NoMercy Arbitrage' });
@@ -499,6 +499,55 @@ export const logArbitratorCall = async (match, calledBy) => {
   // Add button-like link field
   embed.addFields(
     { name: '\u200B', value: `[Voir le match de cette notif](${matchUrl})`, inline: false }
+  );
+
+  await sendToChannel(ARBITRATOR_CHANNEL_ID, { 
+    content: `<@&${ARBITRATOR_ROLE_ID}>`, 
+    embeds: [embed] 
+  });
+};
+
+/**
+ * Log a Stricker arbitrator call to Discord (ARBITRATOR_CHANNEL)
+ * Sends notification when a player calls for an arbitrator during a Stricker match
+ */
+export const logStrickerArbitratorCall = async (match, calledBy) => {
+  const matchUrl = `https://nomercy.ggsecure.io/stricker/match/${match._id}`;
+  
+  // Get team names
+  const team1Name = match.team1Squad?.name || 'Equipe 1';
+  const team2Name = match.team2Squad?.name || 'Equipe 2';
+  
+  // Get voice channel info
+  const team1VoiceChannel = match.team1VoiceChannel?.channelName || 'N/A';
+  const team2VoiceChannel = match.team2VoiceChannel?.channelName || 'N/A';
+  
+  const embed = new EmbedBuilder()
+    .setColor(0x7ED321) // Lime green for Stricker
+    .setTitle('\u{1F6A8} APPEL ARBITRE - MODE STRICKER')
+    .setDescription(`Un joueur demande l'intervention d'un arbitre !`)
+    .addFields(
+      { name: '\u{1F464} Appel\u00e9 par', value: calledBy?.username || 'Inconnu', inline: true },
+      { name: '\u{1F3AE} Mode', value: 'Stricker (5v5)', inline: true },
+      { name: '\u{1F3AF} Mode de jeu', value: 'Search & Destroy', inline: true },
+      { name: '\u{1F6E1}\u{FE0F} Equipe 1', value: team1Name, inline: true },
+      { name: '\u{1F6E1}\u{FE0F} Equipe 2', value: team2Name, inline: true },
+      { name: '\u{1F4CB} Statut', value: match.status || 'N/A', inline: true },
+      { name: '\u{1F194} Match ID', value: match._id?.toString() || 'N/A', inline: false }
+    )
+    .setTimestamp()
+    .setFooter({ text: 'NoMercy Arbitrage - Stricker' });
+
+  // Add voice channels if they exist
+  if (team1VoiceChannel !== 'N/A' || team2VoiceChannel !== 'N/A') {
+    embed.addFields(
+      { name: '\u{1F399}\u{FE0F} Salons vocaux', value: `**${team1Name}:** ${team1VoiceChannel}\n**${team2Name}:** ${team2VoiceChannel}`, inline: false }
+    );
+  }
+
+  // Add button-like link field
+  embed.addFields(
+    { name: '\u200B', value: `[Voir le match](${matchUrl})`, inline: false }
   );
 
   await sendToChannel(ARBITRATOR_CHANNEL_ID, { 
@@ -851,6 +900,7 @@ export default {
   logAdminAction,
   logAdminMessage,
   logArbitratorCall,
+  logStrickerArbitratorCall,
   createMatchVoiceChannels,
   deleteMatchVoiceChannels,
   setShuttingDown,

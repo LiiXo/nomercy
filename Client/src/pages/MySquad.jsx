@@ -8,7 +8,7 @@ import {
   Users, Crown, Shield, UserMinus, Settings, Plus, Search, 
   Loader2, AlertCircle, Trophy, Medal, ChevronRight,
   Target, Swords, Calendar, Sparkles, Globe, Copy, Check, ArrowRight,
-  Zap, Award, X, MessageSquare, Clock, ExternalLink
+  Zap, Award, X, MessageSquare, Clock, ExternalLink, Crosshair
 } from 'lucide-react';
 
 import { API_URL, UPLOADS_BASE_URL } from '../config';
@@ -113,6 +113,7 @@ const MySquad = () => {
       save: 'Enregistrer',
       saving: 'Enregistrement...',
       editSuccess: 'Informations mises à jour avec succès',
+      cranes: 'Munitions',
     },
     en: {
       title: 'My Squad',
@@ -175,6 +176,7 @@ const MySquad = () => {
       save: 'Save',
       saving: 'Saving...',
       editSuccess: 'Information updated successfully',
+      cranes: 'Ammo',
     },
     de: {
       title: 'Mein Squad',
@@ -237,6 +239,7 @@ const MySquad = () => {
       save: 'Speichern',
       saving: 'Speichern...',
       editSuccess: 'Informationen erfolgreich aktualisiert',
+      cranes: 'Munition',
     },
     it: {
       title: 'La mia Squad',
@@ -299,6 +302,7 @@ const MySquad = () => {
       save: 'Salva',
       saving: 'Salvataggio...',
       editSuccess: 'Informazioni aggiornate con successo',
+      cranes: 'Munizioni',
     },
   };
 
@@ -1023,6 +1027,13 @@ const MySquad = () => {
                       <div className="text-center">
                         <p className="text-lg sm:text-xl font-bold text-red-400">{squad.statsStricker?.losses || 0}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
+                      </div>
+                      <div className="text-center pl-3 sm:pl-6 border-l border-lime-500/20">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 text-lime-400" />
+                          <p className="text-lg sm:text-xl font-bold text-gray-200">{squad.cranes || 0}</p>
+                        </div>
+                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.cranes}</p>
                       </div>
                     </div>
                   </div>

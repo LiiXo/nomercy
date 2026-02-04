@@ -558,7 +558,7 @@ function AppContent() {
 
           {/* Stricker Mode - Admin, Staff, Arbitre only */}
           <Route 
-            path="/stricker" 
+            path="/:mode/stricker" 
             element={
               <StrickerRoute>
                 <PageTransition>
@@ -570,7 +570,7 @@ function AppContent() {
 
           {/* Stricker Match Sheet - Admin, Staff, Arbitre only */}
           <Route 
-            path="/stricker/match/:matchId" 
+            path="/:mode/stricker/match/:matchId" 
             element={
               <StrickerRoute>
                 <PageTransition>

@@ -52,12 +52,12 @@ const strickerMatchSchema = new mongoose.Schema({
     enum: ['Search & Destroy'],
     default: 'Search & Destroy'
   },
-  // Mode stricker
+  // Mode (hardcore ou cdl)
   mode: {
     type: String,
     required: true,
-    enum: ['stricker'],
-    default: 'stricker'
+    enum: ['hardcore', 'cdl'],
+    default: 'hardcore'
   },
   // Taille des équipes - 5v5 uniquement
   teamSize: {
@@ -208,6 +208,10 @@ const strickerMatchSchema = new mongoose.Schema({
       type: Boolean,
       default: false
     },
+    isStaff: {
+      type: Boolean,
+      default: false
+    },
     messageType: { type: String, default: null },
     messageParams: { type: mongoose.Schema.Types.Mixed, default: null },
     username: { type: String, default: null },
@@ -262,6 +266,18 @@ const strickerMatchSchema = new mongoose.Schema({
     totalPicks: { type: Number, default: 0 },
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null }
+  },
+  // MVP (Most Valuable Player)
+  mvp: {
+    votingActive: { type: Boolean, default: false },
+    player: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    confirmed: { type: Boolean, default: false },
+    bonusPoints: { type: Number, default: 5 },
+    votes: [{
+      voter: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      votedFor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      votedAt: { type: Date, default: Date.now }
+    }]
   },
   // Appels arbitre
   arbitratorCalls: [{

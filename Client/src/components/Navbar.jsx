@@ -234,8 +234,8 @@ const Navbar = () => {
             {/* Stricker Mode - Only visible to admin/staff/arbitre */}
             {hasAdminAccess() && (
               <Link
-                to="/stricker"
-                className={`nav-link flex items-center gap-2 ${isActive('/stricker') ? 'active' : ''} ${location.pathname === '/stricker' ? 'text-lime-400' : 'hover:text-lime-400'}`}
+                to={`/${selectedMode}/stricker`}
+                className={`nav-link flex items-center gap-2 ${isActive(`/${selectedMode}/stricker`) ? 'active' : ''} ${location.pathname.includes('/stricker') ? 'text-lime-400' : 'hover:text-lime-400'}`}
               >
                 <Target className="w-4 h-4" />
                 <span className="text-lime-400">Stricker</span>
@@ -596,7 +596,7 @@ const Navbar = () => {
                   {/* Stricker Mode - Only visible to admin/staff/arbitre (mobile) */}
                   {hasAdminAccess() && (
                     <Link 
-                      to="/stricker" 
+                      to={`/${selectedMode}/stricker`}
                       onClick={() => setMobileMenuOpen(false)} 
                       className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-lime-500/10 border border-lime-500/30 text-lime-400"
                     >

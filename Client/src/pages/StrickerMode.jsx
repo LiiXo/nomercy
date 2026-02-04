@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
@@ -7,7 +7,7 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, Skull
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, ShoppingCart
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -154,7 +154,9 @@ const translations = {
     unknownSquad: 'Escouade mystère',
     activeMatchFound: 'Match en cours détecté',
     activeMatchDesc: 'Vous avez un match en cours. Vous devez le terminer avant d\'en lancer un autre.',
-    rejoin: 'Rejoindre le match'
+    rejoin: 'Rejoindre le match',
+    cranes: 'Munitions',
+    shop: 'Boutique'
   },
   en: {
     title: 'Stricker Mode',
@@ -210,8 +212,10 @@ const translations = {
     unknownSquad: 'Mystery squad',
     activeMatchFound: 'Active match detected',
     activeMatchDesc: 'You have a match in progress. You must finish it before starting another.',
-    rejoin: 'Rejoin match'
-  }
+    rejoin: 'Rejoin match',
+    cranes: 'Ammo',
+    shop: 'Shop'
+  },
 };
 
 const StrickerMode = () => {
@@ -219,6 +223,7 @@ const StrickerMode = () => {
   const { user, isAuthenticated, hasAdminAccess } = useAuth();
   const { isConnected, on, joinStrickerMode, leaveStrickerMode } = useSocket();
   const navigate = useNavigate();
+  const { mode } = useParams(); // hardcore or cdl from URL
   
   const t = translations[language] || translations.en;
   
@@ -307,7 +312,7 @@ const StrickerMode = () => {
     if (!hasAccess) return;
     
     try {
-      const response = await fetch(`${API_URL}/stricker/matchmaking/status`, {
+      const response = await fetch(`${API_URL}/stricker/matchmaking/status?mode=${mode || 'hardcore'}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -322,7 +327,7 @@ const StrickerMode = () => {
     } catch (err) {
       console.error('Error fetching matchmaking status:', err);
     }
-  }, [hasAccess]);
+  }, [hasAccess, mode]);
   
   // Fetch config
   const fetchConfig = useCallback(async () => {
@@ -366,7 +371,7 @@ const StrickerMode = () => {
     if (!hasAccess) return;
     
     try {
-      const response = await fetch(`${API_URL}/stricker/matches/recent?limit=10`, {
+      const response = await fetch(`${API_URL}/stricker/history/recent?limit=10`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -430,7 +435,8 @@ const StrickerMode = () => {
       const response = await fetch(`${API_URL}/stricker/matchmaking/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include'
+        credentials: 'include',
+        body: JSON.stringify({ mode: mode || 'hardcore' })
       });
       const data = await response.json();
       
@@ -450,17 +456,18 @@ const StrickerMode = () => {
   // Leave queue
   const handleLeaveQueue = async () => {
     if (!hasAccess || leavingQueue) return;
-    
+      
     setLeavingQueue(true);
-    
+      
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include'
+        credentials: 'include',
+        body: JSON.stringify({ mode: mode || 'hardcore' })
       });
       const data = await response.json();
-      
+        
       if (data.success) {
         setInQueue(false);
         setQueueSize(data.queueSize || 0);
@@ -473,43 +480,43 @@ const StrickerMode = () => {
       setLeavingQueue(false);
     }
   };
-  
+    
   // Challenge a squad
   const handleChallengeSquad = async (targetSquadId) => {
     if (!hasAccess || challengingSquad) return;
-    
+      
     setChallengingSquad(targetSquadId);
     setError(null);
-    
+      
     // Check GGSecure for PC players
     if (user?.platform === 'PC') {
       const connected = await checkGGSecure();
       if (!connected) {
-        setError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
+        setError(language === 'fr' ? 'Connectez-vous \u00e0 GGSecure pour jouer.' : 'Connect to GGSecure to play.');
         setChallengingSquad(null);
         return;
       }
     }
-    
+      
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/challenge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ targetSquadId })
+        body: JSON.stringify({ targetSquadId, mode: mode || 'hardcore' })
       });
       const data = await response.json();
-      
+        
       if (data.success) {
-        // Match created - redirect immediately to match page
-        navigate(`/stricker/match/${data.match._id}`);
+        // Match created - redirect immediately to match page (mode-scoped)
+        navigate(`/${mode || 'hardcore'}/stricker/match/${data.match._id}`);
       } else {
         setError(data.message);
         // Refresh list in case squad left
         fetchMatchmakingStatus();
       }
     } catch (err) {
-      setError('Erreur lors du défi');
+      setError('Erreur lors du d\u00e9fi');
     } finally {
       setChallengingSquad(null);
     }
@@ -555,12 +562,14 @@ const StrickerMode = () => {
     const unsubMatchCreated = on('strickerMatchCreated', (data) => {
       console.log('[StrickerMode] Match created event received:', data);
       
-      // Check if this match involves my squad
+      // Check if this match involves my squad and matches current mode
       const mySquadId = mySquad?._id;
-      if (mySquadId && (data.team1Squad === mySquadId || data.team2Squad === mySquadId || 
+      const matchMode = data.mode || 'hardcore';
+      if (mySquadId && matchMode === (mode || 'hardcore') && 
+          (data.team1Squad === mySquadId || data.team2Squad === mySquadId || 
           data.team1Squad?.toString() === mySquadId || data.team2Squad?.toString() === mySquadId)) {
         console.log('[StrickerMode] My squad is in this match, redirecting...');
-        navigate(`/stricker/match/${data.matchId}`);
+        navigate(`/${mode || 'hardcore'}/stricker/match/${data.matchId}`);
       }
     });
     
@@ -961,23 +970,47 @@ const StrickerMode = () => {
                 )}
                 
                 {/* Squad Info */}
-                {myRanking?.squad && (
-                  <div className="p-4 bg-dark-800/50 rounded-xl border border-lime-500/20">
+                {mySquad && (
+                  <div className="p-4 bg-dark-800/50 rounded-xl border border-lime-500/20 mb-4">
                     <div className="flex items-center gap-3">
-                      {myRanking.squad.logo && (
+                      {mySquad.logo && (
                         <img 
-                          src={myRanking.squad.logo} 
-                          alt={myRanking.squad.name}
+                          src={mySquad.logo} 
+                          alt={mySquad.name}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
                       )}
                       <div className="flex-1">
-                        <p className="font-bold text-white">[{myRanking.squad.tag}] {myRanking.squad.name}</p>
-                        <p className="text-lime-400 text-sm">#{myRanking.squad.position} - {myRanking.squad.points} pts</p>
+                        <p className="font-bold text-white">[{mySquad.tag}] {mySquad.name}</p>
+                        {myRanking?.squad && (
+                          <p className="text-lime-400 text-sm">#{myRanking.squad.position} - {myRanking.squad.points} pts</p>
+                        )}
                       </div>
                     </div>
                   </div>
                 )}
+                
+                {/* Munitions & Shop - Always visible */}
+                <div className="p-4 bg-gradient-to-r from-lime-500/10 to-green-500/10 rounded-xl border border-lime-500/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-lime-500/20 flex items-center justify-center">
+                        <Crosshair className="w-5 h-5 text-lime-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-400">{t.cranes}</p>
+                        <p className="text-2xl font-bold text-lime-400">{mySquad?.cranes || 0}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/${mySquad?.mode === 'cdl' ? 'cdl' : 'hardcore'}/shop`)}
+                      className="px-4 py-2 bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-lime-500/20"
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                      {t.shop}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1050,9 +1083,16 @@ const StrickerMode = () => {
                     <span className="text-gray-400">{t.format}</span>
                     <span className="text-lime-400 font-bold">5v5</span>
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-gray-400">{t.gameMode}</span>
                     <span className="text-lime-400 font-medium">{t.searchDestroy}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-400 flex items-center gap-1.5">
+                      <Crosshair className="w-4 h-4 text-lime-400" />
+                      {t.cranes}
+                    </span>
+                    <span className="text-gray-200 font-bold">+20</span>
                   </div>
                 </div>
                 
@@ -1141,7 +1181,7 @@ const StrickerMode = () => {
                         if (points < 1500) return 'border-red-500/40';
                         return 'border-rose-500/40';
                       };
-                      const getSkullColor = () => {
+                      const getIconColor = () => {
                         if (points < 250) return 'text-green-400';
                         if (points < 500) return 'text-lime-400';
                         if (points < 750) return 'text-yellow-400';
@@ -1164,8 +1204,8 @@ const StrickerMode = () => {
                           className={`flex items-center justify-between p-4 bg-dark-800/80 border ${getBorderColor()} rounded-xl`}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={`w-12 h-12 rounded-lg bg-dark-700 flex items-center justify-center ${getSkullColor()}`}>
-                              <Skull className="w-7 h-7" />
+                            <div className={`w-12 h-12 rounded-lg bg-dark-700 flex items-center justify-center ${getIconColor()}`}>
+                              <Crosshair className="w-7 h-7" />
                             </div>
                             <div>
                               <p className="text-green-400 font-bold">+{squadRank.pointsWin} pts</p>

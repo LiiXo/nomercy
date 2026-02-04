@@ -106,7 +106,7 @@ const Footer = () => {
               {showStrickerLink && (
                 <li>
                   <Link
-                    to="/stricker"
+                    to={`/${selectedMode}/stricker`}
                     className={`text-sm text-gray-400 hover:text-white transition-all flex items-center gap-3 group hover:translate-x-1`}
                   >
                     <span className={`transition-colors ${

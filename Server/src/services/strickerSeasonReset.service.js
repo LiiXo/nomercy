@@ -9,7 +9,7 @@ export const STRICKER_REWARD_GOLD = {
   3: 15000   // Third place
 };
 
-// Reward cranes (skulls) for top 10 squads
+// Reward munitions for top 10 squads
 export const STRICKER_REWARD_CRANES = {
   1: 500,   // 1st place
   2: 400,   // 2nd place
@@ -151,7 +151,7 @@ export const resetStrickerSeason = async (adminUserId) => {
       });
     }
     
-    // Cranes rewards for top 10
+    // Munitions rewards for top 10
     let cranesReward = 0;
     if (position <= 10) {
       cranesReward = STRICKER_REWARD_CRANES[position];

@@ -3,12 +3,14 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, Users, Trophy, Shield, Crown, MessageCircle, 
   Send, Loader2, CheckCircle, XCircle, Phone, AlertTriangle,
-  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Skull
+  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Crosshair
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
 import { useSocket } from '../SocketContext';
+import { useMode } from '../ModeContext';
 import { getUserAvatar } from '../utils/avatar';
+import StrickerMatchReport from '../components/StrickerMatchReport';
 
 import { API_URL } from '../config';
 
@@ -163,7 +165,14 @@ const translations = {
     reportAfk: 'Signaler équipe AFK',
     reportAfkSent: 'Signalement envoyé',
     reportAfkCooldown: 'Disponible dans',
-    reportAfkDesc: 'L\'équipe adverse a été signalée aux arbitres'
+    reportAfkDesc: 'L\'\u00e9quipe adverse a \u00e9t\u00e9 signal\u00e9e aux arbitres',
+    cranes: 'munitions',
+    validateWinner: 'Valider le gagnant',
+    validateWinnerDesc: 'Les deux r\u00e9f\u00e9rents doivent valider le gagnant',
+    onlyReferentCanVote: 'Seul le r\u00e9f\u00e9rent peut valider',
+    youAreReferent: 'Vous \u00eates r\u00e9f\u00e9rent',
+    waitingReferentVote: 'En attente de la validation des r\u00e9f\u00e9rents...',
+    bothMustValidate: 'Les deux r\u00e9f\u00e9rents doivent \u00eatre d\'accord'
   },
   en: {
     loading: 'Loading...',
@@ -260,18 +269,29 @@ const translations = {
     reportAfk: 'Report AFK team',
     reportAfkSent: 'Report sent',
     reportAfkCooldown: 'Available in',
-    reportAfkDesc: 'The opposing team has been reported to arbitrators'
+    reportAfkDesc: 'The opposing team has been reported to arbitrators',
+    cranes: 'ammo',
+    validateWinner: 'Validate Winner',
+    validateWinnerDesc: 'Both referents must validate the winner',
+    onlyReferentCanVote: 'Only the referent can validate',
+    youAreReferent: 'You are the referent',
+    waitingReferentVote: 'Waiting for referent validation...',
+    bothMustValidate: 'Both referents must agree'
   }
 };
 
 const StrickerMatchSheet = () => {
-  const { matchId } = useParams();
+  const { matchId, mode } = useParams(); // Get both matchId and mode from URL
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { user, isAuthenticated } = useAuth();
   const { socket, on, emit, joinStrickerMatch, leaveStrickerMatch } = useSocket();
+  const { selectedMode } = useMode();
   const chatRef = useRef(null);
   const preMatchAudioRef = useRef(null);
+  
+  // Use mode from URL params first, fall back to selectedMode from context
+  const currentMode = mode || selectedMode || 'hardcore';
 
   const t = translations[language] || translations.en;
 
@@ -325,6 +345,11 @@ const StrickerMatchSheet = () => {
   const [hasReportedAfk, setHasReportedAfk] = useState(false);
   const [afkWaitCountdown, setAfkWaitCountdown] = useState(300); // 5 min wait before can report
 
+  // Combat Report
+  const [showMatchReport, setShowMatchReport] = useState(false);
+  const [matchReportData, setMatchReportData] = useState(null);
+  const [matchReportShown, setMatchReportShown] = useState(false);
+
   // Fetch match data
   const fetchMatch = useCallback(async () => {
     try {
@@ -351,19 +376,29 @@ const StrickerMatchSheet = () => {
             team2Selected: data.match.players?.filter(p => p.team === 2) || [],
             timeRemaining: data.match.rosterSelection.timeRemaining || 30
           });
-        } else if (data.match.status === 'pending' && !data.match.selectedMap && data.match.mapVoteOptions?.length > 0) {
+        } else if (data.match.status === 'pending' && !(data.match.selectedMap && (typeof data.match.selectedMap === 'string' ? data.match.selectedMap : data.match.selectedMap.name))) {
+          // Map ban phase - roster done but no map selected yet
           setPreMatchPhase('map_vote');
-          setMapVoteOptions(data.match.mapVoteOptions);
+          if (data.match.mapVoteOptions?.length > 0) {
+            setMapVoteOptions(data.match.mapVoteOptions);
+          }
+          // Initialize mapBans from server data
+          if (data.match.mapBans) {
+            setMapBans(data.match.mapBans);
+          }
         } else if (data.match.status === 'ready' || data.match.status === 'in_progress' || data.match.status === 'completed' || data.match.status === 'disputed') {
           setPreMatchPhase('match');
         } else {
           setPreMatchPhase('match');
         }
         
-        // Check if user's team already voted
-        const teamVote = data.match.result?.teamVotes?.[data.myTeam];
-        if (teamVote) {
-          setMyVote(teamVote.winner);
+        // Check if current user (as referent) already voted
+        if (data.isReferent) {
+          if (data.myTeam === 1 && data.match.result?.team1Report?.winner) {
+            setMyVote(data.match.result.team1Report.winner);
+          } else if (data.myTeam === 2 && data.match.result?.team2Report?.winner) {
+            setMyVote(data.match.result.team2Report.winner);
+          }
         }
         
         // Check if arbitrator already called
@@ -463,8 +498,8 @@ const StrickerMatchSheet = () => {
     // Listen for match cancelled
     const unsubMatchCancelled = on('strickerMatchCancelled', (data) => {
       if (data.matchId === matchId) {
-        setMatch(prev => prev ? { ...prev, status: 'cancelled' } : prev);
-        setPreMatchPhase('match');
+        // Redirect to stricker page based on current mode
+        navigate(`/${currentMode}/stricker`);
       }
     });
 
@@ -560,6 +595,65 @@ const StrickerMatchSheet = () => {
     };
   }, [preMatchPhase]);
 
+  // Show combat report when match is completed
+  useEffect(() => {
+    if (!match || matchReportShown) return;
+    
+    if (match.status === 'completed' && match.result?.confirmed) {
+      // Find current player in match
+      const currentPlayer = match.players?.find(p => 
+        p.user && ((p.user._id || p.user).toString() === (user?._id?.toString() || user?.id?.toString()))
+      );
+      
+      if (currentPlayer) {
+        const winnerTeam = match.result.winner;
+        const isWinner = currentPlayer.team === winnerTeam;
+        const rewards = currentPlayer.rewards || {};
+        
+        // Prepare report data
+        setMatchReportData({
+          isWinner,
+          rewards: {
+            pointsChange: rewards.pointsChange || 0,
+            oldPoints: rewards.oldPoints || 0,
+            newPoints: rewards.newPoints || 0
+          },
+          oldRank: { points: rewards.oldPoints || 0 },
+          newRank: { points: rewards.newPoints || 0 },
+          isMvp: rewards.isMvp || false,
+          mvpBonus: rewards.mvpBonus || 5,
+          mvpPlayer: match.mvp?.player || null,
+          winningTeam: winnerTeam,
+          userTeam: currentPlayer.team,
+          squadName: myTeam === 1 ? match.team1Squad?.name : match.team2Squad?.name,
+          cranesEarned: rewards.cranesEarned || 0
+        });
+        
+        setMatchReportShown(true);
+        setTimeout(() => setShowMatchReport(true), 500);
+      }
+    }
+  }, [match, user, matchReportShown, myTeam]);
+
+  // MVP vote handler
+  const handleMvpVote = async (mvpPlayerId) => {
+    try {
+      const response = await fetch(`${API_URL}/stricker/match/${matchId}/mvp-vote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ mvpPlayerId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        fetchMatch(); // Refresh to get updated MVP status
+      }
+    } catch (err) {
+      console.error('Error voting for MVP:', err);
+    }
+  };
+
   // Select roster member
   const handleSelectRosterMember = async (memberId) => {
     if (!isReferent) return;
@@ -578,6 +672,27 @@ const StrickerMatchSheet = () => {
       }
     } catch (err) {
       console.error('Error selecting roster member:', err);
+    }
+  };
+
+  // Deselect/remove roster member
+  const handleDeselectRosterMember = async (memberId) => {
+    if (!isReferent) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/deselect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ memberId })
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        fetchMatch();
+      }
+    } catch (err) {
+      console.error('Error deselecting roster member:', err);
     }
   };
 
@@ -694,7 +809,8 @@ const StrickerMatchSheet = () => {
         setCancellationVotes(data.cancellationVotes);
         setShowCancelDialog(false);
         if (data.matchCancelled) {
-          fetchMatch();
+          // Redirect to stricker page based on current mode
+          navigate(`/${currentMode}/stricker`);
         }
       }
     } catch (err) {
@@ -820,7 +936,7 @@ const StrickerMatchSheet = () => {
           <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-white mb-2">{error || t.matchNotFound}</h2>
           <button
-            onClick={() => navigate('/stricker')}
+            onClick={() => navigate(`/${currentMode}/stricker`)}
             className="mt-4 px-6 py-3 bg-lime-500 hover:bg-lime-600 text-white font-semibold rounded-lg transition-colors"
           >
             {t.backToStricker}
@@ -1027,6 +1143,7 @@ const StrickerMatchSheet = () => {
                   const playerUser = player.user || player;
                   const equippedTitle = playerUser.equippedTitle;
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                  const canRemove = isReferent && myTeam === 1 && !player.isReferent;
                   
                   return (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-lime-500/10 border border-lime-500/30 rounded-xl">
@@ -1049,6 +1166,15 @@ const StrickerMatchSheet = () => {
                           </span>
                         )}
                       </div>
+                      {canRemove && (
+                        <button
+                          onClick={() => handleDeselectRosterMember(playerUser._id || player.user)}
+                          className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          title="Retirer du roster"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1135,6 +1261,7 @@ const StrickerMatchSheet = () => {
                   const playerUser = player.user || player;
                   const equippedTitle = playerUser.equippedTitle;
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                  const canRemove = isReferent && myTeam === 2 && !player.isReferent;
                   
                   return (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl">
@@ -1157,6 +1284,15 @@ const StrickerMatchSheet = () => {
                           </span>
                         )}
                       </div>
+                      {canRemove && (
+                        <button
+                          onClick={() => handleDeselectRosterMember(playerUser._id || player.user)}
+                          className="p-1.5 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          title="Retirer du roster"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
@@ -1304,22 +1440,18 @@ const StrickerMatchSheet = () => {
           {/* Ban status */}
           {(mapBans.team1BannedMap || mapBans.team2BannedMap) && (
             <div className="flex justify-center gap-8 mb-8">
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${mapBans.team1BannedMap ? 'bg-red-500/20 border border-red-500/30' : 'bg-dark-800 border border-gray-700'}`}>
-                <span className="text-gray-400 text-sm">{team1Name}:</span>
-                {mapBans.team1BannedMap ? (
+              {mapBans.team1BannedMap && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30">
                   <span className="text-red-400 font-bold">{mapBans.team1BannedMap}</span>
-                ) : (
-                  <Clock className="w-4 h-4 text-gray-500" />
-                )}
-              </div>
-              <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${mapBans.team2BannedMap ? 'bg-red-500/20 border border-red-500/30' : 'bg-dark-800 border border-gray-700'}`}>
-                <span className="text-gray-400 text-sm">{team2Name}:</span>
-                {mapBans.team2BannedMap ? (
+                  <Ban className="w-4 h-4 text-red-400" />
+                </div>
+              )}
+              {mapBans.team2BannedMap && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30">
                   <span className="text-red-400 font-bold">{mapBans.team2BannedMap}</span>
-                ) : (
-                  <Clock className="w-4 h-4 text-gray-500" />
-                )}
-              </div>
+                  <Ban className="w-4 h-4 text-red-400" />
+                </div>
+              )}
             </div>
           )}
           
@@ -1426,7 +1558,7 @@ const StrickerMatchSheet = () => {
           {/* Top bar */}
           <div className="flex items-center justify-between mb-4">
             <button
-              onClick={() => navigate('/stricker')}
+              onClick={() => navigate(`/${currentMode}/stricker`)}
               className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -1556,8 +1688,8 @@ const StrickerMatchSheet = () => {
                   </div>
                   {myPlayer.rewards.cranesEarned > 0 && (
                     <div className="px-4 py-2 rounded-lg bg-gray-500/20 text-gray-300 flex items-center gap-2">
-                      <Skull className="w-4 h-4" />
-                      <span className="font-bold">+{myPlayer.rewards.cranesEarned}</span> cranes
+                      <Crosshair className="w-4 h-4 text-lime-400" />
+                      <span className="font-bold">+{myPlayer.rewards.cranesEarned}</span> {t.cranes}
                     </div>
                   )}
                 </div>
@@ -1682,15 +1814,18 @@ const StrickerMatchSheet = () => {
                 ) : (
                   messages.map((msg, idx) => {
                     const isOwnMessage = msg.user?._id === user?._id || msg.user === user?._id;
+                    const isStaffMessage = msg.isStaff || msg.user?.roles?.some(r => ['admin', 'staff', 'arbitre'].includes(r));
                     return (
                       <div 
                         key={idx} 
                         className={`p-2.5 rounded-lg ${
                           msg.isSystem 
                             ? 'bg-lime-500/10 border border-lime-500/20 text-center' 
-                            : isOwnMessage
-                              ? 'bg-lime-500/20 ml-4'
-                              : 'bg-dark-700 mr-4'
+                            : isStaffMessage
+                              ? 'bg-amber-500/20 border border-amber-500/30'
+                              : isOwnMessage
+                                ? 'bg-lime-500/20 ml-4'
+                                : 'bg-dark-700 mr-4'
                         }`}
                       >
                         {msg.isSystem ? (
@@ -1698,7 +1833,12 @@ const StrickerMatchSheet = () => {
                         ) : (
                           <>
                             <div className="flex items-center gap-2 mb-1">
-                              <span className={`font-bold text-xs ${msg.team === 1 ? 'text-lime-400' : 'text-blue-400'}`}>
+                              {isStaffMessage && (
+                                <span className="px-1.5 py-0.5 bg-amber-500/30 text-amber-400 text-xs font-bold rounded">
+                                  STAFF
+                                </span>
+                              )}
+                              <span className={`font-bold text-xs ${isStaffMessage ? 'text-amber-400' : msg.team === 1 ? 'text-lime-400' : 'text-blue-400'}`}>
                                 {msg.user?.username || msg.username}
                               </span>
                               <span className="text-gray-600 text-xs">
@@ -1792,13 +1932,14 @@ const StrickerMatchSheet = () => {
               </div>
             </div>
 
-            {/* Result Voting */}
+            {/* Result Voting - Referents Only */}
             {(match.status === 'in_progress' || match.status === 'disputed') && myTeam && (
-              <div className={`bg-dark-900 border rounded-2xl p-5 ${match.status === 'disputed' ? 'border-red-500/30' : 'border-lime-500/20'}`}>
-                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Trophy className={`w-5 h-5 ${match.status === 'disputed' ? 'text-red-400' : 'text-lime-400'}`} />
-                  {t.reportResult}
+              <div className={`bg-gradient-to-br ${match.status === 'disputed' ? 'from-red-500/20 to-orange-500/10' : 'from-lime-500/20 to-green-500/10'} border-2 rounded-2xl p-5 ${match.status === 'disputed' ? 'border-red-500/50' : 'border-lime-500/50'}`}>
+                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                  <Trophy className={`w-6 h-6 ${match.status === 'disputed' ? 'text-red-400' : 'text-lime-400'}`} />
+                  {t.validateWinner}
                 </h3>
+                <p className="text-gray-400 text-sm mb-4">{t.validateWinnerDesc}</p>
                 
                 {/* Dispute notification */}
                 {match.status === 'disputed' && (
@@ -1826,56 +1967,74 @@ const StrickerMatchSheet = () => {
                 )}
                 
                 {/* Show current votes status */}
-                {match.status !== 'disputed' && (match.result?.team1Report || match.result?.team2Report) && (
-                  <div className="mb-4 grid grid-cols-2 gap-2 text-sm">
-                    <div className={`p-2 rounded-lg text-center ${match.result?.team1Report ? 'bg-lime-500/20 border border-lime-500/30' : 'bg-dark-800'}`}>
-                      <span className="text-gray-400">{team1Name}:</span>
-                      <span className={`ml-2 font-medium ${match.result?.team1Report ? 'text-lime-400' : 'text-gray-500'}`}>
+                {match.status !== 'disputed' && (
+                  <div className="mb-4 grid grid-cols-2 gap-3">
+                    <div className={`p-3 rounded-xl text-center ${match.result?.team1Report ? 'bg-lime-500/20 border-2 border-lime-500/50' : 'bg-dark-800/50 border border-white/10'}`}>
+                      <p className="text-xs text-gray-400 mb-1">{team1Name}</p>
+                      <p className={`font-bold ${match.result?.team1Report ? 'text-lime-400' : 'text-gray-500'}`}>
                         {match.result?.team1Report 
                           ? (match.result.team1Report.winner === 1 ? team1Name : team2Name)
                           : t.notVotedYet
                         }
-                      </span>
+                      </p>
+                      {match.result?.team1Report && <CheckCircle className="w-4 h-4 text-lime-400 mx-auto mt-1" />}
                     </div>
-                    <div className={`p-2 rounded-lg text-center ${match.result?.team2Report ? 'bg-blue-500/20 border border-blue-500/30' : 'bg-dark-800'}`}>
-                      <span className="text-gray-400">{team2Name}:</span>
-                      <span className={`ml-2 font-medium ${match.result?.team2Report ? 'text-blue-400' : 'text-gray-500'}`}>
+                    <div className={`p-3 rounded-xl text-center ${match.result?.team2Report ? 'bg-blue-500/20 border-2 border-blue-500/50' : 'bg-dark-800/50 border border-white/10'}`}>
+                      <p className="text-xs text-gray-400 mb-1">{team2Name}</p>
+                      <p className={`font-bold ${match.result?.team2Report ? 'text-blue-400' : 'text-gray-500'}`}>
                         {match.result?.team2Report 
                           ? (match.result.team2Report.winner === 1 ? team1Name : team2Name)
                           : t.notVotedYet
                         }
-                      </span>
+                      </p>
+                      {match.result?.team2Report && <CheckCircle className="w-4 h-4 text-blue-400 mx-auto mt-1" />}
                     </div>
                   </div>
                 )}
                 
+                {/* Voting buttons - Only for referents */}
                 {match.status !== 'disputed' && (
-                  myVote ? (
-                    <div className="text-center py-4">
-                      <CheckCircle className="w-12 h-12 text-lime-400 mx-auto mb-2" />
-                      <p className="text-lime-400 font-medium">
-                        {t.yourTeamVoted}: {myVote === 1 ? team1Name : team2Name}
-                      </p>
-                      <p className="text-gray-500 text-sm mt-2">
-                        {t.waitingOtherTeam}
-                      </p>
-                    </div>
+                  isReferent ? (
+                    myVote ? (
+                      <div className="text-center py-4 bg-dark-800/50 rounded-xl">
+                        <CheckCircle className="w-12 h-12 text-lime-400 mx-auto mb-2" />
+                        <p className="text-lime-400 font-medium">
+                          {t.yourTeamVoted}: <span className="font-bold">{myVote === 1 ? team1Name : team2Name}</span>
+                        </p>
+                        <p className="text-gray-500 text-sm mt-2">
+                          {t.waitingOtherTeam}
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-center gap-2 mb-3">
+                          <Crown className="w-4 h-4 text-amber-400" />
+                          <span className="text-amber-400 text-sm font-medium">{t.youAreReferent}</span>
+                        </div>
+                        <p className="text-center text-gray-400 text-sm mb-3">{t.reportResult}</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => handleSubmitResult(1)}
+                            disabled={submittingResult}
+                            className="py-4 bg-lime-500/20 hover:bg-lime-500/40 text-lime-400 font-bold rounded-xl border-2 border-lime-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
+                          >
+                            {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team1Name}
+                          </button>
+                          <button
+                            onClick={() => handleSubmitResult(2)}
+                            disabled={submittingResult}
+                            className="py-4 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 font-bold rounded-xl border-2 border-blue-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
+                          >
+                            {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team2Name}
+                          </button>
+                        </div>
+                      </div>
+                    )
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        onClick={() => handleSubmitResult(1)}
-                        disabled={submittingResult}
-                        className="py-4 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 font-bold rounded-xl border border-lime-500/30 transition-all disabled:opacity-50"
-                      >
-                        {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team1Name}
-                      </button>
-                      <button
-                        onClick={() => handleSubmitResult(2)}
-                        disabled={submittingResult}
-                        className="py-4 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 font-bold rounded-xl border border-blue-500/30 transition-all disabled:opacity-50"
-                      >
-                        {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team2Name}
-                      </button>
+                    <div className="text-center py-4 bg-dark-800/50 rounded-xl">
+                      <Clock className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                      <p className="text-gray-400">{t.waitingReferentVote}</p>
+                      <p className="text-gray-500 text-xs mt-1">{t.onlyReferentCanVote}</p>
                     </div>
                   )
                 )}
@@ -1940,6 +2099,33 @@ const StrickerMatchSheet = () => {
           </div>
         </div>
       </div>
+
+      {/* Combat Report Modal */}
+      {showMatchReport && matchReportData && (
+        <StrickerMatchReport
+          show={showMatchReport}
+          onClose={() => setShowMatchReport(false)}
+          isWinner={matchReportData.isWinner}
+          rewards={matchReportData.rewards}
+          oldRank={matchReportData.oldRank}
+          newRank={matchReportData.newRank}
+          matchId={matchId}
+          isReferent={isReferent}
+          isMvp={match?.mvp?.confirmed && (match?.mvp?.player?._id?.toString() || match?.mvp?.player?.toString()) === (user?._id?.toString() || user?.id?.toString())}
+          mvpBonus={match?.mvp?.bonusPoints || 5}
+          mvpPlayer={match?.mvp?.player || null}
+          players={match?.players || []}
+          mvpVotingActive={match?.mvp?.votingActive || false}
+          mvpConfirmed={match?.mvp?.confirmed || false}
+          mvpVotes={match?.mvp?.votes || []}
+          onMvpVote={handleMvpVote}
+          isTestMatch={match?.isTestMatch || false}
+          winningTeam={match?.result?.winner}
+          userTeam={matchReportData.userTeam}
+          squadName={matchReportData.squadName}
+          cranesEarned={matchReportData.cranesEarned}
+        />
+      )}
     </div>
   );
 };

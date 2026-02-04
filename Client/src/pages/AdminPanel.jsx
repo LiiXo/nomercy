@@ -6112,7 +6112,7 @@ Cette action est irréversible!`)) {
                     <li>• Gold gagné (retiré à tous)</li>
                     <li>• XP gagnée (retirée aux gagnants)</li>
                     <li>• Victoires/Défaites (retirées des stats)</li>
-                    <li>• Cranes (têtes de mort) gagnés (retirés aux escouades)</li>
+                    <li>• Munitions gagnées (retirées aux escouades)</li>
                   </ul>
                 </div>
               )}

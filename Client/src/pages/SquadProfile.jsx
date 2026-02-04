@@ -7,7 +7,7 @@ import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
 import { 
   ArrowLeft, Trophy, Medal, Shield, Users, Calendar, Crown, Loader2, 
   AlertCircle, TrendingUp, Target, UserPlus, Lock, Check, X, Send, Award,
-  Swords, Clock, Play, Star, ChevronLeft, ChevronRight, Skull
+  Swords, Clock, Play, Star, ChevronLeft, ChevronRight, Crosshair
 } from 'lucide-react';
 
 import { API_URL, UPLOADS_BASE_URL } from '../config';
@@ -115,6 +115,7 @@ const SquadProfile = () => {
       previous: 'Précédent',
       next: 'Suivant',
       totalMatches: 'matchs au total',
+      cranes: 'Munitions',
     },
     en: {
       back: 'Back',
@@ -169,6 +170,7 @@ const SquadProfile = () => {
       previous: 'Previous',
       next: 'Next',
       totalMatches: 'total matches',
+      cranes: 'Ammo',
     },
     de: {
       back: 'Zurück',
@@ -223,6 +225,7 @@ const SquadProfile = () => {
       previous: 'Zurück',
       next: 'Weiter',
       totalMatches: 'Spiele insgesamt',
+      cranes: 'Munition',
     },
     it: {
       back: 'Indietro',
@@ -277,6 +280,7 @@ const SquadProfile = () => {
       previous: 'Precedente',
       next: 'Successivo',
       totalMatches: 'partite totali',
+      cranes: 'Munizioni',
     },
   };
   const t = texts[language] || texts.en;
@@ -814,13 +818,13 @@ const SquadProfile = () => {
                         <p className="text-lg sm:text-xl font-bold text-red-400">{squad.statsStricker?.losses || 0}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
                       </div>
-                      {/* Cranes (Skulls) Currency */}
+                      {/* Munitions Currency */}
                       <div className="text-center pl-3 sm:pl-6 border-l border-lime-500/20">
                         <div className="flex items-center justify-center gap-1.5">
-                          <Skull className="w-4 h-4 sm:w-5 sm:h-5 text-gray-300" />
+                          <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 text-lime-400" />
                           <p className="text-lg sm:text-xl font-bold text-gray-200">{squad.cranes || 0}</p>
                         </div>
-                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">Cranes</p>
+                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.cranes}</p>
                       </div>
                     </div>
                   </div>

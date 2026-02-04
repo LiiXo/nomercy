@@ -116,7 +116,7 @@ const squadSchema = new mongoose.Schema({
     rank: { type: String, default: 'Recrues' } // Default rank for Stricker mode
   },
   
-  // Cranes (skulls) - Squad currency for Stricker mode
+  // Munitions - Squad currency for Stricker mode
   // Earned: 20 per Stricker match, bonus from season rewards (top 10)
   cranes: {
     type: Number,
