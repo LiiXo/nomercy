@@ -9,10 +9,15 @@ import Match from '../models/Match.js';
 import RankedMatch from '../models/RankedMatch.js';
 import StrickerMatch from '../models/StrickerMatch.js';
 import User from '../models/User.js';
+import { alertIrisMatchDisconnected } from './discordBot.service.js';
 
 // Stockage du statut de connexion des joueurs par match
 // Structure: { 'matchId-userId': { isConnected: boolean, lastCheck: Date, matchType: 'ladder' | 'ranked' } }
 const playerConnectionStatus = new Map();
+
+// Stockage du statut Iris des joueurs par match
+// Pour éviter de spammer les alertes Discord
+const irisAlertSent = new Map();
 
 // Socket.io instance
 let io = null;
@@ -22,6 +27,34 @@ let io = null;
  */
 export const initGGSecureMonitoring = (socketIo) => {
   io = socketIo;
+};
+
+/**
+ * Vérifie si un joueur PC est connecté à Iris (heartbeat récent)
+ */
+const checkIrisStatus = async (userId) => {
+  try {
+    const user = await User.findById(userId)
+      .select('platform irisLastSeen irisWasConnected username discordUsername irisScanChannelId')
+      .lean();
+    
+    if (!user || user.platform !== 'PC') {
+      return { required: false, connected: true };
+    }
+    
+    // Vérifier si le joueur a envoyé un heartbeat dans les 6 dernières minutes
+    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+    const isConnected = user.irisLastSeen && new Date(user.irisLastSeen) > sixMinutesAgo;
+    
+    return { 
+      required: true, 
+      connected: isConnected,
+      user: user
+    };
+  } catch (error) {
+    console.error('[GGSecure Monitoring] Iris check error:', error);
+    return { required: true, connected: true }; // En cas d'erreur, on laisse passer
+  }
 };
 
 /**
@@ -69,46 +102,97 @@ const checkGGSecureStatus = async (userId) => {
  */
 const checkPlayerInMatch = async (player, match, matchType) => {
   try {
+    // Vérifier GGSecure
     const status = await checkGGSecureStatus(player.userId);
     
-    if (!status.required) return;
+    if (status.required) {
+      const statusKey = `${match._id}-${player.userId}`;
+      const previousStatus = playerConnectionStatus.get(statusKey);
+      const currentlyConnected = status.connected;
 
-    const statusKey = `${match._id}-${player.userId}`;
-    const previousStatus = playerConnectionStatus.get(statusKey);
-    const currentlyConnected = status.connected;
+      // Si le statut a changé OU si c'est la première vérification
+      if (!previousStatus) {
+        // Première vérification - initialiser sans envoyer de message
+        playerConnectionStatus.set(statusKey, {
+          isConnected: currentlyConnected,
+          lastCheck: new Date(),
+          matchType
+        });
+        
+        // Si déconnecté dès le début, envoyer un message
+        if (!currentlyConnected) {
+          await sendConnectionMessage(player, match, matchType, false);
+        }
+      } else if (previousStatus.isConnected !== currentlyConnected) {
+        // Le statut a changé - envoyer un message
+        playerConnectionStatus.set(statusKey, {
+          isConnected: currentlyConnected,
+          lastCheck: new Date(),
+          matchType
+        });
 
-    // Si le statut a changé OU si c'est la première vérification
-    if (!previousStatus) {
-      // Première vérification - initialiser sans envoyer de message
-      playerConnectionStatus.set(statusKey, {
-        isConnected: currentlyConnected,
-        lastCheck: new Date(),
+        await sendConnectionMessage(player, match, matchType, currentlyConnected);
+      } else {
+        // Pas de changement - juste mettre à jour la date de vérification
+        playerConnectionStatus.set(statusKey, {
+          isConnected: currentlyConnected,
+          lastCheck: new Date(),
+          matchType
+        });
+      }
+    }
+    
+    // Vérifier Iris (indépendamment de GGSecure)
+    await checkPlayerIrisInMatch(player, match, matchType);
+    
+  } catch (error) {
+    console.error('[GGSecure Monitoring] Error checking player:', error);
+  }
+};
+
+/**
+ * Vérifie si un joueur PC est connecté à Iris pendant un match
+ * et envoie une alerte Discord si ce n'est pas le cas
+ */
+const checkPlayerIrisInMatch = async (player, match, matchType) => {
+  try {
+    const irisStatus = await checkIrisStatus(player.userId);
+    
+    if (!irisStatus.required) return; // Pas un joueur PC
+    
+    const irisKey = `iris-${match._id}-${player.userId}`;
+    const alreadyAlerted = irisAlertSent.get(irisKey);
+    
+    if (!irisStatus.connected && !alreadyAlerted) {
+      // Joueur PC en match mais pas connecté à Iris - envoyer l'alerte
+      const matchInfo = {
+        matchId: match._id.toString(),
+        matchType: matchType,
+        status: match.status
+      };
+      
+      await alertIrisMatchDisconnected(
+        {
+          username: irisStatus.user?.username || player.username,
+          discordUsername: irisStatus.user?.discordUsername,
+          irisScanChannelId: irisStatus.user?.irisScanChannelId
+        },
+        matchInfo
+      );
+      
+      // Marquer comme alerté pour éviter le spam
+      irisAlertSent.set(irisKey, {
+        alertedAt: new Date(),
         matchType
       });
       
-      // Si déconnecté dès le début, envoyer un message
-      if (!currentlyConnected) {
-        await sendConnectionMessage(player, match, matchType, false);
-      }
-    } else if (previousStatus.isConnected !== currentlyConnected) {
-      // Le statut a changé - envoyer un message
-      playerConnectionStatus.set(statusKey, {
-        isConnected: currentlyConnected,
-        lastCheck: new Date(),
-        matchType
-      });
-
-      await sendConnectionMessage(player, match, matchType, currentlyConnected);
-    } else {
-      // Pas de changement - juste mettre à jour la date de vérification
-      playerConnectionStatus.set(statusKey, {
-        isConnected: currentlyConnected,
-        lastCheck: new Date(),
-        matchType
-      });
+      console.log(`[Iris Monitoring] Player ${player.username} in ${matchType} match ${match._id} not connected to Iris - alerted`);
+    } else if (irisStatus.connected && alreadyAlerted) {
+      // Le joueur s'est reconnecté, on peut supprimer l'alerte
+      irisAlertSent.delete(irisKey);
     }
   } catch (error) {
-    console.error('[GGSecure Monitoring] Error checking player:', error);
+    console.error('[Iris Monitoring] Error checking player Iris status:', error);
   }
 };
 
@@ -327,9 +411,17 @@ const monitorAllMatches = async () => {
 const cleanupOldStatuses = () => {
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
   
+  // Nettoyer les statuts GGSecure
   for (const [statusKey, status] of playerConnectionStatus.entries()) {
     if (status.lastCheck < oneHourAgo) {
       playerConnectionStatus.delete(statusKey);
+    }
+  }
+  
+  // Nettoyer les alertes Iris
+  for (const [irisKey, alert] of irisAlertSent.entries()) {
+    if (alert.alertedAt < oneHourAgo) {
+      irisAlertSent.delete(irisKey);
     }
   }
 };

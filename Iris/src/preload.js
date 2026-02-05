@@ -8,9 +8,20 @@ contextBridge.exposeInMainWorld('iris', {
   verifySession: () => ipcRenderer.invoke('verify-session'),
   logout: () => ipcRenderer.invoke('logout'),
   
+  // Client authenticity verification
+  verifyClient: () => ipcRenderer.invoke('verify-client'),
+  isClientVerified: () => ipcRenderer.invoke('is-client-verified'),
+  
+  // Auto-update
+  getVersion: () => ipcRenderer.invoke('get-version'),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  
   // Hardware
   getHardwareId: () => ipcRenderer.invoke('get-hardware-id'),
   getSecurityStatus: () => ipcRenderer.invoke('get-security-status'),
+  
+  // Heartbeat
+  startHeartbeat: () => ipcRenderer.send('start-heartbeat'),
   
   // Window controls
   minimize: () => ipcRenderer.invoke('window-minimize'),
@@ -28,5 +39,17 @@ contextBridge.exposeInMainWorld('iris', {
   },
   onAuthError: (callback) => {
     ipcRenderer.on('auth-error', (event, data) => callback(data));
+  },
+  onHeartbeatStatus: (callback) => {
+    ipcRenderer.on('heartbeat-status', (event, data) => callback(data));
+  },
+  onSecurityAlert: (callback) => {
+    ipcRenderer.on('security-alert', (event, data) => callback(data));
+  },
+  onUpdateStatus: (callback) => {
+    ipcRenderer.on('update-status', (event, data) => callback(data));
+  },
+  onUpdateProgress: (callback) => {
+    ipcRenderer.on('update-progress', (event, data) => callback(data));
   }
 });

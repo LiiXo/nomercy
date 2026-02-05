@@ -134,6 +134,21 @@ const strickerMatchSchema = new mongoose.Schema({
     type: String,
     default: 'mixed'
   },
+  // Winner du match (for filtering) - Duplicate of result.winner
+  winner: {
+    type: Number,
+    enum: [1, 2],
+    default: null
+  },
+  // Team scores (for filtering) - Duplicates of result scores
+  team1Score: {
+    type: Number,
+    default: 0
+  },
+  team2Score: {
+    type: Number,
+    default: 0
+  },
   // Résultat du match
   result: {
     winner: {

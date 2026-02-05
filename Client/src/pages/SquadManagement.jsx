@@ -901,7 +901,7 @@ const SquadManagement = () => {
       
       if (data.success) {
         setSuccess(t.squadDisbanded);
-        setTimeout(() => navigate('/my-profile'), 1500);
+        setTimeout(() => navigate('/my-squad'), 1500);
       } else {
         setError(data.message);
       }
@@ -978,7 +978,7 @@ const SquadManagement = () => {
           <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-400 mb-4">{t.noSquad}</p>
           <Link 
-            to="/my-profile"
+            to="/my-squad"
             className={`inline-flex items-center gap-2 px-4 py-2 bg-${accentColor}-500 text-white rounded-lg hover:bg-${accentColor}-600 transition-colors`}
           >
             <ChevronLeft className="w-4 h-4" />
@@ -996,7 +996,7 @@ const SquadManagement = () => {
           <Lock className="w-16 h-16 text-gray-600 mx-auto mb-4" />
           <p className="text-gray-400 mb-4">{t.notLeader}</p>
           <Link 
-            to="/my-profile"
+            to="/my-squad"
             className={`inline-flex items-center gap-2 px-4 py-2 bg-${accentColor}-500 text-white rounded-lg hover:bg-${accentColor}-600 transition-colors`}
           >
             <ChevronLeft className="w-4 h-4" />
@@ -1024,7 +1024,7 @@ const SquadManagement = () => {
           <div className="flex items-center justify-between mb-4 sm:mb-8">
             <div className="flex items-center gap-2 sm:gap-4">
               <Link 
-                to="/my-profile"
+                to="/my-squad"
                 className={`p-1.5 sm:p-2 rounded-lg bg-dark-800 hover:bg-dark-700 text-gray-400 hover:text-white transition-colors`}
               >
                 <ChevronLeft className="w-4 sm:w-5 h-4 sm:h-5" />

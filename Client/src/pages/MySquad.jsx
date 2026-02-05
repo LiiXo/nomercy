@@ -821,10 +821,16 @@ const MySquad = () => {
             </div>
           )}
 
-          {/* Squad Hero Section */}
-          <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${borderColor} overflow-hidden shadow-xl mb-6`}>
-            {/* Banner */}
-            <div className="relative h-32 sm:h-40">
+          {/* Squad Hero Section with New Design */}
+          <div className={`relative bg-gradient-to-br from-dark-900/95 via-dark-900/90 to-dark-900/95 backdrop-blur-xl rounded-3xl border ${borderColor} overflow-hidden shadow-2xl mb-8`}>
+            {/* Animated Background */}
+            <div className="absolute inset-0 overflow-hidden">
+              <div className={`absolute -top-40 -right-40 w-80 h-80 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} opacity-20 blur-3xl animate-pulse`} />
+              <div className={`absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-gradient-to-br ${gradientFrom} ${gradientTo} opacity-15 blur-3xl animate-pulse`} style={{ animationDelay: '1s' }} />
+            </div>
+
+            {/* Banner Section */}
+            <div className="relative h-48 sm:h-56">
               {squad.banner ? (
                 <>
                   <img 
@@ -833,138 +839,135 @@ const MySquad = () => {
                     className="absolute inset-0 w-full h-full object-cover"
                     onError={(e) => { e.target.style.display = 'none'; }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/50 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-b from-dark-900/60 via-dark-900/80 to-dark-900" />
                 </>
               ) : (
                 <>
-                  <div 
-                    className="absolute inset-0"
-                    style={{ 
-                      background: squad.color === 'transparent' 
-                        ? 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.02) 50%, transparent 100%)'
-                        : `linear-gradient(135deg, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}40 0%, ${squad.color || (isHardcore ? '#ef4444' : '#06b6d4')}10 50%, transparent 100%)`
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-dark-900/90 via-dark-900/50 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-dark-800 via-dark-850 to-dark-900" />
+                  <div className={`absolute inset-0 bg-gradient-to-r ${gradientFrom}/10 ${gradientTo}/5`} />
                 </>
               )}
               
-              {/* Quick Actions */}
-              <div className="absolute top-4 right-4 flex gap-2">
-                {isLeaderOrOfficer && (
+              {/* Quick Actions Floating */}
+              {isLeaderOrOfficer && (
+                <div className="absolute top-6 right-6 flex gap-3">
                   <Link
                     to="/squad-management"
-                    className={`p-2.5 bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-lg text-white hover:opacity-90 transition-opacity shadow-lg ${glowColor}`}
+                    className={`p-3 bg-dark-900/80 backdrop-blur-md hover:bg-dark-800/90 rounded-xl border ${borderColor} text-white transition-all hover:scale-105 shadow-lg ${glowColor}`}
                     title={t.manage}
                   >
-                    <Settings className="w-4 h-4" />
+                    <Settings className="w-5 h-5" />
                   </Link>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
-            {/* Squad Info */}
-            <div className="relative px-6 pb-6 -mt-16">
-              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6">
-                {/* Logo */}
-                <div 
-                  className="w-28 h-28 sm:w-32 sm:h-32 rounded-2xl border-4 border-dark-900 flex items-center justify-center text-4xl font-black text-white shadow-2xl overflow-hidden flex-shrink-0"
-                  style={{ backgroundColor: squad.color === 'transparent' ? 'rgba(255,255,255,0.05)' : (squad.color || (isHardcore ? '#ef4444' : '#06b6d4')) }}
-                >
-                  {squad.logo ? (
-                    <img src={squad.logo} alt={squad.name} className="w-full h-full object-cover" />
-                  ) : (
-                    squad.tag?.substring(0, 2) || squad.name?.substring(0, 2)
-                  )}
-                </div>
-                
-                <div className="flex-1 text-center sm:text-left">
-                  <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 mb-2">
-                    <h1 className="text-2xl sm:text-3xl font-black text-white">{squad.name}</h1>
-                    <button
-                      onClick={copyTag}
-                      className={`flex items-center gap-1.5 px-3 py-1 bg-${accentColor}-500/20 text-${accentColor}-400 text-sm font-bold rounded-lg hover:bg-${accentColor}-500/30 transition-colors`}
-                      title={t.copyTag}
-                    >
-                      [{squad.tag}]
-                      {copied ? (
-                        <Check className="w-3.5 h-3.5" />
+            {/* Main Content Section */}
+            <div className="relative px-6 sm:px-8 pb-8 -mt-20">
+              <div className="flex flex-col lg:flex-row gap-8">
+                {/* Left Section: Logo + Info */}
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 lg:flex-1">
+                  {/* Logo with Glow Effect */}
+                  <div className="relative group">
+                    <div className={`absolute inset-0 bg-gradient-to-br ${gradientFrom} ${gradientTo} rounded-2xl opacity-50 blur-xl group-hover:opacity-70 transition-opacity`} />
+                    <div className="relative w-32 h-32 sm:w-36 sm:h-36 rounded-2xl bg-dark-800/80 backdrop-blur-sm border-4 border-dark-900 flex items-center justify-center shadow-2xl overflow-hidden">
+                      {squad.logo ? (
+                        <img src={squad.logo} alt={squad.name} className="w-full h-full object-contain p-3" />
                       ) : (
-                        <Copy className="w-3.5 h-3.5" />
+                        <div className={`text-4xl font-black bg-gradient-to-br ${gradientFrom} ${gradientTo} bg-clip-text text-transparent`}>
+                          {squad.tag?.substring(0, 2) || squad.name?.substring(0, 2)}
+                        </div>
                       )}
-                    </button>
-                    {isLeaderOrOfficer && squad.leader?._id === user?._id && (
-                      <button
-                        onClick={handleOpenEdit}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white text-sm rounded-lg transition-colors"
-                        title={t.editSquadInfo}
-                      >
-                        <Settings className="w-3.5 h-3.5" />
-                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Squad Info */}
+                  <div className="flex-1 text-center sm:text-left">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 mb-4">
+                      <h1 className={`text-3xl sm:text-4xl font-black bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent`}>
+                        {squad.name}
+                      </h1>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={copyTag}
+                          className={`flex items-center gap-2 px-4 py-2 bg-${accentColor}-500/20 hover:bg-${accentColor}-500/30 border border-${accentColor}-500/30 text-${accentColor}-400 font-bold rounded-lg transition-all hover:scale-105`}
+                          title={t.copyTag}
+                        >
+                          [{squad.tag}]
+                          {copied ? (
+                            <Check className="w-4 h-4" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
+                        </button>
+                        {isLeaderOrOfficer && squad.leader?._id === user?._id && (
+                          <button
+                            onClick={handleOpenEdit}
+                            className="p-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-all"
+                            title={t.editSquadInfo}
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {squad.description && (
+                      <p className="text-gray-300 text-base leading-relaxed mb-4 max-w-2xl">{squad.description}</p>
                     )}
+                    
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-sm">
+                      <span className="flex items-center gap-2 text-gray-400">
+                        <Calendar className="w-4 h-4" />
+                        {t.createdAt} {new Date(squad.createdAt).toLocaleDateString(language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US', { month: 'long', year: 'numeric' })}
+                      </span>
+                      <Link
+                        to={`/squad/${squad._id}`}
+                        className={`flex items-center gap-2 text-${accentColor}-400 hover:text-${accentColor}-300 font-medium transition-colors`}
+                      >
+                        <Globe className="w-4 h-4" />
+                        {t.viewProfile}
+                      </Link>
+                    </div>
                   </div>
-                  {squad.description && (
-                    <p className="text-gray-400 text-sm mb-3 max-w-xl">{squad.description}</p>
-                  )}
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-sm text-gray-500">
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-4 h-4" />
-                      {t.createdAt} {new Date(squad.createdAt).toLocaleDateString(language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US')}
-                    </span>
-                    <Link
-                      to={`/squad/${squad._id}`}
-                      className={`flex items-center gap-1.5 text-${accentColor}-400 hover:text-${accentColor}-300 transition-colors`}
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      {t.viewProfile}
-                    </Link>
+                </div>
+
+                {/* Right Section: Quick Stats Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 lg:w-64">
+                  <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-white/10 p-4 hover:border-white/20 transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Users className={`w-4 h-4 text-${accentColor}-400`} />
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.members}</p>
+                    </div>
+                    <p className="text-2xl font-black text-white">{squad.members?.length || 0}</p>
+                  </div>
+                  <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-green-500/20 p-4 hover:border-green-500/30 transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Trophy className="w-4 h-4 text-green-400" />
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.wins}</p>
+                    </div>
+                    <p className="text-2xl font-black text-green-400">{totalWins}</p>
+                  </div>
+                  <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-red-500/20 p-4 hover:border-red-500/30 transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Target className="w-4 h-4 text-red-400" />
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.losses}</p>
+                    </div>
+                    <p className="text-2xl font-black text-red-400">{totalLosses}</p>
+                  </div>
+                  <div className={`bg-dark-800/50 backdrop-blur-sm rounded-xl border border-${accentColor}-500/20 p-4 hover:border-${accentColor}-500/30 transition-all`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Award className={`w-4 h-4 text-${accentColor}-400`} />
+                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.winRate}</p>
+                    </div>
+                    <p className={`text-2xl font-black text-${accentColor}-400`}>{winRate}%</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-            <div className={`bg-dark-900/80 backdrop-blur-sm rounded-xl border ${borderColor} p-4 sm:p-5`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center`}>
-                  <Users className={`w-5 h-5 text-${accentColor}-400`} />
-                </div>
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-white">{squad.members?.length || 0}</p>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">{t.members}</p>
-            </div>
-            <div className={`bg-dark-900/80 backdrop-blur-sm rounded-xl border ${borderColor} p-4 sm:p-5`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                  <Trophy className="w-5 h-5 text-green-400" />
-                </div>
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-white">{totalWins}</p>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">{t.wins}</p>
-            </div>
-            <div className={`bg-dark-900/80 backdrop-blur-sm rounded-xl border ${borderColor} p-4 sm:p-5`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-                  <Swords className="w-5 h-5 text-red-400" />
-                </div>
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-white">{totalLosses}</p>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">{t.losses}</p>
-            </div>
-            <div className={`bg-dark-900/80 backdrop-blur-sm rounded-xl border ${borderColor} p-4 sm:p-5`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className={`w-10 h-10 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center`}>
-                  <Target className={`w-5 h-5 text-${accentColor}-400`} />
-                </div>
-              </div>
-              <p className="text-2xl sm:text-3xl font-black text-white">{winRate}%</p>
-              <p className="text-xs text-gray-500 uppercase tracking-wider">{t.winRate}</p>
-            </div>
-          </div>
-
-          {/* Stricker Rank Display */}
+          {/* Stricker Rank Display - Enhanced */}
           {squad.statsStricker?.rank && (() => {
             const rankName = squad.statsStricker.rank;
             const rankKey = rankName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -979,61 +982,61 @@ const MySquad = () => {
             const rankImage = rankImages[rankKey] || '/stricker1.png';
             
             return (
-              <div className="bg-gradient-to-r from-lime-500/10 via-green-500/10 to-emerald-500/10 backdrop-blur-sm rounded-2xl border border-lime-500/30 overflow-hidden mb-6">
-                <div className="relative p-6">
-                  {/* Background glow effect */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-lime-500/5 to-emerald-500/5"></div>
-                  
-                  {/* Content */}
-                  <div className="relative flex items-center justify-between gap-6">
-                    {/* Left: Rank Icon */}
-                    <div className="flex items-center gap-4">
+              <div className="relative bg-gradient-to-br from-lime-900/20 via-green-900/20 to-emerald-900/20 backdrop-blur-sm rounded-2xl border border-lime-500/30 overflow-hidden mb-8 shadow-xl shadow-lime-500/10">
+                {/* Animated Background */}
+                <div className="absolute inset-0 overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-lime-500/10 rounded-full blur-3xl animate-pulse" />
+                  <div className="absolute bottom-0 left-0 w-64 h-64 bg-green-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+                </div>
+                
+                <div className="relative p-6 sm:p-8">
+                  <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
+                    {/* Left: Rank Badge */}
+                    <div className="flex items-center gap-6">
                       <div className="relative group">
-                        <div className="absolute inset-0 bg-lime-400/20 blur-2xl rounded-full group-hover:bg-lime-400/30 transition-all"></div>
-                        <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-gradient-to-br from-lime-900/50 to-green-900/50 border-2 border-lime-500/30 flex items-center justify-center overflow-hidden shadow-lg">
+                        <div className="absolute inset-0 bg-lime-400/30 blur-2xl rounded-full group-hover:bg-lime-400/40 transition-all" />
+                        <div className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl bg-gradient-to-br from-lime-900/40 to-green-900/40 border-2 border-lime-500/40 flex items-center justify-center overflow-hidden shadow-2xl backdrop-blur-sm">
                           <img 
                             src={rankImage} 
                             alt={rankName}
-                            className="w-20 h-20 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_12px_rgba(126,211,33,0.6)]"
+                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_16px_rgba(126,211,33,0.7)]"
                             onError={(e) => {
                               e.target.style.display = 'none';
-                              e.target.parentElement.innerHTML = '<svg className="w-8 h-8 text-lime-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/></svg>';
                             }}
                           />
                         </div>
                       </div>
                       
-                      {/* Rank info */}
                       <div>
-                        <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">
+                        <p className="text-lime-400/70 text-xs sm:text-sm uppercase tracking-widest font-bold mb-2">
                           {language === 'fr' ? 'Rang Stricker' : 'Stricker Rank'}
                         </p>
-                        <h3 className="text-lime-400 font-black text-xl sm:text-2xl tracking-tight drop-shadow-[0_0_10px_rgba(126,211,33,0.3)]">
+                        <h3 className="text-lime-400 font-black text-2xl sm:text-3xl tracking-tight drop-shadow-[0_0_12px_rgba(126,211,33,0.4)]">
                           {rankName}
                         </h3>
                       </div>
                     </div>
                     
-                    {/* Right: Stricker Stats */}
-                    <div className="flex items-center gap-3 sm:gap-6">
-                      <div className="text-center">
-                        <p className="text-lg sm:text-xl font-bold text-lime-400">{squad.statsStricker?.points || 0}</p>
-                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Points' : 'Points'}</p>
+                    {/* Right: Stats Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full lg:w-auto">
+                      <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-lime-500/20 p-4 text-center hover:border-lime-500/40 transition-all">
+                        <p className="text-2xl sm:text-3xl font-black text-lime-400">{squad.statsStricker?.points || 0}</p>
+                        <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{language === 'fr' ? 'Points' : 'Points'}</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg sm:text-xl font-bold text-green-400">{squad.statsStricker?.wins || 0}</p>
-                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Victoires' : 'Wins'}</p>
+                      <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-green-500/20 p-4 text-center hover:border-green-500/40 transition-all">
+                        <p className="text-2xl sm:text-3xl font-black text-green-400">{squad.statsStricker?.wins || 0}</p>
+                        <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{language === 'fr' ? 'Victoires' : 'Wins'}</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-lg sm:text-xl font-bold text-red-400">{squad.statsStricker?.losses || 0}</p>
-                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
+                      <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-red-500/20 p-4 text-center hover:border-red-500/40 transition-all">
+                        <p className="text-2xl sm:text-3xl font-black text-red-400">{squad.statsStricker?.losses || 0}</p>
+                        <p className="text-xs text-gray-400 uppercase tracking-wider mt-1">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
                       </div>
-                      <div className="text-center pl-3 sm:pl-6 border-l border-lime-500/20">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <Crosshair className="w-4 h-4 sm:w-5 sm:h-5 text-lime-400" />
-                          <p className="text-lg sm:text-xl font-bold text-gray-200">{squad.cranes || 0}</p>
+                      <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-lime-500/20 p-4 text-center hover:border-lime-500/40 transition-all">
+                        <div className="flex items-center justify-center gap-2 mb-1">
+                          <Crosshair className="w-5 h-5 text-lime-400" />
+                          <p className="text-2xl sm:text-3xl font-black text-lime-400">{squad.cranes || 0}</p>
                         </div>
-                        <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.cranes}</p>
+                        <p className="text-xs text-gray-400 uppercase tracking-wider">{t.cranes}</p>
                       </div>
                     </div>
                   </div>
@@ -1042,20 +1045,24 @@ const MySquad = () => {
             );
           })()}
 
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Members Column */}
-            <div className="lg:col-span-2">
-              <div className={`bg-dark-900/80 backdrop-blur-sm rounded-2xl border ${borderColor} overflow-hidden`}>
-                <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Users className={`w-5 h-5 text-${accentColor}-400`} />
-                    {t.members}
-                    <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-white/10 rounded-full">{squad.members?.length || 0}</span>
+          {/* Main Content - Full Width */}
+          <div>
+            {/* Members Column - Full Width */}
+            <div>
+              <div className={`bg-gradient-to-br from-dark-900/95 via-dark-900/90 to-dark-900/95 backdrop-blur-xl rounded-2xl border ${borderColor} overflow-hidden shadow-xl`}>
+                <div className="px-6 py-5 border-b border-white/10 bg-gradient-to-r from-dark-800/50 to-transparent">
+                  <h2 className="text-xl font-black text-white flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${gradientFrom} ${gradientTo} flex items-center justify-center shadow-lg`}>
+                      <Users className="w-5 h-5 text-white" />
+                    </div>
+                    <span>{t.members}</span>
+                    <span className={`ml-auto px-3 py-1.5 text-sm font-bold bg-gradient-to-r ${gradientFrom} ${gradientTo} bg-clip-text text-transparent border border-${accentColor}-500/30 rounded-lg`}>
+                      {squad.members?.length || 0}
+                    </span>
                   </h2>
                 </div>
                 
-                <div className="divide-y divide-white/5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
                   {squad.members?.map((member, index) => {
                     const role = getMemberRole(member);
                     const isCurrentUser = (member.user?._id === user?._id || member.user?._id === user?.id);
@@ -1063,37 +1070,58 @@ const MySquad = () => {
                       <Link
                         key={member.user?._id || member.user || index}
                         to={`/player/${member.user?._id}`}
-                        className="flex items-center gap-4 p-4 hover:bg-white/5 transition-colors group"
+                        className={`group relative bg-dark-800/50 hover:bg-dark-800/80 backdrop-blur-sm rounded-xl border ${
+                          isCurrentUser ? `border-${accentColor}-500/50 shadow-lg shadow-${accentColor}-500/20` : 'border-white/10 hover:border-white/20'
+                        } p-4 transition-all hover:scale-[1.02] hover:shadow-xl`}
                       >
-                        <div className="relative">
-                          <img
-                            src={getAvatar(member)}
-                            alt={member.user?.username}
-                            className="w-12 h-12 rounded-xl object-cover border-2 border-white/10 group-hover:border-white/20 transition-colors"
-                            onError={(e) => { e.target.src = getDefaultAvatar(member.user?.username); }}
-                          />
-                          {role === 'leader' && (
-                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center border-2 border-dark-900">
-                              <Crown className="w-2.5 h-2.5 text-dark-900" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className={`font-semibold truncate ${isCurrentUser ? `text-${accentColor}-400` : 'text-white'}`}>
-                              {member.user?.username}
-                            </p>
-                            <span className={`px-2 py-0.5 text-xs font-medium rounded border ${getRoleColor(role)} flex items-center gap-1`}>
-                              {getRoleIcon(role)}
-                              {t[role]}
-                            </span>
+                        {/* Glow effect for current user */}
+                        {isCurrentUser && (
+                          <div className={`absolute inset-0 bg-gradient-to-br ${gradientFrom} ${gradientTo} opacity-5 rounded-xl`} />
+                        )}
+                        
+                        <div className="relative flex items-center gap-4">
+                          <div className="relative flex-shrink-0">
+                            <img
+                              src={getAvatar(member)}
+                              alt={member.user?.username}
+                              className="w-14 h-14 rounded-xl object-cover border-2 border-white/20 group-hover:border-white/40 transition-all shadow-lg"
+                              onError={(e) => { e.target.src = getDefaultAvatar(member.user?.username); }}
+                            />
+                            {role === 'leader' && (
+                              <div className="absolute -top-2 -right-2 w-6 h-6 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-full flex items-center justify-center border-2 border-dark-900 shadow-lg shadow-yellow-500/50">
+                                <Crown className="w-3 h-3 text-dark-900" />
+                              </div>
+                            )}
                           </div>
-                          <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                            <Clock className="w-3 h-3" />
-                            {t.joinedAt} {new Date(member.joinedAt).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: 'numeric' })}
-                          </p>
+                          
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className={`font-bold truncate text-base ${
+                                isCurrentUser ? `text-${accentColor}-400` : 'text-white group-hover:text-gray-100'
+                              }`}>
+                                {member.user?.username}
+                              </p>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2.5 py-1 text-xs font-semibold rounded-lg border ${
+                                getRoleColor(role)
+                              } flex items-center gap-1.5`}>
+                                {getRoleIcon(role)}
+                                {t[role]}
+                              </span>
+                            </div>
+                            
+                            <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-2">
+                              <Clock className="w-3 h-3" />
+                              {t.joinedAt} {new Date(member.joinedAt).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', year: 'numeric' })}
+                            </p>
+                          </div>
+                          
+                          <ChevronRight className={`w-5 h-5 ${
+                            isCurrentUser ? `text-${accentColor}-400` : 'text-gray-600 group-hover:text-gray-400'
+                          } transition-colors flex-shrink-0`} />
                         </div>
-                        <ChevronRight className="w-5 h-5 text-gray-600 group-hover:text-gray-400 transition-colors" />
                       </Link>
                     );
                   })}
@@ -1101,67 +1129,18 @@ const MySquad = () => {
               </div>
             </div>
 
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Quick Actions */}
-              {isLeaderOrOfficer && (
-                <div className={`bg-dark-900/80 backdrop-blur-sm rounded-2xl border ${borderColor} overflow-hidden`}>
-                  <div className="px-6 py-4 border-b border-white/5">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                      <Zap className={`w-5 h-5 text-${accentColor}-400`} />
-                      {t.quickActions}
-                    </h2>
-                  </div>
-                  <div className="p-4 space-y-2">
-                    <Link
-                      to="/squad-management"
-                      className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors group"
-                    >
-                      <div className={`w-9 h-9 rounded-lg bg-${accentColor}-500/20 flex items-center justify-center`}>
-                        <Settings className={`w-4 h-4 text-${accentColor}-400`} />
-                      </div>
-                      <span className="text-white font-medium flex-1">{t.squadSettings}</span>
-                      <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-white transition-colors" />
-                    </Link>
-                    
-                    {pendingRequests > 0 && (
-                      <Link
-                        to="/squad-management"
-                        className="flex items-center gap-3 p-3 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 transition-colors group border border-yellow-500/20"
-                      >
-                        <div className="w-9 h-9 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                          <MessageSquare className="w-4 h-4 text-yellow-400" />
-                        </div>
-                        <span className="text-yellow-400 font-medium flex-1">{t.pendingRequests}</span>
-                        <span className="px-2 py-0.5 bg-yellow-500 text-dark-900 text-xs font-bold rounded-full">{pendingRequests}</span>
-                      </Link>
-                    )}
-
-                    <Link
-                      to={`/${selectedMode}/rankings`}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors group"
-                    >
-                      <div className="w-9 h-9 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                        <Trophy className="w-4 h-4 text-purple-400" />
-                      </div>
-                      <span className="text-white font-medium flex-1">{t.viewRankings}</span>
-                      <ChevronRight className="w-4 h-4 text-gray-500 group-hover:text-white transition-colors" />
-                    </Link>
-                  </div>
-                </div>
-              )}
-
-              {/* Leave Squad */}
-              {!isLeader && (
+            {/* Leave Squad Button - Below Members */}
+            {!isLeader && (
+              <div className="mt-6">
                 <button
                   onClick={() => setShowLeaveConfirm(true)}
-                  className="w-full flex items-center justify-center gap-2 p-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 transition-colors"
+                  className="w-full flex items-center justify-center gap-3 p-5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 rounded-2xl text-red-400 transition-all hover:scale-[1.02] font-bold shadow-lg hover:shadow-red-500/20"
                 >
                   <UserMinus className="w-5 h-5" />
                   {t.leave}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

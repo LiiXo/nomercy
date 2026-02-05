@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Search, Shield, TrendingUp, Crown, Star, Trophy, Trash2, X
+  Search, Shield, TrendingUp, Crown, Star, Trophy, Trash2, X, Coins, Target
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
@@ -14,7 +14,7 @@ const AdminSquads = ({
   userIsAdmin,
   userIsArbitre = false,
   openEditModal,
-  openLadderPointsModal,
+  openStrickerStatsModal,
   openSquadTrophyModal,
   setDeleteConfirm,
   handleKickMember
@@ -90,30 +90,37 @@ const AdminSquads = ({
                   <span className="text-gray-400">Level</span>
                   <span className="text-white font-medium">{squad.level || 1}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400">Points Top Escouade</span>
-                  <span className="text-amber-400 font-bold">{squad.stats?.totalPoints || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400">W/L</span>
-                  <span className="text-white font-medium">{squad.stats?.totalWins || 0}W - {squad.stats?.totalLosses || 0}L</span>
-                </div>
               </div>
 
-              {/* Ladder Points */}
-              {squad.registeredLadders && squad.registeredLadders.length > 0 && (
-                <div className="mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 rounded-lg">
-                  <p className="text-[10px] sm:text-xs text-purple-400 mb-2 font-medium flex items-center gap-1">
-                    <TrendingUp className="w-3 h-3" />
-                    Points Ladder
+              {/* Stricker Stats */}
+              {squad.statsStricker && (squad.statsStricker.points > 0 || squad.statsStricker.wins > 0 || squad.statsStricker.losses > 0) && (
+                <div className="mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-lime-500/10 to-green-500/10 border border-lime-500/20 rounded-lg">
+                  <p className="text-[10px] sm:text-xs text-lime-400 mb-2 font-medium flex items-center gap-1">
+                    <Target className="w-3 h-3" />
+                    Stats Stricker
                   </p>
                   <div className="space-y-1 sm:space-y-1.5">
-                    {squad.registeredLadders.map((ladder, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs sm:text-sm">
-                        <span className="text-gray-300 text-[10px] sm:text-xs">{ladder.ladderName || ladder.ladderId}</span>
-                        <span className="text-purple-400 font-bold">{ladder.points} pts</span>
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                      <span className="text-gray-300 text-[10px] sm:text-xs">Points</span>
+                      <span className="text-lime-400 font-bold">{squad.statsStricker.points || 0} pts</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                      <span className="text-gray-300 text-[10px] sm:text-xs">Victoires</span>
+                      <span className="text-green-400 font-bold">{squad.statsStricker.wins || 0}W</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                      <span className="text-gray-300 text-[10px] sm:text-xs">Défaites</span>
+                      <span className="text-red-400 font-bold">{squad.statsStricker.losses || 0}L</span>
+                    </div>
+                    {squad.cranes !== undefined && (
+                      <div className="flex items-center justify-between text-xs sm:text-sm pt-1 border-t border-lime-500/20">
+                        <span className="text-gray-300 text-[10px] sm:text-xs flex items-center gap-1">
+                          <Coins className="w-3 h-3" />
+                          Munitions
+                        </span>
+                        <span className="text-amber-400 font-bold">{squad.cranes || 0}</span>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
               )}
@@ -184,13 +191,13 @@ const AdminSquads = ({
                   >
                     Modifier
                   </button>
-                  {userIsAdmin && squad.registeredLadders && squad.registeredLadders.length > 0 && (
+                  {userIsAdmin && (
                     <button
-                      onClick={() => openLadderPointsModal(squad)}
-                      className="py-1.5 sm:py-2 px-2 sm:px-3 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors"
-                      title="Modifier les points Ladder"
+                      onClick={() => openStrickerStatsModal(squad)}
+                      className="py-1.5 sm:py-2 px-2 sm:px-3 bg-lime-500/20 text-lime-400 rounded-lg hover:bg-lime-500/30 transition-colors"
+                      title="Modifier les stats Stricker"
                     >
-                      <TrendingUp className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                      <Target className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                     </button>
                   )}
                   {userIsAdmin && (

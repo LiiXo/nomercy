@@ -109,11 +109,12 @@
     /* Main container */
     .container {
       height: calc(100vh - 36px);
-      padding: 24px;
+      padding: 20px;
       display: flex;
       flex-direction: column;
       position: relative;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
 
     /* Background effects */
@@ -149,7 +150,7 @@
     /* Logo section */
     .logo-section {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 20px;
     }
 
     .logo-container {
@@ -173,10 +174,10 @@
 
     .logo {
       position: relative;
-      width: 80px;
-      height: 80px;
+      width: 70px;
+      height: 70px;
       background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-orange) 100%);
-      border-radius: 20px;
+      border-radius: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -310,17 +311,17 @@
     .user-section {
       display: flex;
       align-items: center;
-      gap: 16px;
-      padding: 16px;
+      gap: 12px;
+      padding: 12px;
       background: rgba(255, 45, 85, 0.05);
       border: 1px solid rgba(255, 45, 85, 0.2);
       border-radius: 12px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
 
     .user-avatar {
-      width: 56px;
-      height: 56px;
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       border: 2px solid var(--neon-red);
       box-shadow: 0 0 20px rgba(255, 45, 85, 0.3);
@@ -331,7 +332,7 @@
     }
 
     .user-name {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 600;
       margin-bottom: 2px;
     }
@@ -357,155 +358,26 @@
       50% { opacity: 0.5; }
     }
 
-    /* Hardware info */
-    .hardware-section {
-      margin-bottom: 20px;
-    }
-
-    .hardware-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--dark-500);
-      margin-bottom: 8px;
-    }
-
-    .hardware-id {
-      font-family: 'Courier New', monospace;
-      font-size: 11px;
-      color: var(--dark-400);
-      background: var(--dark-900);
-      padding: 12px;
-      border-radius: 8px;
-      word-break: break-all;
-      border: 1px solid var(--dark-700);
-    }
-
-    /* Security Status */
-    .security-section {
-      margin-bottom: 20px;
-    }
-
-    .security-label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: var(--dark-500);
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .security-label svg {
-      width: 14px;
-      height: 14px;
-      color: var(--neon-red);
-    }
-
-    .security-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
-
-    .security-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px;
-      background: var(--dark-900);
-      border: 1px solid var(--dark-700);
-      border-radius: 8px;
-      font-size: 12px;
-      transition: all 0.2s ease;
-    }
-
-    .security-item.enabled {
-      border-color: rgba(34, 197, 94, 0.3);
-      background: rgba(34, 197, 94, 0.05);
-    }
-
-    .security-item.disabled {
-      border-color: rgba(239, 68, 68, 0.3);
-      background: rgba(239, 68, 68, 0.05);
-    }
-
-    .security-item.warning {
-      border-color: rgba(245, 158, 11, 0.3);
-      background: rgba(245, 158, 11, 0.05);
-    }
-
-    .security-icon {
-      width: 16px;
-      height: 16px;
-      flex-shrink: 0;
-    }
-
-    .security-icon.enabled {
-      color: #22c55e;
-    }
-
-    .security-icon.disabled {
-      color: #ef4444;
-    }
-
-    .security-icon.warning {
-      color: #f59e0b;
-    }
-
-    .security-name {
-      flex: 1;
-      color: var(--dark-300);
-      font-weight: 500;
-    }
-
-    .security-status {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-    }
-
-    .security-status.enabled {
-      color: #22c55e;
-    }
-
-    .security-status.disabled {
-      color: #ef4444;
-    }
-
-    .security-status.warning {
-      color: #f59e0b;
-    }
-
-    .security-loading {
-      text-align: center;
-      padding: 20px;
-      color: var(--dark-500);
-      font-size: 12px;
-    }
-
-    /* Status badge */
-    .status-badge {
+    /* Protection active badge */
+    .protection-badge {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 12px;
+      padding: 14px;
       background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
       border: 1px solid rgba(34, 197, 94, 0.3);
       border-radius: 10px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
 
-    .status-badge svg {
-      width: 18px;
-      height: 18px;
+    .protection-badge svg {
+      width: 20px;
+      height: 20px;
       color: #22c55e;
     }
 
-    .status-badge span {
+    .protection-badge span {
       font-size: 14px;
       font-weight: 500;
       color: #22c55e;
@@ -546,7 +418,7 @@
     /* Footer */
     .footer {
       margin-top: auto;
-      padding-top: 20px;
+      padding-top: 12px;
       text-align: center;
     }
 
@@ -633,16 +505,16 @@
       <!-- Login view -->
       <div id="login-view" class="slide-up">
         <div class="card">
-          <h2 class="login-title">Connexion requise</h2>
-          <p class="login-description">
-            Connectez-vous avec Discord pour lier votre compte NoMercy à cette machine.
+          <h2 class="login-title" data-i18n="loginTitle">Connexion requise</h2>
+          <p class="login-description" data-i18n="loginDesc">
+            Connectez-vous avec votre compte Discord lié à NoMercy pour activer la protection anticheat.
           </p>
           <div id="login-error" class="error-message"></div>
           <button class="discord-btn" onclick="startAuth()">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037 13.13 13.13 0 00-.608 1.25 18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037 19.736 19.736 0 00-4.884 1.515.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128c.122-.093.244-.19.361-.289a.074.074 0 01.078-.012c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.118.098.24.195.361.288a.077.077 0 01-.006.128 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
             </svg>
-            <span>Se connecter avec Discord</span>
+            <span data-i18n="connectDiscord">Se connecter avec Discord</span>
           </button>
         </div>
       </div>
@@ -652,6 +524,7 @@
         <div class="card">
           <div class="spinner"></div>
           <p class="loading-text" id="loading-message">Connexion en cours...</p>
+          <p class="loading-hint" id="loading-hint" style="margin-top: 16px; font-size: 12px; color: #71717a;" data-i18n="clickBrowserHint">Autorisez l'accès dans votre navigateur</p>
         </div>
       </div>
 
@@ -664,46 +537,28 @@
               <div id="user-name" class="user-name">Username</div>
               <div class="user-status">
                 <div class="status-dot"></div>
-                <span>Connecté</span>
+                <span data-i18n="connected">Connecté</span>
               </div>
             </div>
           </div>
 
-          <div class="hardware-section">
-            <div class="hardware-label">Hardware ID (TPM 2.0)</div>
-            <div id="hardware-id" class="hardware-id">Loading...</div>
-          </div>
-
-          <!-- Security Status Section -->
-          <div class="security-section">
-            <div class="security-label">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-              </svg>
-              <span>État de sécurité Windows</span>
-            </div>
-            <div id="security-grid" class="security-grid">
-              <div class="security-loading">Analyse en cours...</div>
-            </div>
-          </div>
-
-          <div class="status-badge">
+          <!-- Protection Active Badge -->
+          <div class="protection-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-              <polyline points="22 4 12 14.01 9 11.01"/>
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
-            <span>Machine vérifiée</span>
+            <span data-i18n="protectionActive">Protection active</span>
           </div>
 
-          <button class="logout-btn" onclick="logout()">Déconnexion</button>
+          <button class="logout-btn" onclick="logout()" data-i18n="logout">Déconnexion</button>
         </div>
       </div>
 
       <!-- Footer -->
       <div class="footer">
         <p class="footer-text">
-          En utilisant Iris, vous acceptez les 
-          <a class="footer-link" onclick="window.iris.openExternal('https://nomercy.gg/terms')">conditions d'utilisation</a>
+          <span data-i18n="termsText">En utilisant Iris, vous acceptez les</span> 
+          <a class="footer-link" onclick="window.iris.openExternal('https://nomercy.gg/terms')" data-i18n="termsLink">conditions d'utilisation</a>
         </p>
         <p class="version">v1.0.0</p>
       </div>
@@ -711,6 +566,102 @@
   </div>
 
   <script>
+    // === i18n Multi-language Support ===
+    const translations = {
+      fr: {
+        connected: 'Connecté',
+        protectionActive: 'Protection active',
+        logout: 'Déconnexion',
+        termsText: 'En utilisant Iris, vous acceptez les',
+        termsLink: "conditions d'utilisation",
+        loginTitle: 'Connexion requise',
+        loginDesc: 'Connectez-vous avec votre compte Discord lié à NoMercy pour activer la protection anticheat.',
+        connectDiscord: 'Se connecter avec Discord',
+        openingDiscord: 'Ouverture de Discord dans votre navigateur...',
+        waitingAuth: "En attente de votre autorisation...",
+        verifyingAccount: 'Vérification de votre compte...',
+        verifyingSession: 'Vérification de la session...',
+        authError: "Erreur d'authentification",
+        connectionError: 'Erreur de connexion',
+        clickBrowserHint: "Autorisez l'accès dans votre navigateur"
+      },
+      en: {
+        connected: 'Connected',
+        protectionActive: 'Protection active',
+        logout: 'Logout',
+        termsText: 'By using Iris, you accept the',
+        termsLink: 'terms of use',
+        loginTitle: 'Login required',
+        loginDesc: 'Connect with your Discord account linked to NoMercy to activate anticheat protection.',
+        connectDiscord: 'Connect with Discord',
+        openingDiscord: 'Opening Discord in your browser...',
+        waitingAuth: 'Waiting for your authorization...',
+        verifyingAccount: 'Verifying your account...',
+        verifyingSession: 'Verifying session...',
+        authError: 'Authentication error',
+        connectionError: 'Connection error',
+        clickBrowserHint: 'Authorize access in your browser'
+      },
+      de: {
+        connected: 'Verbunden',
+        protectionActive: 'Schutz aktiv',
+        logout: 'Abmelden',
+        termsText: 'Durch die Nutzung von Iris akzeptieren Sie die',
+        termsLink: 'Nutzungsbedingungen',
+        loginTitle: 'Anmeldung erforderlich',
+        loginDesc: 'Verbinden Sie sich mit Ihrem Discord-Konto, das mit NoMercy verknüpft ist, um den Anticheat-Schutz zu aktivieren.',
+        connectDiscord: 'Mit Discord verbinden',
+        openingDiscord: 'Discord wird in Ihrem Browser geöffnet...',
+        waitingAuth: 'Warten auf Ihre Autorisierung...',
+        verifyingAccount: 'Ihr Konto wird überprüft...',
+        verifyingSession: 'Sitzung wird überprüft...',
+        authError: 'Authentifizierungsfehler',
+        connectionError: 'Verbindungsfehler',
+        clickBrowserHint: 'Autorisieren Sie den Zugang in Ihrem Browser'
+      },
+      it: {
+        connected: 'Connesso',
+        protectionActive: 'Protezione attiva',
+        logout: 'Disconnetti',
+        termsText: 'Utilizzando Iris, accetti i',
+        termsLink: "termini d'uso",
+        loginTitle: 'Accesso richiesto',
+        loginDesc: 'Connettiti con il tuo account Discord collegato a NoMercy per attivare la protezione anticheat.',
+        connectDiscord: 'Connetti con Discord',
+        openingDiscord: 'Apertura di Discord nel browser...',
+        waitingAuth: 'In attesa della tua autorizzazione...',
+        verifyingAccount: 'Verifica del tuo account...',
+        verifyingSession: 'Verifica della sessione...',
+        authError: 'Errore di autenticazione',
+        connectionError: 'Errore di connessione',
+        clickBrowserHint: "Autorizza l'accesso nel tuo browser"
+      }
+    };
+
+    // Detect system language or use stored preference
+    function detectLanguage() {
+      const stored = localStorage.getItem('iris_language');
+      if (stored && translations[stored]) return stored;
+      
+      const sysLang = navigator.language.split('-')[0].toLowerCase();
+      return translations[sysLang] ? sysLang : 'fr';
+    }
+
+    let currentLang = detectLanguage();
+    const t = (key) => translations[currentLang]?.[key] || translations.fr[key] || key;
+
+    // Apply translations to static elements
+    function applyTranslations() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.textContent = t(key);
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.placeholder = t(key);
+      });
+    }
+
     // Views
     const loginView = document.getElementById('login-view');
     const loadingView = document.getElementById('loading-view');
@@ -736,13 +687,20 @@
     // Start Discord authentication
     async function startAuth() {
       loginError.style.display = 'none';
-      loadingMessage.textContent = 'Connexion en cours...';
+      loadingMessage.textContent = t('openingDiscord');
+      document.getElementById('loading-hint').style.display = 'block';
       showView(loadingView);
       
       const result = await window.iris.startDiscordAuth();
       if (!result.success) {
-        showError(result.error || 'Erreur de connexion');
+        showError(result.error || t('connectionError'));
+        return;
       }
+      
+      // Update message after browser opens
+      setTimeout(() => {
+        loadingMessage.textContent = t('waitingAuth');
+      }, 1000);
     }
 
     // Logout
@@ -756,92 +714,21 @@
       document.getElementById('user-avatar').src = user.avatarUrl || 
         `https://cdn.discordapp.com/embed/avatars/${parseInt(user.discriminator || '0') % 5}.png`;
       document.getElementById('user-name').textContent = user.username;
-      document.getElementById('hardware-id').textContent = hardwareId;
       showView(connectedView);
       
-      // Load security status
-      loadSecurityStatus();
-    }
-
-    // Security status icons
-    const checkIcon = `<svg class="security-icon enabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`;
-    const xIcon = `<svg class="security-icon disabled" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-    const warnIcon = `<svg class="security-icon warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
-
-    // Load and display security status
-    async function loadSecurityStatus() {
-      const grid = document.getElementById('security-grid');
-      grid.innerHTML = '<div class="security-loading">Analyse en cours...</div>';
-      
-      try {
-        const result = await window.iris.getSecurityStatus();
-        
-        if (result.success) {
-          const security = result.security;
-          
-          const items = [
-            { 
-              name: 'Secure Boot', 
-              enabled: security.secureBoot.enabled,
-              status: security.secureBoot.enabled ? 'Actif' : 'Désactivé'
-            },
-            { 
-              name: 'TPM 2.0', 
-              enabled: security.tpm.present && security.tpm.enabled,
-              status: security.tpm.present ? (security.tpm.version || 'Actif') : 'Absent'
-            },
-            { 
-              name: 'Defender', 
-              enabled: security.defender.enabled && security.defender.realTimeProtection,
-              status: security.defender.realTimeProtection ? 'Actif' : 'Désactivé'
-            },
-            { 
-              name: 'HVCI', 
-              enabled: security.hvci.enabled,
-              status: security.hvci.enabled ? 'Actif' : 'Désactivé'
-            },
-            { 
-              name: 'VBS', 
-              enabled: security.vbs.enabled,
-              status: security.vbs.running ? 'Actif' : (security.vbs.enabled ? 'Configuré' : 'Désactivé')
-            },
-            { 
-              name: 'BitLocker', 
-              enabled: security.bitlocker.enabled,
-              status: security.bitlocker.enabled ? 'Actif' : 'Désactivé'
-            },
-            { 
-              name: 'UEFI', 
-              enabled: security.uefi.enabled,
-              status: security.uefi.enabled ? 'Actif' : 'Legacy'
-            },
-            { 
-              name: 'Kernel DMA', 
-              enabled: security.kernelDma.enabled,
-              status: security.kernelDma.enabled ? 'Actif' : 'Désactivé'
-            }
-          ];
-          
-          grid.innerHTML = items.map(item => `
-            <div class="security-item ${item.enabled ? 'enabled' : 'disabled'}">
-              ${item.enabled ? checkIcon : xIcon}
-              <span class="security-name">${item.name}</span>
-              <span class="security-status ${item.enabled ? 'enabled' : 'disabled'}">${item.status}</span>
-            </div>
-          `).join('');
-        } else {
-          grid.innerHTML = '<div class="security-loading">Erreur de chargement</div>';
-        }
-      } catch (error) {
-        console.error('Security status error:', error);
-        grid.innerHTML = '<div class="security-loading">Erreur de chargement</div>';
-      }
+      // Start heartbeat (sends security status to server every 5 minutes)
+      window.iris.startHeartbeat();
     }
 
     // Listen for auth events
     window.iris.onAuthStatus((data) => {
-      if (data.status === 'processing') {
-        loadingMessage.textContent = 'Vérification de votre compte...';
+      if (data.status === 'waiting') {
+        loadingMessage.textContent = data.message || t('waitingAuth');
+        document.getElementById('loading-hint').style.display = 'block';
+        showView(loadingView);
+      } else if (data.status === 'processing') {
+        loadingMessage.textContent = t('verifyingAccount');
+        document.getElementById('loading-hint').style.display = 'none';
       }
     });
 
@@ -850,13 +737,36 @@
     });
 
     window.iris.onAuthError((data) => {
-      showError(data.message || 'Erreur d\'authentification');
+      // Handle TPM disabled error specially
+      if (data.type === 'tpm_disabled') {
+        loginError.innerHTML = `
+          <div style="text-align: left;">
+            <strong style="color: #ef4444; display: block; margin-bottom: 8px;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; vertical-align: middle; margin-right: 6px;">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              ${data.title || 'TPM Requis'}
+            </strong>
+            <span style="white-space: pre-line;">${data.message}</span>
+          </div>
+        `;
+      } else {
+        loginError.textContent = data.message || t('authError');
+      }
+      loginError.style.display = 'block';
+      showView(loginView);
     });
 
     // Check for existing session on load
     async function init() {
+      // Apply translations first
+      applyTranslations();
+      
       showView(loadingView);
-      loadingMessage.textContent = 'Vérification de la session...';
+      loadingMessage.textContent = t('verifyingSession');
+      document.getElementById('loading-hint').style.display = 'none';
       
       const session = await window.iris.verifySession();
       
@@ -864,6 +774,23 @@
         const hwId = await window.iris.getHardwareId();
         updateConnectedView(session.user, hwId.hardwareId);
       } else {
+        // Handle TPM disabled error specially
+        if (session.reason === 'tpm_disabled') {
+          loginError.innerHTML = `
+            <div style="text-align: left;">
+              <strong style="color: #ef4444; display: block; margin-bottom: 8px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline; vertical-align: middle; margin-right: 6px;">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                TPM Requis
+              </strong>
+              <span style="white-space: pre-line;">${session.message}</span>
+            </div>
+          `;
+          loginError.style.display = 'block';
+        }
         showView(loginView);
       }
     }

@@ -36,6 +36,19 @@ async function diagnoseStrickerLeaderboard() {
 
     // 1. Check all squads with statsStricker
     console.log('1️⃣ Checking all squads with statsStricker...\n');
+    
+    // First, let's see ALL squads, regardless of stats or active status
+    const allSquads = await Squad.find({}).select('name tag logo statsStricker cranes isActive isDeleted').limit(20);
+    
+    console.log(`   Total squads found (first 20): ${allSquads.length}\n`);
+    allSquads.forEach((squad, i) => {
+      console.log(`   ${i + 1}. [${squad.tag}] ${squad.name}`);
+      console.log(`      isActive: ${squad.isActive}, isDeleted: ${squad.isDeleted || false}`);
+      console.log(`      statsStricker:`, squad.statsStricker || 'None');
+      console.log(`      Munitions: ${squad.cranes || 0}`);
+      console.log();
+    });
+    
     const squadsWithStats = await Squad.find({
       isActive: true,
       isDeleted: { $ne: true },
@@ -46,7 +59,7 @@ async function diagnoseStrickerLeaderboard() {
       ]
     }).select('name tag logo statsStricker cranes');
 
-    console.log(`   Found ${squadsWithStats.length} squads with Stricker stats:\n`);
+    console.log(`\n   Squads with Stricker stats (points>0 OR wins>0 OR losses>0): ${squadsWithStats.length}\n`);
     squadsWithStats.forEach((squad, i) => {
       console.log(`   ${i + 1}. [${squad.tag}] ${squad.name}`);
       console.log(`      Points: ${squad.statsStricker?.points || 0} | Wins: ${squad.statsStricker?.wins || 0} | Losses: ${squad.statsStricker?.losses || 0}`);

@@ -13,7 +13,7 @@ import Announcement from '../models/Announcement.js';
 import AccountDeletion from '../models/AccountDeletion.js';
 import Ranking from '../models/Ranking.js';
 import { verifyToken, requireCompleteProfile, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
-import { logPlayerBan, logPlayerUnban, logAdminAction, logPlayerWarn, logRankedBan, logRankedUnban, logReferentBan, sendPlayerSummon } from '../services/discordBot.service.js';
+import { logPlayerBan, logPlayerUnban, logAdminAction, logPlayerWarn, logRankedBan, logRankedUnban, logReferentBan, sendPlayerSummon, deleteIrisChannel } from '../services/discordBot.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1076,6 +1076,13 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
       status: 'completed'
     });
 
+    // Delete Iris scan Discord channel if it exists
+    if (req.user.irisScanChannelId) {
+      console.log(`[Self Delete] Deleting Iris scan channel for ${req.user.username}...`);
+      await deleteIrisChannel(req.user.irisScanChannelId, req.user.username)
+        .catch(err => console.error('[Self Delete] Error deleting Iris channel:', err.message));
+    }
+
     // If user has a squad, remove them from it
     if (req.user.squad) {
       try {
@@ -1114,7 +1121,7 @@ router.delete('/delete-account', verifyToken, async (req, res) => {
     // Delete user's rankings
     await Ranking.deleteMany({ user: userId });
     
-    // Delete the user
+    // Delete the user (this will remove all Iris-related data stored on the user)
     await User.findByIdAndDelete(userId);
 
     res.json({
@@ -2317,6 +2324,13 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
       status: 'completed'
     });
 
+    // Delete Iris scan Discord channel if it exists
+    if (user.irisScanChannelId) {
+      console.log(`[Admin Delete] Deleting Iris scan channel for ${user.username}...`);
+      await deleteIrisChannel(user.irisScanChannelId, user.username)
+        .catch(err => console.error('[Admin Delete] Error deleting Iris channel:', err.message));
+    }
+
     // If user has a squad, remove them from it
     if (user.squad) {
       const squad = await Squad.findById(user.squad);
@@ -2345,7 +2359,7 @@ router.delete('/admin/:userId', verifyToken, requireStaff, async (req, res) => {
     // Delete user's rankings
     await Ranking.deleteMany({ user: user._id });
     
-    // Delete the user
+    // Delete the user (this will remove all Iris-related data stored on the user)
     await User.findByIdAndDelete(req.params.userId);
 
     res.json({

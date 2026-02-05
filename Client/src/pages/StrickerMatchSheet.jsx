@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Users, Trophy, Shield, Crown, MessageCircle, 
   Send, Loader2, CheckCircle, XCircle, Phone, AlertTriangle,
@@ -638,12 +638,14 @@ const StrickerMatchSheet = () => {
           rewards: {
             pointsChange: rewards.pointsChange || 0,
             oldPoints: rewards.oldPoints || 0,
-            newPoints: rewards.newPoints || 0
+            newPoints: rewards.newPoints || 0,
+            goldEarned: rewards.goldEarned || 0
           },
           oldRank: { points: rewards.oldPoints || 0 },
           newRank: { points: rewards.newPoints || 0 },
           squadName: myTeam === 1 ? match.team1Squad?.name : match.team2Squad?.name,
-          cranesEarned: rewards.cranesEarned || 0
+          cranesEarned: rewards.cranesEarned || 0,
+          goldEarned: rewards.goldEarned || 0
         });
         
         setMatchReportShown(true);
@@ -1130,7 +1132,7 @@ const StrickerMatchSheet = () => {
             <div className={`bg-dark-900 border rounded-2xl p-6 ${myTeam === 1 ? 'border-lime-500' : 'border-lime-500/20'}`}>
               <div className="flex items-center gap-3 mb-4">
                 {team1Logo ? (
-                  <img src={team1Logo} alt={team1Name} className="w-12 h-12 rounded-xl object-cover border border-lime-500/30" />
+                  <img src={team1Logo} alt={team1Name} className="w-12 h-12 object-contain" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-lime-500/20 border border-lime-500/30 flex items-center justify-center">
                     <Users className="w-6 h-6 text-lime-400" />
@@ -1268,7 +1270,7 @@ const StrickerMatchSheet = () => {
             <div className={`bg-dark-900 border rounded-2xl p-6 ${myTeam === 2 ? 'border-blue-500' : 'border-blue-500/20'}`}>
               <div className="flex items-center gap-3 mb-4">
                 {team2Logo ? (
-                  <img src={team2Logo} alt={team2Name} className="w-12 h-12 rounded-xl object-cover border border-blue-500/30" />
+                  <img src={team2Logo} alt={team2Name} className="w-12 h-12 object-contain" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
                     <Users className="w-6 h-6 text-blue-400" />
@@ -1576,13 +1578,13 @@ const StrickerMatchSheet = () => {
   const didWin = myPlayer && winner === myPlayer.team;
   
   const team1Name = match.team1Squad?.name || t.team1;
-  const team2Name = match.team2Squad?.name || match.team2Name || t.team2;
+  const team2Name = match.team2Squad?.name || t.team2;
   const team1Logo = match.team1Squad?.logo;
   const team2Logo = match.team2Squad?.logo;
   
-  // Calculate total team points
-  const team1TotalPoints = team1Players.reduce((sum, p) => sum + (p.points || 0), 0);
-  const team2TotalPoints = team2Players.reduce((sum, p) => sum + (p.points || 0), 0);
+  // Get squad total points - try statsStricker first, then stats
+  const team1TotalPoints = match.team1Squad?.statsStricker?.points || match.team1Squad?.stats?.points || 0;
+  const team2TotalPoints = match.team2Squad?.statsStricker?.points || match.team2Squad?.stats?.points || 0;
   
   // Get team ranks based on total points
   const team1Rank = getStrickerRank(team1TotalPoints);
@@ -1634,7 +1636,7 @@ const StrickerMatchSheet = () => {
               )}
               <div className="flex flex-col items-center">
                 {team1Logo ? (
-                  <img src={team1Logo} alt={team1Name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border-2 border-lime-500/30 mb-2" />
+                  <img src={team1Logo} alt={team1Name} className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-2" />
                 ) : (
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-lime-500/20 border-2 border-lime-500/30 flex items-center justify-center mb-2">
                     <Users className="w-8 h-8 text-lime-400" />
@@ -1677,7 +1679,7 @@ const StrickerMatchSheet = () => {
               )}
               <div className="flex flex-col items-center">
                 {team2Logo ? (
-                  <img src={team2Logo} alt={team2Name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border-2 border-blue-500/30 mb-2" />
+                  <img src={team2Logo} alt={team2Name} className="w-16 h-16 sm:w-20 sm:h-20 object-contain mb-2" />
                 ) : (
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-blue-500/20 border-2 border-blue-500/30 flex items-center justify-center mb-2">
                     <Users className="w-8 h-8 text-blue-400" />
@@ -1737,65 +1739,467 @@ const StrickerMatchSheet = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Chat, Map & Voice */}
-          <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          {/* Left Column - Match Info */}
+          <div className="lg:col-span-1 space-y-4">
+            {/* Match Info */}
+            <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-lime-500/20 p-4 sm:p-5">
+              <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-lime-400" />
+                {language === 'fr' ? 'Informations' : 'Match Info'}
+              </h2>
+              
+              <div className="space-y-2">
+                <div className="flex justify-between items-center py-1.5 border-b border-white/5">
+                  <span className="text-gray-500 text-sm">{language === 'fr' ? 'Mode' : 'Game Mode'}</span>
+                  <span className="px-2 py-0.5 bg-lime-500/20 rounded text-lime-400 text-xs font-medium">
+                    {match.gameMode || 'Search & Destroy'}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between items-center py-1.5 border-b border-white/5">
+                  <span className="text-gray-500 text-sm">{language === 'fr' ? 'Format' : 'Format'}</span>
+                  <span className="text-white font-semibold text-sm">5v5</span>
+                </div>
+                
+                {match.createdAt && (
+                  <div className="flex justify-between items-center py-1.5">
+                    <span className="text-gray-500 text-sm">{language === 'fr' ? 'Créé le' : 'Created'}</span>
+                    <span className="text-white text-sm font-medium">
+                      {new Date(match.createdAt).toLocaleString(
+                        language === 'fr' ? 'fr-FR' : 'en-US',
+                        { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Selected Map */}
+            {match.selectedMap?.name && (
+              <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-lime-500/20 p-4 sm:p-5">
+                <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                  <Map className="w-4 h-4 text-lime-400" />
+                  {t.selectedMap}
+                </h2>
+                <div className="text-center">
+                  {match.selectedMap.image && (
+                    <div className="rounded-lg overflow-hidden border border-white/10 mb-3">
+                      <img 
+                        src={match.selectedMap.image} 
+                        alt={match.selectedMap.name}
+                        className="w-full h-24 object-cover"
+                      />
+                    </div>
+                  )}
+                  <p className="text-xl font-bold text-lime-400">{match.selectedMap.name}</p>
+                  {match.startedAt && (
+                    <div className="mt-2 pt-2 border-t border-lime-500/20">
+                      <div className="flex items-center justify-center gap-2 text-xs">
+                        <Clock className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-gray-400">{t.matchStartTime}:</span>
+                        <span className="text-white font-medium">
+                          {new Date(match.startedAt).toLocaleTimeString(language === 'fr' ? 'fr-FR' : 'en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Referents */}
+            {(match.team1Referent || match.team2Referent) && (
+              <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-yellow-500/20 p-4 sm:p-5">
+                <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-yellow-400" />
+                  {language === 'fr' ? 'Référents' : 'Referents'}
+                </h2>
+                
+                <div className="space-y-3">
+                  {team1Players.find(p => p.isReferent) && (
+                    <div className="flex items-center gap-3 p-2.5 rounded-lg bg-lime-500/10 border border-lime-500/20">
+                      <div className="w-1 h-8 rounded-full bg-lime-500"></div>
+                      <img 
+                        src={getUserAvatar(team1Players.find(p => p.isReferent)?.user)}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover border border-lime-500/30"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{team1Players.find(p => p.isReferent)?.username}</p>
+                        <p className="text-lime-400 text-xs">{team1Name}</p>
+                      </div>
+                      <Crown className="w-4 h-4 text-yellow-400" />
+                    </div>
+                  )}
+                  
+                  {team2Players.find(p => p.isReferent) && (
+                    <div className="flex items-center gap-3 p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                      <div className="w-1 h-8 rounded-full bg-blue-500"></div>
+                      <img 
+                        src={getUserAvatar(team2Players.find(p => p.isReferent)?.user)}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover border border-blue-500/30"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{team2Players.find(p => p.isReferent)?.username}</p>
+                        <p className="text-blue-400 text-xs">{team2Name}</p>
+                      </div>
+                      <Crown className="w-4 h-4 text-yellow-400" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Result Voting - Referents Only */}
+            {(match.status === 'ready' || match.status === 'in_progress' || match.status === 'disputed') && isReferent && (
+              <div className={`bg-gradient-to-br ${match.status === 'disputed' ? 'from-red-500/20 to-orange-500/10' : 'from-lime-500/20 to-green-500/10'} border-2 rounded-xl p-4 ${match.status === 'disputed' ? 'border-red-500/50' : 'border-lime-500/50'}`}>
+                <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                  <Trophy className={`w-5 h-5 ${match.status === 'disputed' ? 'text-red-400' : 'text-lime-400'}`} />
+                  {t.validateWinner}
+                </h3>
+                <p className="text-gray-400 text-sm mb-4">{t.validateWinnerDesc}</p>
+                
+                {/* Dispute notification */}
+                {match.status === 'disputed' && (
+                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                    <div className="flex items-center gap-2 text-red-400 mb-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span className="font-bold text-sm">{t.disputeTitle}</span>
+                    </div>
+                    <p className="text-gray-400 text-xs">{t.disputeDesc}</p>
+                  </div>
+                )}
+                
+                {/* Voting buttons - Only for referents */}
+                {match.status !== 'disputed' && (
+                  myVote ? (
+                    <div className="text-center py-3 bg-dark-800/50 rounded-lg">
+                      <CheckCircle className="w-10 h-10 text-lime-400 mx-auto mb-2" />
+                      <p className="text-lime-400 font-medium text-sm">
+                        {t.yourTeamVoted}: <span className="font-bold">{myVote === 1 ? team1Name : team2Name}</span>
+                      </p>
+                      <p className="text-gray-500 text-xs mt-2">{t.waitingOtherTeam}</p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <Crown className="w-4 h-4 text-amber-400" />
+                        <span className="text-amber-400 text-xs font-medium">{t.youAreReferent}</span>
+                      </div>
+                      <p className="text-center text-gray-400 text-xs mb-3">{t.reportResult}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => handleSubmitResult(1)}
+                          disabled={submittingResult}
+                          className="py-3 bg-lime-500/20 hover:bg-lime-500/40 text-lime-400 font-bold rounded-lg border-2 border-lime-500/50 transition-all disabled:opacity-50 hover:scale-[1.02] text-sm"
+                        >
+                          {submittingResult ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : team1Name}
+                        </button>
+                        <button
+                          onClick={() => handleSubmitResult(2)}
+                          disabled={submittingResult}
+                          className="py-3 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 font-bold rounded-lg border-2 border-blue-500/50 transition-all disabled:opacity-50 hover:scale-[1.02] text-sm"
+                        >
+                          {submittingResult ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : team2Name}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* Call Arbitrator */}
+            {match.status !== 'completed' && match.status !== 'cancelled' && (
+              <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-orange-500/20 p-4">
+                <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-orange-400" />
+                  {language === 'fr' ? 'Assistance' : 'Support'}
+                </h3>
+                
+                {hasCalledArbitrator ? (
+                  <div className="text-center py-2">
+                    <div className="flex items-center justify-center gap-2 text-green-400 mb-2">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="font-medium text-sm">{t.arbitratorCalled}</span>
+                    </div>
+                    <p className="text-gray-400 text-xs">{t.arbitratorCalledDesc}</p>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleCallArbitrator}
+                    disabled={callingArbitrator}
+                    className="w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30 disabled:opacity-50"
+                  >
+                    {callingArbitrator ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4" />
+                        {t.callArbitrator}
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Match Cancellation Request - Referents Only */}
+            {(match.status === 'ready' || match.status === 'in_progress') && isReferent && (
+              <div className="bg-orange-500/10 border border-orange-500/30 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-orange-400 font-semibold text-sm flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    {language === 'fr' ? 'Annulation du match' : 'Match Cancellation'}
+                  </h3>
+                </div>
+                
+                {/* Progress indicator */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>{language === 'fr' ? 'Accord mutuel requis' : 'Mutual agreement required'}</span>
+                    <span>
+                      {(cancellationVotes.team1 === true ? 1 : 0) + (cancellationVotes.team2 === true ? 1 : 0)}/2
+                    </span>
+                  </div>
+                  <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-300 ${
+                        cancellationVotes.team1 === true && cancellationVotes.team2 === true 
+                          ? 'bg-green-500' 
+                          : 'bg-orange-500'
+                      }`}
+                      style={{ 
+                        width: `${((cancellationVotes.team1 === true ? 1 : 0) + (cancellationVotes.team2 === true ? 1 : 0)) * 50}%` 
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs mt-1">
+                    <span className={cancellationVotes.team1 === true ? 'text-orange-400' : 'text-gray-500'}>
+                      {team1Name}: {cancellationVotes.team1 === true ? '✓' : '-'}
+                    </span>
+                    <span className={cancellationVotes.team2 === true ? 'text-orange-400' : 'text-gray-500'}>
+                      {team2Name}: {cancellationVotes.team2 === true ? '✓' : '-'}
+                    </span>
+                  </div>
+                </div>
+                
+                {(() => {
+                  const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
+                  const opponentVote = myTeam === 1 ? cancellationVotes.team2 : cancellationVotes.team1;
+                  const opponentTeamName = myTeam === 1 ? team2Name : team1Name;
+                  
+                  // Opponent requested cancellation - show accept/refuse buttons
+                  if (opponentVote === true && myTeamVote !== true) {
+                    return (
+                      <div>
+                        <div className="mb-3 p-2 bg-orange-500/20 border border-orange-500/30 rounded-lg">
+                          <p className="text-orange-400 text-xs text-center">
+                            <span className="font-bold">{opponentTeamName}</span> {t.opponentRequestedCancellation}
+                          </p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => handleCancelVote(true)}
+                            disabled={submittingCancelVote}
+                            className="py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/50 text-green-400 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1"
+                          >
+                            {submittingCancelVote ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-3.5 h-3.5" /> {t.acceptCancellation}</>}
+                          </button>
+                          <button
+                            onClick={() => handleCancelVote(false)}
+                            disabled={submittingCancelVote}
+                            className="py-2 bg-dark-700 hover:bg-dark-600 border border-gray-600 text-gray-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                          >
+                            {t.refuseCancellation}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // My team requested cancellation - show waiting with option to cancel request
+                  if (myTeamVote === true) {
+                    return (
+                      <button
+                        onClick={() => handleCancelVote(false)}
+                        disabled={submittingCancelVote}
+                        className="w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-green-500/20 border border-green-500/40 text-green-400 hover:bg-green-500/30 disabled:opacity-50"
+                      >
+                        {submittingCancelVote ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Shield className="w-4 h-4" />
+                            {language === 'fr' ? 'Retirer ma demande' : 'Remove my request'}
+                          </>
+                        )}
+                      </button>
+                    );
+                  }
+                  
+                  // No cancellation request - show request button
+                  return (
+                    <button
+                      onClick={() => handleCancelVote(true)}
+                      disabled={submittingCancelVote}
+                      className="w-full py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30 disabled:opacity-50"
+                    >
+                      {submittingCancelVote ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <AlertTriangle className="w-4 h-4" />
+                          {t.requestCancellation}
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
+                
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  {language === 'fr' 
+                    ? 'Les deux équipes doivent accepter pour annuler' 
+                    : 'Both teams must agree to cancel'}
+                </p>
+              </div>
+            )}
+
+            {/* Match Completed */}
+            {match.status === 'completed' && match.result?.winner && (
+              <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl border border-green-500/20 p-4">
+                <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-green-400" />
+                  {language === 'fr' ? 'Match terminé' : 'Match Ended'}
+                </h2>
+                
+                <div className="bg-green-500/10 rounded-lg p-4 border border-green-500/20 text-center">
+                  <p className="text-green-400 text-sm mb-1">{t.winner}</p>
+                  <p className="text-white font-bold text-lg">
+                    {match.result.winner === 1 ? team1Name : team2Name}
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Chat & Rosters */}
+          <div className="lg:col-span-2 space-y-4">
             {/* Chat */}
-            <div className="bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-lime-500/20 p-4 flex flex-col">
-              <h2 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                <MessageCircle className="w-4 h-4" />
+            <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-lime-500/20 p-3 sm:p-4 flex flex-col">
+              <h2 className="text-xs sm:text-sm font-semibold text-gray-300 mb-2 sm:mb-3 flex items-center gap-2 uppercase tracking-wider">
+                <MessageCircle className="w-3 sm:w-4 h-3 sm:h-4" />
                 {t.chat}
               </h2>
               
               {/* Messages */}
               <div 
                 ref={chatRef}
-                className="flex-1 min-h-[350px] max-h-[450px] overflow-y-auto space-y-2 mb-4 p-3 bg-dark-800/50 rounded-xl"
+                className="flex-1 bg-dark-950/50 rounded-lg p-2 sm:p-3 mb-2 sm:mb-3 overflow-y-auto max-h-[200px] sm:max-h-[250px] min-h-[120px] border border-white/5"
               >
                 {messages.length === 0 ? (
                   <div className="text-center py-8 text-gray-500 text-sm">
                     {language === 'fr' ? 'Aucun message' : 'No messages'}
                   </div>
                 ) : (
-                  messages.map((msg, idx) => {
-                    const isOwnMessage = msg.user?._id === user?._id || msg.user === user?._id;
-                    const isStaffMessage = msg.isStaff || msg.user?.roles?.some(r => ['admin', 'staff', 'arbitre'].includes(r));
-                    return (
-                      <div 
-                        key={idx} 
-                        className={`p-2.5 rounded-lg ${
-                          msg.isSystem 
-                            ? 'bg-lime-500/10 border border-lime-500/20 text-center' 
-                            : isStaffMessage
-                              ? 'bg-amber-500/20 border border-amber-500/30'
-                              : isOwnMessage
-                                ? 'bg-lime-500/20 ml-4'
-                                : 'bg-dark-700 mr-4'
-                        }`}
-                      >
-                        {msg.isSystem ? (
-                          <span className="text-lime-400 text-sm">{msg.message}</span>
-                        ) : (
-                          <>
-                            <div className="flex items-center gap-2 mb-1">
-                              {isStaffMessage && (
-                                <span className="px-1.5 py-0.5 bg-amber-500/30 text-amber-400 text-xs font-bold rounded">
-                                  STAFF
-                                </span>
-                              )}
-                              <span className={`font-bold text-xs ${isStaffMessage ? 'text-amber-400' : msg.team === 1 ? 'text-lime-400' : 'text-blue-400'}`}>
-                                {msg.user?.username || msg.username}
-                              </span>
-                              <span className="text-gray-600 text-xs">
-                                {new Date(msg.createdAt).toLocaleTimeString(language === 'fr' ? 'fr-FR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
+                  <div className="space-y-2">
+                    {messages.filter(msg => {
+                      // Filter out empty messages (including GGSecure messages without content)
+                      if (msg.isSystem && msg.messageType) return true; // Keep typed system messages
+                      if (msg.isSystem && msg.message && msg.message.trim()) return true;
+                      if (!msg.isSystem && msg.message && msg.message.trim()) return true;
+                      return false;
+                    }).map((msg, idx) => {
+                      // Handle system messages
+                      if (msg.isSystem) {
+                        let displayMessage = msg.message || '';
+                        let messageStyle = 'default';
+                        
+                        // Handle GGSecure messages with messageType
+                        if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') {
+                          const timestamp = new Date(msg.createdAt);
+                          const timeString = timestamp.toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            second: '2-digit'
+                          });
+                          const username = msg.username || msg.user?.username || 'Joueur';
+                          
+                          if (msg.messageType === 'ggsecure_disconnect') {
+                            displayMessage = `${username} ${language === 'fr' ? 's\'est déconnecté' : 'disconnected'} (${timeString})`;
+                            messageStyle = 'disconnect';
+                          } else {
+                            displayMessage = `${username} ${language === 'fr' ? 's\'est reconnecté' : 'reconnected'} (${timeString})`;
+                            messageStyle = 'reconnect';
+                          }
+                        }
+                        
+                        // Skip empty system messages
+                        if (!displayMessage.trim()) return null;
+                        
+                        // Styles based on message type
+                        let bgClass = 'bg-gray-500/10 border-gray-500/30';
+                        let textClass = 'text-gray-400';
+                        
+                        if (messageStyle === 'disconnect') {
+                          bgClass = 'bg-red-500/10 border-red-500/30';
+                          textClass = 'text-red-400';
+                        } else if (messageStyle === 'reconnect') {
+                          bgClass = 'bg-green-500/10 border-green-500/30';
+                          textClass = 'text-green-400';
+                        } else {
+                          bgClass = 'bg-lime-500/10 border-lime-500/20';
+                          textClass = 'text-lime-400';
+                        }
+                        
+                        return (
+                          <div key={idx} className="flex justify-center">
+                            <div className={`px-3 py-1.5 ${bgClass} border rounded-lg max-w-[85%]`}>
+                              <p className={`${textClass} text-xs text-center`}>{displayMessage}</p>
                             </div>
-                            <span className="text-white text-sm">{msg.message}</span>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })
+                          </div>
+                        );
+                      }
+
+                      // Regular user messages
+                      const isOwnMessage = msg.user?._id === user?._id || msg.user === user?._id;
+                      const isStaffMessage = msg.isStaff || msg.user?.roles?.some(r => ['admin', 'staff', 'arbitre'].includes(r));
+                      
+                      let teamColor = 'gray';
+                      if (isStaffMessage) {
+                        teamColor = 'yellow';
+                      } else {
+                        teamColor = msg.team === 1 ? 'lime' : 'blue';
+                      }
+                      
+                      return (
+                        <div key={idx} className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                          <div className="max-w-[75%]">
+                            <div className={`flex items-center gap-1.5 mb-0.5 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}>
+                              {isStaffMessage && <span className="px-1.5 py-0.5 bg-yellow-500/20 border border-yellow-500/30 rounded text-[10px] font-bold text-yellow-400">STAFF</span>}
+                              <span className={`text-xs font-medium text-${teamColor}-400`}>{msg.user?.username || msg.username}</span>
+                              <span className="text-gray-600 text-[10px]">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div className={`px-3 py-1.5 rounded-lg text-sm ${
+                              isStaffMessage 
+                                ? 'bg-yellow-500/20 text-yellow-100 border-2 border-yellow-500/50' 
+                                : isOwnMessage 
+                                  ? `bg-${teamColor}-500/20 text-${teamColor}-100 border border-${teamColor}-500/30` 
+                                  : 'bg-dark-800 text-gray-200 border border-white/5'
+                            }`}>
+                              {msg.message}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
               
@@ -1821,401 +2225,122 @@ const StrickerMatchSheet = () => {
               )}
             </div>
 
-            {/* Selected Map */}
-            {match.selectedMap?.name && (
-              <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Map className="w-5 h-5 text-lime-400" />
-                  {t.selectedMap}
+            {/* Rosters - Side by side */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Team 1 Roster */}
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${winner === 1 ? 'border-lime-500/50' : 'border-lime-500/20'} p-3 sm:p-4`}>
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-lime-400" />
+                  {team1Name}
+                  {match.hostTeam === 1 && (
+                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
+                  )}
                 </h3>
-                <div className="text-center">
-                  {match.selectedMap.image && (
-                    <img 
-                      src={match.selectedMap.image} 
-                      alt={match.selectedMap.name}
-                      className="w-full h-32 object-cover rounded-lg mb-3"
-                    />
-                  )}
-                  <p className="text-2xl font-bold text-lime-400">{match.selectedMap.name}</p>
-                  {match.startedAt && (
-                    <div className="mt-3 pt-3 border-t border-lime-500/20">
-                      <div className="flex items-center justify-center gap-2 text-sm">
-                        <Clock className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-400">{t.matchStartTime}:</span>
-                        <span className="text-white font-medium">
-                          {new Date(match.startedAt).toLocaleTimeString(language === 'fr' ? 'fr-FR' : 'en-US', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </span>
+                <div className="space-y-2">
+                  {team1Players.map((player, idx) => {
+                    const isRef = player.isReferent;
+                    const equippedTitle = player.user?.equippedTitle;
+                    const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                    const playerRank = getStrickerRank(player.points || 0);
+                    
+                    return (
+                      <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
+                        <img 
+                          src={getUserAvatar(player.user)} 
+                          alt={player.username}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                        <div className="flex-1 min-w-0">
+                          {player.user?._id ? (
+                            <Link to={`/player/${player.user._id}`} className="hover:text-lime-400 transition-colors">
+                              <p className="text-white text-sm font-medium truncate hover:underline">{player.username}</p>
+                            </Link>
+                          ) : (
+                            <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                          )}
+                          {titleName && !player.isFake && (
+                            <span 
+                              className={getTitleStyles(equippedTitle?.rarity).className}
+                              style={getTitleStyles(equippedTitle?.rarity).style}
+                            >
+                              {titleName}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {/* Rank badge */}
+                          <div 
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-lime-500/20 border border-lime-500/30"
+                            title={`${playerRank.name} - ${player.points || 0} pts`}
+                          >
+                            <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
+                            <span className="text-lime-400 text-[10px] font-bold">{playerRank.name}</span>
+                          </div>
+                          {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
               </div>
-            )}
 
-            {/* Voice Channels */}
-            {match.team1VoiceChannel?.channelId && myTeam === 1 && (
-              <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Mic className="w-5 h-5 text-lime-400" />
-                  {t.joinVoiceChannel}
-                </h3>
-                <a
-                  href={`https://discord.com/channels/YOUR_SERVER_ID/${match.team1VoiceChannel.channelId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 rounded-xl transition-colors border border-lime-500/30"
-                >
-                  <Mic className="w-5 h-5" />
-                  {match.team1VoiceChannel.channelName || 'Team 1 Voice'}
-                </a>
-              </div>
-            )}
-
-            {match.team2VoiceChannel?.channelId && myTeam === 2 && (
-              <div className="bg-dark-900 border border-blue-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Mic className="w-5 h-5 text-blue-400" />
-                  {t.joinVoiceChannel}
-                </h3>
-                <a
-                  href={`https://discord.com/channels/YOUR_SERVER_ID/${match.team2VoiceChannel.channelId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors border border-blue-500/30"
-                >
-                  <Mic className="w-5 h-5" />
-                  {match.team2VoiceChannel.channelName || 'Team 2 Voice'}
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Right Column - Teams Rosters & Actions */}
-          <div className="space-y-4">
-            {/* Team 1 Roster */}
-            <div className={`bg-dark-900 border rounded-2xl p-5 ${winner === 1 ? 'border-lime-500/50' : 'border-lime-500/20'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-lime-400" />
-                  {team1Name}
-                </h3>
-                {match.hostTeam === 1 && (
-                  <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs font-bold">{t.host}</span>
-                )}
-              </div>
-              <div className="space-y-2">
-                {team1Players.map((player, idx) => {
-                  const isRef = player.isReferent;
-                  const equippedTitle = player.user?.equippedTitle;
-                  const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
-                  
-                  return (
-                    <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl ${isRef ? 'bg-lime-500/10 border border-lime-500/30' : 'bg-dark-800/50'}`}>
-                      {player.user ? (
-                        <img 
-                          src={getUserAvatar(player.user)} 
-                          alt={player.username}
-                          className="w-10 h-10 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
-                          <Shield className="w-5 h-5 text-gray-500" />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium truncate ${player.isFake ? 'text-gray-500' : 'text-white'}`}>
-                            {player.username}
-                          </span>
-                          {isRef && <Crown className="w-4 h-4 text-amber-400" />}
-                          {player.isFake && <span className="text-xs text-purple-400">(Bot)</span>}
-                        </div>
-                        {titleName && !player.isFake && (
-                          <span 
-                            className={getTitleStyles(equippedTitle?.rarity).className}
-                            style={getTitleStyles(equippedTitle?.rarity).style}
-                          >
-                            {titleName}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Team 2 Roster */}
-            <div className={`bg-dark-900 border rounded-2xl p-5 ${winner === 2 ? 'border-blue-500/50' : 'border-blue-500/20'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Users className="w-5 h-5 text-blue-400" />
+              {/* Team 2 Roster */}
+              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border ${winner === 2 ? 'border-blue-500/50' : 'border-blue-500/20'} p-3 sm:p-4`}>
+                <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-blue-400" />
                   {team2Name}
+                  {match.hostTeam === 2 && (
+                    <span className="px-1.5 py-0.5 bg-green-500/20 text-green-400 text-[10px] rounded">{t.host}</span>
+                  )}
                 </h3>
-                {match.hostTeam === 2 && (
-                  <span className="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs font-bold">{t.host}</span>
-                )}
-              </div>
-              <div className="space-y-2">
-                {team2Players.map((player, idx) => {
-                  const isRef = player.isReferent;
-                  const equippedTitle = player.user?.equippedTitle;
-                  const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
-                  
-                  return (
-                    <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl ${isRef ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-dark-800/50'}`}>
-                      {player.user ? (
+                <div className="space-y-2">
+                  {team2Players.map((player, idx) => {
+                    const isRef = player.isReferent;
+                    const equippedTitle = player.user?.equippedTitle;
+                    const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                    const playerRank = getStrickerRank(player.points || 0);
+                    
+                    return (
+                      <div key={idx} className={`flex items-center gap-2 p-2 rounded-lg ${isRef ? 'bg-yellow-500/10 border border-yellow-500/20' : 'bg-dark-800/50'}`}>
                         <img 
                           src={getUserAvatar(player.user)} 
                           alt={player.username}
-                          className="w-10 h-10 rounded-full object-cover"
+                          className="w-8 h-8 rounded-full object-cover"
                         />
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
-                          <Shield className="w-5 h-5 text-gray-500" />
+                        <div className="flex-1 min-w-0">
+                          {player.user?._id ? (
+                            <Link to={`/player/${player.user._id}`} className="hover:text-blue-400 transition-colors">
+                              <p className="text-white text-sm font-medium truncate hover:underline">{player.username}</p>
+                            </Link>
+                          ) : (
+                            <p className="text-white text-sm font-medium truncate">{player.username}</p>
+                          )}
+                          {titleName && !player.isFake && (
+                            <span 
+                              className={getTitleStyles(equippedTitle?.rarity).className}
+                              style={getTitleStyles(equippedTitle?.rarity).style}
+                            >
+                              {titleName}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`font-medium truncate ${player.isFake ? 'text-gray-500' : 'text-white'}`}>
-                            {player.username}
-                          </span>
-                          {isRef && <Crown className="w-4 h-4 text-amber-400" />}
-                          {player.isFake && <span className="text-xs text-purple-400">(Bot)</span>}
-                        </div>
-                        {titleName && !player.isFake && (
-                          <span 
-                            className={getTitleStyles(equippedTitle?.rarity).className}
-                            style={getTitleStyles(equippedTitle?.rarity).style}
+                        <div className="flex items-center gap-1">
+                          {/* Rank badge */}
+                          <div 
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/20 border border-blue-500/30"
+                            title={`${playerRank.name} - ${player.points || 0} pts`}
                           >
-                            {titleName}
-                          </span>
-                        )}
+                            <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
+                            <span className="text-blue-400 text-[10px] font-bold">{playerRank.name}</span>
+                          </div>
+                          {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
-
-            {/* Result Voting - Referents Only */}
-            {(match.status === 'ready' || match.status === 'in_progress' || match.status === 'disputed') && isReferent && (
-              <div className={`bg-gradient-to-br ${match.status === 'disputed' ? 'from-red-500/20 to-orange-500/10' : 'from-lime-500/20 to-green-500/10'} border-2 rounded-2xl p-5 ${match.status === 'disputed' ? 'border-red-500/50' : 'border-lime-500/50'}`}>
-                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                  <Trophy className={`w-6 h-6 ${match.status === 'disputed' ? 'text-red-400' : 'text-lime-400'}`} />
-                  {t.validateWinner}
-                </h3>
-                <p className="text-gray-400 text-sm mb-4">{t.validateWinnerDesc}</p>
-                
-                {/* Dispute notification */}
-                {match.status === 'disputed' && (
-                  <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-xl">
-                    <div className="flex items-center gap-2 text-red-400 mb-2">
-                      <AlertTriangle className="w-5 h-5" />
-                      <span className="font-bold">{t.disputeTitle}</span>
-                    </div>
-                    <p className="text-gray-400 text-sm">{t.disputeDesc}</p>
-                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <div className="p-2 bg-lime-500/10 rounded-lg text-center">
-                        <span className="text-gray-400">{team1Name}:</span>
-                        <span className="ml-2 text-lime-400 font-medium">
-                          {match.result?.team1Report?.winner === 1 ? team1Name : team2Name}
-                        </span>
-                      </div>
-                      <div className="p-2 bg-blue-500/10 rounded-lg text-center">
-                        <span className="text-gray-400">{team2Name}:</span>
-                        <span className="ml-2 text-blue-400 font-medium">
-                          {match.result?.team2Report?.winner === 1 ? team1Name : team2Name}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Show current votes status */}
-                {match.status !== 'disputed' && (
-                  <div className="mb-4 grid grid-cols-2 gap-3">
-                    <div className={`p-3 rounded-xl text-center ${match.result?.team1Report ? 'bg-lime-500/20 border-2 border-lime-500/50' : 'bg-dark-800/50 border border-white/10'}`}>
-                      <p className="text-xs text-gray-400 mb-1">{team1Name}</p>
-                      <p className={`font-bold ${match.result?.team1Report ? 'text-lime-400' : 'text-gray-500'}`}>
-                        {match.result?.team1Report 
-                          ? (match.result.team1Report.winner === 1 ? team1Name : team2Name)
-                          : t.notVotedYet
-                        }
-                      </p>
-                      {match.result?.team1Report && <CheckCircle className="w-4 h-4 text-lime-400 mx-auto mt-1" />}
-                    </div>
-                    <div className={`p-3 rounded-xl text-center ${match.result?.team2Report ? 'bg-blue-500/20 border-2 border-blue-500/50' : 'bg-dark-800/50 border border-white/10'}`}>
-                      <p className="text-xs text-gray-400 mb-1">{team2Name}</p>
-                      <p className={`font-bold ${match.result?.team2Report ? 'text-blue-400' : 'text-gray-500'}`}>
-                        {match.result?.team2Report 
-                          ? (match.result.team2Report.winner === 1 ? team1Name : team2Name)
-                          : t.notVotedYet
-                        }
-                      </p>
-                      {match.result?.team2Report && <CheckCircle className="w-4 h-4 text-blue-400 mx-auto mt-1" />}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Voting buttons - Only for referents */}
-                {match.status !== 'disputed' && (
-                  myVote ? (
-                    <div className="text-center py-4 bg-dark-800/50 rounded-xl">
-                      <CheckCircle className="w-12 h-12 text-lime-400 mx-auto mb-2" />
-                      <p className="text-lime-400 font-medium">
-                        {t.yourTeamVoted}: <span className="font-bold">{myVote === 1 ? team1Name : team2Name}</span>
-                      </p>
-                      <p className="text-gray-500 text-sm mt-2">
-                        {t.waitingOtherTeam}
-                      </p>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="flex items-center justify-center gap-2 mb-3">
-                        <Crown className="w-4 h-4 text-amber-400" />
-                        <span className="text-amber-400 text-sm font-medium">{t.youAreReferent}</span>
-                      </div>
-                      <p className="text-center text-gray-400 text-sm mb-3">{t.reportResult}</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          onClick={() => handleSubmitResult(1)}
-                          disabled={submittingResult}
-                          className="py-4 bg-lime-500/20 hover:bg-lime-500/40 text-lime-400 font-bold rounded-xl border-2 border-lime-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
-                        >
-                          {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team1Name}
-                        </button>
-                        <button
-                          onClick={() => handleSubmitResult(2)}
-                          disabled={submittingResult}
-                          className="py-4 bg-blue-500/20 hover:bg-blue-500/40 text-blue-400 font-bold rounded-xl border-2 border-blue-500/50 transition-all disabled:opacity-50 hover:scale-[1.02]"
-                        >
-                          {submittingResult ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : team2Name}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-
-            {/* Call Arbitrator */}
-            {match.status !== 'completed' && match.status !== 'cancelled' && (
-              <div className="bg-dark-900 border border-orange-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <Phone className="w-5 h-5 text-orange-400" />
-                  {language === 'fr' ? 'Assistance' : 'Support'}
-                </h3>
-                
-                {hasCalledArbitrator ? (
-                  <div className="text-center py-2">
-                    <div className="flex items-center justify-center gap-2 text-green-400 mb-2">
-                      <CheckCircle className="w-5 h-5" />
-                      <span className="font-medium">{t.arbitratorCalled}</span>
-                    </div>
-                    <p className="text-gray-400 text-xs">
-                      {t.arbitratorCalledDesc}
-                    </p>
-                  </div>
-                ) : (
-                  <button
-                    onClick={handleCallArbitrator}
-                    disabled={callingArbitrator}
-                    className="w-full py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-orange-500/20 border border-orange-500/40 text-orange-400 hover:bg-orange-500/30 disabled:opacity-50"
-                  >
-                    {callingArbitrator ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-4 h-4" />
-                        {t.callArbitrator}
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Match Cancellation Request - Referents Only */}
-            {(match.status === 'ready' || match.status === 'in_progress') && isReferent && (
-              <div className="bg-dark-900 border border-red-500/20 rounded-2xl p-5">
-                <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                  <X className="w-5 h-5 text-red-400" />
-                  {t.requestCancellation}
-                </h3>
-                
-                {(() => {
-                  const myTeamVote = myTeam === 1 ? cancellationVotes.team1 : cancellationVotes.team2;
-                  const opponentVote = myTeam === 1 ? cancellationVotes.team2 : cancellationVotes.team1;
-                  const opponentTeamName = myTeam === 1 ? team2Name : team1Name;
-                  
-                  // Opponent requested cancellation - show accept/refuse buttons
-                  if (opponentVote === true && myTeamVote !== true) {
-                    return (
-                      <div>
-                        <div className="mb-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                          <p className="text-orange-400 text-sm">
-                            <span className="font-bold">{opponentTeamName}</span> {t.opponentRequestedCancellation}
-                          </p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <button
-                            onClick={() => handleCancelVote(true)}
-                            disabled={submittingCancelVote}
-                            className="py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 text-red-400 rounded-lg font-medium transition-colors disabled:opacity-50"
-                          >
-                            {submittingCancelVote ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : t.acceptCancellation}
-                          </button>
-                          <button
-                            onClick={() => handleCancelVote(false)}
-                            disabled={submittingCancelVote}
-                            className="py-2.5 bg-dark-700 hover:bg-dark-600 border border-gray-600 text-gray-300 rounded-lg font-medium transition-colors disabled:opacity-50"
-                          >
-                            {t.refuseCancellation}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
-                  
-                  // My team requested cancellation - show waiting
-                  if (myTeamVote === true) {
-                    return (
-                      <div className="text-center py-2">
-                        <div className="flex items-center justify-center gap-2 text-orange-400 mb-2">
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          <span className="font-medium">{t.cancellationRequested}</span>
-                        </div>
-                        <p className="text-gray-400 text-xs">
-                          {t.waitingOpponentCancelResponse}
-                        </p>
-                      </div>
-                    );
-                  }
-                  
-                  // No cancellation request - show request button
-                  return (
-                    <button
-                      onClick={() => handleCancelVote(true)}
-                      disabled={submittingCancelVote}
-                      className="w-full py-2.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 bg-red-500/20 border border-red-500/40 text-red-400 hover:bg-red-500/30 disabled:opacity-50"
-                    >
-                      {submittingCancelVote ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <X className="w-4 h-4" />
-                          {t.requestCancellation}
-                        </>
-                      )}
-                    </button>
-                  );
-                })()}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -2233,6 +2358,7 @@ const StrickerMatchSheet = () => {
           isReferent={isReferent}
           squadName={matchReportData.squadName}
           cranesEarned={matchReportData.cranesEarned}
+          goldEarned={matchReportData.goldEarned}
         />
       )}
     </div>

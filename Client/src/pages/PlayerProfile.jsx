@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
-import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame, Link2, Award, Calendar } from 'lucide-react';
+import { ArrowLeft, Trophy, Medal, Target, TrendingUp, Gamepad2, Crown, Loader2, AlertCircle, Shield, Monitor, Copy, Check, Users, Swords, Clock, Zap, Coins, Play, X, Sparkles, Star, Flame, Award, Calendar } from 'lucide-react';
 import ProfileAnimation from '../components/ProfileAnimation';
 
 import { getAvatarUrl, getDefaultAvatar, getUserAvatar } from '../utils/avatar';
@@ -27,7 +27,6 @@ const PlayerProfile = () => {
 
   // States
   const [loading, setLoading] = useState(true);
-  const [copiedMatchId, setCopiedMatchId] = useState(null);
   const [error, setError] = useState(null);
   const [playerData, setPlayerData] = useState(null);
   const [ranking, setRanking] = useState(null);
@@ -44,6 +43,11 @@ const PlayerProfile = () => {
   const [loadingRankedHistory, setLoadingRankedHistory] = useState(false);
   const [selectedRankedMatch, setSelectedRankedMatch] = useState(null);
   const [showRankedMatchDetails, setShowRankedMatchDetails] = useState(false);
+  const [strickerMatchHistory, setStrickerMatchHistory] = useState([]);
+  const [loadingStrickerHistory, setLoadingStrickerHistory] = useState(false);
+  const [matchTypeFilter, setMatchTypeFilter] = useState('all'); // 'all', 'ranked', 'stricker'
+  const [selectedStrickerMatch, setSelectedStrickerMatch] = useState(null);
+  const [showStrickerMatchDetails, setShowStrickerMatchDetails] = useState(false);
   const [rankedPage, setRankedPage] = useState(1);
   const [rankedTotalPages, setRankedTotalPages] = useState(1);
   const [ladderPage, setLadderPage] = useState(1);
@@ -63,7 +67,7 @@ const PlayerProfile = () => {
   
   // Lock body scroll when dialog is open
   useEffect(() => {
-    if (showMatchDetails || showRankedMatchDetails) {
+    if (showMatchDetails || showRankedMatchDetails || showStrickerMatchDetails) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -71,7 +75,7 @@ const PlayerProfile = () => {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showMatchDetails, showRankedMatchDetails]);
+  }, [showMatchDetails, showRankedMatchDetails, showStrickerMatchDetails]);
 
   // Traductions
   const texts = {
@@ -115,6 +119,9 @@ const PlayerProfile = () => {
         'Domination': 'Domination',
         'Team Deathmatch': 'Mêlée générale',
       },
+      filterAll: 'Tout',
+      filterRanked: 'Classé',
+      filterStricker: 'Stricker',
     },
     en: {
       back: 'Back',
@@ -156,6 +163,9 @@ const PlayerProfile = () => {
         'Domination': 'Domination',
         'Team Deathmatch': 'Team Deathmatch',
       },
+      filterAll: 'All',
+      filterRanked: 'Ranked',
+      filterStricker: 'Stricker',
     },
     de: {
       back: 'Zurück',
@@ -197,6 +207,9 @@ const PlayerProfile = () => {
         'Domination': 'Herrschaft',
         'Team Deathmatch': 'Team-Deathmatch',
       },
+      filterAll: 'Alle',
+      filterRanked: 'Ranked',
+      filterStricker: 'Stricker',
     },
     it: {
       back: 'Indietro',
@@ -238,6 +251,9 @@ const PlayerProfile = () => {
         'Domination': 'Dominazione',
         'Team Deathmatch': 'Deathmatch a squadre',
       },
+      filterAll: 'Tutto',
+      filterRanked: 'Ranked',
+      filterStricker: 'Stricker',
     },
   };
   const t = texts[language] || texts.en;
@@ -409,6 +425,28 @@ const PlayerProfile = () => {
     fetchRankedMatchHistory();
   }, [playerData?.id, selectedMode]);
 
+  // Fetch Stricker match history when player data is loaded
+  useEffect(() => {
+    const fetchStrickerMatchHistory = async () => {
+      if (!playerData?.id) return;
+      setLoadingStrickerHistory(true);
+      try {
+        const response = await fetch(`${API_URL}/stricker/history/player/${playerData.id}?limit=500`, {
+          credentials: 'include'
+        });
+        const data = await response.json();
+        if (data.success) {
+          setStrickerMatchHistory(data.matches || []);
+        }
+      } catch (err) {
+        console.error('Error fetching Stricker match history:', err);
+      } finally {
+        setLoadingStrickerHistory(false);
+      }
+    };
+    fetchStrickerMatchHistory();
+  }, [playerData?.id]);
+
   // Get paginated ranked matches
   const getPaginatedRankedMatches = () => {
     const startIndex = (rankedPage - 1) * MATCHES_PER_PAGE;
@@ -442,27 +480,40 @@ const PlayerProfile = () => {
     return `${Math.round((playerStats.wins / total) * 100)}%`;
   };
 
-  // Calculate combined stats from ladder + ranked match histories
+  // Calculate combined stats from ladder + ranked + stricker match histories
   const getCombinedStats = () => {
     let wins = 0;
     let losses = 0;
     
-    // Count from ladder match history
-    matchHistory.forEach(match => {
-      const playerSquadId = match.playerSquad?._id || match.playerSquad;
-      const winnerId = typeof match.result?.winner === 'object' 
-        ? match.result?.winner?._id 
-        : match.result?.winner;
-      const isWinner = playerSquadId?.toString?.() === winnerId?.toString?.();
-      if (isWinner) wins++;
-      else losses++;
-    });
+    // Apply filter
+    if (matchTypeFilter === 'all' || matchTypeFilter === 'ladder') {
+      // Count from ladder match history
+      matchHistory.forEach(match => {
+        const playerSquadId = match.playerSquad?._id || match.playerSquad;
+        const winnerId = typeof match.result?.winner === 'object' 
+          ? match.result?.winner?._id 
+          : match.result?.winner;
+        const isWinner = playerSquadId?.toString?.() === winnerId?.toString?.();
+        if (isWinner) wins++;
+        else losses++;
+      });
+    }
     
-    // Count from ranked match history
-    rankedMatchHistory.forEach(match => {
-      if (match.isWinner) wins++;
-      else losses++;
-    });
+    if (matchTypeFilter === 'all' || matchTypeFilter === 'ranked') {
+      // Count from ranked match history
+      rankedMatchHistory.forEach(match => {
+        if (match.isWinner) wins++;
+        else losses++;
+      });
+    }
+    
+    if (matchTypeFilter === 'all' || matchTypeFilter === 'stricker') {
+      // Count from Stricker match history
+      strickerMatchHistory.forEach(match => {
+        if (match.isWinner) wins++;
+        else losses++;
+      });
+    }
     
     return { wins, losses, total: wins + losses };
   };
@@ -984,7 +1035,7 @@ const PlayerProfile = () => {
                     {selectedMode === 'hardcore' ? playerData.mvpCountHardcore : playerData.mvpCountCdl}x
                   </div>
                   <p className="text-yellow-400/80 text-xs sm:text-sm font-medium">
-                    MVP {language === 'fr' ? 'en mode classé' : language === 'de' ? 'im Ranglistenmodus' : language === 'it' ? 'in modalità classificata' : 'in ranked mode'}
+                    MVP
                   </p>
                 </div>
                 
@@ -1045,128 +1096,195 @@ const PlayerProfile = () => {
             </div>
           )}
 
-          {/* Ranked Match History */}
+          {/* Match History with Filter */}
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-xl border border-purple-500/20 p-6`}>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3">
               <h2 className="text-lg font-bold text-white flex items-center space-x-2">
                 <Trophy className="w-5 h-5 text-purple-400" />
-                <span>{language === 'fr' ? 'Historique Mode Classé' : 'Ranked History'}</span>
-                {rankedMatchHistory.length > 0 && (
-                  <span className="text-sm font-normal text-gray-500">({rankedMatchHistory.length})</span>
+                <span>{t.matchHistory}</span>
+                {combinedStats.total > 0 && (
+                  <span className="text-sm font-normal text-gray-500">({combinedStats.total})</span>
                 )}
               </h2>
+              
+              {/* Filter Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMatchTypeFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    matchTypeFilter === 'all'
+                      ? 'bg-purple-500/30 text-purple-300 border border-purple-400/50'
+                      : 'bg-dark-800/50 text-gray-400 border border-white/10 hover:bg-dark-700'
+                  }`}
+                >
+                  {t.filterAll}
+                </button>
+                <button
+                  onClick={() => setMatchTypeFilter('ranked')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    matchTypeFilter === 'ranked'
+                      ? 'bg-purple-500/30 text-purple-300 border border-purple-400/50'
+                      : 'bg-dark-800/50 text-gray-400 border border-white/10 hover:bg-dark-700'
+                  }`}
+                >
+                  {t.filterRanked}
+                </button>
+                <button
+                  onClick={() => setMatchTypeFilter('stricker')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    matchTypeFilter === 'stricker'
+                      ? 'bg-lime-500/30 text-lime-300 border border-lime-400/50'
+                      : 'bg-dark-800/50 text-gray-400 border border-white/10 hover:bg-dark-700'
+                  }`}
+                >
+                  {t.filterStricker}
+                </button>
+              </div>
             </div>
             
-            {loadingRankedHistory ? (
+            {(loadingRankedHistory || loadingStrickerHistory || loadingHistory) ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
               </div>
-            ) : rankedMatchHistory.length > 0 ? (
+            ) : combinedStats.total > 0 ? (
               <>
                 <div className="space-y-3 overflow-y-auto max-h-[50vh] sm:max-h-none">
-                  {getPaginatedRankedMatches().map((match) => (
-                    <div 
-                      key={match._id}
-                      className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
-                        match.isWinner 
-                          ? 'border-green-500/30' 
-                          : 'border-red-500/30'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        {/* Left: Result + Mode + Format */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          {/* Result badge */}
-                          <div className={`px-2.5 py-1 rounded text-xs font-bold ${
-                            match.isWinner 
-                              ? 'bg-green-500/20 text-green-400' 
-                              : 'bg-red-500/20 text-red-400'
-                          }`}>
-                            {match.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+                  {/* Display filtered matches */}
+                  {(() => {
+                    const getFilteredMatches = () => {
+                      const allMatches = [];
+                      
+                      // Add Stricker matches if filter allows
+                      if (matchTypeFilter === 'all' || matchTypeFilter === 'stricker') {
+                        strickerMatchHistory.forEach(match => {
+                          allMatches.push({ ...match, type: 'stricker' });
+                        });
+                      }
+                      
+                      // Add Ranked matches if filter allows
+                      if (matchTypeFilter === 'all' || matchTypeFilter === 'ranked') {
+                        rankedMatchHistory.forEach(match => {
+                          allMatches.push({ ...match, type: 'ranked' });
+                        });
+                      }
+                      
+                      // Sort by date (most recent first)
+                      allMatches.sort((a, b) => {
+                        const dateA = new Date(a.completedAt || a.createdAt);
+                        const dateB = new Date(b.completedAt || b.createdAt);
+                        return dateB - dateA;
+                      });
+                      
+                      return allMatches.slice(0, 20); // Show first 20 matches
+                    };
+                    
+                    const filteredMatches = getFilteredMatches();
+                    
+                    return filteredMatches.map((match) => (
+                      <div 
+                        key={`${match.type}-${match._id}`}
+                        className={`p-3 sm:p-4 bg-dark-800/50 rounded-lg border ${
+                          match.isWinner 
+                            ? 'border-green-500/30' 
+                            : 'border-red-500/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          {/* Left: Result + Mode + Format */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            {/* Result badge */}
+                            <div className={`px-2.5 py-1 rounded text-xs font-bold ${
+                              match.isWinner 
+                                ? 'bg-green-500/20 text-green-400' 
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {match.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+                            </div>
+                            
+                            {/* Match Type Badge */}
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              match.type === 'stricker' 
+                                ? 'bg-lime-500/20 text-lime-400' 
+                                : 'bg-purple-500/20 text-purple-400'
+                            }`}>
+                              {match.type === 'stricker' ? 'Stricker' : 'Ranked'}
+                            </span>
+                            
+                            {/* Game mode for ranked, team names for stricker */}
+                            {match.type === 'ranked' ? (
+                              <>
+                                <span className="px-2 py-1 bg-dark-700 rounded text-xs font-medium text-gray-400">
+                                  {match.gameMode === 'Search & Destroy' ? 'S&D' : 
+                                   match.gameMode === 'Team Deathmatch' ? 'TDM' : 
+                                   match.gameMode}
+                                </span>
+                                <div className="flex items-center gap-1 px-2 py-1 bg-dark-700 rounded text-xs text-gray-400">
+                                  <Users className="w-3 h-3" />
+                                  <span>{match.teamSize}v{match.teamSize}</span>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex items-center gap-2 text-xs text-gray-400">
+                                <span className="truncate max-w-[100px]">{match.team1Squad?.tag || 'Team 1'}</span>
+                                <span>vs</span>
+                                <span className="truncate max-w-[100px]">{match.team2Squad?.tag || 'Team 2'}</span>
+                              </div>
+                            )}
                           </div>
                           
-                          {/* Game mode */}
-                          <span className="px-2 py-1 bg-purple-500/20 rounded text-xs font-medium text-purple-400">
-                            {match.gameMode === 'Search & Destroy' ? 'S&D' : 
-                             match.gameMode === 'Team Deathmatch' ? 'TDM' : 
-                             match.gameMode}
-                          </span>
-                          
-                          {/* Format */}
-                          <div className="flex items-center gap-1 px-2 py-1 bg-dark-700 rounded text-xs text-gray-400">
-                            <Users className="w-3 h-3" />
-                            <span>{match.teamSize}v{match.teamSize}</span>
+                          {/* Right: Date + Buttons */}
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            {/* Date + Heure */}
+                            <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
+                              <Clock className="w-3.5 h-3.5" />
+                              <span>
+                                {new Date(match.completedAt || match.createdAt).toLocaleDateString(
+                                  language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                                  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+                                )}
+                              </span>
+                            </div>
+                            
+                            {/* View Details Button - For both ranked and stricker */}
+                            <button
+                              onClick={() => {
+                                if (match.type === 'stricker') {
+                                  setSelectedStrickerMatch(match);
+                                  setShowStrickerMatchDetails(true);
+                                } else {
+                                  setSelectedRankedMatch(match);
+                                  setShowRankedMatchDetails(true);
+                                }
+                              }}
+                              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-opacity-80 transition-colors flex items-center gap-1.5 ${
+                                match.type === 'stricker'
+                                  ? 'bg-lime-500/20 text-lime-400 hover:bg-lime-500/30'
+                                  : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+                              }`}
+                            >
+                              <Play className="w-3 h-3" />
+                              <span>{language === 'fr' ? 'Voir détails' : 'View details'}</span>
+                            </button>
                           </div>
                         </div>
                         
-                        {/* Right: Date + Buttons */}
-                        <div className="flex items-center gap-2 sm:gap-3">
-                          {/* Date + Heure */}
-                          <div className="hidden sm:flex items-center gap-1.5 text-gray-500 text-xs">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>
-                              {new Date(match.completedAt || match.createdAt).toLocaleDateString(
-                                language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                                { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
-                              )}
-                            </span>
-                          </div>
-                          
-                          {/* Copy Match Link Button - Only for own profile */}
-                          {isOwnProfile && (
-                            <button
-                              onClick={() => {
-                                const matchUrl = `${window.location.origin}/ranked-match/${match._id}`;
-                                navigator.clipboard.writeText(matchUrl);
-                                setCopiedMatchId(match._id);
-                                setTimeout(() => setCopiedMatchId(null), 2000);
-                              }}
-                              className={`px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1 ${
-                                copiedMatchId === match._id
-                                  ? 'bg-green-500/20 text-green-400'
-                                  : 'bg-gray-500/20 text-gray-400 hover:bg-gray-500/30'
-                              }`}
-                              title={language === 'fr' ? 'Copier le lien pour arbitre' : 'Copy link for referee'}
-                            >
-                              {copiedMatchId === match._id ? (
-                                <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                              ) : (
-                                <Link2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                              )}
-                              <span className="hidden sm:inline">{copiedMatchId === match._id ? (language === 'fr' ? 'Copié!' : 'Copied!') : (language === 'fr' ? 'Copier' : 'Copy')}</span>
-                            </button>
-                          )}
-                          
-                          {/* View Details Button */}
-                          <button
-                            onClick={() => {
-                              setSelectedRankedMatch(match);
-                              setShowRankedMatchDetails(true);
-                            }}
-                            className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 transition-colors flex items-center gap-1.5"
-                          >
-                            <Play className="w-3 h-3" />
-                            <span>{language === 'fr' ? 'Voir détails' : 'View details'}</span>
-                          </button>
+                        {/* Mobile: Date + Heure on second row */}
+                        <div className="sm:hidden flex items-center gap-1.5 text-gray-500 text-xs mt-2">
+                          <Clock className="w-3 h-3" />
+                          <span>
+                            {new Date(match.completedAt || match.createdAt).toLocaleDateString(
+                              language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                              { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+                            )}
+                          </span>
                         </div>
                       </div>
-                      
-                      {/* Mobile: Date + Heure on second row */}
-                      <div className="sm:hidden flex items-center gap-1.5 text-gray-500 text-xs mt-2">
-                        <Clock className="w-3 h-3" />
-                        <span>
-                          {new Date(match.completedAt || match.createdAt).toLocaleDateString(
-                            language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
-                            { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
                 
-                {/* Pagination */}
-                {rankedTotalPages > 1 && (
+                {/* Pagination - Removed for now since we're showing first 20 */}
+                {false && rankedTotalPages > 1 && (
                   <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-white/10">
                     <button
                       onClick={() => setRankedPage(p => Math.max(1, p - 1))}
@@ -1201,7 +1319,7 @@ const PlayerProfile = () => {
             ) : (
               <div className="text-center py-8">
                 <Trophy className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500">{language === 'fr' ? 'Aucun match classé joué' : 'No ranked matches played'}</p>
+                <p className="text-gray-500">{t.noMatches}</p>
               </div>
             )}
           </div>
@@ -1653,6 +1771,230 @@ const PlayerProfile = () => {
                 </div>
               )}
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stricker Match Details Modal */}
+      {showStrickerMatchDetails && selectedStrickerMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm overflow-y-auto overscroll-contain" onClick={(e) => { if (e.target === e.currentTarget) { setShowStrickerMatchDetails(false); setSelectedStrickerMatch(null); } }}>
+          <div className="bg-dark-900 rounded-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] overflow-hidden shadow-2xl border border-lime-500/30 my-auto flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex-shrink-0 p-4 sm:p-6 border-b border-white/10 bg-gradient-to-r from-lime-500 to-green-600">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg sm:text-2xl font-bold text-white flex items-center gap-2 sm:gap-3">
+                  <Trophy className="w-5 sm:w-6 h-5 sm:h-6" />
+                  {language === 'fr' ? 'Détails du match Stricker' : 'Stricker Match Details'}
+                </h2>
+                <button 
+                  onClick={() => {
+                    setShowStrickerMatchDetails(false);
+                    setSelectedStrickerMatch(null);
+                  }}
+                  className="p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+              
+              {/* Match Info */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-3 sm:mt-4">
+                <span className={`px-2.5 py-1 rounded-lg text-xs sm:text-sm font-bold ${
+                  selectedStrickerMatch.isWinner 
+                    ? 'bg-green-500/30 text-green-300' 
+                    : 'bg-red-500/30 text-red-300'
+                }`}>
+                  {selectedStrickerMatch.isWinner ? (language === 'fr' ? 'Victoire' : 'Victory') : (language === 'fr' ? 'Défaite' : 'Defeat')}
+                </span>
+                <span className="px-2.5 py-1 bg-white/20 rounded-lg text-xs sm:text-sm font-medium text-white">
+                  Search & Destroy
+                </span>
+                <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
+                  <Users className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                  <span>5v5</span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
+                  <Clock className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                  <span>
+                    {new Date(selectedStrickerMatch.completedAt || selectedStrickerMatch.createdAt).toLocaleDateString(
+                      language === 'fr' ? 'fr-FR' : language === 'de' ? 'de-DE' : language === 'it' ? 'it-IT' : 'en-US',
+                      { day: 'numeric', month: 'short', year: 'numeric' }
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Content - Teams */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                {/* Team 1 */}
+                <div className={`p-4 rounded-xl border-2 ${
+                  selectedStrickerMatch.winner === 1
+                    ? 'bg-green-500/10 border-green-500/50' 
+                    : 'bg-red-500/10 border-red-500/50'
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      {selectedStrickerMatch.team1Squad?.logo && (
+                        <img 
+                          src={selectedStrickerMatch.team1Squad.logo} 
+                          alt={selectedStrickerMatch.team1Squad.name}
+                          className="w-10 h-10 object-contain"
+                        />
+                      )}
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{selectedStrickerMatch.team1Squad?.name || 'Team 1'}</h3>
+                        <p className="text-sm text-gray-400">[{selectedStrickerMatch.team1Squad?.tag || 'T1'}]</p>
+                      </div>
+                    </div>
+                    {selectedStrickerMatch.winner === 1 ? (
+                      <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5" />
+                        {language === 'fr' ? 'Victoire' : 'Winner'}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                        {language === 'fr' ? 'Défaite' : 'Defeat'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Roster */}
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wider text-gray-400 mb-3 font-bold">{language === 'fr' ? 'Roster' : 'Roster'}</p>
+                    {selectedStrickerMatch.players?.filter(p => p.team === 1).map((player, idx) => {
+                      const safeUsername = player.user?.username || 'Player';
+                      let playerAvatar = null;
+                      try {
+                        playerAvatar = player.user?.avatarUrl ? getAvatarUrl(player.user.avatarUrl) : null;
+                        if (!playerAvatar && player.user?.discordId && player.user?.discordAvatar) {
+                          playerAvatar = `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
+                        }
+                        if (!playerAvatar) {
+                          playerAvatar = getDefaultAvatar(safeUsername);
+                        }
+                      } catch (e) {
+                        playerAvatar = '/avatar.jpg';
+                      }
+                      
+                      return (
+                        <div key={idx} className="flex items-center gap-3 p-2.5 rounded-lg bg-dark-800/50">
+                          <img 
+                            src={playerAvatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            {player.user?._id ? (
+                              <Link 
+                                to={`/player/${player.user._id}`}
+                                className="text-white hover:text-lime-400 transition-colors font-medium text-sm truncate block"
+                              >
+                                {safeUsername}
+                              </Link>
+                            ) : (
+                              <span className="text-white font-medium text-sm truncate block">
+                                {safeUsername}
+                              </span>
+                            )}
+                          </div>
+                          {selectedStrickerMatch.playerTeam === 1 && player.user?._id?.toString() === playerId && (
+                            <span className="px-2 py-0.5 bg-lime-500/20 text-lime-400 text-xs rounded">
+                              {language === 'fr' ? 'Ce joueur' : 'This player'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Team 2 */}
+                <div className={`p-4 rounded-xl border-2 ${
+                  selectedStrickerMatch.winner === 2
+                    ? 'bg-green-500/10 border-green-500/50' 
+                    : 'bg-red-500/10 border-red-500/50'
+                }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      {selectedStrickerMatch.team2Squad?.logo && (
+                        <img 
+                          src={selectedStrickerMatch.team2Squad.logo} 
+                          alt={selectedStrickerMatch.team2Squad.name}
+                          className="w-10 h-10 object-contain"
+                        />
+                      )}
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{selectedStrickerMatch.team2Squad?.name || 'Team 2'}</h3>
+                        <p className="text-sm text-gray-400">[{selectedStrickerMatch.team2Squad?.tag || 'T2'}]</p>
+                      </div>
+                    </div>
+                    {selectedStrickerMatch.winner === 2 ? (
+                      <div className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5" />
+                        {language === 'fr' ? 'Victoire' : 'Winner'}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                        {language === 'fr' ? 'Défaite' : 'Defeat'}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Roster */}
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wider text-gray-400 mb-3 font-bold">{language === 'fr' ? 'Roster' : 'Roster'}</p>
+                    {selectedStrickerMatch.players?.filter(p => p.team === 2).map((player, idx) => {
+                      const safeUsername = player.user?.username || 'Player';
+                      let playerAvatar = null;
+                      try {
+                        playerAvatar = player.user?.avatarUrl ? getAvatarUrl(player.user.avatarUrl) : null;
+                        if (!playerAvatar && player.user?.discordId && player.user?.discordAvatar) {
+                          playerAvatar = `https://cdn.discordapp.com/avatars/${player.user.discordId}/${player.user.discordAvatar}.png`;
+                        }
+                        if (!playerAvatar) {
+                          playerAvatar = getDefaultAvatar(safeUsername);
+                        }
+                      } catch (e) {
+                        playerAvatar = '/avatar.jpg';
+                      }
+                      
+                      return (
+                        <div key={idx} className="flex items-center gap-3 p-2.5 rounded-lg bg-dark-800/50">
+                          <img 
+                            src={playerAvatar}
+                            alt=""
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={(e) => { e.target.src = '/avatar.jpg'; }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            {player.user?._id ? (
+                              <Link 
+                                to={`/player/${player.user._id}`}
+                                className="text-white hover:text-lime-400 transition-colors font-medium text-sm truncate block"
+                              >
+                                {safeUsername}
+                              </Link>
+                            ) : (
+                              <span className="text-white font-medium text-sm truncate block">
+                                {safeUsername}
+                              </span>
+                            )}
+                          </div>
+                          {selectedStrickerMatch.playerTeam === 2 && player.user?._id?.toString() === playerId && (
+                            <span className="px-2 py-0.5 bg-lime-500/20 text-lime-400 text-xs rounded">
+                              {language === 'fr' ? 'Ce joueur' : 'This player'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

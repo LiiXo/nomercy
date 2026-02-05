@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
@@ -231,6 +231,7 @@ const StrickerMode = () => {
   const [loading, setLoading] = useState(true);
   const [myRanking, setMyRanking] = useState(null);
   const [squadLeaderboard, setSquadLeaderboard] = useState([]);
+  const [userSquadPosition, setUserSquadPosition] = useState(null); // Position de l'escouade du joueur si hors top 15
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(true);
   const [inQueue, setInQueue] = useState(false);
   const [queueSize, setQueueSize] = useState(0);
@@ -253,6 +254,9 @@ const StrickerMode = () => {
   const [ggsecureConnected, setGgsecureConnected] = useState(null); // GGSecure connection status for PC players
   const [currentSeason, setCurrentSeason] = useState(null); // Current Stricker season info
   const [seasonCountdown, setSeasonCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 }); // Countdown to next season
+  const [showTop100Modal, setShowTop100Modal] = useState(false); // Top 100 modal
+  const [top100Squads, setTop100Squads] = useState([]); // Top 100 squads data
+  const [loadingTop100, setLoadingTop100] = useState(false); // Loading state for top 100
   const [recentMatches, setRecentMatches] = useState([
     // Test matches for preview
     { _id: 'test1', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'FTW', logo: '' }, team1Score: 6, team2Score: 4, winner: 'team1' },
@@ -293,12 +297,13 @@ const StrickerMode = () => {
     
     try {
       setLoadingLeaderboard(true);
-      const response = await fetch(`${API_URL}/stricker/leaderboard/squads?limit=10`, {
+      const response = await fetch(`${API_URL}/stricker/leaderboard/squads`, {
         credentials: 'include'
       });
       const data = await response.json();
       if (data.success) {
-        setSquadLeaderboard(data.leaderboard || []);
+        setSquadLeaderboard(data.top15 || []);
+        setUserSquadPosition(data.userSquad || null);
       }
     } catch (err) {
       console.error('Error fetching stricker leaderboard:', err);
@@ -306,6 +311,32 @@ const StrickerMode = () => {
       setLoadingLeaderboard(false);
     }
   }, [hasAccess]);
+  
+  // Fetch top 100 squads
+  const fetchTop100 = useCallback(async () => {
+    if (!hasAccess) return;
+    
+    try {
+      setLoadingTop100(true);
+      const response = await fetch(`${API_URL}/stricker/leaderboard/squads/top100`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTop100Squads(data.squads || []);
+      }
+    } catch (err) {
+      console.error('Error fetching top 100:', err);
+    } finally {
+      setLoadingTop100(false);
+    }
+  }, [hasAccess]);
+  
+  // Open top 100 modal
+  const handleOpenTop100 = () => {
+    setShowTop100Modal(true);
+    fetchTop100();
+  };
   
   // Fetch matchmaking status
   const fetchMatchmakingStatus = useCallback(async () => {
@@ -729,12 +760,12 @@ const StrickerMode = () => {
                   onClick={() => navigate(`/squad/${mySquad._id}`)}
                   className="px-4 py-2 bg-lime-500/10 border border-lime-500/30 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-lime-500/20 transition-colors"
                 >
-                  <div className="w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden border border-lime-500/30">
+                  <div className="w-10 h-10 flex items-center justify-center overflow-hidden">
                     {mySquad.logo ? (
                       <img 
                         src={mySquad.logo} 
                         alt={mySquad.name} 
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     ) : (
                       <Users className="w-5 h-5 text-lime-400" />
@@ -867,7 +898,7 @@ const StrickerMode = () => {
                             <img 
                               src={match.team1Squad.logo} 
                               alt={match.team1Squad.tag}
-                              className="w-6 h-6 rounded object-cover"
+                              className="w-6 h-6 object-contain"
                             />
                           )}
                           <span className={`font-bold text-sm ${team1Won ? 'text-green-400' : 'text-gray-400'}`}>
@@ -895,7 +926,7 @@ const StrickerMode = () => {
                             <img 
                               src={match.team2Squad.logo} 
                               alt={match.team2Squad.tag}
-                              className="w-6 h-6 rounded object-cover"
+                              className="w-6 h-6 object-contain"
                             />
                           )}
                         </div>
@@ -977,7 +1008,7 @@ const StrickerMode = () => {
                         <img 
                           src={mySquad.logo} 
                           alt={mySquad.name}
-                          className="w-12 h-12 rounded-lg object-cover"
+                          className="w-12 h-12 object-contain"
                         />
                       )}
                       <div className="flex-1">
@@ -1238,10 +1269,19 @@ const StrickerMode = () => {
             
             {/* Squad Leaderboard */}
             <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-6">
-              <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <Medal className="w-5 h-5 text-lime-400" />
-                {t.squadLeaderboard}
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Medal className="w-5 h-5 text-lime-400" />
+                  {t.squadLeaderboard}
+                </h2>
+                <button
+                  onClick={handleOpenTop100}
+                  className="px-4 py-2 bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600 text-white font-bold rounded-xl transition-all flex items-center gap-2 text-sm"
+                >
+                  <Trophy className="w-4 h-4" />
+                  Top 100
+                </button>
+              </div>
               
               {loadingLeaderboard ? (
                 <div className="flex items-center justify-center py-8">
@@ -1255,36 +1295,62 @@ const StrickerMode = () => {
                 <div className="space-y-2">
                   {squadLeaderboard.map((squad, index) => {
                     const squadRank = getStrickerRank(squad.stats?.points || 0);
+                    const isPodium = index < 3;
+                    const isFirst = index === 0;
+                    const isSecond = index === 1;
+                    const isThird = index === 2;
+                    
                     return (
                       <div 
                         key={squad._id}
-                        className={`flex items-center gap-4 p-4 rounded-xl transition-colors ${
-                          index < 3 
-                            ? 'bg-gradient-to-r from-lime-500/10 to-transparent border border-lime-500/20' 
-                            : 'bg-dark-800/50 hover:bg-dark-800'
+                        className={`flex items-center gap-4 p-4 rounded-xl transition-all duration-300 ${
+                          isPodium
+                            ? `border ${
+                                isFirst ? 'bg-gradient-to-r from-yellow-500/20 to-transparent border-yellow-500/40 hover:border-yellow-500/60 animate-pulse-slow' :
+                                isSecond ? 'bg-gradient-to-r from-gray-400/20 to-transparent border-gray-400/40 hover:border-gray-400/60' :
+                                'bg-gradient-to-r from-amber-700/20 to-transparent border-amber-700/40 hover:border-amber-700/60'
+                              }` 
+                            : 'bg-dark-800/50 hover:bg-dark-800 border border-transparent'
                         }`}
                       >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                          index === 0 ? 'bg-yellow-500 text-black' :
-                          index === 1 ? 'bg-gray-400 text-black' :
-                          index === 2 ? 'bg-amber-700 text-white' :
+                        {/* Position Badge with animation for podium */}
+                        <div className={`relative w-10 h-10 rounded-full flex items-center justify-center font-bold transition-transform duration-300 ${
+                          isFirst ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black shadow-lg shadow-yellow-500/50 scale-110' :
+                          isSecond ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-black shadow-lg shadow-gray-400/50 scale-105' :
+                          isThird ? 'bg-gradient-to-br from-amber-600 to-amber-800 text-white shadow-lg shadow-amber-600/50' :
                           'bg-dark-700 text-gray-400'
                         }`}>
-                          {squad.position || index + 1}
+                          {isPodium && (
+                            <div className={`absolute inset-0 rounded-full blur-md opacity-50 ${
+                              isFirst ? 'bg-yellow-500 animate-ping-slow' :
+                              isSecond ? 'bg-gray-400 animate-pulse' :
+                              'bg-amber-600'
+                            }`} />
+                          )}
+                          <span className="relative z-10">
+                            {squad.position || index + 1}
+                          </span>
                         </div>
                         
                         <div className="flex items-center gap-3 flex-1 min-w-0">
                           {squad.logo && (
-                            <img 
-                              src={squad.logo} 
-                              alt={squad.name}
-                              className="w-10 h-10 rounded-lg object-cover"
-                            />
+                            <Link to={`/squad/${squad._id}`}>
+                              <img 
+                                src={squad.logo} 
+                                alt={squad.name}
+                                className="w-10 h-10 object-contain transition-transform duration-300 hover:scale-110 cursor-pointer"
+                              />
+                            </Link>
                           )}
-                          <div className="min-w-0">
-                            <p className="font-bold text-white truncate">
+                          <div className="min-w-0 flex-1">
+                            <Link 
+                              to={`/squad/${squad._id}`}
+                              className={`font-bold truncate block hover:underline cursor-pointer ${
+                                isPodium ? 'text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-400' : 'text-white hover:text-lime-400'
+                              }`}
+                            >
                               [{squad.tag}] {squad.name}
-                            </p>
+                            </Link>
                             <div className="flex items-center gap-2">
                               <img 
                                 src={squadRank.image} 
@@ -1298,7 +1364,11 @@ const StrickerMode = () => {
                         </div>
                         
                         <div className="text-right">
-                          <p className="text-lime-400 font-bold">{squad.stats?.points || 0} pts</p>
+                          <p className={`font-bold ${
+                            isPodium ? 'text-lime-400 text-lg' : 'text-lime-400'
+                          }`}>
+                            {squad.stats?.points || 0} pts
+                          </p>
                           <p className="text-gray-500 text-xs">
                             {squad.stats?.wins || 0}W - {squad.stats?.losses || 0}L
                           </p>
@@ -1306,6 +1376,65 @@ const StrickerMode = () => {
                       </div>
                     );
                   })}
+                  
+                  {/* Position de l'escouade du joueur si hors top 15 */}
+                  {userSquadPosition && (
+                    <>
+                      <div className="flex items-center gap-2 py-2">
+                        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-lime-500/30 to-transparent" />
+                        <span className="text-xs text-gray-500">...</span>
+                        <div className="h-px flex-1 bg-gradient-to-l from-transparent via-lime-500/30 to-transparent" />
+                      </div>
+                      
+                      <div 
+                        className="flex items-center gap-4 p-4 rounded-xl bg-dark-800 border-2 border-lime-500/40 animate-pulse-slow"
+                      >
+                        <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold bg-lime-500/20 text-lime-400 border border-lime-500/50">
+                          {userSquadPosition.position}
+                        </div>
+                        
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {userSquadPosition.logo && (
+                            <Link to={`/squad/${userSquadPosition._id}`}>
+                              <img 
+                                src={userSquadPosition.logo} 
+                                alt={userSquadPosition.name}
+                                className="w-10 h-10 object-contain hover:scale-110 transition-transform cursor-pointer"
+                              />
+                            </Link>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <Link 
+                              to={`/squad/${userSquadPosition._id}`}
+                              className="font-bold text-lime-400 truncate block hover:underline hover:text-lime-300 cursor-pointer"
+                            >
+                              [{userSquadPosition.tag}] {userSquadPosition.name}
+                            </Link>
+                            <div className="flex items-center gap-2">
+                              <img 
+                                src={getStrickerRank(userSquadPosition.stats?.points || 0).image} 
+                                alt={getStrickerRank(userSquadPosition.stats?.points || 0).name}
+                                className="w-4 h-4 object-contain"
+                                onError={(e) => e.target.style.display = 'none'}
+                              />
+                              <span className="text-lime-400 text-sm">
+                                {getStrickerRank(userSquadPosition.stats?.points || 0).name}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="text-right">
+                          <p className="text-lime-400 font-bold">
+                            {userSquadPosition.stats?.points || 0} pts
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            {userSquadPosition.stats?.wins || 0}W - {userSquadPosition.stats?.losses || 0}L
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1603,6 +1732,118 @@ const StrickerMode = () => {
                       />
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top 100 Modal */}
+      {showTop100Modal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowTop100Modal(false)}>
+          <div className="bg-dark-900 border border-lime-500/30 rounded-2xl max-w-5xl w-full max-h-[85vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-lime-500/20">
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <Trophy className="w-7 h-7 text-lime-400" />
+                  Top 100 {t.squadLeaderboard}
+                </h2>
+                <button
+                  onClick={() => setShowTop100Modal(false)}
+                  className="p-2 hover:bg-white/5 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+            </div>
+            
+            <div className="p-6 overflow-y-auto max-h-[calc(85vh-100px)]">
+              {loadingTop100 ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
+                </div>
+              ) : top100Squads.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  Aucune escouade classée
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {top100Squads.map((squad, index) => {
+                    const squadRank = getStrickerRank(squad.stats?.points || 0);
+                    const isPodium = index < 3;
+                    const isFirst = index === 0;
+                    const isSecond = index === 1;
+                    const isThird = index === 2;
+                    
+                    return (
+                      <div 
+                        key={squad._id}
+                        className={`flex items-center gap-4 p-3 rounded-xl transition-all ${
+                          isPodium
+                            ? `border ${
+                                isFirst ? 'bg-gradient-to-r from-yellow-500/20 to-transparent border-yellow-500/40' :
+                                isSecond ? 'bg-gradient-to-r from-gray-400/20 to-transparent border-gray-400/40' :
+                                'bg-gradient-to-r from-amber-700/20 to-transparent border-amber-700/40'
+                              }` 
+                            : 'bg-dark-800/50 hover:bg-dark-800 border border-transparent'
+                        }`}
+                      >
+                        {/* Position Badge */}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                          isFirst ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black' :
+                          isSecond ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-black' :
+                          isThird ? 'bg-gradient-to-br from-amber-600 to-amber-800 text-white' :
+                          'bg-dark-700 text-gray-400'
+                        }`}>
+                          {squad.position}
+                        </div>
+                        
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          {squad.logo && (
+                            <Link to={`/squad/${squad._id}`} onClick={() => setShowTop100Modal(false)}>
+                              <img 
+                                src={squad.logo} 
+                                alt={squad.name}
+                                className="w-8 h-8 object-contain transition-transform duration-300 hover:scale-110 cursor-pointer"
+                              />
+                            </Link>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <Link 
+                              to={`/squad/${squad._id}`}
+                              onClick={() => setShowTop100Modal(false)}
+                              className={`font-bold truncate block hover:underline cursor-pointer text-sm ${
+                                isPodium ? 'text-transparent bg-clip-text bg-gradient-to-r from-lime-400 to-emerald-400' : 'text-white hover:text-lime-400'
+                              }`}
+                            >
+                              [{squad.tag}] {squad.name}
+                            </Link>
+                            <div className="flex items-center gap-2">
+                              <img 
+                                src={squadRank.image} 
+                                alt={squadRank.name}
+                                className="w-3 h-3 object-contain"
+                                onError={(e) => e.target.style.display = 'none'}
+                              />
+                              <span className="text-lime-400 text-xs">{squadRank.name}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="text-right">
+                          <p className={`font-bold text-sm ${
+                            isPodium ? 'text-lime-400' : 'text-lime-400'
+                          }`}>
+                            {squad.stats?.points || 0} pts
+                          </p>
+                          <p className="text-gray-500 text-xs">
+                            {squad.stats?.wins || 0}W - {squad.stats?.losses || 0}L
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

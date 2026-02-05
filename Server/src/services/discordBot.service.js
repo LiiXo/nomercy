@@ -4,6 +4,7 @@ import { Client, GatewayIntentBits, EmbedBuilder, ChannelType, PermissionFlagsBi
 const ADMIN_LOG_CHANNEL_ID = '1463997106204184690';
 const BAN_LOG_CHANNEL_ID = '1463997518412255488';
 const ARBITRATOR_CHANNEL_ID = '1464005794289815746';
+const IRIS_LOGS_CHANNEL_ID = '1468864868634460202';
 
 // Discord role IDs to mention in ban notifications
 const BAN_MENTION_ROLES = ['1450169699710144644', '1450169557451935784'];
@@ -21,6 +22,9 @@ const SUPPORT_TICKET_CATEGORY_ID = '1447349602331398164';
 // Discord bot client
 let client = null;
 let isReady = false;
+
+// Socket.io instance for emitting events
+let io = null;
 
 // Flag to prevent channel deletion during server restart
 let isShuttingDown = false;
@@ -48,7 +52,10 @@ export const getShuttingDown = () => isShuttingDown;
 /**
  * Initialize the Discord bot
  */
-export const initDiscordBot = async () => {
+export const initDiscordBot = async (socketIo) => {
+  // Store socket.io instance
+  io = socketIo;
+  
   const token = process.env.DISCORD_BOT_TOKEN;
   
   if (!token) {
@@ -108,8 +115,16 @@ export const initDiscordBot = async () => {
         match.status = 'cancelled';
         match.cancelledAt = new Date();
         match.cancelledBy = 'discord_arbitrator';
-        match.cancelReason = 'Annulé par arbitre via Discord (roster non sélectionné)';
+        match.cancelReason = 'Annulé par arbitre via Discord (équipe AFK)';
         await match.save();
+        
+        // Emit socket event to notify all players in the match
+        if (io) {
+          io.to(`stricker-match-${matchId}`).emit('strickerMatchCancelled', {
+            matchId: matchId,
+            reason: 'Annulé par arbitre (équipe AFK)'
+          });
+        }
         
         // Update the original message to show it's been cancelled
         const cancelledEmbed = new EmbedBuilder()
@@ -891,6 +906,658 @@ A private voice channel has been created for you: **${voiceChannel.name}**`, inl
   }
 };
 
+// Iris Scan category ID
+const IRIS_SCAN_CATEGORY_ID = '1468857562446303305';
+
+/**
+ * Create an Iris Scan text channel for a suspicious player
+ * @param {Object} player - Player data (username, discordId, discordUsername, etc.)
+ * @param {Object} securityStatus - Player's Iris security status
+ * @param {Object} admin - Admin who initiated the scan
+ * @returns {Object} - { success, channelId, channelUrl, error }
+ */
+export const createIrisScanChannel = async (player, securityStatus, admin) => {
+  if (!client || !isReady) {
+    return { success: false, error: 'Discord bot not ready' };
+  }
+
+  try {
+    const guild = client.guilds.cache.first();
+    if (!guild) {
+      return { success: false, error: 'No guild found' };
+    }
+
+    // Fetch the category to sync permissions
+    const category = await client.channels.fetch(IRIS_SCAN_CATEGORY_ID).catch(() => null);
+    if (!category) {
+      return { success: false, error: 'Iris Scan category not found' };
+    }
+
+    // Create channel name from player username (sanitize for Discord)
+    const channelName = `scan-${(player.username || player.discordUsername || 'inconnu').toLowerCase().replace(/[^a-z0-9-]/g, '-').substring(0, 30)}`;
+
+    // Check if a channel with this name already exists in the category
+    const existingChannel = category.children?.cache?.find(ch => ch.name === channelName);
+    if (existingChannel) {
+      return { 
+        success: true, 
+        channelId: existingChannel.id, 
+        channelUrl: `https://discord.com/channels/${guild.id}/${existingChannel.id}`,
+        alreadyExists: true
+      };
+    }
+
+    // Create the text channel with synced permissions from category
+    const channel = await guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      parent: IRIS_SCAN_CATEGORY_ID,
+      reason: `Iris Scan pour ${player.username || player.discordUsername} par ${admin.username}`
+    });
+
+    // Sync permissions with the category
+    await channel.lockPermissions();
+
+    // Build security status fields
+    const securityFields = [];
+    
+    if (securityStatus) {
+      // TPM Status
+      const tpmStatus = securityStatus.tpm?.enabled ? '✅ Actif' : '❌ Désactivé';
+      const tpmVersion = securityStatus.tpm?.version || 'N/A';
+      securityFields.push({ name: '🔐 TPM 2.0', value: `${tpmStatus}\nVersion: ${tpmVersion}`, inline: true });
+      
+      // Secure Boot
+      securityFields.push({ 
+        name: '🛡️ Secure Boot', 
+        value: securityStatus.secureBoot ? '✅ Actif' : '❌ Désactivé', 
+        inline: true 
+      });
+      
+      // Virtualization
+      securityFields.push({ 
+        name: '💻 Virtualisation', 
+        value: securityStatus.virtualization ? '✅ Actif' : '❌ Désactivé', 
+        inline: true 
+      });
+      
+      // IOMMU
+      securityFields.push({ 
+        name: '🔄 IOMMU', 
+        value: securityStatus.iommu ? '✅ Actif' : '❌ Désactivé', 
+        inline: true 
+      });
+      
+      // HVCI
+      securityFields.push({ 
+        name: '🔒 HVCI', 
+        value: securityStatus.hvci ? '✅ Actif' : '❌ Désactivé', 
+        inline: true 
+      });
+      
+      // VBS
+      securityFields.push({ 
+        name: '🛡️ VBS', 
+        value: securityStatus.vbs ? '✅ Actif' : '❌ Désactivé', 
+        inline: true 
+      });
+      
+      // Windows Defender
+      const defenderRealtime = securityStatus.defenderRealtime ? ' (Temps réel)' : '';
+      securityFields.push({ 
+        name: '🦠 Defender', 
+        value: securityStatus.defender ? `✅ Actif${defenderRealtime}` : '❌ Désactivé', 
+        inline: true 
+      });
+      
+      // Integrity check
+      if (securityStatus.tamperDetected) {
+        securityFields.push({ 
+          name: '⚠️ ALERTE INTÉGRITÉ', 
+          value: `Falsification détectée!\n${securityStatus.verificationIssues?.join(', ') || 'Problèmes détectés'}`, 
+          inline: false 
+        });
+      } else if (securityStatus.verified) {
+        securityFields.push({ 
+          name: '✅ Intégrité', 
+          value: 'Données vérifiées', 
+          inline: true 
+        });
+      }
+    } else {
+      securityFields.push({ 
+        name: '❓ Statut', 
+        value: 'Aucune donnée de sécurité disponible', 
+        inline: false 
+      });
+    }
+
+    // Create the player info embed
+    const playerEmbed = new EmbedBuilder()
+      .setColor(securityStatus?.tamperDetected ? 0xFF6B2C : 0x9333EA) // Orange if tamper, Purple otherwise
+      .setTitle(`🔍 IRIS SCAN - ${player.username || player.discordUsername}`)
+      .setThumbnail(player.avatarUrl || `https://cdn.discordapp.com/embed/avatars/0.png`)
+      .addFields(
+        { name: '👤 Joueur', value: player.username || 'Non défini', inline: true },
+        { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+        { name: '🆔 Discord ID', value: player.discordId || 'N/A', inline: true },
+        { name: '🖥️ Plateforme', value: player.platform || 'N/A', inline: true },
+        { name: '🎯 Activision ID', value: player.activisionId || 'Non renseigné', inline: true },
+        { name: '📅 Inscription', value: player.createdAt ? new Date(player.createdAt).toLocaleDateString('fr-FR') : 'N/A', inline: true },
+        ...securityFields
+      )
+      .setTimestamp()
+      .setFooter({ text: `Scan initié par ${admin.username}` });
+
+    // Send the embed to the channel
+    await channel.send({ embeds: [playerEmbed] });
+
+    // If player has hardware ID, add it as a separate message
+    if (player.hardwareId) {
+      await channel.send({
+        embeds: [new EmbedBuilder()
+          .setColor(0x3B82F6)
+          .setTitle('🔧 Hardware ID')
+          .setDescription(`\`\`\`${player.hardwareId}\`\`\``)
+        ]
+      });
+    }
+
+    // Send cheat detection embed if cheats were found
+    if (securityStatus?.cheatDetection?.found) {
+      // Risk level colors
+      const riskColors = {
+        'critical': 0xFF0000, // Red
+        'high': 0xFF6B2C,     // Orange
+        'medium': 0xFFA500,   // Yellow-Orange
+        'low': 0x10B981       // Green
+      };
+      
+      const riskLevel = securityStatus.cheatDetection.riskLevel || 'critical';
+      const riskScore = securityStatus.cheatDetection.riskScore || 100;
+      
+      // Risk Assessment Summary Embed
+      const riskEmbed = new EmbedBuilder()
+        .setColor(riskColors[riskLevel] || 0xFF0000)
+        .setTitle(`🚨 ALERTE SÉCURITÉ - NIVEAU ${riskLevel.toUpperCase()}`)
+        .setDescription(`**Score de risque: ${riskScore}/100**\n\n${riskLevel === 'critical' ? '🔴 **Périphérique de triche confirmé!**' : riskLevel === 'high' ? '🟠 **Forte suspicion de triche**' : '🟡 **Activité suspecte détectée**'}`);
+      
+      // Add games running
+      if (securityStatus.cheatDetection.gamesRunning?.length > 0) {
+        riskEmbed.addFields({ 
+          name: '🎮 Jeux en cours', 
+          value: securityStatus.cheatDetection.gamesRunning.map(g => `• **${g.display}** (${g.processName})`).join('\n').substring(0, 1024), 
+          inline: true 
+        });
+      }
+      
+      // Quick stats
+      riskEmbed.addFields(
+        { name: '🔌 Périphériques triche', value: `${securityStatus.cheatDetection.devices?.length || 0}`, inline: true },
+        { name: '💻 Logiciels suspects', value: `${securityStatus.cheatDetection.processes?.length || 0}`, inline: true }
+      );
+      
+      await channel.send({ embeds: [riskEmbed] });
+      
+      // Detailed cheat detection embed
+      const cheatEmbed = new EmbedBuilder()
+        .setColor(0xFF0000)
+        .setTitle('🔍 DÉTAILS DE DÉTECTION');
+
+      // Add detected devices with severity
+      if (securityStatus.cheatDetection.devices?.length > 0) {
+        const criticalDevices = securityStatus.cheatDetection.devices.filter(d => d.severity === 'critical');
+        const otherDevices = securityStatus.cheatDetection.devices.filter(d => d.severity !== 'critical');
+        
+        if (criticalDevices.length > 0) {
+          const devicesList = criticalDevices
+            .map(d => `🔴 **${d.type}**: ${d.name || 'N/A'} (VID:${d.vid || 'N/A'} PID:${d.pid || 'N/A'})`)
+            .join('\n');
+          cheatEmbed.addFields({ name: '⚠️ Périphériques CRITIQUES', value: devicesList.substring(0, 1024), inline: false });
+        }
+        
+        if (otherDevices.length > 0) {
+          const devicesList = otherDevices
+            .map(d => `🟡 **${d.type}**: ${d.name || 'N/A'}`)
+            .join('\n');
+          cheatEmbed.addFields({ name: '🟠 Adaptateurs suspects', value: devicesList.substring(0, 1024), inline: false });
+        }
+      }
+
+      // Add detected processes
+      if (securityStatus.cheatDetection.processes?.length > 0) {
+        const processesList = securityStatus.cheatDetection.processes
+          .map(p => `• **${p.name}** (PID: ${p.pid}) - Détecté: *${p.matchedCheat || 'suspect'}*`)
+          .join('\n');
+        cheatEmbed.addFields({ name: '💻 Logiciels de triche/macro', value: processesList.substring(0, 1024), inline: false });
+      }
+      
+      // Add suspicious USB devices (microcontrollers)
+      if (securityStatus.cheatDetection.suspiciousUsb?.length > 0) {
+        const suspiciousList = securityStatus.cheatDetection.suspiciousUsb
+          .map(u => `• ${u.name} - *${u.reason || 'Suspect'}*`)
+          .join('\n');
+        cheatEmbed.addFields({ name: '🔌 USB Suspects (Microcontrôleurs)', value: suspiciousList.substring(0, 1024), inline: false });
+      }
+
+      // Add all warnings
+      if (securityStatus.cheatDetection.warnings?.length > 0) {
+        cheatEmbed.addFields({ 
+          name: '📝 Résumé', 
+          value: securityStatus.cheatDetection.warnings.join('\n').substring(0, 1024), 
+          inline: false 
+        });
+      }
+
+      await channel.send({ embeds: [cheatEmbed] });
+    }
+
+    // Send USB devices embed
+    if (securityStatus?.usbDevices?.length > 0) {
+      const usbEmbed = new EmbedBuilder()
+        .setColor(0x10B981) // Green
+        .setTitle('🔌 Périphériques USB')
+        .setDescription(`${securityStatus.usbDevices.length} périphérique(s) USB détecté(s)`);
+
+      // Group USB devices in chunks of 10 for readability
+      const usbList = securityStatus.usbDevices.slice(0, 25).map(device => {
+        const vidPid = device.vid && device.pid ? ` (VID:${device.vid} PID:${device.pid})` : '';
+        return `• ${device.name || 'Inconnu'}${vidPid}`;
+      }).join('\n');
+
+      usbEmbed.addFields({ name: 'Liste des périphériques', value: usbList.substring(0, 1024) || 'Aucun', inline: false });
+
+      if (securityStatus.usbDevices.length > 25) {
+        usbEmbed.setFooter({ text: `Et ${securityStatus.usbDevices.length - 25} autres périphériques...` });
+      }
+
+      await channel.send({ embeds: [usbEmbed] });
+    }
+
+    // Send processes embed
+    if (securityStatus?.processes?.length > 0) {
+      // Sort processes and show top ones by relevance
+      const processEmbed = new EmbedBuilder()
+        .setColor(0x6366F1) // Indigo
+        .setTitle('⚙️ Liste des Processus')
+        .setDescription(`${securityStatus.processes.length} processus en cours d'exécution`);
+
+      // Show first 30 processes
+      const processList = securityStatus.processes.slice(0, 30).map(p => {
+        const path = p.path ? ` - ${p.path.substring(0, 40)}...` : '';
+        return `• ${p.name} (PID: ${p.pid})`;
+      }).join('\n');
+
+      processEmbed.addFields({ name: 'Processus actifs', value: processList.substring(0, 1024) || 'Aucun', inline: false });
+
+      if (securityStatus.processes.length > 30) {
+        processEmbed.setFooter({ text: `Et ${securityStatus.processes.length - 30} autres processus...` });
+      }
+
+      await channel.send({ embeds: [processEmbed] });
+    }
+
+    console.log(`[Discord Bot] Iris Scan channel created for ${player.username || player.discordUsername}`);
+    if (securityStatus?.cheatDetection?.found) {
+      console.warn(`[Discord Bot] CHEAT DETECTED for ${player.username || player.discordUsername}`);
+    }
+
+    return { 
+      success: true, 
+      channelId: channel.id, 
+      channelUrl: `https://discord.com/channels/${guild.id}/${channel.id}`,
+      alreadyExists: false
+    };
+  } catch (error) {
+    console.error('[Discord Bot] Error creating Iris Scan channel:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send connection/disconnection notification to a player's Iris scan channel
+ * @param {string} channelId - The Discord channel ID
+ * @param {Object} player - Player info (username, discordUsername)
+ * @param {string} status - 'connected' or 'disconnected'
+ * @param {Object} securityData - Optional security data to include on connection
+ * @returns {Object} - { success, error }
+ */
+export const sendIrisConnectionStatus = async (channelId, player, status, securityData = null) => {
+  if (!client || !isReady) {
+    return { success: false, error: 'Discord bot not ready' };
+  }
+
+  if (!channelId) {
+    return { success: false, error: 'No channel ID provided' };
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      return { success: false, error: 'Channel not found' };
+    }
+
+    const now = new Date().toLocaleString('fr-FR', { 
+      dateStyle: 'short', 
+      timeStyle: 'medium' 
+    });
+
+    if (status === 'connected') {
+      // Connected notification
+      const connectEmbed = new EmbedBuilder()
+        .setColor(0x22C55E) // Green
+        .setTitle('🟢 CONNECTÉ À IRIS')
+        .setDescription(`**${player.username || player.discordUsername}** vient de se connecter.`)
+        .addFields(
+          { name: '⏰ Heure', value: now, inline: true }
+        )
+        .setTimestamp();
+      
+      // Add cheat detection alert if found
+      if (securityData?.cheatDetection?.found) {
+        const riskLevel = securityData.cheatDetection.riskLevel || 'unknown';
+        const riskScore = securityData.cheatDetection.riskScore || 0;
+        
+        connectEmbed.setColor(riskLevel === 'critical' ? 0xFF0000 : riskLevel === 'high' ? 0xFF6B2C : 0xFFA500);
+        connectEmbed.addFields(
+          { name: '🚨 Alerte', value: `Niveau: **${riskLevel.toUpperCase()}** (Score: ${riskScore})`, inline: true }
+        );
+        
+        if (securityData.cheatDetection.devices?.length > 0) {
+          connectEmbed.addFields({
+            name: '🔌 Périphériques détectés',
+            value: securityData.cheatDetection.devices.map(d => `• ${d.type || d.name}`).join('\n').substring(0, 500),
+            inline: false
+          });
+        }
+        
+        if (securityData.cheatDetection.processes?.length > 0) {
+          connectEmbed.addFields({
+            name: '💻 Logiciels suspects',
+            value: securityData.cheatDetection.processes.map(p => `• ${p.name}`).join('\n').substring(0, 500),
+            inline: false
+          });
+        }
+        
+        if (securityData.cheatDetection.gamesRunning?.length > 0) {
+          connectEmbed.addFields({
+            name: '🎮 Jeux en cours',
+            value: securityData.cheatDetection.gamesRunning.map(g => g.display).join(', '),
+            inline: true
+          });
+        }
+      }
+      
+      await channel.send({ embeds: [connectEmbed] });
+      
+    } else if (status === 'disconnected') {
+      // Disconnected notification
+      const disconnectEmbed = new EmbedBuilder()
+        .setColor(0xEF4444) // Red
+        .setTitle('🔴 DÉCONNECTÉ D\'IRIS')
+        .setDescription(`**${player.username || player.discordUsername}** s'est déconnecté.`)
+        .addFields(
+          { name: '⏰ Heure', value: now, inline: true }
+        )
+        .setTimestamp();
+      
+      await channel.send({ embeds: [disconnectEmbed] });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Discord Bot] Error sending Iris connection status:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+/**
+ * Send Iris connection/disconnection log to the global logs channel
+ * @param {Object} player - Player info
+ * @param {string} status - 'connected' or 'disconnected'
+ * @param {Object} extraData - Optional extra data (cheatDetection, etc.)
+ */
+export const logIrisConnectionStatus = async (player, status, extraData = null) => {
+  if (!client || !isReady) return;
+
+  try {
+    const now = new Date().toLocaleString('fr-FR', { 
+      dateStyle: 'short', 
+      timeStyle: 'medium' 
+    });
+
+    let embed;
+    
+    if (status === 'connected') {
+      embed = new EmbedBuilder()
+        .setColor(extraData?.cheatDetection?.found ? 0xFF6B2C : 0x22C55E)
+        .setTitle('🟢 Connexion Iris')
+        .setDescription(`**${player.username || player.discordUsername}** s'est connecté à Iris`)
+        .addFields(
+          { name: '⏰ Heure', value: now, inline: true }
+        )
+        .setTimestamp();
+      
+      // Add cheat alert if detected
+      if (extraData?.cheatDetection?.found) {
+        embed.addFields(
+          { name: '🚨 Alerte', value: `Niveau: **${extraData.cheatDetection.riskLevel?.toUpperCase() || 'SUSPECT'}**`, inline: true }
+        );
+        if (extraData.cheatDetection.devices?.length > 0) {
+          embed.addFields({
+            name: '🔌 Détection',
+            value: extraData.cheatDetection.devices.slice(0, 3).map(d => d.type || d.name).join(', '),
+            inline: true
+          });
+        }
+      }
+    } else {
+      embed = new EmbedBuilder()
+        .setColor(0xEF4444)
+        .setTitle('🔴 Déconnexion Iris')
+        .setDescription(`**${player.username || player.discordUsername}** s'est déconnecté d'Iris`)
+        .addFields(
+          { name: '⏰ Heure', value: now, inline: true }
+        )
+        .setTimestamp();
+    }
+
+    await sendToChannel(IRIS_LOGS_CHANNEL_ID, { embeds: [embed] });
+  } catch (error) {
+    console.error('[Discord Bot] Error logging Iris status:', error.message);
+  }
+};
+
+/**
+ * Alert when a player is in a match but not connected to Iris
+ * @param {Object} player - Player info
+ * @param {Object} matchInfo - Match information
+ */
+export const alertIrisMatchDisconnected = async (player, matchInfo) => {
+  if (!client || !isReady) return;
+
+  try {
+    const now = new Date().toLocaleString('fr-FR', { 
+      dateStyle: 'short', 
+      timeStyle: 'medium' 
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500) // Orange warning
+      .setTitle('⚠️ ALERTE: Joueur en match sans Iris')
+      .setDescription(`**${player.username || player.discordUsername}** est en match mais n'est pas connecté à Iris!`)
+      .addFields(
+        { name: '🎮 Mode', value: matchInfo.mode || 'N/A', inline: true },
+        { name: '📋 Match', value: matchInfo.matchId ? `\`${matchInfo.matchId}\`` : 'N/A', inline: true },
+        { name: '⏰ Détecté à', value: now, inline: true }
+      )
+      .setTimestamp();
+    
+    if (matchInfo.team1 && matchInfo.team2) {
+      embed.addFields({
+        name: '🎯 Match',
+        value: `${matchInfo.team1} vs ${matchInfo.team2}`,
+        inline: false
+      });
+    }
+
+    await sendToChannel(IRIS_LOGS_CHANNEL_ID, { embeds: [embed] });
+    
+    // Also send to the player's scan channel if they have one
+    if (player.irisScanChannelId) {
+      await sendToChannel(player.irisScanChannelId, { embeds: [embed] });
+    }
+  } catch (error) {
+    console.error('[Discord Bot] Error alerting Iris match disconnected:', error.message);
+  }
+};
+
+/**
+ * Delete an Iris scan channel when a player account is deleted
+ * @param {string} channelId - The Discord channel ID to delete
+ * @param {string} playerUsername - The player's username (for logging)
+ * @returns {Object} - { success, error }
+ */
+export const deleteIrisChannel = async (channelId, playerUsername) => {
+  if (!client || !isReady) {
+    return { success: false, error: 'Discord bot not ready' };
+  }
+
+  if (!channelId) {
+    return { success: false, error: 'No channel ID provided' };
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    
+    if (!channel) {
+      console.log(`[Discord Bot] Iris channel ${channelId} not found (may already be deleted)`);
+      return { success: true, alreadyDeleted: true };
+    }
+
+    // Send a final message before deleting
+    await channel.send({
+      embeds: [new EmbedBuilder()
+        .setColor(0xFF0000)
+        .setTitle('❌ COMPTE SUPPRIMÉ')
+        .setDescription(`Le compte de **${playerUsername}** a été supprimé.\nCe salon va être supprimé.`)
+        .setTimestamp()
+      ]
+    }).catch(() => {});
+
+    // Wait a moment before deleting
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Delete the channel
+    await channel.delete(`Compte ${playerUsername} supprimé`);
+    console.log(`[Discord Bot] Deleted Iris scan channel for ${playerUsername}`);
+
+    return { success: true };
+  } catch (error) {
+    console.error(`[Discord Bot] Error deleting Iris channel ${channelId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Channel for Iris shadow bans and security warnings
+const IRIS_SHADOW_BAN_CHANNEL_ID = '1468867097504251914';
+
+/**
+ * Send notification when a player is shadow banned for cheat detection
+ * @param {Object} player - Player data
+ * @param {string} reason - What was detected (Cronus, DS4Windows, etc.)
+ * @param {number} durationHours - Ban duration in hours
+ * @param {Object} detectionDetails - Full detection details
+ */
+export const sendIrisShadowBan = async (player, reason, durationHours = 24, detectionDetails = null) => {
+  if (!client || !isReady) return;
+
+  try {
+    const expiresAt = new Date(Date.now() + durationHours * 60 * 60 * 1000);
+    
+    const embed = new EmbedBuilder()
+      .setColor(0xFF0000) // Red
+      .setTitle('🚨 SHADOW BAN - IRIS DÉTECTION')
+      .setDescription(`Un joueur a été automatiquement banni suite à une détection Iris.`)
+      .addFields(
+        { name: '👤 Joueur', value: player.username || 'N/A', inline: true },
+        { name: '🎮 Discord', value: player.discordUsername ? `<@${player.discordId}>` : 'N/A', inline: true },
+        { name: '⏰ Durée', value: `${durationHours}h`, inline: true },
+        { name: '📋 Raison', value: `Shadow ban pour ${reason}`, inline: false },
+        { name: '📅 Expiration', value: expiresAt.toLocaleString('fr-FR'), inline: true }
+      );
+
+    // Add detection details if available
+    if (detectionDetails) {
+      if (detectionDetails.devices && detectionDetails.devices.length > 0) {
+        const devicesList = detectionDetails.devices.map(d => `• **${d.type}** - ${d.name}`).join('\n').substring(0, 1024);
+        embed.addFields({ name: '🔌 Périphériques détectés', value: devicesList, inline: false });
+      }
+      if (detectionDetails.processes && detectionDetails.processes.length > 0) {
+        const processList = detectionDetails.processes.map(p => `• **${p.name}** (${p.matchedCheat})`).join('\n').substring(0, 1024);
+        embed.addFields({ name: '💻 Logiciels détectés', value: processList, inline: false });
+      }
+      if (detectionDetails.riskScore) {
+        embed.addFields({ name: '⚠️ Score de risque', value: `${detectionDetails.riskScore}/100 (${detectionDetails.riskLevel})`, inline: true });
+      }
+    }
+
+    embed.setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Détection automatique' });
+
+    await sendToChannel(IRIS_SHADOW_BAN_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Shadow ban notification sent for ${player.username}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending shadow ban notification:', error.message);
+  }
+};
+
+/**
+ * Send warning notification when a player has missing security modules
+ * @param {Object} player - Player data
+ * @param {Array} missingModules - List of missing/disabled security modules
+ */
+export const sendIrisSecurityWarning = async (player, missingModules) => {
+  if (!client || !isReady) return;
+
+  try {
+    const modulesList = missingModules.map(m => {
+      const icons = {
+        'TPM': '🔐',
+        'Secure Boot': '🛡️',
+        'Virtualization': '💻',
+        'IOMMU': '🔄',
+        'HVCI': '🔒',
+        'VBS': '🛡️',
+        'Defender': '🦠'
+      };
+      return `${icons[m.name] || '⚠️'} **${m.name}**: ${m.status}`;
+    }).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500) // Orange
+      .setTitle('⚠️ ALERTE SÉCURITÉ - MODULES MANQUANTS')
+      .setDescription(`${player.discordId ? `<@${player.discordId}>` : player.username}, des modules de sécurité sont désactivés sur votre PC.`)
+      .addFields(
+        { name: '👤 Joueur', value: player.username || 'N/A', inline: true },
+        { name: '🎮 Discord', value: player.discordUsername ? `<@${player.discordId}>` : 'N/A', inline: true },
+        { name: '\u200B', value: '\u200B', inline: true },
+        { name: '🔧 Modules à activer', value: modulesList, inline: false },
+        { name: '📋 Action requise', value: 'Veuillez activer ces modules dans les paramètres BIOS/UEFI de votre PC.\n**Des sanctions peuvent suivre si ces modules restent désactivés.**', inline: false }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Avertissement automatique' });
+
+    await sendToChannel(IRIS_SHADOW_BAN_CHANNEL_ID, { 
+      content: player.discordId ? `<@${player.discordId}>` : '', 
+      embeds: [embed] 
+    });
+    console.log(`[Discord Bot] Security warning sent for ${player.username}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending security warning:', error.message);
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -908,5 +1575,12 @@ export default {
   setShuttingDown,
   getShuttingDown,
   sendPlayerSummon,
-  sendToChannel
+  sendToChannel,
+  createIrisScanChannel,
+  sendIrisConnectionStatus,
+  logIrisConnectionStatus,
+  alertIrisMatchDisconnected,
+  deleteIrisChannel,
+  sendIrisShadowBan,
+  sendIrisSecurityWarning
 };

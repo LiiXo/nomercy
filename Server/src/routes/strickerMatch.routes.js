@@ -97,7 +97,7 @@ setInterval(() => {
 router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const odId = req.user._id.toString();
-    const mode = req.query.mode || 'hardcore'; // hardcore or cdl
+    const mode = req.query.mode || 'stricker'; // stricker mode
     
     // Update online status
     strickerOnlineUsers[odId] = Date.now();
@@ -181,7 +181,7 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
   try {
     const odId = req.user._id.toString();
     const now = Date.now();
-    const mode = req.body.mode || 'hardcore'; // hardcore or cdl
+    const mode = req.body.mode || 'stricker'; // stricker mode
     
     // Rate limiting: Prevent rapid join attempts (anti race condition)
     const lastUserAttempt = recentJoinAttempts.get(`user:${odId}:${mode}`);
@@ -386,7 +386,7 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
 router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const { targetSquadId, mode: requestMode } = req.body;
-    const mode = requestMode || 'hardcore'; // hardcore or cdl
+    const mode = requestMode || 'stricker'; // stricker mode
     const odId = req.user._id.toString();
     const now = Date.now();
     
@@ -632,7 +632,7 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
 router.post('/matchmaking/leave', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const odId = req.user._id.toString();
-    const mode = req.body.mode || 'hardcore'; // hardcore or cdl
+    const mode = req.body.mode || 'stricker'; // stricker mode
     
     const playerIndex = strickerQueue.findIndex(p => p.odId === odId && p.mode === mode);
     if (playerIndex === -1) {
@@ -772,16 +772,16 @@ async function createStrickerMatch() {
 // Get squad leaderboard for stricker mode
 router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
-    const { limit = 50, page = 1 } = req.query;
-    const skip = (page - 1) * limit;
-    
     console.log('[STRICKER LEADERBOARD] Fetching squad leaderboard...');
     
-    // Get squads with stricker stats sorted by points
-    const squads = await Squad.aggregate([
+    // Get user's squad
+    const user = await User.findById(req.user._id).select('squadStricker');
+    const userSquadId = user?.squadStricker?.toString();
+    
+    // Get all squads with stricker stats sorted by points
+    const allSquads = await Squad.aggregate([
       {
         $match: {
-          isActive: true,
           isDeleted: { $ne: true },
           $or: [
             { 'statsStricker.points': { $gt: 0 } },
@@ -799,12 +799,6 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
       },
       {
         $sort: { strickerPoints: -1, strickerWins: -1 }
-      },
-      {
-        $skip: skip
-      },
-      {
-        $limit: parseInt(limit)
       },
       {
         $lookup: {
@@ -830,51 +824,111 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
       }
     ]);
     
-    console.log(`[STRICKER LEADERBOARD] Found ${squads.length} squads with Stricker stats`);
+    console.log(`[STRICKER LEADERBOARD] Found ${allSquads.length} squads with Stricker stats`);
     
-    // Debug: Show first 3 squads
-    if (squads.length > 0) {
-      console.log('[STRICKER LEADERBOARD] Sample squads:', squads.slice(0, 3).map(s => ({
-        tag: s.tag,
-        points: s.strickerPoints,
-        wins: s.strickerWins,
-        losses: s.strickerLosses,
-        hasStatsStricker: !!s.stats
-      })));
-    }
-    
-    // Add rank position
-    const leaderboard = squads.map((squad, index) => ({
+    // Add positions to all squads
+    const allSquadsWithPosition = allSquads.map((squad, index) => ({
       ...squad,
-      position: skip + index + 1,
+      position: index + 1,
       rank: getStrickerRank(squad.stats?.points || squad.strickerPoints || 0),
       rankImage: STRICKER_RANKS[getStrickerRank(squad.stats?.points || squad.strickerPoints || 0)]?.image
     }));
     
-    const totalSquads = await Squad.countDocuments({
-      isActive: true,
-      isDeleted: { $ne: true },
-      $or: [
-        { 'statsStricker.points': { $gt: 0 } },
-        { 'statsStricker.wins': { $gt: 0 } },
-        { 'statsStricker.losses': { $gt: 0 } }
-      ]
-    });
+    // Get top 15
+    const top15 = allSquadsWithPosition.slice(0, 15);
     
-    console.log(`[STRICKER LEADERBOARD] Total squads in leaderboard: ${totalSquads}`);
+    // Find user's squad position if not in top 15
+    let userSquad = null;
+    if (userSquadId) {
+      const userSquadIndex = allSquadsWithPosition.findIndex(s => s._id.toString() === userSquadId);
+      if (userSquadIndex >= 15) {
+        userSquad = allSquadsWithPosition[userSquadIndex];
+      }
+    }
     
     res.json({
       success: true,
-      leaderboard,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total: totalSquads,
-        totalPages: Math.ceil(totalSquads / limit)
-      }
+      top15,
+      userSquad,
+      totalSquads: allSquads.length
     });
   } catch (error) {
     console.error('Stricker squad leaderboard error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get top 100 squad leaderboard for stricker mode
+router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async (req, res) => {
+  try {
+    console.log('[STRICKER TOP 100] Fetching top 100 squads...');
+    
+    // Get all squads with stricker stats sorted by points
+    const top100Squads = await Squad.aggregate([
+      {
+        $match: {
+          isDeleted: { $ne: true },
+          $or: [
+            { 'statsStricker.points': { $gt: 0 } },
+            { 'statsStricker.wins': { $gt: 0 } },
+            { 'statsStricker.losses': { $gt: 0 } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          strickerPoints: { $ifNull: ['$statsStricker.points', 0] },
+          strickerWins: { $ifNull: ['$statsStricker.wins', 0] },
+          strickerLosses: { $ifNull: ['$statsStricker.losses', 0] }
+        }
+      },
+      {
+        $sort: { strickerPoints: -1, strickerWins: -1 }
+      },
+      {
+        $limit: 100
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'leader',
+          foreignField: '_id',
+          as: 'leaderInfo'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          tag: 1,
+          logo: 1,
+          stats: '$statsStricker',
+          strickerPoints: 1,
+          strickerWins: 1,
+          strickerLosses: 1,
+          memberCount: { $size: '$members' },
+          leader: { $arrayElemAt: ['$leaderInfo.username', 0] }
+        }
+      }
+    ]);
+    
+    console.log(`[STRICKER TOP 100] Found ${top100Squads.length} squads`);
+    
+    // Add positions and rank info
+    const top100WithPosition = top100Squads.map((squad, index) => ({
+      ...squad,
+      position: index + 1,
+      rank: getStrickerRank(squad.stats?.points || squad.strickerPoints || 0),
+      rankImage: STRICKER_RANKS[getStrickerRank(squad.stats?.points || squad.strickerPoints || 0)]?.image
+    }));
+    
+    res.json({
+      success: true,
+      squads: top100WithPosition,
+      total: top100Squads.length
+    });
+  } catch (error) {
+    console.error('Stricker top 100 error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -953,8 +1007,8 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
         }
       })
       .populate('players.squad', 'name tag logo')
-      .populate('team1Squad', 'name tag logo members')
-      .populate('team2Squad', 'name tag logo members')
+      .populate('team1Squad', 'name tag logo members statsStricker')
+      .populate('team2Squad', 'name tag logo members statsStricker')
       .populate('team1Referent', 'username avatarUrl')
       .populate('team2Referent', 'username avatarUrl')
       .populate('chat.user', 'username roles')
@@ -1580,18 +1634,19 @@ router.post('/match/:matchId/cancel-vote', verifyToken, checkStrickerAccess, asy
       .populate('team2Referent', '_id username');
     
     if (!match) {
-      return res.status(404).json({ success: false, message: 'Match non trouv\u00e9' });
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
     
-    // Only allow during roster selection or map ban phase (before match starts)
+    // Allow cancellation during pre-match AND during ready/in_progress
     const isRosterSelectionActive = match.rosterSelection?.isActive === true;
     const isMapBanPhase = match.status === 'pending' && !match.rosterSelection?.isActive && !match.selectedMap;
-    const isPreMatchPhase = isRosterSelectionActive || isMapBanPhase;
+    const isMatchPhase = match.status === 'ready' || match.status === 'in_progress';
+    const canCancel = isRosterSelectionActive || isMapBanPhase || isMatchPhase;
     
-    if (!isPreMatchPhase) {
+    if (!canCancel) {
       return res.status(400).json({ 
         success: false, 
-        message: 'L\'annulation n\'est possible que pendant la phase de s\u00e9lection du roster ou de ban des maps' 
+        message: 'L\'annulation n\'est plus possible pour ce match' 
       });
     }
     
@@ -1827,16 +1882,20 @@ router.post('/match/:matchId/result', verifyToken, checkStrickerAccess, async (r
       if (match.result.team1Report.winner === match.result.team2Report.winner) {
         // Both agree - complete the match
         match.result.winner = match.result.team1Report.winner;
+        match.winner = match.result.team1Report.winner; // Set winner at root level for filtering
         match.result.confirmed = true;
         match.result.confirmedAt = new Date();
         match.status = 'completed';
         match.completedAt = new Date();
+        
+        console.log(`[STRICKER] Match ${match._id} completed - Winner: Team ${match.winner}`);
         
         // Distribute rewards (no MVP system for Stricker)
         await distributeStrickerRewards(match);
       } else {
         // Disagreement - mark as disputed
         match.status = 'disputed';
+        console.log(`[STRICKER] Match ${match._id} disputed - Team1 voted ${match.result.team1Report.winner}, Team2 voted ${match.result.team2Report.winner}`);
       }
     }
     
@@ -1887,7 +1946,7 @@ async function distributeStrickerRewards(match) {
     // Munitions rewards - Winners get 50, losers get 10 (consolation)
     const CRANES_WIN = 50;
     const CRANES_LOSS = 10;
-    const squadsAwarded = new Set();
+    const squadsAwarded = new Map(); // Map<squadId, cranesEarned> to track rewards per squad
     
     // Process each player
     for (const player of match.players) {
@@ -1923,35 +1982,43 @@ async function distributeStrickerRewards(match) {
       let cranesAwarded = 0;
       if (player.squad) {
         const squadId = player.squad.toString();
-        const squad = await Squad.findById(player.squad);
-        if (squad) {
-          if (!squad.statsStricker) squad.statsStricker = { points: 0, wins: 0, losses: 0 };
-          
-          const oldSquadPoints = squad.statsStricker.points || 0;
-          const squadPointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldSquadPoints);
-          
-          squad.statsStricker.points = Math.max(0, oldSquadPoints + squadPointsChange);
-          
-          if (isWinner) {
-            squad.statsStricker.wins = (squad.statsStricker.wins || 0) + 1;
-          } else {
-            squad.statsStricker.losses = (squad.statsStricker.losses || 0) + 1;
-          }
-          
-          // Award munitions only once per squad per match
-          // Winners get 50 munitions, losers get 10 munitions (consolation)
-          if (!squadsAwarded.has(squadId)) {
+        
+        // Check if this squad was already processed
+        if (squadsAwarded.has(squadId)) {
+          // Squad already processed, just get the cranes value that was awarded
+          cranesAwarded = squadsAwarded.get(squadId);
+          console.log(`[STRICKER] Squad already processed for ${user.username}, using cached cranes: ${cranesAwarded}`);
+        } else {
+          // First player from this squad - process squad stats
+          const squad = await Squad.findById(player.squad);
+          if (squad) {
+            if (!squad.statsStricker) squad.statsStricker = { points: 0, wins: 0, losses: 0 };
+            
+            const oldSquadPoints = squad.statsStricker.points || 0;
+            const squadPointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldSquadPoints);
+            
+            squad.statsStricker.points = Math.max(0, oldSquadPoints + squadPointsChange);
+            
+            if (isWinner) {
+              squad.statsStricker.wins = (squad.statsStricker.wins || 0) + 1;
+            } else {
+              squad.statsStricker.losses = (squad.statsStricker.losses || 0) + 1;
+            }
+            
+            // Award munitions
+            // Winners get 50 munitions, losers get 10 munitions (consolation)
             const cranesReward = isWinner ? CRANES_WIN : CRANES_LOSS;
             squad.cranes = (squad.cranes || 0) + cranesReward;
-            squadsAwarded.add(squadId);
+            squadsAwarded.set(squadId, cranesReward); // Store cranes value for other players
             cranesAwarded = cranesReward;
+            
             console.log(`[STRICKER] Squad ${squad.tag} (${squad._id}) ${isWinner ? 'WON' : 'LOST'} - Stats: ${oldSquadPoints} → ${squad.statsStricker.points} pts (${squadPointsChange > 0 ? '+' : ''}${squadPointsChange}), ${squad.statsStricker.wins}W/${squad.statsStricker.losses}L - Munitions: ${cranesReward} (total: ${squad.cranes})`);
+            
+            await squad.save();
+            console.log(`[STRICKER] Squad ${squad.tag} saved successfully. Current statsStricker:`, squad.statsStricker);
+          } else {
+            console.warn(`[STRICKER] Squad ${squadId} not found for player ${user.username}`);
           }
-          
-          await squad.save();
-          console.log(`[STRICKER] Squad ${squad.tag} saved successfully. Current statsStricker:`, squad.statsStricker);
-        } else {
-          console.warn(`[STRICKER] Squad ${squadId} not found for player ${user.username}`);
         }
       }
       
@@ -2096,6 +2163,55 @@ router.get('/history/recent', verifyToken, checkStrickerAccess, async (req, res)
     });
   } catch (error) {
     console.error('Stricker recent history error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Get player Stricker match history
+router.get('/history/player/:userId', verifyToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { limit = 500 } = req.query;
+    
+    // Find all completed matches where user participated
+    const matches = await StrickerMatch.find({
+      'players.user': userId,
+      status: 'completed',
+      isTestMatch: { $ne: true },
+      winner: { $exists: true, $ne: null }
+    })
+    .populate('team1Squad', 'name tag logo')
+    .populate('team2Squad', 'name tag logo')
+    .populate('players.user', 'username avatarUrl')
+    .sort({ completedAt: -1 })
+    .limit(parseInt(limit))
+    .lean();
+    
+    // Format matches with win/loss info for the player
+    const formattedMatches = matches.map(match => {
+      // Find player's team
+      const playerData = match.players.find(p => 
+        p.user?._id?.toString() === userId || p.user?.toString() === userId
+      );
+      
+      const playerTeam = playerData?.team;
+      const isWinner = (playerTeam === 1 && match.winner === 1) || (playerTeam === 2 && match.winner === 2);
+      
+      return {
+        ...match,
+        playerTeam,
+        isWinner,
+        matchType: 'stricker'
+      };
+    });
+    
+    res.json({
+      success: true,
+      matches: formattedMatches,
+      total: formattedMatches.length
+    });
+  } catch (error) {
+    console.error('Player stricker history error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

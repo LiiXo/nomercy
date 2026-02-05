@@ -1962,6 +1962,59 @@ router.put('/admin/:squadId/ladder-points', verifyToken, requireAdmin, async (re
   }
 });
 
+// Update squad Stricker stats (admin only)
+router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { statsStricker, cranes } = req.body;
+    
+    const squad = await Squad.findById(req.params.squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Update Stricker stats
+    if (statsStricker && typeof statsStricker === 'object') {
+      squad.statsStricker = {
+        points: parseInt(statsStricker.points) || 0,
+        wins: parseInt(statsStricker.wins) || 0,
+        losses: parseInt(statsStricker.losses) || 0
+      };
+    }
+
+    // Update Munitions (cranes)
+    if (cranes !== undefined) {
+      squad.cranes = parseInt(cranes) || 0;
+    }
+
+    await squad.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Stricker Stats', squad.name, {
+      fields: [
+        { name: 'Points', value: `${squad.statsStricker.points} pts` },
+        { name: 'Victoires', value: squad.statsStricker.wins.toString() },
+        { name: 'Défaites', value: squad.statsStricker.losses.toString() },
+        { name: 'Munitions', value: squad.cranes.toString() }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: 'Stats Stricker mises à jour',
+      squad
+    });
+  } catch (error) {
+    console.error('Update squad stricker stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
 // Delete squad (admin/staff)
 router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
   try {

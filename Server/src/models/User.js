@@ -340,6 +340,86 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  irisSecurityStatus: {
+    tpm: {
+      present: Boolean,
+      enabled: Boolean,
+      version: String
+    },
+    secureBoot: Boolean,
+    virtualization: Boolean,
+    virtualizationType: String,
+    iommu: Boolean,
+    hvci: Boolean,
+    vbs: Boolean,
+    defender: Boolean,
+    defenderRealtime: Boolean,
+    // Process and device info
+    processes: [{
+      name: String,
+      pid: Number,
+      path: String
+    }],
+    usbDevices: [{
+      name: String,
+      manufacturer: String,
+      vid: String,
+      pid: String
+    }],
+    cheatDetection: {
+      found: { type: Boolean, default: false },
+      riskScore: { type: Number, default: 0 },
+      riskLevel: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'low' },
+      devices: [{
+        type: String,
+        name: String,
+        vid: String,
+        pid: String,
+        manufacturer: String,
+        severity: { type: String, enum: ['low', 'medium', 'high', 'critical'], default: 'critical' }
+      }],
+      processes: [{
+        name: String,
+        pid: Number,
+        path: String,
+        matchedCheat: String
+      }],
+      suspiciousUsb: [{
+        name: String,
+        manufacturer: String,
+        vid: String,
+        pid: String,
+        reason: String
+      }],
+      gamesRunning: [{
+        name: String,
+        display: String,
+        processName: String
+      }],
+      warnings: [String]
+    },
+    // Verification fields
+    verified: { type: Boolean, default: false },
+    tamperDetected: { type: Boolean, default: false },
+    verificationIssues: [String],
+    antiTamperClean: { type: Boolean, default: true },
+    antiTamperAlerts: [String],
+    integrityHash: String,
+    verifiedAt: Date,
+    // Client tampering
+    clientTampered: { type: Boolean, default: false },
+    tamperDetectedAt: Date
+  },
+  
+  // Iris client verification
+  irisClientVerified: { type: Boolean, default: false },
+  irisClientVersion: String,
+  irisClientCodeHash: String,
+  irisVerifiedAt: Date,
+  
+  // Iris scan channel (for Discord notifications)
+  irisScanChannelId: String,
+  irisWasConnected: { type: Boolean, default: false }, // Track connection state for notifications
   
 }, {
   timestamps: true

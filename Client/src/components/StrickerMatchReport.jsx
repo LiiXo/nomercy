@@ -2,13 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, TrendingDown, X, Trophy, Shield, Crown, 
-  Star, ChevronRight, ArrowRight, Users, Check, Loader2, Crosshair
+  Star, ChevronRight, ArrowRight, Users, Check, Loader2, Crosshair, Coins
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
+import { useMode } from '../ModeContext';
 import { getUserAvatar } from '../utils/avatar';
 import { API_URL } from '../config';
 
+// Pre-match music (same as ranked)
+const PRE_MATCH_MUSIC = '/sound5.mp3';
 // Combat report sound
 const COMBAT_REPORT_SOUND = '/soundRapport.mp3';
 
@@ -53,23 +56,35 @@ const StrickerMatchReport = ({
   userTeam = null,
   // Squad info
   squadName = '',
-  cranesEarned = 0
+  cranesEarned = 0,
+  goldEarned = 0
 }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { language } = useLanguage();
+  const { currentMode } = useMode();
   const [animationStep, setAnimationStep] = useState(0);
   const [progressAnimation, setProgressAnimation] = useState(0);
   const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
   const audioRef = useRef(null);
+  const musicRef = useRef(null);
   
-  // Play sound when combat report is shown
+  // Play pre-match music + sound when combat report is shown
   useEffect(() => {
     if (show) {
+      // Play background music
+      const music = new Audio(PRE_MATCH_MUSIC);
+      music.volume = 0.15;
+      music.loop = true;
+      musicRef.current = music;
+      music.play().catch(err => {
+        console.warn('[StrickerMatchReport] Music play failed:', err);
+      });
+      
+      // Play report sound
       const audio = new Audio(COMBAT_REPORT_SOUND);
       audio.volume = 0.1;
       audioRef.current = audio;
-      
       audio.play().catch(err => {
         console.warn('[StrickerMatchReport] Audio play failed:', err);
       });
@@ -78,6 +93,10 @@ const StrickerMatchReport = ({
         if (audioRef.current) {
           audioRef.current.pause();
           audioRef.current = null;
+        }
+        if (musicRef.current) {
+          musicRef.current.pause();
+          musicRef.current = null;
         }
       };
     }
@@ -183,7 +202,14 @@ const StrickerMatchReport = ({
     if (canVoteForMvp && !userMvpVote && !isTestMatch) {
       return; // Must vote first
     }
+    // Stop music
+    if (musicRef.current) {
+      musicRef.current.pause();
+      musicRef.current = null;
+    }
     onClose();
+    // Navigate to stricker mode page
+    navigate(`/${currentMode}/stricker`);
   };
   
   if (!show) return null;
@@ -259,48 +285,52 @@ const StrickerMatchReport = ({
             }}
           >
             <h3 className="text-white font-bold text-base sm:text-lg mb-3 sm:mb-4">
-              {isWinner ? '🎁 Récompenses' : '📉 Points perdus'}
+              {isWinner ? '🎁 Récompenses' : '💔 Pertes et Consolations'}
             </h3>
             
-            <div className="flex items-center justify-center gap-4">
+            <div className="grid grid-cols-2 gap-3">
               {/* Points */}
-              <div className={`bg-dark-900/50 rounded-xl p-4 border-2 ${
+              <div className={`bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 ${
                 (rewards?.pointsChange || 0) >= 0 
                   ? 'border-lime-500/30' 
                   : 'border-red-500/30'
               } ${isMvp ? 'ring-2 ring-yellow-400/50' : ''}`}>
                 <div className="flex items-center justify-center gap-2 mb-2">
                   {(rewards?.pointsChange || 0) >= 0 ? (
-                    <TrendingUp className="w-5 h-5 text-lime-400" />
+                    <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-lime-400" />
                   ) : (
-                    <TrendingDown className="w-5 h-5 text-red-400" />
+                    <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
                   )}
-                  <span className="text-gray-400 text-sm">Points</span>
+                  <span className="text-gray-400 text-xs sm:text-sm">Points</span>
                 </div>
-                <div className={`text-2xl sm:text-3xl font-bold ${
+                <div className={`text-xl sm:text-2xl font-bold text-center ${
                   (rewards?.pointsChange || 0) >= 0 ? 'text-lime-400' : 'text-red-400'
                 }`}>
                   {(rewards?.pointsChange || 0) > 0 ? '+' : ''}{rewards?.pointsChange || 0}
                   {isMvp && (
-                    <span className="text-yellow-400 ml-2 text-lg">+{mvpBonus}</span>
+                    <span className="text-yellow-400 ml-1 text-sm">+{mvpBonus}</span>
                   )}
                 </div>
-                {isMvp && (
-                  <p className="text-yellow-400 text-xs mt-1">⭐ MVP Bonus</p>
+                {isMvp ? (
+                  <p className="text-yellow-400 text-xs mt-1 text-center">⭐ MVP Bonus</p>
+                ) : (
+                  <p className={`text-xs mt-1 text-center ${(rewards?.pointsChange || 0) >= 0 ? 'text-lime-400/70' : 'text-red-400/70'}`}>
+                    {(rewards?.pointsChange || 0) >= 0 ? '🏆 Gagné' : '📉 Perdu'}
+                  </p>
                 )}
               </div>
               
-              {/* Munitions */}
-              {cranesEarned > 0 && (
-                <div className="bg-dark-900/50 rounded-xl p-4 border-2 border-amber-500/30">
+              {/* Munitions - shown for winners */}
+              {isWinner && (
+                <div className="bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 border-amber-500/30">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <span className="text-xl">💀</span>
-                    <span className="text-gray-400 text-sm">Munitions</span>
+                    <span className="text-lg">💀</span>
+                    <span className="text-gray-400 text-xs sm:text-sm">Munitions</span>
                   </div>
-                  <div className="text-2xl sm:text-3xl font-bold text-amber-400">
-                    +{cranesEarned}
+                  <div className="text-xl sm:text-2xl font-bold text-amber-400 text-center">
+                    +{cranesEarned || 0}
                   </div>
-                  <p className="text-amber-400/70 text-xs mt-1">Escouade</p>
+                  <p className="text-amber-400/70 text-xs mt-1 text-center">Escouade</p>
                 </div>
               )}
             </div>
@@ -494,6 +524,22 @@ const StrickerMatchReport = ({
               <p className="text-orange-400 text-sm font-medium">⚠️ {t.mustVote}</p>
             </div>
           )}
+          
+          {/* Close Button */}
+          <button
+            onClick={handleClose}
+            disabled={canVoteForMvp && !userMvpVote && !isTestMatch}
+            className={`w-full py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+              canVoteForMvp && !userMvpVote && !isTestMatch
+                ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
+                : isWinner
+                  ? 'bg-lime-500/20 hover:bg-lime-500/30 border-2 border-lime-500/50 text-lime-400'
+                  : 'bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500/50 text-red-400'
+            }`}
+          >
+            <Crosshair className="w-4 h-4" />
+            {language === 'fr' ? 'Fermer' : 'Close'}
+          </button>
         </div>
       </div>
       

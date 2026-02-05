@@ -17,7 +17,7 @@ import {
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
-  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart
+  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart, Cpu
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -62,6 +62,31 @@ const AdminPanel = () => {
   const [maps, setMaps] = useState([]);
   const [config, setConfig] = useState(null);
   const [stats, setStats] = useState(null);
+  
+  // Iris players state
+  const [irisPlayers, setIrisPlayers] = useState([]);
+  const [loadingIrisPlayers, setLoadingIrisPlayers] = useState(false);
+  const [irisSearchTerm, setIrisSearchTerm] = useState('');
+  const [scanningPlayerId, setScanningPlayerId] = useState(null);
+  
+  // Iris updates state (admin only)
+  const [irisSubTab, setIrisSubTab] = useState('players'); // 'players' or 'updates'
+  const [irisUpdates, setIrisUpdates] = useState([]);
+  const [loadingIrisUpdates, setLoadingIrisUpdates] = useState(false);
+  const [showIrisUpdateModal, setShowIrisUpdateModal] = useState(false);
+  const [editingIrisUpdate, setEditingIrisUpdate] = useState(null);
+  const [irisUpdateFormData, setIrisUpdateFormData] = useState({
+    version: '',
+    codeHash: '',
+    downloadUrl: '',
+    fileSize: 0,
+    fileHash: '',
+    changelog: '',
+    mandatory: false,
+    minVersion: '',
+    isCurrent: false
+  });
+  const [savingIrisUpdate, setSavingIrisUpdate] = useState(false);
   
   // Filtres et recherche
   const [searchTerm, setSearchTerm] = useState('');
@@ -347,6 +372,7 @@ const AdminPanel = () => {
         { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false, arbitreAccess: true },
         { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false, arbitreAccess: true },
         { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false, arbitreAccess: true },
+        { id: 'iris', label: 'Iris', icon: Cpu, adminOnly: false, arbitreAccess: true },
         { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false, arbitreAccess: true },
         { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false, arbitreAccess: false },
       ]
@@ -442,6 +468,16 @@ const AdminPanel = () => {
   const [squadForLadderPoints, setSquadForLadderPoints] = useState(null);
   const [ladderPointsEdit, setLadderPointsEdit] = useState({});
 
+  // Squad Stricker stats modal state
+  const [showStrickerStatsModal, setShowStrickerStatsModal] = useState(false);
+  const [squadForStrickerStats, setSquadForStrickerStats] = useState(null);
+  const [strickerStatsEdit, setStrickerStatsEdit] = useState({
+    points: 0,
+    wins: 0,
+    losses: 0,
+    cranes: 0
+  });
+
   const openSquadTrophyModal = (squad) => {
     setSquadForTrophy(squad);
     setSelectedTrophyToAdd('');
@@ -466,6 +502,18 @@ const AdminPanel = () => {
     setShowLadderPointsModal(true);
   };
 
+  const openStrickerStatsModal = (squad) => {
+    setSquadForStrickerStats(squad);
+    // Initialize Stricker stats edit state with current values
+    setStrickerStatsEdit({
+      points: squad.statsStricker?.points || 0,
+      wins: squad.statsStricker?.wins || 0,
+      losses: squad.statsStricker?.losses || 0,
+      cranes: squad.cranes || 0
+    });
+    setShowStrickerStatsModal(true);
+  };
+
   const handleUpdateLadderPoints = async () => {
     if (!squadForLadderPoints) return;
     
@@ -486,6 +534,36 @@ const AdminPanel = () => {
       }
     } catch (err) {
       setError('Erreur lors de la mise à jour des points');
+    }
+  };
+
+  const handleUpdateStrickerStats = async () => {
+    if (!squadForStrickerStats) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/squads/admin/${squadForStrickerStats._id}/stricker-stats`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          statsStricker: {
+            points: parseInt(strickerStatsEdit.points) || 0,
+            wins: parseInt(strickerStatsEdit.wins) || 0,
+            losses: parseInt(strickerStatsEdit.losses) || 0
+          },
+          cranes: parseInt(strickerStatsEdit.cranes) || 0
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Stats Stricker mises à jour avec succès');
+        setShowStrickerStatsModal(false);
+        fetchSquads();
+      } else {
+        setError(data.message || 'Erreur lors de la mise à jour');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour des stats');
     }
   };
 
@@ -588,6 +666,12 @@ const AdminPanel = () => {
           break;
         case 'squads':
           await fetchSquads();
+          break;
+        case 'iris':
+          await fetchIrisPlayers();
+          if (userIsAdmin) {
+            await fetchIrisUpdates();
+          }
           break;
         case 'deleted-accounts':
           await fetchDeletedAccounts();
@@ -722,6 +806,172 @@ const AdminPanel = () => {
     } catch (err) {
       console.error('Error fetching squads:', err);
     }
+  };
+
+  const fetchIrisPlayers = async (search = '') => {
+    setLoadingIrisPlayers(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      
+      const response = await fetch(`${API_URL}/iris/connected-players?${params}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIrisPlayers(data.players || []);
+      }
+    } catch (err) {
+      console.error('Error fetching Iris players:', err);
+    } finally {
+      setLoadingIrisPlayers(false);
+    }
+  };
+
+  // Handle Iris Scan (admin only)
+  const handleIrisScan = async (playerId) => {
+    setScanningPlayerId(playerId);
+    try {
+      const response = await fetch(`${API_URL}/iris/scan/${playerId}`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message + (data.channelUrl ? ` - Ouvrir: ${data.channelUrl}` : ''));
+        // Open the Discord channel in a new tab
+        if (data.channelUrl) {
+          window.open(data.channelUrl, '_blank');
+        }
+      } else {
+        setError(data.message || 'Erreur lors du scan');
+      }
+    } catch (err) {
+      setError('Erreur lors du scan Iris');
+    } finally {
+      setScanningPlayerId(null);
+    }
+  };
+
+  // Fetch Iris updates (admin only)
+  const fetchIrisUpdates = async () => {
+    setLoadingIrisUpdates(true);
+    try {
+      const response = await fetch(`${API_URL}/iris/updates`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setIrisUpdates(data.updates || []);
+      }
+    } catch (err) {
+      console.error('Error fetching Iris updates:', err);
+    } finally {
+      setLoadingIrisUpdates(false);
+    }
+  };
+
+  // Create or update Iris update
+  const handleSaveIrisUpdate = async () => {
+    setSavingIrisUpdate(true);
+    try {
+      const url = editingIrisUpdate 
+        ? `${API_URL}/iris/updates/${editingIrisUpdate._id}`
+        : `${API_URL}/iris/updates`;
+      
+      const response = await fetch(url, {
+        method: editingIrisUpdate ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(irisUpdateFormData)
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message || 'Mise à jour sauvegardée');
+        setShowIrisUpdateModal(false);
+        setEditingIrisUpdate(null);
+        fetchIrisUpdates();
+      } else {
+        setError(data.message || 'Erreur lors de la sauvegarde');
+      }
+    } catch (err) {
+      setError('Erreur lors de la sauvegarde');
+    } finally {
+      setSavingIrisUpdate(false);
+    }
+  };
+
+  // Set update as current version
+  const handleSetCurrentIrisUpdate = async (updateId) => {
+    try {
+      const response = await fetch(`${API_URL}/iris/updates/${updateId}/set-current`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message || 'Version définie comme actuelle');
+        fetchIrisUpdates();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la mise à jour');
+    }
+  };
+
+  // Delete Iris update
+  const handleDeleteIrisUpdate = async (updateId) => {
+    try {
+      const response = await fetch(`${API_URL}/iris/updates/${updateId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message || 'Mise à jour supprimée');
+        fetchIrisUpdates();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la suppression');
+    }
+  };
+
+  // Open edit modal for Iris update
+  const openIrisUpdateModal = (update = null) => {
+    if (update) {
+      setEditingIrisUpdate(update);
+      setIrisUpdateFormData({
+        version: update.version,
+        codeHash: update.codeHash,
+        downloadUrl: update.downloadUrl,
+        fileSize: update.fileSize || 0,
+        fileHash: update.fileHash,
+        changelog: update.changelog || '',
+        mandatory: update.mandatory || false,
+        minVersion: update.minVersion || '',
+        isCurrent: update.isCurrent || false
+      });
+    } else {
+      setEditingIrisUpdate(null);
+      setIrisUpdateFormData({
+        version: '',
+        codeHash: '',
+        downloadUrl: '',
+        fileSize: 0,
+        fileHash: '',
+        changelog: '',
+        mandatory: false,
+        minVersion: '',
+        isCurrent: false
+      });
+    }
+    setShowIrisUpdateModal(true);
   };
 
   const fetchShopItems = async () => {
@@ -2382,6 +2632,573 @@ const AdminPanel = () => {
           </div>
                   )}
                 </div>
+    );
+  };
+
+  const renderIrisPlayers = () => {
+    const getStatusColor = (isConnected) => {
+      return isConnected 
+        ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+        : 'bg-red-500/20 text-red-400 border-red-500/30';
+    };
+
+    const getSecurityBadge = (enabled) => {
+      return enabled 
+        ? <CheckCircle className="w-4 h-4 text-green-400" />
+        : <X className="w-4 h-4 text-red-400" />;
+    };
+
+    const formatLastSeen = (lastSeen) => {
+      if (!lastSeen) return 'Jamais';
+      const date = new Date(lastSeen);
+      const now = new Date();
+      const diff = Math.floor((now - date) / 1000 / 60); // minutes
+      if (diff < 1) return 'À l\'instant';
+      if (diff < 60) return `Il y a ${diff} min`;
+      if (diff < 1440) return `Il y a ${Math.floor(diff / 60)}h`;
+      return date.toLocaleDateString('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+
+    const formatFileSize = (bytes) => {
+      if (!bytes) return 'N/A';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    };
+
+    // Render Players sub-tab
+    const renderPlayersTab = () => (
+      <>
+        {/* Search bar */}
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="text"
+              value={irisSearchTerm}
+              onChange={(e) => setIrisSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && fetchIrisPlayers(irisSearchTerm)}
+              placeholder="Rechercher par nom, Discord ou Activision ID..."
+              className="w-full pl-10 pr-4 py-2.5 bg-dark-800 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-purple-500/50"
+            />
+          </div>
+          <button
+            onClick={() => fetchIrisPlayers(irisSearchTerm)}
+            className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors flex items-center gap-2"
+          >
+            <Search className="w-4 h-4" />
+            Rechercher
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-6 text-sm text-gray-400 flex-wrap">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <span>Connecté (données &lt; 6 min)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+            <span>Déconnecté (données &gt; 6 min)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+            <span>PC sans Iris</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-orange-400" />
+            <span>Falsification détectée</span>
+          </div>
+        </div>
+
+        {/* Players Table */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-900/50">
+                <tr>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Intégrité</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Joueur</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">TPM</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Secure Boot</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">VT-x</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">VT-d</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">HVCI</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">VBS</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Defender</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Dernière MAJ</th>
+                  {userIsAdmin && <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loadingIrisPlayers ? (
+                  <tr>
+                    <td colSpan={userIsAdmin ? "12" : "11"} className="px-6 py-12 text-center">
+                      <Loader2 className="w-6 h-6 text-purple-500 animate-spin mx-auto" />
+                    </td>
+                  </tr>
+                ) : irisPlayers.length === 0 ? (
+                  <tr>
+                    <td colSpan={userIsAdmin ? "12" : "11"} className="px-6 py-12 text-center text-gray-400">
+                      {irisSearchTerm ? 'Aucun joueur trouvé pour cette recherche.' : 'Aucun joueur PC trouvé.'}
+                    </td>
+                  </tr>
+                ) : (
+                  irisPlayers.map((player) => (
+                    <tr key={player._id} className={`hover:bg-white/5 transition-colors ${player.security?.tamperDetected ? 'bg-orange-500/10' : ''}`}>
+                      <td className="px-4 py-4">
+                        {player.hasIrisData ? (
+                          <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(player.isConnected)}`}>
+                            {player.isConnected ? 'Connecté' : 'Déconnecté'}
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 text-xs font-medium rounded-full border bg-gray-500/20 text-gray-400 border-gray-500/30">
+                            Sans Iris
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        {player.security?.tamperDetected ? (
+                          <div className="flex items-center gap-2" title={player.security?.verificationIssues?.join(', ') || 'Falsification détectée'}>
+                            <ShieldAlert className="w-5 h-5 text-orange-400" />
+                            <span className="text-xs text-orange-400">ALERTE</span>
+                          </div>
+                        ) : player.security?.verified ? (
+                          <div className="flex items-center gap-2" title="Données vérifiées">
+                            <Shield className="w-5 h-5 text-green-400" />
+                            <span className="text-xs text-green-400">OK</span>
+                          </div>
+                        ) : player.hasIrisData ? (
+                          <div className="flex items-center gap-2" title="Non vérifié (ancien client)">
+                            <Shield className="w-5 h-5 text-gray-500" />
+                            <span className="text-xs text-gray-500">N/A</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2" title="Aucune donnée Iris">
+                            <Shield className="w-5 h-5 text-gray-600" />
+                            <span className="text-xs text-gray-600">-</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3">
+                          <img src={getAvatarUrl(player.avatarUrl || player.avatar) || '/avatar.jpg'} alt="Avatar" className="w-8 h-8 rounded-full" />
+                          <div>
+                            <div className="text-white font-medium">{player.username || player.discordUsername || 'N/A'}</div>
+                            <div className="text-xs text-gray-500">
+                              {player.hasIrisData ? `HWID: ${player.hardwareId?.substring(0, 12) || 'N/A'}...` : `Platform: ${player.platform || 'N/A'}`}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {player.hasIrisData ? (
+                          <div className="flex items-center gap-2">
+                            {getSecurityBadge(player.security?.tpm?.enabled)}
+                            {player.security?.tpm?.version && <span className="text-xs text-gray-500">{player.security.tpm.version}</span>}
+                          </div>
+                        ) : <span className="text-gray-600">-</span>}
+                      </td>
+                      <td className="px-4 py-4">{player.hasIrisData ? getSecurityBadge(player.security?.secureBoot) : <span className="text-gray-600">-</span>}</td>
+                      <td className="px-4 py-4">{player.hasIrisData ? getSecurityBadge(player.security?.virtualization) : <span className="text-gray-600">-</span>}</td>
+                      <td className="px-4 py-4">{player.hasIrisData ? getSecurityBadge(player.security?.iommu) : <span className="text-gray-600">-</span>}</td>
+                      <td className="px-4 py-4">{player.hasIrisData ? getSecurityBadge(player.security?.hvci) : <span className="text-gray-600">-</span>}</td>
+                      <td className="px-4 py-4">{player.hasIrisData ? getSecurityBadge(player.security?.vbs) : <span className="text-gray-600">-</span>}</td>
+                      <td className="px-4 py-4">
+                        {player.hasIrisData ? (
+                          <div className="flex items-center gap-2">
+                            {getSecurityBadge(player.security?.defender)}
+                            {player.security?.defenderRealtime && <span className="text-xs text-green-400">RT</span>}
+                          </div>
+                        ) : <span className="text-gray-600">-</span>}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="text-sm text-gray-400">{player.lastSeen ? formatLastSeen(player.lastSeen) : '-'}</div>
+                      </td>
+                      {userIsAdmin && (
+                        <td className="px-4 py-4">
+                          <button
+                            onClick={() => handleIrisScan(player._id)}
+                            disabled={scanningPlayerId === player._id}
+                            className="px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                            title="Scan Iris - Créer un salon Discord pour ce joueur"
+                          >
+                            {scanningPlayerId === player._id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Search className="w-4 h-4" />
+                            )}
+                            Scan
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Info Card */}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <Activity className="w-5 h-5 text-blue-400 mt-0.5" />
+            <div>
+              <h4 className="text-blue-400 font-medium">Système de Heartbeat</h4>
+              <p className="text-gray-400 text-sm mt-1">
+                Chaque joueur envoie son statut de sécurité toutes les 5 minutes. 
+                Un joueur est considéré comme déconnecté s'il n'a pas envoyé de données depuis plus de 6 minutes.
+                Les joueurs PC sans Iris sont également affichés pour suivi.
+              </p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+
+    // Render Updates sub-tab (admin only)
+    const renderUpdatesTab = () => (
+      <>
+        {/* Add Update Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => openIrisUpdateModal()}
+            className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-medium flex items-center gap-2 hover:opacity-90 transition-opacity"
+          >
+            <Plus className="w-4 h-4" />
+            Nouvelle version
+          </button>
+        </div>
+
+        {/* Updates Table */}
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-dark-900/50">
+                <tr>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Version</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Taille</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Téléchargements</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {loadingIrisUpdates ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-12 text-center">
+                      <Loader2 className="w-6 h-6 text-purple-500 animate-spin mx-auto" />
+                    </td>
+                  </tr>
+                ) : irisUpdates.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
+                      Aucune version publiée. Cliquez sur "Nouvelle version" pour ajouter une mise à jour.
+                    </td>
+                  </tr>
+                ) : (
+                  irisUpdates.map((update) => (
+                    <tr key={update._id} className={`hover:bg-white/5 transition-colors ${update.isCurrent ? 'bg-green-500/5' : ''}`}>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-mono font-medium">v{update.version}</span>
+                          {update.mandatory && (
+                            <span className="px-2 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">Obligatoire</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {update.isCurrent ? (
+                          <span className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded-full border border-green-500/30">Version actuelle</span>
+                        ) : update.isActive ? (
+                          <span className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded-full border border-blue-500/30">Active</span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs bg-gray-500/20 text-gray-400 rounded-full border border-gray-500/30">Inactive</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-gray-400">{formatFileSize(update.fileSize)}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2 text-gray-400">
+                          <Download className="w-4 h-4" />
+                          {update.downloadCount || 0}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-gray-400">
+                        {new Date(update.releasedAt || update.createdAt).toLocaleDateString('fr-FR', {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          {!update.isCurrent && (
+                            <button
+                              onClick={() => handleSetCurrentIrisUpdate(update._id)}
+                              className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-colors"
+                              title="Définir comme version actuelle"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openIrisUpdateModal(update)}
+                            className="p-2 hover:bg-purple-500/20 text-purple-400 rounded-lg transition-colors"
+                            title="Modifier"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          {!update.isCurrent && (
+                            <button
+                              onClick={() => handleDeleteIrisUpdate(update._id)}
+                              className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
+                              title="Supprimer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Info Card */}
+        <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <Download className="w-5 h-5 text-purple-400 mt-0.5" />
+            <div>
+              <h4 className="text-purple-400 font-medium">Système de mise à jour</h4>
+              <p className="text-gray-400 text-sm mt-1">
+                Les clients Iris vérifient les mises à jour au démarrage. 
+                Marquez une version comme "obligatoire" pour forcer tous les utilisateurs à mettre à jour.
+              </p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Cpu className="w-7 h-7 text-purple-400" />
+            Iris Anticheat
+          </h2>
+          <div className="flex items-center gap-4">
+            {irisSubTab === 'players' && (
+              <>
+                <button
+                  onClick={fetchIrisPlayers}
+                  disabled={loadingIrisPlayers}
+                  className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingIrisPlayers ? 'animate-spin' : ''}`} />
+                  Actualiser
+                </button>
+                <div className="text-gray-400 text-sm">
+                  {irisPlayers.filter(p => p.isConnected).length} connecté(s) / {irisPlayers.length} total
+                </div>
+              </>
+            )}
+            {irisSubTab === 'updates' && (
+              <button
+                onClick={fetchIrisUpdates}
+                disabled={loadingIrisUpdates}
+                className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingIrisUpdates ? 'animate-spin' : ''}`} />
+                Actualiser
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Sub-tabs */}
+        <div className="flex gap-2 bg-dark-800/50 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setIrisSubTab('players')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              irisSubTab === 'players'
+                ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Joueurs
+            {irisPlayers.filter(p => p.isConnected).length > 0 && (
+              <span className={`px-2 py-0.5 text-xs rounded-full ${irisSubTab === 'players' ? 'bg-white/20 text-white' : 'bg-green-500/20 text-green-400'}`}>
+                {irisPlayers.filter(p => p.isConnected).length} en ligne
+              </span>
+            )}
+          </button>
+          {userIsAdmin && (
+            <button
+              onClick={() => setIrisSubTab('updates')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                irisSubTab === 'updates'
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Download className="w-4 h-4" />
+              Mises à jour
+            </button>
+          )}
+        </div>
+
+        {/* Content based on sub-tab */}
+        {irisSubTab === 'players' && renderPlayersTab()}
+        {irisSubTab === 'updates' && userIsAdmin && renderUpdatesTab()}
+
+        {/* Update Modal */}
+        {showIrisUpdateModal && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-800 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-white">
+                    {editingIrisUpdate ? 'Modifier la version' : 'Nouvelle version'}
+                  </h3>
+                  <button
+                    onClick={() => setShowIrisUpdateModal(false)}
+                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Version */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Version (ex: 1.0.0)</label>
+                    <input
+                      type="text"
+                      value={irisUpdateFormData.version}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, version: e.target.value })}
+                      disabled={!!editingIrisUpdate}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white disabled:opacity-50"
+                      placeholder="1.0.0"
+                    />
+                  </div>
+
+                  {/* Download URL */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">URL de téléchargement</label>
+                    <input
+                      type="text"
+                      value={irisUpdateFormData.downloadUrl}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, downloadUrl: e.target.value })}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white"
+                      placeholder="https://..."
+                    />
+                  </div>
+
+                  {/* File Hash */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Hash SHA256 du fichier</label>
+                    <input
+                      type="text"
+                      value={irisUpdateFormData.fileHash}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, fileHash: e.target.value })}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white font-mono text-sm"
+                      placeholder="abc123..."
+                    />
+                  </div>
+
+                  {/* Code Hash */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Hash du code client</label>
+                    <input
+                      type="text"
+                      value={irisUpdateFormData.codeHash}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, codeHash: e.target.value })}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white font-mono text-sm"
+                      placeholder="abc123..."
+                    />
+                  </div>
+
+                  {/* File Size */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Taille du fichier (octets)</label>
+                    <input
+                      type="number"
+                      value={irisUpdateFormData.fileSize}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, fileSize: parseInt(e.target.value) || 0 })}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white"
+                    />
+                  </div>
+
+                  {/* Changelog */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Notes de version</label>
+                    <textarea
+                      value={irisUpdateFormData.changelog}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, changelog: e.target.value })}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white resize-none"
+                      rows={4}
+                      placeholder="- Amélioration..."
+                    />
+                  </div>
+
+                  {/* Options */}
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={irisUpdateFormData.mandatory}
+                        onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, mandatory: e.target.checked })}
+                        className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500"
+                      />
+                      <span className="text-white">Mise à jour obligatoire</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={irisUpdateFormData.isCurrent}
+                        onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, isCurrent: e.target.checked })}
+                        className="w-4 h-4 rounded border-gray-600 text-purple-500 focus:ring-purple-500"
+                      />
+                      <span className="text-white">Version actuelle</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    onClick={() => setShowIrisUpdateModal(false)}
+                    className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleSaveIrisUpdate}
+                    disabled={savingIrisUpdate || !irisUpdateFormData.version || !irisUpdateFormData.downloadUrl || !irisUpdateFormData.fileHash || !irisUpdateFormData.codeHash}
+                    className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {savingIrisUpdate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {editingIrisUpdate ? 'Enregistrer' : 'Créer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -8944,12 +9761,14 @@ Cette action est irréversible!`)) {
             userIsAdmin={userIsAdmin}
             userIsArbitre={userIsArbitre}
             openEditModal={openEditModal}
-            openLadderPointsModal={openLadderPointsModal}
+            openStrickerStatsModal={openStrickerStatsModal}
             openSquadTrophyModal={openSquadTrophyModal}
             setDeleteConfirm={setDeleteConfirm}
             handleKickMember={handleKickMember}
           />
         );
+      case 'iris':
+        return renderIrisPlayers();
       case 'deleted-accounts':
         return renderDeletedAccounts();
       case 'messages':
@@ -10199,6 +11018,135 @@ Cette action est irréversible!`)) {
                 onClick={handleUpdateLadderPoints}
                 disabled={saving}
                 className="flex-1 py-3 px-4 bg-purple-500 text-white font-medium rounded-xl hover:bg-purple-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                  <>
+                    <Save className="w-5 h-5" />
+                    Sauvegarder
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Squad Stricker Stats Modal */}
+      {showStrickerStatsModal && squadForStrickerStats && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowStrickerStatsModal(false)}></div>
+          <div className="relative bg-dark-900 border border-lime-500/20 rounded-2xl p-6 max-w-lg w-full">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-lime-500/20 rounded-xl">
+                <Target className="w-6 h-6 text-lime-400" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white">Stats Stricker</h3>
+                <p className="text-gray-400 text-sm">{squadForStrickerStats.name} [{squadForStrickerStats.tag}]</p>
+              </div>
+            </div>
+
+            {/* Stricker Stats Fields */}
+            <div className="space-y-4">
+              {/* Points */}
+              <div className="flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-lime-500/20">
+                <div>
+                  <p className="text-white font-medium">Points Stricker</p>
+                  <p className="text-gray-500 text-xs">Points de classement</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={strickerStatsEdit.points}
+                    onChange={(e) => setStrickerStatsEdit({
+                      ...strickerStatsEdit,
+                      points: parseInt(e.target.value) || 0
+                    })}
+                    className="w-24 px-3 py-2 bg-dark-700 border border-lime-500/30 rounded-lg text-white text-center font-bold focus:outline-none focus:border-lime-500"
+                    min={0}
+                  />
+                  <span className="text-lime-400 text-sm">pts</span>
+                </div>
+              </div>
+
+              {/* Wins */}
+              <div className="flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-green-500/20">
+                <div>
+                  <p className="text-white font-medium">Victoires</p>
+                  <p className="text-gray-500 text-xs">Matchs gagnés</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={strickerStatsEdit.wins}
+                    onChange={(e) => setStrickerStatsEdit({
+                      ...strickerStatsEdit,
+                      wins: parseInt(e.target.value) || 0
+                    })}
+                    className="w-24 px-3 py-2 bg-dark-700 border border-green-500/30 rounded-lg text-white text-center font-bold focus:outline-none focus:border-green-500"
+                    min={0}
+                  />
+                  <span className="text-green-400 text-sm">W</span>
+                </div>
+              </div>
+
+              {/* Losses */}
+              <div className="flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-red-500/20">
+                <div>
+                  <p className="text-white font-medium">Défaites</p>
+                  <p className="text-gray-500 text-xs">Matchs perdus</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={strickerStatsEdit.losses}
+                    onChange={(e) => setStrickerStatsEdit({
+                      ...strickerStatsEdit,
+                      losses: parseInt(e.target.value) || 0
+                    })}
+                    className="w-24 px-3 py-2 bg-dark-700 border border-red-500/30 rounded-lg text-white text-center font-bold focus:outline-none focus:border-red-500"
+                    min={0}
+                  />
+                  <span className="text-red-400 text-sm">L</span>
+                </div>
+              </div>
+
+              {/* Munitions (Cranes) */}
+              <div className="flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-amber-500/20">
+                <div>
+                  <p className="text-white font-medium flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-amber-400" />
+                    Munitions
+                  </p>
+                  <p className="text-gray-500 text-xs">Monnaie d'escouade</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    value={strickerStatsEdit.cranes}
+                    onChange={(e) => setStrickerStatsEdit({
+                      ...strickerStatsEdit,
+                      cranes: parseInt(e.target.value) || 0
+                    })}
+                    className="w-24 px-3 py-2 bg-dark-700 border border-amber-500/30 rounded-lg text-white text-center font-bold focus:outline-none focus:border-amber-500"
+                    min={0}
+                  />
+                  <Coins className="w-5 h-5 text-amber-400" />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowStrickerStatsModal(false)}
+                className="flex-1 py-3 px-4 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleUpdateStrickerStats}
+                disabled={saving}
+                className="flex-1 py-3 px-4 bg-lime-500 text-black font-medium rounded-xl hover:bg-lime-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <>

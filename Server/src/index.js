@@ -438,8 +438,8 @@ const startServer = async () => {
       // Start GGSecure monitoring for active matches
       startGGSecureMonitoring();
       
-      // Initialize Discord Arbitrage bot
-      initDiscordBot().catch(err => console.error('Discord bot init error:', err));
+      // Initialize Discord Arbitrage bot with Socket.io
+      initDiscordBot(io).catch(err => console.error('Discord bot init error:', err));
       
       // Schedule automatic unban checks (runs every minute)
       scheduleAutoUnban();
