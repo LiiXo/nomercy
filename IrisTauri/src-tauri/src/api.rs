@@ -3,7 +3,7 @@
 use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Sha256, Digest};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -70,13 +70,8 @@ impl IrisApiClient {
             "https://nomercy.ggsecure.io/api".to_string()
         };
 
-        // HMAC secret (same as server)
-        let hmac_secret = String::from_utf8(
-            base64::Engine::decode(
-                &base64::engine::general_purpose::STANDARD,
-                "TlNfSVJJU19ITUFDX1NFQ1JFVF8yMDI0XyFAIyQlXiYqKCk="
-            ).unwrap_or_default()
-        ).unwrap_or_default();
+        // HMAC secret (same as server default)
+        let hmac_secret = "NM_IRIS_SEC_K3Y_2024_!@#$%^&*()_SECURE".to_string();
 
         Self {
             client: Client::builder()
@@ -88,9 +83,17 @@ impl IrisApiClient {
         }
     }
 
-    /// Generate HMAC signature for request
+    /// Generate HMAC signature for request (matches server format)
     fn generate_signature(&self, method: &str, path: &str, timestamp: u64, nonce: &str, body: &str) -> String {
-        let sign_payload = format!("{}:{}:{}:{}:{}", method, path, timestamp, nonce, body);
+        // Hash the body first (server expects body hash)
+        let body_hash = {
+            let mut hasher = Sha256::new();
+            hasher.update(body.as_bytes());
+            hex::encode(hasher.finalize())
+        };
+        
+        // Create message: METHOD|PATH|TIMESTAMP|NONCE|BODY_HASH (server format)
+        let sign_payload = format!("{}|{}|{}|{}|{}", method.to_uppercase(), path, timestamp, nonce, body_hash);
         
         let mut mac = HmacSha256::new_from_slice(self.hmac_secret.as_bytes())
             .expect("HMAC can take key of any size");
@@ -198,6 +201,45 @@ impl IrisApiClient {
     pub async fn send_ping(&self, token: &str) -> Result<ApiResponse<serde_json::Value>, String> {
         self.request("POST", "/iris/ping", Some(token), Some(serde_json::json!({}))).await
     }
+
+    /// Create auth session for desktop OAuth flow
+    pub async fn create_auth_session(&self) -> Result<AuthSessionResponse, String> {
+        self.request("POST", "/iris/auth/create-session", None, Some(serde_json::json!({}))).await
+    }
+
+    /// Check auth session status (polling)
+    pub async fn check_auth_status(&self, session_id: &str) -> Result<AuthStatusResponse, String> {
+        self.request("GET", &format!("/iris/auth/status/{}", session_id), None, None).await
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthSessionResponse {
+    pub success: bool,
+    #[serde(rename = "sessionId")]
+    pub session_id: Option<String>,
+    #[serde(rename = "authUrl")]
+    pub auth_url: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthStatusResponse {
+    pub success: bool,
+    pub status: Option<String>,
+    pub token: Option<String>,
+    pub user: Option<AuthUser>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuthUser {
+    pub id: String,
+    pub username: String,
+    #[serde(rename = "discordId")]
+    pub discord_id: Option<String>,
+    #[serde(rename = "avatarUrl")]
+    pub avatar_url: Option<String>,
 }
 
 /// Get Discord OAuth URL

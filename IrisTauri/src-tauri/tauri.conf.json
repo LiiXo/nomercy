@@ -4,7 +4,8 @@
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
     "devPath": "../ui",
-    "distDir": "../ui"
+    "distDir": "../ui",
+    "withGlobalTauri": true
   },
   "package": {
     "productName": "Iris",
@@ -13,6 +14,15 @@
   "tauri": {
     "allowlist": {
       "all": false,
+      "window": {
+        "all": false,
+        "startDragging": true,
+        "minimize": true,
+        "close": true,
+        "hide": true,
+        "show": true,
+        "setFocus": true
+      },
       "shell": {
         "open": true
       },
@@ -58,17 +68,17 @@
     "windows": [
       {
         "title": "Iris - NoMercy Anticheat",
-        "width": 480,
-        "height": 780,
-        "minWidth": 450,
-        "minHeight": 700,
-        "maxWidth": 480,
-        "maxHeight": 780,
+        "width": 400,
+        "height": 640,
+        "minWidth": 380,
+        "minHeight": 580,
+        "maxWidth": 400,
+        "maxHeight": 640,
         "resizable": false,
         "maximizable": false,
         "fullscreen": false,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
         "center": true
       }
     ],

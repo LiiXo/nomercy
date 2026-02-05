@@ -1639,7 +1639,8 @@ router.post('/match/:matchId/cancel-vote', verifyToken, checkStrickerAccess, asy
     
     // Allow cancellation during pre-match AND during ready/in_progress
     const isRosterSelectionActive = match.rosterSelection?.isActive === true;
-    const isMapBanPhase = match.status === 'pending' && !match.rosterSelection?.isActive && !match.selectedMap;
+    // Check selectedMap.name because selectedMap is an embedded object that may be {} when empty
+    const isMapBanPhase = match.status === 'pending' && !match.rosterSelection?.isActive && !match.selectedMap?.name;
     const isMatchPhase = match.status === 'ready' || match.status === 'in_progress';
     const canCancel = isRosterSelectionActive || isMapBanPhase || isMatchPhase;
     

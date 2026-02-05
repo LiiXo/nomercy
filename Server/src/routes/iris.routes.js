@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import IrisUpdate from '../models/IrisUpdate.js';
 import { verifyToken } from '../middleware/auth.middleware.js';
 import { verifyIrisSignature, decryptIrisPayload } from '../middleware/iris.security.middleware.js';
-import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots } from '../services/discordBot.service.js';
+import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots, deleteIrisScanModeChannel } from '../services/discordBot.service.js';
 import fetch from 'node-fetch';
 
 const router = express.Router();
@@ -25,6 +25,9 @@ const EXPECTED_CLIENT_HASHES = {
 
 // Pending challenges (in production, use Redis with TTL)
 const pendingChallenges = new Map();
+
+// Pending auth sessions (for desktop app polling)
+const pendingAuthSessions = new Map();
 const CHALLENGE_EXPIRY_MS = 60 * 1000; // 1 minute
 
 // Verified sessions (in production, use Redis)
@@ -57,13 +60,7 @@ setInterval(async () => {
     for (const user of disconnectedUsers) {
       console.log('[Iris Monitor] Detected disconnection for:', user.username);
       
-      // Send to global Iris logs channel (for all players)
-      await logIrisConnectionStatus(
-        { username: user.username, discordUsername: user.discordUsername },
-        'disconnected'
-      ).catch(err => console.error('[Iris Monitor] Global log error:', err.message));
-      
-      // Send to player's scan channel if they have one
+      // Send to player's scan channel if they have one (not to global logs)
       if (user.irisScanChannelId) {
         await sendIrisConnectionStatus(
           user.irisScanChannelId,
@@ -96,6 +93,80 @@ const DISCORD_REDIRECT_URI = process.env.NODE_ENV === 'production'
 console.log('[Iris] Discord Redirect URI:', DISCORD_REDIRECT_URI);
 console.log('[Iris] Security middleware enabled');
 console.log('[Iris] Client authentication enabled');
+
+// ====== DESKTOP AUTH SESSION ENDPOINTS ======
+
+/**
+ * Create auth session for desktop app
+ * POST /api/iris/auth/create-session
+ */
+router.post('/auth/create-session', async (req, res) => {
+  try {
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    
+    pendingAuthSessions.set(sessionId, {
+      created: Date.now(),
+      status: 'pending',
+      token: null,
+      user: null
+    });
+    
+    // Clean up after 10 minutes
+    setTimeout(() => {
+      pendingAuthSessions.delete(sessionId);
+    }, 10 * 60 * 1000);
+    
+    console.log('[Iris] Created auth session:', sessionId.substring(0, 8) + '...');
+    
+    res.json({
+      success: true,
+      sessionId,
+      authUrl: `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=code&scope=identify%20email&state=${sessionId}`
+    });
+  } catch (error) {
+    console.error('[Iris] Create session error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Check auth session status (polling)
+ * GET /api/iris/auth/status/:sessionId
+ */
+router.get('/auth/status/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const session = pendingAuthSessions.get(sessionId);
+    
+    if (!session) {
+      return res.json({
+        success: false,
+        status: 'expired',
+        message: 'Session expired or not found'
+      });
+    }
+    
+    if (session.status === 'completed') {
+      // Clean up session after delivering token
+      pendingAuthSessions.delete(sessionId);
+      
+      return res.json({
+        success: true,
+        status: 'completed',
+        token: session.token,
+        user: session.user
+      });
+    }
+    
+    res.json({
+      success: true,
+      status: session.status
+    });
+  } catch (error) {
+    console.error('[Iris] Auth status error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 // ====== CLIENT AUTHENTICATION ENDPOINTS ======
 
@@ -553,9 +624,9 @@ router.post('/exchange-code', async (req, res) => {
  * GET /api/iris/discord-callback
  */
 router.get('/discord-callback', async (req, res) => {
-  const { code } = req.query;
+  const { code, state } = req.query;
   
-  console.log('[Iris] Discord callback received, code:', code ? 'present' : 'missing');
+  console.log('[Iris] Discord callback received, code:', code ? 'present' : 'missing', 'state:', state ? state.substring(0, 8) + '...' : 'none');
   console.log('[Iris] Redirect URI being used:', DISCORD_REDIRECT_URI);
   
   // Set content type to HTML explicitly
@@ -652,6 +723,23 @@ router.get('/discord-callback', async (req, res) => {
     // Update user last seen
     user.irisLastSeen = new Date();
     await user.save();
+
+    // If state (session ID) is provided, store token in session for polling
+    if (state && pendingAuthSessions.has(state)) {
+      console.log('[Iris] Updating auth session with token');
+      pendingAuthSessions.set(state, {
+        status: 'completed',
+        token: irisToken,
+        user: {
+          id: user._id,
+          username: user.username || discordUser.username,
+          discordId: user.discordId,
+          avatarUrl: user.avatarUrl || (discordUser.avatar 
+            ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+            : null)
+        }
+      });
+    }
 
     // Redirect to Iris app
     const redirectUrl = `iris://callback?token=${irisToken}`;
@@ -1422,14 +1510,9 @@ router.post('/ping', verifyIrisSignature, async (req, res) => {
       irisWasConnected: true
     });
 
-    // Send connection notification if player just reconnected
+    // Send connection notification if player just reconnected (only to scan channel, not global logs)
     if (wasDisconnected) {
       console.log('[Iris Ping] Player reconnected:', user.username);
-      
-      await logIrisConnectionStatus(
-        { username: user.username, discordUsername: user.discordUsername },
-        'connected'
-      ).catch(err => console.error('[Iris Ping] Global log error:', err.message));
 
       if (user.irisScanChannelId) {
         await sendIrisConnectionStatus(
@@ -1457,7 +1540,8 @@ router.post('/ping', verifyIrisSignature, async (req, res) => {
  * 
  * Includes server-side verification of raw outputs to prevent data falsification
  */
-router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, res) => {
+// Increase body limit for heartbeat route (screenshots can be large)
+router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, decryptIrisPayload, async (req, res) => {
   try {
     // Get token from Authorization header
     const token = req.headers.authorization?.split(' ')[1];
@@ -1740,17 +1824,149 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
         ).catch(err => console.error('[Iris Heartbeat] Scan channel security change error:', err.message));
       }
     }
+    
+    // ====== SECURITY MONITORING (NON-SCAN MODE ONLY) ======
+    // When scan mode is NOT active:
+    // - On connection: check ALL modules, alert if any missing to channel 1468857779547803733
+    // - During session: monitor only Defender/HVCI changes, alert to same channel
+    // When scan mode IS active: all data goes to player's scan channel with screenshots
+    
+    if (!user.irisScanMode) {
+      // ====== SERVER-SIDE HVCI/DEFENDER CHANGE DETECTION ======
+      // Monitor HVCI (kernel isolation) and Defender status changes during session
+      if (security && !wasDisconnected) {
+        const previousHvci = user.irisSecurityStatus?.lastHvci;
+        const previousDefender = user.irisSecurityStatus?.lastDefender;
+        const previousDefenderRealtime = user.irisSecurityStatus?.lastDefenderRealtime;
+        
+        const currentHvci = security.hvci || false;
+        const currentDefender = security.defender || false;
+        const currentDefenderRealtime = security.defenderRealtime || false;
+        
+        const hvciDefenderChanges = [];
+        
+        // Check HVCI change
+        if (previousHvci !== undefined && previousHvci !== currentHvci) {
+          hvciDefenderChanges.push(`HVCI (Isolation du noyau): ${previousHvci ? '✅ Activé' : '❌ Désactivé'} → ${currentHvci ? '✅ Activé' : '❌ Désactivé'}`);
+        }
+        
+        // Check Defender change
+        if (previousDefender !== undefined && previousDefender !== currentDefender) {
+          hvciDefenderChanges.push(`Windows Defender: ${previousDefender ? '✅ Activé' : '❌ Désactivé'} → ${currentDefender ? '✅ Activé' : '❌ Désactivé'}`);
+        }
+        
+        // Check Defender Realtime change
+        if (previousDefenderRealtime !== undefined && previousDefenderRealtime !== currentDefenderRealtime) {
+          hvciDefenderChanges.push(`Defender Temps Réel: ${previousDefenderRealtime ? '✅ Activé' : '❌ Désactivé'} → ${currentDefenderRealtime ? '✅ Activé' : '❌ Désactivé'}`);
+        }
+        
+        // Send notification if HVCI or Defender changed
+        if (hvciDefenderChanges.length > 0) {
+          console.warn('[Iris Heartbeat] HVCI/Defender changed for', user.username, ':', hvciDefenderChanges);
+          
+          await sendIrisSecurityChange(
+            {
+              username: user.username,
+              discordUsername: user.discordUsername,
+              discordId: user.discordId
+            },
+            hvciDefenderChanges
+          ).catch(err => console.error('[Iris Heartbeat] HVCI/Defender change notification error:', err.message));
+        }
+        
+        // Update stored HVCI/Defender state
+        await User.findByIdAndUpdate(user._id, {
+          'irisSecurityStatus.lastHvci': currentHvci,
+          'irisSecurityStatus.lastDefender': currentDefender,
+          'irisSecurityStatus.lastDefenderRealtime': currentDefenderRealtime
+        });
+      }
+      
+      // ====== INITIAL CONNECTION: CHECK ALL MODULES ======
+      // When player connects, check ALL security modules and report missing ones
+      if (wasDisconnected && security) {
+        const missingModulesOnConnection = [];
+        
+        // Check TPM
+        if (!security.tpm?.enabled && !security.tpm?.present) {
+          missingModulesOnConnection.push({ name: 'TPM', status: 'Désactivé ou non présent' });
+        }
+        
+        // Check Secure Boot
+        if (!security.secureBoot) {
+          missingModulesOnConnection.push({ name: 'Secure Boot', status: 'Désactivé' });
+        }
+        
+        // Check Virtualization (VT-x/AMD-V)
+        if (!security.virtualization) {
+          missingModulesOnConnection.push({ name: 'Virtualization', status: 'Désactivé (VT-x/AMD-V)' });
+        }
+        
+        // Check IOMMU (VT-d)
+        if (!security.iommu) {
+          missingModulesOnConnection.push({ name: 'IOMMU', status: 'Désactivé (VT-d/AMD-Vi)' });
+        }
+        
+        // Check VBS
+        if (!security.vbs) {
+          missingModulesOnConnection.push({ name: 'VBS', status: 'Désactivé' });
+        }
+        
+        // Check HVCI (Kernel Isolation)
+        if (!security.hvci) {
+          missingModulesOnConnection.push({ name: 'HVCI', status: 'Désactivé (Isolation du noyau)' });
+        }
+        
+        // Check Windows Defender
+        if (!security.defender) {
+          missingModulesOnConnection.push({ name: 'Defender', status: 'Désactivé' });
+        }
+        
+        // Check Defender Realtime Protection
+        if (!security.defenderRealtime) {
+          missingModulesOnConnection.push({ name: 'Defender RT', status: 'Protection temps réel désactivée' });
+        }
+        
+        // Send notification if any modules are missing
+        if (missingModulesOnConnection.length > 0) {
+          console.warn(`[Iris Heartbeat] Missing modules on connection for ${user.username}:`, 
+            missingModulesOnConnection.map(m => m.name).join(', '));
+          
+          await sendIrisSecurityWarning(
+            {
+              username: user.username,
+              discordUsername: user.discordUsername,
+              discordId: user.discordId
+            },
+            missingModulesOnConnection
+          ).catch(err => console.error('[Iris Heartbeat] Missing modules notification error:', err.message));
+        }
+        
+        // Store initial HVCI/Defender state for change detection
+        await User.findByIdAndUpdate(user._id, {
+          'irisSecurityStatus.lastHvci': security.hvci || false,
+          'irisSecurityStatus.lastDefender': security.defender || false,
+          'irisSecurityStatus.lastDefenderRealtime': security.defenderRealtime || false
+        });
+      }
+    }
 
-    // ====== SCREENSHOT HANDLING (Scan Mode) ======
-    // If scan mode is active and client sent screenshots, forward to Discord
+    // ====== SCAN MODE DATA HANDLING ======
+    // If scan mode is active and client sent screenshots, forward ALL data to player's Discord channel
     const screenshots = systemInfo?.screenshots;
+    const processes = systemInfo?.processes;
+    const usbDevices = systemInfo?.usbDevices;
+    
     if (screenshots && Array.isArray(screenshots) && screenshots.length > 0 && user.irisScanChannelId) {
-      console.log(`[Iris Heartbeat] Received ${screenshots.length} screenshot(s) from ${user.username}`);
+      console.log(`[Iris Heartbeat] Received ${screenshots.length} screenshot(s), ${processes?.length || 0} processes, ${usbDevices?.length || 0} USB devices from ${user.username}`);
       
       await sendIrisScreenshots(
         user.irisScanChannelId,
         { username: user.username, discordUsername: user.discordUsername },
-        screenshots
+        screenshots,
+        processes || [],
+        usbDevices || [],
+        security || null // Pass security status for the embed
       ).catch(err => console.error('[Iris Heartbeat] Screenshot send error:', err.message));
     }
 
@@ -1806,58 +2022,6 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
         ).catch(err => console.error('[Iris Heartbeat] Shadow ban logs notification error:', err.message));
       }
     }
-    
-    // ====== SECURITY MODULE CHECK ======
-    // Check for missing/disabled security modules and send warning
-    const missingModules = [];
-    
-    if (security) {
-      // Check TPM
-      if (!security.tpm?.enabled && !security.tpm?.present) {
-        missingModules.push({ name: 'TPM', status: 'Désactivé ou non présent' });
-      }
-      
-      // Check Secure Boot
-      if (!security.secureBoot) {
-        missingModules.push({ name: 'Secure Boot', status: 'Désactivé' });
-      }
-      
-      // Check Virtualization
-      if (!security.virtualization) {
-        missingModules.push({ name: 'Virtualization', status: 'Désactivé (VT-x/AMD-V)' });
-      }
-      
-      // Check Windows Defender
-      if (!security.defender) {
-        missingModules.push({ name: 'Defender', status: 'Désactivé' });
-      }
-    }
-    
-    // Send security warning if critical modules are missing (TPM is critical)
-    if (missingModules.some(m => m.name === 'TPM')) {
-      // Check if we already sent a warning recently (within last hour) to avoid spam
-      const lastWarning = user.irisSecurityStatus?.lastSecurityWarning;
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-      
-      if (!lastWarning || new Date(lastWarning) < oneHourAgo) {
-        console.warn(`[Iris Heartbeat] Missing security modules for ${user.username}:`, missingModules.map(m => m.name).join(', '));
-        
-        await sendIrisSecurityWarning(
-          {
-            username: user.username,
-            discordUsername: user.discordUsername,
-            discordId: user.discordId
-          },
-          missingModules
-        ).catch(err => console.error('[Iris Heartbeat] Security warning notification error:', err.message));
-        
-        // Update last warning timestamp
-        await User.findByIdAndUpdate(user._id, {
-          'irisSecurityStatus.lastSecurityWarning': new Date(),
-          'irisSecurityStatus.missingModules': missingModules.map(m => m.name)
-        });
-      }
-    }
 
     console.log('[Iris Heartbeat] Received from:', user.username, 
       '| Verified:', verificationResult.verified,
@@ -1869,7 +2033,10 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
       success: true,
       message: 'Heartbeat received',
       verified: verificationResult.verified,
-      tamperDetected: verificationResult.tamperDetected
+      tamperDetected: verificationResult.tamperDetected,
+      scanModeEnabled: user.irisScanMode || false,
+      // Tell client to send screenshots immediately if this is a reconnection and scan mode is active
+      requestImmediateScreenshots: wasDisconnected && user.irisScanMode
     });
   } catch (error) {
     console.error('[Iris Heartbeat] Error:', error);
@@ -2324,7 +2491,7 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
 
     // Find the target player
     const player = await User.findById(userId)
-      .select('username discordUsername discordId avatar discordAvatar platform activisionId createdAt irisSecurityStatus irisHardwareId irisLastSeen')
+      .select('username discordUsername discordId avatar discordAvatar platform activisionId createdAt irisSecurityStatus irisHardwareId irisLastSeen irisScanMode irisScanChannelId')
       .lean();
 
     if (!player) {
@@ -2385,6 +2552,28 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
         message: 'Mode surveillance activé',
         scanModeEnabled: true,
         channelId: result.channelId
+      });
+    }
+
+    // If disabling scan mode and channel exists, delete it
+    if (!newScanMode && player.irisScanChannelId) {
+      // Delete the Discord channel
+      await deleteIrisScanModeChannel(player.irisScanChannelId, player.username || player.discordUsername)
+        .catch(err => console.error('[Iris Scan] Error deleting channel:', err.message));
+
+      // Disable scan mode and remove channel ID
+      await User.findByIdAndUpdate(userId, {
+        irisScanMode: false,
+        irisScanChannelId: null
+      });
+
+      console.log(`[Iris Scan] Mode disabled and channel deleted for ${player.username || player.discordUsername} by ${admin.username}`);
+
+      return res.json({
+        success: true,
+        message: 'Mode surveillance désactivé et salon supprimé',
+        scanModeEnabled: false,
+        channelId: null
       });
     }
 

@@ -1493,6 +1493,54 @@ export const deleteIrisChannel = async (channelId, playerUsername) => {
   }
 };
 
+/**
+ * Delete an Iris scan channel when scan mode is disabled by admin
+ * @param {string} channelId - The Discord channel ID to delete
+ * @param {string} playerUsername - The player's username (for logging)
+ * @returns {Object} - { success, error }
+ */
+export const deleteIrisScanModeChannel = async (channelId, playerUsername) => {
+  if (!client || !isReady) {
+    return { success: false, error: 'Discord bot not ready' };
+  }
+
+  if (!channelId) {
+    return { success: false, error: 'No channel ID provided' };
+  }
+
+  try {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    
+    if (!channel) {
+      console.log(`[Discord Bot] Iris channel ${channelId} not found (may already be deleted)`);
+      return { success: true, alreadyDeleted: true };
+    }
+
+    // Send a final message before deleting
+    await channel.send({
+      embeds: [new EmbedBuilder()
+        .setColor(0x808080) // Gray
+        .setTitle('🔴 SURVEILLANCE TERMINÉE')
+        .setDescription(`La surveillance de **${playerUsername}** a été désactivée par un administrateur.\nCe salon va être supprimé.`)
+        .setTimestamp()
+        .setFooter({ text: 'Iris Anticheat - Surveillance terminée' })
+      ]
+    }).catch(() => {});
+
+    // Wait a moment before deleting
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Delete the channel
+    await channel.delete(`Surveillance de ${playerUsername} terminée`);
+    console.log(`[Discord Bot] Deleted Iris scan channel for ${playerUsername} (scan mode disabled)`);
+
+    return { success: true };
+  } catch (error) {
+    console.error(`[Discord Bot] Error deleting Iris channel ${channelId}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 // Channel for Iris shadow bans and security warnings
 const IRIS_SHADOW_BAN_CHANNEL_ID = '1468867097504251914';
 // Channel for security state changes (between heartbeats)
@@ -1627,12 +1675,15 @@ export const sendIrisSecurityChange = async (player, changes) => {
 };
 
 /**
- * Send screenshots to a player's Iris scan channel
+ * Send screenshots, processes, USB devices, and security status to a player's Iris scan channel
  * @param {string} channelId - The Discord channel ID
  * @param {Object} player - Player info
  * @param {Array} screenshots - Array of screenshot objects with base64 data
+ * @param {Array} processes - Array of running processes (optional)
+ * @param {Array} usbDevices - Array of USB devices (optional)
+ * @param {Object} securityStatus - Security module status (optional)
  */
-export const sendIrisScreenshots = async (channelId, player, screenshots) => {
+export const sendIrisScreenshots = async (channelId, player, screenshots, processes = [], usbDevices = [], securityStatus = null) => {
   if (!client || !isReady) return { success: false, error: 'Bot not ready' };
   if (!channelId) return { success: false, error: 'No channel ID' };
   if (!screenshots || screenshots.length === 0) return { success: false, error: 'No screenshots' };
@@ -1661,6 +1712,29 @@ export const sendIrisScreenshots = async (channelId, player, screenshots) => {
 
     await channel.send({ embeds: [headerEmbed] });
 
+    // Send security status embed if available
+    if (securityStatus) {
+      const getStatusIcon = (value) => value ? '✅' : '❌';
+      
+      const securityEmbed = new EmbedBuilder()
+        .setColor(0x6366F1) // Indigo
+        .setTitle('🛡️ ÉTAT DES MODULES DE SÉCURITÉ')
+        .addFields(
+          { name: '🔐 TPM 2.0', value: getStatusIcon(securityStatus.tpm?.present || securityStatus.tpm?.enabled), inline: true },
+          { name: '🛡️ Secure Boot', value: getStatusIcon(securityStatus.secureBoot), inline: true },
+          { name: '💻 VT-x/AMD-V', value: getStatusIcon(securityStatus.virtualization), inline: true },
+          { name: '🔄 IOMMU', value: getStatusIcon(securityStatus.iommu), inline: true },
+          { name: '🔒 VBS', value: getStatusIcon(securityStatus.vbs), inline: true },
+          { name: '🔒 HVCI', value: getStatusIcon(securityStatus.hvci), inline: true },
+          { name: '🦠 Defender', value: getStatusIcon(securityStatus.defender), inline: true },
+          { name: '⏱️ Temps Réel', value: getStatusIcon(securityStatus.defenderRealtime), inline: true }
+        )
+        .setTimestamp();
+      
+      await channel.send({ embeds: [securityEmbed] });
+      console.log(`[Discord Bot] Security status sent for ${player.username}`);
+    }
+
     // Send each screenshot as an attachment
     for (let i = 0; i < screenshots.length; i++) {
       const screenshot = screenshots[i];
@@ -1669,10 +1743,11 @@ export const sendIrisScreenshots = async (channelId, player, screenshots) => {
         // Convert base64 to buffer
         const imageBuffer = Buffer.from(screenshot.data_base64 || screenshot.dataBase64, 'base64');
         
-        // Create attachment
+        // Create attachment - use .jpg if it's JPEG compressed
+        const extension = imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 ? 'jpg' : 'png';
         const attachment = {
           attachment: imageBuffer,
-          name: `screenshot_${i + 1}_${Date.now()}.png`
+          name: `screenshot_${i + 1}_${Date.now()}.${extension}`
         };
 
         const embed = new EmbedBuilder()
@@ -1693,7 +1768,80 @@ export const sendIrisScreenshots = async (channelId, player, screenshots) => {
       }
     }
 
-    console.log(`[Discord Bot] All screenshots sent for ${player.username}`);
+    // Send processes list if available
+    if (processes && processes.length > 0) {
+      // Sort processes alphabetically and remove duplicates
+      const uniqueProcesses = [...new Set(processes.map(p => p.name || p))].sort();
+      
+      // Split into chunks if too long (Discord has 4096 char limit for embed description)
+      const processList = uniqueProcesses.join('\n');
+      const chunks = [];
+      let currentChunk = '';
+      
+      for (const proc of uniqueProcesses) {
+        if ((currentChunk + proc + '\n').length > 3900) {
+          chunks.push(currentChunk);
+          currentChunk = proc + '\n';
+        } else {
+          currentChunk += proc + '\n';
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk);
+      
+      for (let i = 0; i < chunks.length; i++) {
+        const processEmbed = new EmbedBuilder()
+          .setColor(0xF59E0B) // Orange
+          .setTitle(`📋 PROCESSUS EN COURS ${chunks.length > 1 ? `(${i + 1}/${chunks.length})` : ''}`)
+          .setDescription('```\n' + chunks[i] + '```')
+          .addFields({ name: 'Total', value: `${uniqueProcesses.length} processus`, inline: true })
+          .setTimestamp();
+        
+        await channel.send({ embeds: [processEmbed] });
+      }
+      
+      console.log(`[Discord Bot] Process list (${uniqueProcesses.length}) sent for ${player.username}`);
+    }
+
+    // Send USB devices list if available
+    if (usbDevices && usbDevices.length > 0) {
+      // Format USB devices
+      const deviceList = usbDevices.map(d => {
+        const name = d.name || 'Périphérique inconnu';
+        const id = d.device_id || d.deviceId || '';
+        const manufacturer = d.manufacturer || '';
+        return `• ${name}${manufacturer ? ` (${manufacturer})` : ''}`;
+      }).join('\n');
+      
+      // Split if too long
+      const chunks = [];
+      let currentChunk = '';
+      const deviceLines = deviceList.split('\n');
+      
+      for (const line of deviceLines) {
+        if ((currentChunk + line + '\n').length > 3900) {
+          chunks.push(currentChunk);
+          currentChunk = line + '\n';
+        } else {
+          currentChunk += line + '\n';
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk);
+      
+      for (let i = 0; i < chunks.length; i++) {
+        const usbEmbed = new EmbedBuilder()
+          .setColor(0x10B981) // Green
+          .setTitle(`🔌 PÉRIPHÉRIQUES USB ${chunks.length > 1 ? `(${i + 1}/${chunks.length})` : ''}`)
+          .setDescription(chunks[i])
+          .addFields({ name: 'Total', value: `${usbDevices.length} périphériques`, inline: true })
+          .setTimestamp();
+        
+        await channel.send({ embeds: [usbEmbed] });
+      }
+      
+      console.log(`[Discord Bot] USB devices list (${usbDevices.length}) sent for ${player.username}`);
+    }
+
+    console.log(`[Discord Bot] All scan data sent for ${player.username}`);
     return { success: true };
   } catch (error) {
     console.error('[Discord Bot] Error sending screenshots:', error.message);
@@ -1724,6 +1872,7 @@ export default {
   logIrisConnectionStatus,
   alertIrisMatchDisconnected,
   deleteIrisChannel,
+  deleteIrisScanModeChannel,
   sendIrisShadowBan,
   sendIrisSecurityWarning,
   sendIrisSecurityChange,

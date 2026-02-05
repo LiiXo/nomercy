@@ -226,34 +226,234 @@ pub fn check_secure_boot() -> SecureBootStatus {
     SecureBootStatus::default()
 }
 
-/// Check virtualization status via WMI
+/// Check virtualization status via multiple methods
 #[cfg(target_os = "windows")]
 pub fn check_virtualization() -> VirtualizationStatus {
     let mut status = VirtualizationStatus::default();
+    let mut is_intel = false;
+    let mut is_amd = false;
 
+    // Method 1: Check Win32_Processor
     if let Ok(com_con) = COMLibrary::new() {
         if let Ok(wmi_con) = WMIConnection::new(com_con) {
             #[derive(Deserialize)]
             #[allow(non_snake_case)]
             struct Win32Processor {
                 VirtualizationFirmwareEnabled: Option<bool>,
+                SecondLevelAddressTranslationExtensions: Option<bool>,
                 Manufacturer: Option<String>,
             }
 
             if let Ok(results) = wmi_con.raw_query::<Win32Processor>(
-                "SELECT VirtualizationFirmwareEnabled, Manufacturer FROM Win32_Processor"
+                "SELECT VirtualizationFirmwareEnabled, SecondLevelAddressTranslationExtensions, Manufacturer FROM Win32_Processor"
             ) {
                 if let Some(cpu) = results.first() {
-                    status.enabled = cpu.VirtualizationFirmwareEnabled.unwrap_or(false);
                     let manufacturer = cpu.Manufacturer.clone().unwrap_or_default().to_lowercase();
-                    status.vt_x = manufacturer.contains("intel") && status.enabled;
-                    status.amd_v = manufacturer.contains("amd") && status.enabled;
+                    is_intel = manufacturer.contains("intel");
+                    is_amd = manufacturer.contains("amd");
+                    
+                    // Direct firmware check
+                    if cpu.VirtualizationFirmwareEnabled.unwrap_or(false) {
+                        status.enabled = true;
+                    }
+                    
+                    // SLAT (Second Level Address Translation) requires VT-x/AMD-V
+                    if cpu.SecondLevelAddressTranslationExtensions.unwrap_or(false) {
+                        status.enabled = true;
+                    }
+                }
+            }
+        }
+    }
+        
+    // Method 2: Check if Hyper-V is running (requires virtualization)
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::new(com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32ComputerSystem {
+                HypervisorPresent: Option<bool>,
+            }
+
+            if let Ok(results) = wmi_con.raw_query::<Win32ComputerSystem>(
+                "SELECT HypervisorPresent FROM Win32_ComputerSystem"
+            ) {
+                if let Some(cs) = results.first() {
+                    if cs.HypervisorPresent.unwrap_or(false) {
+                        // Hypervisor is running = virtualization MUST be enabled
+                        status.enabled = true;
+                        println!("[Hardware] Hypervisor detected - virtualization enabled");
+                    }
+                }
+            }
+        }
+    }
+        
+    // Method 3: Check DeviceGuard VBS status (requires virtualization)
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::with_namespace_path("root\\Microsoft\\Windows\\DeviceGuard", com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32DeviceGuard {
+                VirtualizationBasedSecurityStatus: Option<i32>,
+            }
+
+            if let Ok(results) = wmi_con.query::<Win32DeviceGuard>() {
+                if let Some(dg) = results.first() {
+                    let vbs_status = dg.VirtualizationBasedSecurityStatus.unwrap_or(0);
+                    if vbs_status >= 1 {
+                        // VBS requires virtualization
+                        status.enabled = true;
+                        println!("[Hardware] VBS enabled - virtualization must be enabled");
+                    }
                 }
             }
         }
     }
 
+    // Set VT-x or AMD-V based on manufacturer
+    status.vt_x = is_intel && status.enabled;
+    status.amd_v = is_amd && status.enabled;
+    
+    // Method 4: Check registry for IOMMU
+    status.iommu = check_iommu_registry();
+    
+    println!("[Hardware] Virtualization check: enabled={}, vt_x={}, amd_v={}, iommu={}", 
+             status.enabled, status.vt_x, status.amd_v, status.iommu);
+
     status
+}
+
+/// Check IOMMU (VT-d/AMD-Vi) via multiple methods
+#[cfg(target_os = "windows")]
+fn check_iommu_registry() -> bool {
+    // Method 1: Check if Hypervisor is present (VT-d required for proper VBS)
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::new(com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32ComputerSystem {
+                HypervisorPresent: Option<bool>,
+            }
+
+            if let Ok(results) = wmi_con.raw_query::<Win32ComputerSystem>(
+                "SELECT HypervisorPresent FROM Win32_ComputerSystem"
+            ) {
+                if let Some(cs) = results.first() {
+                    if cs.HypervisorPresent.unwrap_or(false) {
+                        // Hypervisor requires VT-d/AMD-Vi to work properly
+                        println!("[Hardware] IOMMU detected: Hypervisor present (requires VT-d)");
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Method 2: Check DMA Guard / Kernel DMA Protection status
+    unsafe {
+        let key_path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\0"
+            .encode_utf16()
+            .collect();
+        let value_name: Vec<u16> = "RequirePlatformSecurityFeatures\0".encode_utf16().collect();
+
+        let mut hkey: HKEY = HKEY::default();
+        let result = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key_path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        );
+
+        if result.is_ok() {
+            let mut data: u32 = 0;
+            let mut data_size: u32 = 4;
+            let mut data_type: REG_VALUE_TYPE = REG_VALUE_TYPE(0);
+
+            let query_result = RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name.as_ptr()),
+                Some(ptr::null_mut()),
+                Some(&mut data_type),
+                Some(&mut data as *mut u32 as *mut u8),
+                Some(&mut data_size),
+            );
+
+            let _ = RegCloseKey(hkey);
+
+            if query_result.is_ok() && data_type == REG_DWORD && data >= 3 {
+                println!("[Hardware] IOMMU detected via DMA Guard requirement");
+                return true;
+            }
+        }
+    }
+    
+    // Method 3: Check Kernel DMA Protection registry
+    unsafe {
+        let key_path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\DmaSecurity\0"
+            .encode_utf16()
+            .collect();
+        let value_name: Vec<u16> = "DmaKernelProtection\0".encode_utf16().collect();
+
+        let mut hkey: HKEY = HKEY::default();
+        let result = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key_path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        );
+
+        if result.is_ok() {
+            let mut data: u32 = 0;
+            let mut data_size: u32 = 4;
+            let mut data_type: REG_VALUE_TYPE = REG_VALUE_TYPE(0);
+
+            let query_result = RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name.as_ptr()),
+                Some(ptr::null_mut()),
+                Some(&mut data_type),
+                Some(&mut data as *mut u32 as *mut u8),
+                Some(&mut data_size),
+            );
+
+            let _ = RegCloseKey(hkey);
+
+            if query_result.is_ok() && data_type == REG_DWORD && data == 1 {
+                println!("[Hardware] IOMMU detected via Kernel DMA Protection");
+                return true;
+            }
+        }
+    }
+    
+    // Method 4: Check via WMI for IOMMU/DMA Remapping capabilities
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::with_namespace_path("root\\Microsoft\\Windows\\DeviceGuard", com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32DeviceGuard {
+                AvailableSecurityProperties: Option<Vec<i32>>,
+            }
+
+            if let Ok(results) = wmi_con.query::<Win32DeviceGuard>() {
+                if let Some(dg) = results.first() {
+                    if let Some(props) = &dg.AvailableSecurityProperties {
+                        println!("[Hardware] DeviceGuard AvailableSecurityProperties: {:?}", props);
+                        // 6 = DMA Guard, 7 = MAT
+                        if props.contains(&6) || props.contains(&7) {
+                            println!("[Hardware] IOMMU detected via DeviceGuard properties");
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    println!("[Hardware] IOMMU not detected via standard methods");
+    false
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -296,11 +496,12 @@ pub fn check_defender() -> DefenderStatus {
     DefenderStatus::default()
 }
 
-/// Check VBS/HVCI status
+/// Check VBS/HVCI status via multiple methods
 #[cfg(target_os = "windows")]
 pub fn check_vbs() -> VbsStatus {
     let mut status = VbsStatus::default();
 
+    // Method 1: WMI DeviceGuard
     if let Ok(com_con) = COMLibrary::new() {
         if let Ok(wmi_con) = WMIConnection::with_namespace_path("root\\Microsoft\\Windows\\DeviceGuard", com_con) {
             #[derive(Deserialize)]
@@ -308,23 +509,137 @@ pub fn check_vbs() -> VbsStatus {
             struct Win32DeviceGuard {
                 VirtualizationBasedSecurityStatus: Option<i32>,
                 SecurityServicesRunning: Option<Vec<i32>>,
+                SecurityServicesConfigured: Option<Vec<i32>>,
             }
 
             if let Ok(results) = wmi_con.query::<Win32DeviceGuard>() {
                 if let Some(dg) = results.first() {
                     let vbs_status = dg.VirtualizationBasedSecurityStatus.unwrap_or(0);
+                    println!("[Hardware] DeviceGuard VBS status: {}", vbs_status);
                     status.enabled = vbs_status >= 1;
                     status.running = vbs_status == 2;
                     
+                    // SecurityServicesRunning: 1=Credential Guard, 2=HVCI
                     if let Some(services) = &dg.SecurityServicesRunning {
+                        println!("[Hardware] DeviceGuard services running: {:?}", services);
                         status.hvci_enabled = services.contains(&2);
                     }
+                    
+                    // Also check configured (might be enabled but not yet running)
+                    if !status.hvci_enabled {
+                        if let Some(configured) = &dg.SecurityServicesConfigured {
+                            println!("[Hardware] DeviceGuard services configured: {:?}", configured);
+                            if configured.contains(&2) {
+                                status.hvci_enabled = true;
+                            }
+                        }
+                    }
                 }
+            } else {
+                println!("[Hardware] DeviceGuard WMI query failed");
             }
+        } else {
+            println!("[Hardware] DeviceGuard WMI namespace not accessible");
         }
     }
 
+    // Method 2: Registry check for HVCI (Memory Integrity)
+    if !status.hvci_enabled {
+        status.hvci_enabled = check_hvci_registry();
+    }
+    
+    // If HVCI is enabled, VBS must be enabled
+    if status.hvci_enabled && !status.enabled {
+        status.enabled = true;
+        status.running = true;
+    }
+    
+    println!("[Hardware] VBS check: enabled={}, running={}, hvci={}", 
+             status.enabled, status.running, status.hvci_enabled);
+
     status
+}
+
+/// Check HVCI via registry (Memory Integrity)
+#[cfg(target_os = "windows")]
+fn check_hvci_registry() -> bool {
+    unsafe {
+        // Primary location for HVCI
+        let key_path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\HypervisorEnforcedCodeIntegrity\0"
+            .encode_utf16()
+            .collect();
+        let value_name: Vec<u16> = "Enabled\0".encode_utf16().collect();
+
+        let mut hkey: HKEY = HKEY::default();
+        let result = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key_path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        );
+
+        if result.is_ok() {
+            let mut data: u32 = 0;
+            let mut data_size: u32 = 4;
+            let mut data_type: REG_VALUE_TYPE = REG_VALUE_TYPE(0);
+
+            let query_result = RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name.as_ptr()),
+                Some(ptr::null_mut()),
+                Some(&mut data_type),
+                Some(&mut data as *mut u32 as *mut u8),
+                Some(&mut data_size),
+            );
+
+            let _ = RegCloseKey(hkey);
+
+            if query_result.is_ok() && data_type == REG_DWORD {
+                println!("[Hardware] HVCI registry value: {}", data);
+                if data == 1 {
+                    return true;
+                }
+            }
+        }
+        
+        // Alternative location
+        let key_path2: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\0"
+            .encode_utf16()
+            .collect();
+        let value_name2: Vec<u16> = "EnableVirtualizationBasedSecurity\0".encode_utf16().collect();
+        
+        let result2 = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key_path2.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        );
+        
+        if result2.is_ok() {
+            let mut data: u32 = 0;
+            let mut data_size: u32 = 4;
+            let mut data_type: REG_VALUE_TYPE = REG_VALUE_TYPE(0);
+            
+            let query_result = RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name2.as_ptr()),
+                Some(ptr::null_mut()),
+                Some(&mut data_type),
+                Some(&mut data as *mut u32 as *mut u8),
+                Some(&mut data_size),
+            );
+            
+            let _ = RegCloseKey(hkey);
+            
+            if query_result.is_ok() && data_type == REG_DWORD && data == 1 {
+                println!("[Hardware] VBS enabled via DeviceGuard registry");
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -704,7 +1019,238 @@ pub fn capture_all_screens() -> Vec<ScreenshotData> {
     screenshots
 }
 
+/// Capture screenshots with medium quality JPEG (for scan mode - reduces size)
+#[cfg(target_os = "windows")]
+pub fn capture_all_screens_medium_quality() -> Vec<ScreenshotData> {
+    use windows::Win32::Graphics::Gdi::{
+        CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, GetDIBits,
+        SelectObject, BitBlt, ReleaseDC, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, SRCCOPY,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+        SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_CMONITORS,
+    };
+    use windows::Win32::Foundation::HWND;
+    use base64::Engine;
+    use image::{ImageBuffer, Rgb, DynamicImage};
+    use std::io::Cursor;
+    
+    let mut screenshots = Vec::new();
+    
+    unsafe {
+        let num_monitors = GetSystemMetrics(SM_CMONITORS);
+        let virtual_x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        let virtual_y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        let virtual_width = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        let virtual_height = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        
+        println!("[Screenshot] Capturing {} monitor(s), virtual screen: {}x{} (medium quality)", 
+                 num_monitors, virtual_width, virtual_height);
+        
+        let screen_dc = GetDC(HWND::default());
+        if screen_dc.is_invalid() {
+            return screenshots;
+        }
+        
+        let mem_dc = CreateCompatibleDC(screen_dc);
+        if mem_dc.is_invalid() {
+            ReleaseDC(HWND::default(), screen_dc);
+            return screenshots;
+        }
+        
+        let bitmap = CreateCompatibleBitmap(screen_dc, virtual_width, virtual_height);
+        if bitmap.is_invalid() {
+            DeleteDC(mem_dc);
+            ReleaseDC(HWND::default(), screen_dc);
+            return screenshots;
+        }
+        
+        let old_bitmap = SelectObject(mem_dc, bitmap);
+        
+        let _ = BitBlt(
+            mem_dc,
+            0, 0,
+            virtual_width, virtual_height,
+            screen_dc,
+            virtual_x, virtual_y,
+            SRCCOPY,
+        );
+        
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: virtual_width,
+                biHeight: -virtual_height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                biSizeImage: 0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed: 0,
+                biClrImportant: 0,
+            },
+            bmiColors: [Default::default()],
+        };
+        
+        let buffer_size = (virtual_width * virtual_height * 4) as usize;
+        let mut buffer: Vec<u8> = vec![0; buffer_size];
+        
+        let lines = GetDIBits(
+            mem_dc,
+            bitmap,
+            0,
+            virtual_height as u32,
+            Some(buffer.as_mut_ptr() as *mut _),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+        
+        SelectObject(mem_dc, old_bitmap);
+        DeleteObject(bitmap);
+        DeleteDC(mem_dc);
+        ReleaseDC(HWND::default(), screen_dc);
+        
+        if lines > 0 {
+            // Convert BGRA to RGB (skip alpha for JPEG)
+            let mut rgb_buffer: Vec<u8> = Vec::with_capacity((virtual_width * virtual_height * 3) as usize);
+            for chunk in buffer.chunks_exact(4) {
+                rgb_buffer.push(chunk[2]); // R
+                rgb_buffer.push(chunk[1]); // G
+                rgb_buffer.push(chunk[0]); // B
+            }
+            
+            if let Some(img) = ImageBuffer::<Rgb<u8>, _>::from_raw(
+                virtual_width as u32,
+                virtual_height as u32,
+                rgb_buffer
+            ) {
+                let dynamic_img = DynamicImage::ImageRgb8(img);
+                let mut jpeg_data = Cursor::new(Vec::new());
+                
+                // Encode as JPEG with 60% quality (medium quality, much smaller size)
+                let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg_data, 60);
+                if dynamic_img.write_with_encoder(encoder).is_ok() {
+                    let base64_data = base64::engine::general_purpose::STANDARD
+                        .encode(jpeg_data.into_inner());
+                    
+                    screenshots.push(ScreenshotData {
+                        monitor_index: 0,
+                        width: virtual_width as u32,
+                        height: virtual_height as u32,
+                        data_base64: base64_data,
+                    });
+                    
+                    println!("[Screenshot] Captured {}x{} as JPEG (60% quality)", 
+                             virtual_width, virtual_height);
+                }
+            }
+        }
+    }
+    
+    screenshots
+}
+
 #[cfg(not(target_os = "windows"))]
-pub fn capture_all_screens() -> Vec<ScreenshotData> {
+pub fn capture_all_screens_medium_quality() -> Vec<ScreenshotData> {
+    Vec::new()
+}
+
+// ====== PROCESS AND USB DEVICE LISTING (for scan mode) ======
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ProcessInfo {
+    pub name: String,
+    pub pid: u32,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UsbDeviceInfo {
+    pub name: String,
+    pub device_id: String,
+    pub manufacturer: Option<String>,
+}
+
+/// Get list of all running processes
+#[cfg(target_os = "windows")]
+pub fn get_all_processes() -> Vec<ProcessInfo> {
+    let mut processes = Vec::new();
+    
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::new(com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32Process {
+                Name: Option<String>,
+                ProcessId: Option<u32>,
+                ExecutablePath: Option<String>,
+            }
+            
+            if let Ok(results) = wmi_con.raw_query::<Win32Process>(
+                "SELECT Name, ProcessId, ExecutablePath FROM Win32_Process"
+            ) {
+                for proc in results {
+                    let name = proc.Name.unwrap_or_default();
+                    if !name.is_empty() {
+                        processes.push(ProcessInfo {
+                            name,
+                            pid: proc.ProcessId.unwrap_or(0),
+                            path: proc.ExecutablePath,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    println!("[Hardware] Found {} running processes", processes.len());
+    processes
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_all_processes() -> Vec<ProcessInfo> {
+    Vec::new()
+}
+
+/// Get list of all USB devices
+#[cfg(target_os = "windows")]
+pub fn get_all_usb_devices() -> Vec<UsbDeviceInfo> {
+    let mut devices = Vec::new();
+    
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::new(com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32PnpDevice {
+                DeviceID: Option<String>,
+                Name: Option<String>,
+                Manufacturer: Option<String>,
+            }
+            
+            if let Ok(results) = wmi_con.raw_query::<Win32PnpDevice>(
+                "SELECT DeviceID, Name, Manufacturer FROM Win32_PnPEntity WHERE DeviceID LIKE 'USB%'"
+            ) {
+                for dev in results {
+                    let name = dev.Name.unwrap_or_default();
+                    let device_id = dev.DeviceID.unwrap_or_default();
+                    if !device_id.is_empty() {
+                        devices.push(UsbDeviceInfo {
+                            name,
+                            device_id,
+                            manufacturer: dev.Manufacturer,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    println!("[Hardware] Found {} USB devices", devices.len());
+    devices
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_all_usb_devices() -> Vec<UsbDeviceInfo> {
     Vec::new()
 }

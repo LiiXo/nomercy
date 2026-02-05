@@ -842,7 +842,7 @@ const AdminPanel = () => {
         // Update player's scan mode in local state
         setIrisPlayers(prev => prev.map(p => 
           p._id === playerId 
-            ? { ...p, scanMode: data.scanModeEnabled, hasScanChannel: true }
+            ? { ...p, scanMode: data.scanModeEnabled, hasScanChannel: data.scanModeEnabled }
             : p
         ));
       } else {

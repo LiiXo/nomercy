@@ -1982,6 +1982,8 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
         wins: parseInt(statsStricker.wins) || 0,
         losses: parseInt(statsStricker.losses) || 0
       };
+      // Mark nested object as modified to ensure Mongoose saves it
+      squad.markModified('statsStricker');
     }
 
     // Update Munitions (cranes)
@@ -2037,6 +2039,9 @@ router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (
     // Reset Munitions (cranes)
     squad.cranes = 0;
 
+    // Mark nested object as modified to ensure Mongoose saves it
+    squad.markModified('statsStricker');
+    
     await squad.save();
 
     // Log to Discord

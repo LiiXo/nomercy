@@ -8,8 +8,11 @@ import crypto from 'crypto';
 // Shared secret for HMAC signing (must match client)
 const IRIS_SHARED_SECRET = process.env.IRIS_SHARED_SECRET || 'NM_IRIS_SEC_K3Y_2024_!@#$%^&*()_SECURE';
 
-// Request timestamp tolerance (5 minutes)
-const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
+// Request timestamp tolerance (10 minutes - increased for clock drift)
+const TIMESTAMP_TOLERANCE_MS = 10 * 60 * 1000;
+
+// Endpoints that can skip signature verification (protected by token auth)
+const SKIP_SIGNATURE_ENDPOINTS = ['/iris/ping'];
 
 // Nonce cache to prevent replay attacks (in production, use Redis)
 const nonceCache = new Map();
@@ -35,7 +38,16 @@ setInterval(() => {
  * @returns {string} - Expected HMAC signature
  */
 function generateExpectedSignature(method, path, timestamp, nonce, body = '') {
-  const bodyString = typeof body === 'object' ? JSON.stringify(body) : (body || '');
+  // For GET/DELETE requests or empty body, use empty string
+  let bodyString = '';
+  
+  if (method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'DELETE') {
+    if (body && typeof body === 'object' && Object.keys(body).length > 0) {
+      bodyString = JSON.stringify(body);
+    } else if (typeof body === 'string' && body.length > 0) {
+      bodyString = body;
+    }
+  }
   
   // Create message to verify: METHOD|PATH|TIMESTAMP|NONCE|BODY_HASH
   const bodyHash = crypto.createHash('sha256').update(bodyString).digest('hex');
@@ -83,6 +95,14 @@ export const verifyIrisSignature = (req, res, next) => {
     return next();
   }
   
+  // Get path for checking skip endpoints
+  const path = req.originalUrl.replace('/api', '');
+  
+  // Skip signature verification for certain endpoints (they use token auth)
+  if (SKIP_SIGNATURE_ENDPOINTS.some(ep => path.startsWith(ep))) {
+    return next();
+  }
+  
   // Validate required headers
   if (!clientTimestamp || !clientNonce || !clientSignature) {
     console.warn('[Iris Security] Missing security headers from:', req.ip);
@@ -117,7 +137,6 @@ export const verifyIrisSignature = (req, res, next) => {
   }
   
   // Generate expected signature
-  const path = req.originalUrl.replace('/api', '');
   const expectedSignature = generateExpectedSignature(
     req.method,
     path,
@@ -132,8 +151,7 @@ export const verifyIrisSignature = (req, res, next) => {
   
   if (signatureBuffer.length !== expectedBuffer.length || 
       !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {
-    console.warn('[Iris Security] Signature mismatch from:', req.ip);
-    console.warn('[Iris Security] Path:', path, 'Method:', req.method);
+    console.warn('[Iris Security] Signature mismatch from:', req.ip, 'Path:', path);
     return res.status(401).json({
       success: false,
       message: 'Invalid request signature',
@@ -157,7 +175,6 @@ export const verifyIrisSignature = (req, res, next) => {
   };
   
   // Request is valid
-  console.log('[Iris Security] Request verified from:', req.ip);
   next();
 };
 

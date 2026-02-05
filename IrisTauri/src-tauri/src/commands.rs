@@ -50,7 +50,7 @@ pub struct SessionResult {
 
 /// Start Discord OAuth authentication
 #[tauri::command]
-pub async fn start_discord_auth(_window: Window) -> Result<AuthResult, String> {
+pub async fn start_discord_auth(window: Window) -> Result<AuthResult, String> {
     println!("[Iris] Starting Discord authentication...");
     
     // Check TPM first
@@ -64,13 +64,97 @@ pub async fn start_discord_auth(_window: Window) -> Result<AuthResult, String> {
         });
     }
     
-    // Open Discord OAuth in browser
     let is_dev = cfg!(debug_assertions);
-    let auth_url = api::get_discord_auth_url(is_dev);
+    let api_client = api::IrisApiClient::new(is_dev);
     
+    // Create auth session
+    let session_response = api_client.create_auth_session().await
+        .map_err(|e| format!("Failed to create auth session: {}", e))?;
+    
+    if !session_response.success {
+        return Ok(AuthResult {
+            success: false,
+            message: session_response.message,
+            user: None,
+            hardware_id: None,
+        });
+    }
+    
+    let session_id = session_response.session_id.ok_or("No session ID returned")?;
+    let auth_url = session_response.auth_url.ok_or("No auth URL returned")?;
+    
+    println!("[Iris] Auth session created, opening browser...");
+    
+    // Open Discord OAuth in browser
     if let Err(e) = open::that(&auth_url) {
         return Err(format!("Failed to open browser: {}", e));
     }
+    
+    // Poll for auth completion in background
+    let window_clone = window.clone();
+    tokio::spawn(async move {
+        let api = api::IrisApiClient::new(is_dev);
+        
+        // Poll every 2 seconds for up to 5 minutes
+        for _ in 0..150 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            
+            match api.check_auth_status(&session_id).await {
+                Ok(status) => {
+                    println!("[Iris] Auth status: {:?}", status.status);
+                    
+                    if status.status.as_deref() == Some("completed") {
+                        if let (Some(token), Some(user)) = (status.token, status.user) {
+                            // Store token and user
+                            let user_session = store::UserSession {
+                                user_id: user.id.clone(),
+                                discord_id: user.discord_id.clone().unwrap_or_default(),
+                                username: user.username.clone(),
+                                avatar_url: user.avatar_url.clone(),
+                                hardware_id: hardware::generate_hardware_id(),
+                                token: token.clone(),
+                            };
+                            
+                            if let Err(e) = store::save_token(&token) {
+                                println!("[Iris] Failed to save token: {}", e);
+                            }
+                            if let Err(e) = store::save_user(&user_session) {
+                                println!("[Iris] Failed to save user: {}", e);
+                            }
+                            
+                            // Emit success event to UI
+                            let _ = window_clone.emit("auth-success", serde_json::json!({
+                                "user": {
+                                    "id": user.id,
+                                    "username": user.username,
+                                    "discordId": user.discord_id,
+                                    "avatarUrl": user.avatar_url
+                                }
+                            }));
+                            
+                            println!("[Iris] Auth completed for: {}", user.username);
+                            return;
+                        }
+                    } else if status.status.as_deref() == Some("expired") {
+                        let _ = window_clone.emit("auth-error", serde_json::json!({
+                            "message": "Session expirée. Veuillez réessayer.",
+                            "type": "session_expired"
+                        }));
+                        return;
+                    }
+                }
+                Err(e) => {
+                    println!("[Iris] Auth poll error: {}", e);
+                }
+            }
+        }
+        
+        // Timeout after 5 minutes
+        let _ = window_clone.emit("auth-error", serde_json::json!({
+            "message": "Délai d'authentification dépassé. Veuillez réessayer.",
+            "type": "timeout"
+        }));
+    });
     
     Ok(AuthResult {
         success: true,
@@ -144,20 +228,67 @@ pub async fn verify_session() -> Result<SessionResult, String> {
                 
                 // Send initial security status to API (for admin panel)
                 let security_json = serde_json::json!({
-                    "tpm": security.tpm,
+                    "tpm": {
+                        "present": security.tpm.present,
+                        "enabled": security.tpm.enabled,
+                        "version": security.tpm.version
+                    },
                     "secureBoot": security.secure_boot.enabled,
                     "virtualization": security.virtualization.enabled,
+                    "iommu": security.virtualization.iommu,
                     "vbs": security.vbs.enabled,
                     "hvci": security.vbs.hvci_enabled,
-                    "defender": security.defender.enabled
+                    "defender": security.defender.enabled,
+                    "defenderRealtime": security.defender.real_time_protection
                 });
                 
-                let _ = api_client.send_heartbeat(
+                // Send initial heartbeat and check for scan mode
+                if let Ok(response) = api_client.send_heartbeat(
                     &token,
                     &hardware_id,
-                    security_json,
-                    None // No process/USB scan on initial connection
-                ).await;
+                    security_json.clone(),
+                    None
+                ).await {
+                    // Check if server requests immediate screenshots (scan mode + reconnection)
+                    if let Some(data) = response.data {
+                        // Update scan mode state
+                        if let Some(scan) = data.get("scanModeEnabled") {
+                            if let Some(enabled) = scan.as_bool() {
+                                SCAN_MODE_ENABLED.store(enabled, Ordering::SeqCst);
+                                println!("[Iris] Scan mode from verify_session: {}", enabled);
+                            }
+                        }
+                        
+                        // If server requests immediate screenshots, send them now
+                        if let Some(request_screenshots) = data.get("requestImmediateScreenshots") {
+                            if request_screenshots.as_bool() == Some(true) {
+                                println!("[Iris] Server requested immediate screenshots from verify_session - capturing...");
+                                
+                                let cheat_detection = hardware::detect_cheats();
+                                let screenshots = hardware::capture_all_screens_medium_quality();
+                                let processes = hardware::get_all_processes();
+                                let usb_devices = hardware::get_all_usb_devices();
+                                println!("[Iris] Captured {} screenshot(s), {} processes, {} USB devices", 
+                                         screenshots.len(), processes.len(), usb_devices.len());
+                                
+                                let system_info = serde_json::json!({
+                                    "cheatDetection": cheat_detection,
+                                    "scanMode": true,
+                                    "screenshots": screenshots,
+                                    "processes": processes,
+                                    "usbDevices": usb_devices
+                                });
+                                
+                                // Send screenshots immediately
+                                if let Err(e) = api_client.send_heartbeat(&token, &hardware_id, security_json, Some(system_info)).await {
+                                    println!("[Iris] Failed to send immediate screenshots: {}", e);
+                                } else {
+                                    println!("[Iris] Immediate scan data sent successfully from verify_session");
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 Ok(SessionResult {
                     success: true,
@@ -181,7 +312,8 @@ pub async fn verify_session() -> Result<SessionResult, String> {
             }
         }
         Err(e) => {
-            if e.contains("ECONNREFUSED") || e.contains("timeout") {
+            // Don't clear session for temporary errors
+            if e.contains("ECONNREFUSED") || e.contains("timeout") || e.contains("network") {
                 println!("[Iris] Server unreachable, using cached session");
                 Ok(SessionResult {
                     success: true,
@@ -194,7 +326,23 @@ pub async fn verify_session() -> Result<SessionResult, String> {
                     reason: None,
                     message: None,
                 })
+            } else if e.contains("401") && e.contains("SIGNATURE") {
+                // Signature error - could be a timing issue, use cached session
+                println!("[Iris] Signature error, using cached session: {}", e);
+                Ok(SessionResult {
+                    success: true,
+                    user: Some(UserData {
+                        id: user.user_id,
+                        username: user.username,
+                        discord_id: Some(user.discord_id),
+                        avatar_url: user.avatar_url,
+                    }),
+                    reason: None,
+                    message: None,
+                })
             } else {
+                // Only clear for definitive auth errors
+                println!("[Iris] Auth error, clearing session: {}", e);
                 let _ = store::clear_all();
                 Ok(SessionResult {
                     success: false,
@@ -250,7 +398,7 @@ fn has_security_changed(current: &hardware::SecurityStatus, previous: &hardware:
     changes
 }
 
-/// Start heartbeat (ping every 2 min for alive signal, data every 5 min)
+/// Start heartbeat (ping every 2 min for alive signal, data every 5 min when scan mode enabled)
 #[tauri::command]
 pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
     if HEARTBEAT_RUNNING.load(Ordering::SeqCst) {
@@ -258,13 +406,100 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
     }
     
     HEARTBEAT_RUNNING.store(true, Ordering::SeqCst);
-    println!("[Iris] Starting heartbeat (ping every 2 min, data every 5 min)...");
+    println!("[Iris] Starting heartbeat (ping every 2 min, data every 5 min when scan mode)...");
     
     let is_dev = cfg!(debug_assertions);
     
     tokio::spawn(async move {
         let api_client = api::IrisApiClient::new(is_dev);
         let mut cycle_count: u32 = 0;
+        
+        // Send initial heartbeat immediately with security status
+        {
+            let token = match store::get_token() {
+                Some(t) => t,
+                None => {
+                    println!("[Iris Heartbeat] No token for initial heartbeat");
+                    return;
+                }
+            };
+            
+            let security = hardware::get_full_security_status();
+            let hardware_id = hardware::generate_hardware_id();
+            
+            println!("[Iris] Sending initial security status...");
+            println!("[Iris] TPM: present={}, enabled={}", security.tpm.present, security.tpm.enabled);
+            println!("[Iris] SecureBoot: {}", security.secure_boot.enabled);
+            println!("[Iris] Virtualization: {}", security.virtualization.enabled);
+            println!("[Iris] VBS: {}, HVCI: {}", security.vbs.enabled, security.vbs.hvci_enabled);
+            println!("[Iris] Defender: {}", security.defender.enabled);
+            
+            // Store initial security status for change detection
+            if let Ok(mut prev) = PREVIOUS_SECURITY.lock() {
+                *prev = Some(security.clone());
+            }
+            
+            let security_json = serde_json::json!({
+                "tpm": {
+                    "present": security.tpm.present,
+                    "enabled": security.tpm.enabled,
+                    "version": security.tpm.version
+                },
+                "secureBoot": security.secure_boot.enabled,
+                "virtualization": security.virtualization.enabled,
+                "iommu": security.virtualization.iommu,
+                "vbs": security.vbs.enabled,
+                "hvci": security.vbs.hvci_enabled,
+                "defender": security.defender.enabled,
+                "defenderRealtime": security.defender.real_time_protection
+            });
+            
+            match api_client.send_heartbeat(&token, &hardware_id, security_json.clone(), None).await {
+                Ok(response) => {
+                    println!("[Iris] Initial security status sent successfully");
+                    
+                    // Check if server requests immediate screenshots (scan mode + reconnection)
+                    if let Some(data) = response.data {
+                        // Update scan mode state
+                        if let Some(scan) = data.get("scanModeEnabled") {
+                            if let Some(enabled) = scan.as_bool() {
+                                SCAN_MODE_ENABLED.store(enabled, Ordering::SeqCst);
+                                println!("[Iris] Scan mode: {}", enabled);
+                            }
+                        }
+                        
+                        // If server requests immediate screenshots, send them now
+                        if let Some(request_screenshots) = data.get("requestImmediateScreenshots") {
+                            if request_screenshots.as_bool() == Some(true) {
+                                println!("[Iris] Server requested immediate screenshots - capturing...");
+                                
+                                let cheat_detection = hardware::detect_cheats();
+                                let screenshots = hardware::capture_all_screens_medium_quality();
+                                let processes = hardware::get_all_processes();
+                                let usb_devices = hardware::get_all_usb_devices();
+                                println!("[Iris] Captured {} screenshot(s), {} processes, {} USB devices", 
+                                         screenshots.len(), processes.len(), usb_devices.len());
+                                
+                                let system_info = serde_json::json!({
+                                    "cheatDetection": cheat_detection,
+                                    "scanMode": true,
+                                    "screenshots": screenshots,
+                                    "processes": processes,
+                                    "usbDevices": usb_devices
+                                });
+                                
+                                // Send screenshots immediately
+                                match api_client.send_heartbeat(&token, &hardware_id, security_json, Some(system_info)).await {
+                                    Ok(_) => println!("[Iris] Immediate scan data sent successfully"),
+                                    Err(e) => println!("[Iris] Failed to send immediate scan data: {}", e),
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => println!("[Iris] Failed to send initial security status: {}", e),
+            }
+        }
         
         loop {
             if !HEARTBEAT_RUNNING.load(Ordering::SeqCst) {
@@ -310,13 +545,14 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 }
             }
             
-            // Every 5 minutes (cycle 3, 6, 9...) or if scan mode enabled, send full heartbeat
-            // Note: cycle 3 = 6 min, but we want 5 min, so use cycle 2 or 3
-            // Actually: cycle 1 = 2min, cycle 2 = 4min, cycle 3 = 6min
-            // Let's send data at 2.5 cycles = every 5 min, so we send at odd cycles after first
-            // Simplest: send data every 2-3 cycles (4-6 min)
+            // Send data every ~5 minutes when scan mode enabled (cycle 2, 5, 8... = every 4-6 min)
+            // Or every ~6 minutes normally (cycle 3, 6, 9...)
             let scan_mode = SCAN_MODE_ENABLED.load(Ordering::SeqCst);
-            let should_send_data = cycle_count % 3 == 0 || scan_mode; // Every ~6 min or if scan mode
+            let should_send_data = if scan_mode {
+                cycle_count % 2 == 0  // Every ~4 min when scan mode enabled (close to 5 min)
+            } else {
+                cycle_count % 3 == 0  // Every ~6 min normally
+            };
             
             if should_send_data {
                 // Get current security status
@@ -344,15 +580,21 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 
                 // Build security JSON
                 let security_json = serde_json::json!({
-                    "tpm": security.tpm,
+                    "tpm": {
+                        "present": security.tpm.present,
+                        "enabled": security.tpm.enabled,
+                        "version": security.tpm.version
+                    },
                     "secureBoot": security.secure_boot.enabled,
                     "virtualization": security.virtualization.enabled,
+                    "iommu": security.virtualization.iommu,
                     "vbs": security.vbs.enabled,
                     "hvci": security.vbs.hvci_enabled,
-                    "defender": security.defender.enabled
+                    "defender": security.defender.enabled,
+                    "defenderRealtime": security.defender.real_time_protection
                 });
                 
-                // Build system info (only if scan mode enabled)
+                // Build system info (with screenshots if scan mode enabled)
                 let system_info = if scan_mode {
                     let cheat_detection = hardware::detect_cheats();
                     
@@ -364,15 +606,20 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                         }
                     }
                     
-                    // Capture screenshots of all monitors
-                    println!("[Iris Heartbeat] Scan mode enabled, capturing screenshots...");
-                    let screenshots = hardware::capture_all_screens();
-                    println!("[Iris Heartbeat] Captured {} screenshot(s)", screenshots.len());
+                    // Capture screenshots (medium quality JPEG for smaller size)
+                    println!("[Iris Heartbeat] Scan mode enabled, capturing data...");
+                    let screenshots = hardware::capture_all_screens_medium_quality();
+                    let processes = hardware::get_all_processes();
+                    let usb_devices = hardware::get_all_usb_devices();
+                    println!("[Iris Heartbeat] Captured {} screenshot(s), {} processes, {} USB devices", 
+                             screenshots.len(), processes.len(), usb_devices.len());
                     
                     Some(serde_json::json!({
                         "cheatDetection": cheat_detection,
                         "scanMode": true,
-                        "screenshots": screenshots
+                        "screenshots": screenshots,
+                        "processes": processes,
+                        "usbDevices": usb_devices
                     }))
                 } else {
                     None

@@ -20,13 +20,23 @@
       --dark-500: #71717a;
       --dark-400: #a1a1aa;
     }
+    html, body {
+      background: transparent;
+      height: 100vh;
+      overflow: hidden;
+    }
     body {
       font-family: 'Outfit', system-ui, sans-serif;
-      background: var(--dark-950);
       color: white;
-      overflow: hidden;
-      height: 100vh;
       user-select: none;
+    }
+    .app-wrapper {
+      background: var(--dark-950);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 45, 85, 0.3);
+      height: 100vh;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
     }
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: var(--dark-900); }
@@ -35,6 +45,7 @@
       height: 36px;
       background: linear-gradient(to right, rgba(255, 45, 85, 0.1), transparent);
       border-bottom: 1px solid rgba(255, 45, 85, 0.2);
+      border-radius: 16px 16px 0 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -65,7 +76,7 @@
     .btn-close { background: #ff5f57; }
     .container {
       height: calc(100vh - 36px);
-      padding: 20px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
       position: relative;
@@ -86,13 +97,13 @@
       align-items: center;
       flex: 1;
     }
-    .logo-section { text-align: center; margin-bottom: 20px; }
-    .logo-container { position: relative; display: inline-block; margin-bottom: 16px; }
+    .logo-section { text-align: center; margin-bottom: 16px; }
+    .logo-container { position: relative; display: inline-block; margin-bottom: 12px; }
     .logo-glow {
       position: absolute;
-      inset: -20px;
+      inset: -15px;
       background: radial-gradient(circle, rgba(255, 45, 85, 0.4) 0%, transparent 70%);
-      filter: blur(20px);
+      filter: blur(15px);
       animation: pulse-glow 3s ease-in-out infinite;
     }
     @keyframes pulse-glow {
@@ -101,38 +112,38 @@
     }
     .logo {
       position: relative;
-      width: 70px;
-      height: 70px;
+      width: 56px;
+      height: 56px;
       background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-orange) 100%);
-      border-radius: 18px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 0 40px rgba(255, 45, 85, 0.4);
+      box-shadow: 0 0 30px rgba(255, 45, 85, 0.4);
     }
-    .logo img { width: 60px; height: 60px; object-fit: contain; }
-    .logo svg { width: 40px; height: 40px; color: white; }
+    .logo img { width: 48px; height: 48px; object-fit: contain; }
+    .logo svg { width: 32px; height: 32px; color: white; }
     .app-title {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 48px;
-      letter-spacing: 8px;
+      font-size: 36px;
+      letter-spacing: 6px;
       background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-orange) 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
-    .app-subtitle { font-size: 12px; color: var(--dark-400); letter-spacing: 4px; text-transform: uppercase; }
+    .app-subtitle { font-size: 10px; color: var(--dark-400); letter-spacing: 3px; text-transform: uppercase; }
     .card {
       background: rgba(24, 24, 27, 0.8);
       backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 45, 85, 0.2);
-      border-radius: 16px;
-      padding: 24px;
+      border-radius: 14px;
+      padding: 16px;
       width: 100%;
       max-width: 340px;
     }
     #login-view .card { text-align: center; }
-    .login-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
-    .login-description { color: var(--dark-400); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+    .login-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+    .login-description { color: var(--dark-400); font-size: 13px; margin-bottom: 16px; line-height: 1.4; }
     .discord-btn {
       width: 100%;
       padding: 14px 24px;
@@ -167,23 +178,23 @@
     .user-section {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 12px;
+      gap: 10px;
+      padding: 10px;
       background: rgba(255, 45, 85, 0.05);
       border: 1px solid rgba(255, 45, 85, 0.2);
-      border-radius: 12px;
-      margin-bottom: 16px;
+      border-radius: 10px;
+      margin-bottom: 12px;
     }
     .user-avatar {
-      width: 48px;
-      height: 48px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       border: 2px solid var(--neon-red);
-      box-shadow: 0 0 20px rgba(255, 45, 85, 0.3);
+      box-shadow: 0 0 15px rgba(255, 45, 85, 0.3);
     }
     .user-info { flex: 1; }
-    .user-name { font-size: 16px; font-weight: 600; margin-bottom: 2px; }
-    .user-status { font-size: 12px; color: #22c55e; display: flex; align-items: center; gap: 6px; }
+    .user-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .user-status { font-size: 11px; color: #22c55e; display: flex; align-items: center; gap: 5px; }
     .status-dot {
       width: 8px;
       height: 8px;
@@ -207,17 +218,80 @@
     .protection-badge span { font-size: 14px; font-weight: 500; color: #22c55e; }
     .logout-btn {
       width: 100%;
-      padding: 12px;
+      padding: 10px;
       background: transparent;
       border: 1px solid rgba(255, 45, 85, 0.3);
-      border-radius: 10px;
+      border-radius: 8px;
       color: var(--neon-red);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       cursor: pointer;
       transition: all 0.3s ease;
     }
     .logout-btn:hover { background: rgba(255, 45, 85, 0.1); border-color: var(--neon-red); }
+    /* Trust Score Section */
+    .trust-score-section {
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .trust-score-value {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 48px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .trust-score-value.high { color: #22c55e; }
+    .trust-score-value.medium { color: #f59e0b; }
+    .trust-score-value.low { color: #ef4444; }
+    .trust-score-label {
+      font-size: 11px;
+      color: var(--dark-400);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+    .security-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .security-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .security-item .icon { width: 14px; height: 14px; flex-shrink: 0; }
+    .security-item .icon.ok { color: #22c55e; }
+    .security-item .icon.fail { color: #ef4444; }
+    .security-item .icon.pending { color: var(--dark-400); animation: spin 1s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .security-item .label { color: var(--dark-400); }
+    /* Module loading animation */
+    .module-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(255, 45, 85, 0.05);
+      border: 1px solid rgba(255, 45, 85, 0.2);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      color: var(--dark-400);
+      font-size: 12px;
+    }
+    .module-loading-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--dark-700);
+      border-top-color: var(--neon-red);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
     .error-message {
       padding: 12px;
       background: rgba(239, 68, 68, 0.1);
@@ -229,11 +303,11 @@
       margin-bottom: 16px;
       display: none;
     }
-    .footer { margin-top: auto; padding-top: 12px; text-align: center; }
-    .footer-text { font-size: 11px; color: var(--dark-600); }
+    .footer { margin-top: auto; padding-top: 8px; text-align: center; }
+    .footer-text { font-size: 10px; color: var(--dark-600); }
     .footer-link { color: var(--neon-red); text-decoration: none; cursor: pointer; }
     .footer-link:hover { text-decoration: underline; }
-    .version { font-size: 10px; color: var(--dark-600); margin-top: 8px; }
+    .version { font-size: 9px; color: var(--dark-600); margin-top: 4px; }
     .fade-in { animation: fadeIn 0.5s ease-out; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .slide-up { animation: slideUp 0.5s ease-out; }
@@ -241,6 +315,7 @@
   </style>
 </head>
 <body>
+  <div class="app-wrapper">
   <div class="title-bar" data-tauri-drag-region>
     <div class="title-bar-text">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -248,9 +323,9 @@
       </svg>
       <span>IRIS ANTICHEAT</span>
     </div>
-    <div class="window-controls">
-      <button class="window-btn btn-minimize" onclick="minimizeWindow()"></button>
-      <button class="window-btn btn-close" onclick="closeWindow()"></button>
+    <div class="window-controls" onmousedown="event.stopPropagation()">
+      <button class="window-btn btn-minimize" onclick="minimizeWindow(); event.stopPropagation();"></button>
+      <button class="window-btn btn-close" onclick="closeWindow(); event.stopPropagation();"></button>
     </div>
   </div>
 
@@ -306,12 +381,55 @@
               </div>
             </div>
           </div>
-          <div class="protection-badge">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-            <span>Protection active</span>
+          
+          <!-- Trust Score -->
+          <div class="trust-score-section">
+            <div id="trust-score" class="trust-score-value high">100%</div>
+            <div class="trust-score-label" id="trust-score-label">Score de confiance</div>
           </div>
+          
+          <!-- Loading indicator for module check -->
+          <div id="module-loading" class="module-loading" style="display: none;">
+            <div class="module-loading-spinner"></div>
+            <span>Analyse des modules de sécurité...</span>
+          </div>
+          
+          <!-- Security Modules Grid -->
+          <div class="security-grid" id="security-grid">
+            <div class="security-item" id="sec-tpm">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">TPM 2.0</span>
+            </div>
+            <div class="security-item" id="sec-secureboot">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">Secure Boot</span>
+            </div>
+            <div class="security-item" id="sec-virt">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">VT-x/AMD-V</span>
+            </div>
+            <div class="security-item" id="sec-iommu">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">VT-d/IOMMU</span>
+            </div>
+            <div class="security-item" id="sec-vbs">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">VBS</span>
+            </div>
+            <div class="security-item" id="sec-hvci">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">HVCI</span>
+            </div>
+            <div class="security-item" id="sec-defender">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">Defender</span>
+            </div>
+            <div class="security-item" id="sec-realtime">
+              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+              <span class="label">Temps réel</span>
+            </div>
+          </div>
+          
           <button class="logout-btn" onclick="logout()">Déconnexion</button>
         </div>
       </div>
@@ -325,10 +443,14 @@
       </div>
     </div>
   </div>
+  </div><!-- end app-wrapper -->
 
   <script>
-    const { invoke } = window.__TAURI__.tauri;
+    const invoke = window.__TAURI__?.invoke || window.__TAURI__?.tauri?.invoke;
 
+    if (!invoke) {
+      console.error('[Iris] Tauri API not available. Make sure to run with: npm run dev');
+    }
     const loginView = document.getElementById('login-view');
     const loadingView = document.getElementById('loading-view');
     const connectedView = document.getElementById('connected-view');
@@ -398,7 +520,112 @@
       document.getElementById('user-name').textContent = user.username;
       showView(connectedView);
       
+      // Reset score to 0% and show loading state
+      const scoreEl = document.getElementById('trust-score');
+      const scoreLabelEl = document.getElementById('trust-score-label');
+      const moduleLoadingEl = document.getElementById('module-loading');
+      
+      scoreEl.textContent = '-';
+      scoreEl.className = 'trust-score-value low';
+      scoreLabelEl.textContent = 'Initialisation...';
+      moduleLoadingEl.style.display = 'flex';
+      
+      // Reset all security items to loading state
+      const pendingIcon = '<svg class="icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>';
+      document.querySelectorAll('.security-item').forEach(el => {
+        const label = el.querySelector('.label')?.textContent || '';
+        el.innerHTML = pendingIcon + `<span class="label">${label}</span>`;
+      });
+      
+      // Fetch and display security status with animation
+      fetchSecurityStatus();
+      
       invoke('start_heartbeat').catch(console.error);
+    }
+
+    async function fetchSecurityStatus() {
+      try {
+        const security = await invoke('get_security_status');
+        animateSecurityDisplay(security);
+      } catch (e) {
+        console.error('[UI] Failed to get security status:', e);
+      }
+    }
+
+    async function animateSecurityDisplay(security) {
+      const checkIcon = '<svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
+      const crossIcon = '<svg class="icon fail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      
+      // Hide loading indicator
+      document.getElementById('module-loading').style.display = 'none';
+      document.getElementById('trust-score-label').textContent = 'Score de confiance';
+      document.getElementById('trust-score').textContent = '0%';
+      
+      // Define modules with their values and labels
+      const modules = [
+        { id: 'sec-tpm', enabled: security.tpm?.enabled || security.tpm?.present, label: 'TPM 2.0' },
+        { id: 'sec-secureboot', enabled: security.secure_boot?.enabled, label: 'Secure Boot' },
+        { id: 'sec-virt', enabled: security.virtualization?.enabled, label: 'VT-x/AMD-V' },
+        { id: 'sec-iommu', enabled: security.virtualization?.iommu, label: 'VT-d/IOMMU' },
+        { id: 'sec-vbs', enabled: security.vbs?.enabled, label: 'VBS' },
+        { id: 'sec-hvci', enabled: security.vbs?.hvci_enabled, label: 'HVCI' },
+        { id: 'sec-defender', enabled: security.defender?.enabled, label: 'Defender' },
+        { id: 'sec-realtime', enabled: security.defender?.real_time_protection, label: 'Temps réel' }
+      ];
+      
+      const totalCount = modules.length;
+      const scoreEl = document.getElementById('trust-score');
+      let currentScore = 0;
+      let enabledCount = 0;
+      
+      // Animate each module check
+      for (let i = 0; i < modules.length; i++) {
+        const module = modules[i];
+        const el = document.getElementById(module.id);
+        
+        // Wait before showing each result
+        await new Promise(resolve => setTimeout(resolve, 150));
+        
+        if (el) {
+          el.innerHTML = (module.enabled ? checkIcon : crossIcon) + `<span class="label">${module.label}</span>`;
+          el.style.animation = 'none';
+          el.offsetHeight; // Trigger reflow
+          el.style.animation = 'fadeIn 0.3s ease-out';
+        }
+        
+        if (module.enabled) enabledCount++;
+        
+        // Calculate and animate score
+        const targetScore = Math.round((enabledCount / totalCount) * 100);
+        animateScore(currentScore, targetScore, scoreEl);
+        currentScore = targetScore;
+        
+        // Small delay to let animation play
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
+    function animateScore(from, to, element) {
+      const duration = 200;
+      const start = performance.now();
+      
+      function update(time) {
+        const elapsed = time - start;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Ease out
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        const current = Math.round(from + (to - from) * easeProgress);
+        
+        element.textContent = current + '%';
+        element.className = 'trust-score-value ' + (current >= 75 ? 'high' : current >= 50 ? 'medium' : 'low');
+        
+        if (progress < 1) {
+          requestAnimationFrame(update);
+        }
+      }
+      
+      requestAnimationFrame(update);
     }
 
     async function minimizeWindow() {
@@ -446,18 +673,21 @@
     }
 
     // Listen for auth events from Tauri
-    window.__TAURI__.event.listen('auth-success', (event) => {
-      updateConnectedView(event.payload.user);
-    });
+    const listen = window.__TAURI__?.event?.listen;
+    if (listen) {
+      listen('auth-success', (event) => {
+        updateConnectedView(event.payload.user);
+      });
 
-    window.__TAURI__.event.listen('auth-error', (event) => {
-      showError(event.payload.message, event.payload.type === 'tpm_disabled');
-    });
+      listen('auth-error', (event) => {
+        showError(event.payload.message, event.payload.type === 'tpm_disabled');
+      });
 
-    window.__TAURI__.event.listen('cheat-detected', (event) => {
-      console.warn('Cheat detected:', event.payload);
-      // Could show a warning to the user
-    });
+      listen('cheat-detected', (event) => {
+        console.warn('Cheat detected:', event.payload);
+        // Could show a warning to the user
+      });
+    }
 
     init();
   </script>
