@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  Search, Shield, TrendingUp, Crown, Star, Trophy, Trash2, X, Coins, Target
+  Search, Shield, TrendingUp, Crown, Star, Trophy, Trash2, X, Coins, Target, RotateCcw
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
@@ -17,7 +17,8 @@ const AdminSquads = ({
   openStrickerStatsModal,
   openSquadTrophyModal,
   setDeleteConfirm,
-  handleKickMember
+  handleKickMember,
+  handleResetSquadStricker
 }) => {
   // Arbitre has view-only access to squads
   const canModify = !userIsArbitre;
@@ -198,6 +199,15 @@ const AdminSquads = ({
                       title="Modifier les stats Stricker"
                     >
                       <Target className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
+                    </button>
+                  )}
+                  {userIsAdmin && (
+                    <button
+                      onClick={() => handleResetSquadStricker(squad)}
+                      className="py-1.5 sm:py-2 px-2 sm:px-3 bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors"
+                      title="RAZ Stats Stricker"
+                    >
+                      <RotateCcw className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
                     </button>
                   )}
                   {userIsAdmin && (

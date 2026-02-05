@@ -1302,6 +1302,28 @@ export const sendIrisConnectionStatus = async (channelId, player, status, securi
         .setTimestamp();
       
       await channel.send({ embeds: [disconnectEmbed] });
+    } else if (status === 'security_change') {
+      // Security state change notification
+      const changeEmbed = new EmbedBuilder()
+        .setColor(0xFF6B2C) // Orange-Red
+        .setTitle('🔄 CHANGEMENT SÉCURITÉ')
+        .setDescription(`L'état de sécurité de **${player.username || player.discordUsername}** a changé.`)
+        .addFields(
+          { name: '⏰ Heure', value: now, inline: true }
+        )
+        .setTimestamp();
+      
+      // Add changes list if available
+      if (securityData?.changes && securityData.changes.length > 0) {
+        const changesList = securityData.changes.map(c => `• ${c}`).join('\n');
+        changeEmbed.addFields({
+          name: '🔄 Changements',
+          value: changesList.substring(0, 1024),
+          inline: false
+        });
+      }
+      
+      await channel.send({ embeds: [changeEmbed] });
     }
 
     return { success: true };
@@ -1314,8 +1336,8 @@ export const sendIrisConnectionStatus = async (channelId, player, status, securi
 /**
  * Send Iris connection/disconnection log to the global logs channel
  * @param {Object} player - Player info
- * @param {string} status - 'connected' or 'disconnected'
- * @param {Object} extraData - Optional extra data (cheatDetection, etc.)
+ * @param {string} status - 'connected', 'disconnected', or 'shadowbanned'
+ * @param {Object} extraData - Optional extra data (cheatDetection, reason, duration, etc.)
  */
 export const logIrisConnectionStatus = async (player, status, extraData = null) => {
   if (!client || !isReady) return;
@@ -1351,6 +1373,18 @@ export const logIrisConnectionStatus = async (player, status, extraData = null) 
           });
         }
       }
+    } else if (status === 'shadowbanned') {
+      // Shadow ban notification for logs channel
+      embed = new EmbedBuilder()
+        .setColor(0xFF0000) // Red
+        .setTitle('🚫 SHADOW BAN APPLIQUÉ')
+        .setDescription(`**${player.username || player.discordUsername}** a été shadow ban automatiquement.`)
+        .addFields(
+          { name: '⏰ Heure', value: now, inline: true },
+          { name: '⏱️ Durée', value: extraData?.duration || '24h', inline: true },
+          { name: '📋 Raison interne', value: extraData?.reason || 'logiciel/périphérique suspect', inline: false }
+        )
+        .setTimestamp();
     } else {
       embed = new EmbedBuilder()
         .setColor(0xEF4444)
@@ -1461,6 +1495,8 @@ export const deleteIrisChannel = async (channelId, playerUsername) => {
 
 // Channel for Iris shadow bans and security warnings
 const IRIS_SHADOW_BAN_CHANNEL_ID = '1468867097504251914';
+// Channel for security state changes (between heartbeats)
+const IRIS_SECURITY_CHANGES_CHANNEL_ID = '1468857779547803733';
 
 /**
  * Send notification when a player is shadow banned for cheat detection
@@ -1548,13 +1584,120 @@ export const sendIrisSecurityWarning = async (player, missingModules) => {
       .setTimestamp()
       .setFooter({ text: 'Iris Anticheat - Avertissement automatique' });
 
-    await sendToChannel(IRIS_SHADOW_BAN_CHANNEL_ID, { 
+    // Send to security changes channel (1468857779547803733) as per spec
+    await sendToChannel(IRIS_SECURITY_CHANGES_CHANNEL_ID, { 
       content: player.discordId ? `<@${player.discordId}>` : '', 
       embeds: [embed] 
     });
     console.log(`[Discord Bot] Security warning sent for ${player.username}`);
   } catch (error) {
     console.error('[Discord Bot] Error sending security warning:', error.message);
+  }
+};
+
+/**
+ * Send notification when a player's security status changes between heartbeats
+ * @param {Object} player - Player data
+ * @param {Array} changes - List of security changes detected
+ */
+export const sendIrisSecurityChange = async (player, changes) => {
+  if (!client || !isReady) return;
+
+  try {
+    const changesList = changes.map(change => `• ${change}`).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFF6B2C) // Orange-Red
+      .setTitle('🔄 CHANGEMENT SÉCURITÉ IRIS')
+      .setDescription(`L'état de sécurité de **${player.username}** a changé entre deux heartbeats.`)
+      .addFields(
+        { name: '👤 Joueur', value: player.username || 'N/A', inline: true },
+        { name: '🎮 Discord', value: player.discordUsername ? `<@${player.discordId}>` : 'N/A', inline: true },
+        { name: '⏰ Détecté à', value: new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' }), inline: true },
+        { name: '🔄 Changements détectés', value: changesList.substring(0, 1024), inline: false }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Surveillance automatique' });
+
+    await sendToChannel(IRIS_SECURITY_CHANGES_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Security change notification sent for ${player.username}:`, changes);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending security change notification:', error.message);
+  }
+};
+
+/**
+ * Send screenshots to a player's Iris scan channel
+ * @param {string} channelId - The Discord channel ID
+ * @param {Object} player - Player info
+ * @param {Array} screenshots - Array of screenshot objects with base64 data
+ */
+export const sendIrisScreenshots = async (channelId, player, screenshots) => {
+  if (!client || !isReady) return { success: false, error: 'Bot not ready' };
+  if (!channelId) return { success: false, error: 'No channel ID' };
+  if (!screenshots || screenshots.length === 0) return { success: false, error: 'No screenshots' };
+
+  try {
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      return { success: false, error: 'Channel not found' };
+    }
+
+    const now = new Date().toLocaleString('fr-FR', { 
+      dateStyle: 'short', 
+      timeStyle: 'medium' 
+    });
+
+    // Send header embed
+    const headerEmbed = new EmbedBuilder()
+      .setColor(0x9333EA) // Purple
+      .setTitle('📸 CAPTURE D\'ÉCRAN - MODE SCAN')
+      .setDescription(`Capture d'écran automatique de **${player.username || player.discordUsername}**`)
+      .addFields(
+        { name: '⏰ Heure', value: now, inline: true },
+        { name: '🖥️ Écrans', value: `${screenshots.length}`, inline: true }
+      )
+      .setTimestamp();
+
+    await channel.send({ embeds: [headerEmbed] });
+
+    // Send each screenshot as an attachment
+    for (let i = 0; i < screenshots.length; i++) {
+      const screenshot = screenshots[i];
+      
+      try {
+        // Convert base64 to buffer
+        const imageBuffer = Buffer.from(screenshot.data_base64 || screenshot.dataBase64, 'base64');
+        
+        // Create attachment
+        const attachment = {
+          attachment: imageBuffer,
+          name: `screenshot_${i + 1}_${Date.now()}.png`
+        };
+
+        const embed = new EmbedBuilder()
+          .setColor(0x3B82F6)
+          .setTitle(`🖥️ Écran ${i + 1}`)
+          .setDescription(`Résolution: ${screenshot.width}x${screenshot.height}`)
+          .setImage(`attachment://${attachment.name}`)
+          .setTimestamp();
+
+        await channel.send({ 
+          embeds: [embed],
+          files: [attachment]
+        });
+
+        console.log(`[Discord Bot] Screenshot ${i + 1} sent for ${player.username}`);
+      } catch (imgError) {
+        console.error(`[Discord Bot] Error sending screenshot ${i + 1}:`, imgError.message);
+      }
+    }
+
+    console.log(`[Discord Bot] All screenshots sent for ${player.username}`);
+    return { success: true };
+  } catch (error) {
+    console.error('[Discord Bot] Error sending screenshots:', error.message);
+    return { success: false, error: error.message };
   }
 };
 
@@ -1582,5 +1725,7 @@ export default {
   alertIrisMatchDisconnected,
   deleteIrisChannel,
   sendIrisShadowBan,
-  sendIrisSecurityWarning
+  sendIrisSecurityWarning,
+  sendIrisSecurityChange,
+  sendIrisScreenshots
 };

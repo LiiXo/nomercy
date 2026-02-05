@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff2d55;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff6b2c;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a1d;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0a0b;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="url(#bgGradient)" stroke="#ff2d55" stroke-width="2" stroke-opacity="0.3"/>
+  
+  <!-- Shield shape with glow -->
+  <g filter="url(#glow)">
+    <path d="M128 35 L60 65 L60 120 C60 165 90 200 128 220 C166 200 196 165 196 120 L196 65 Z" 
+          fill="url(#shieldGradient)"
+          stroke="none"/>
+  </g>
+  
+  <!-- Inner shield highlight -->
+  <path d="M128 50 L75 75 L75 118 C75 155 100 185 128 202 C156 185 181 155 181 118 L181 75 Z" 
+        fill="none"
+        stroke="rgba(255,255,255,0.2)"
+        stroke-width="2"/>
+  
+  <!-- Checkmark inside shield -->
+  <path d="M100 125 L120 145 L160 100" 
+        fill="none" 
+        stroke="white" 
+        stroke-width="10" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+</svg>

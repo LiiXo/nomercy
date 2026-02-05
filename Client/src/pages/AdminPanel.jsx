@@ -828,7 +828,7 @@ const AdminPanel = () => {
     }
   };
 
-  // Handle Iris Scan (admin only)
+  // Handle Iris Scan (admin only) - Toggle scan mode
   const handleIrisScan = async (playerId) => {
     setScanningPlayerId(playerId);
     try {
@@ -838,11 +838,13 @@ const AdminPanel = () => {
       });
       const data = await response.json();
       if (data.success) {
-        setSuccess(data.message + (data.channelUrl ? ` - Ouvrir: ${data.channelUrl}` : ''));
-        // Open the Discord channel in a new tab
-        if (data.channelUrl) {
-          window.open(data.channelUrl, '_blank');
-        }
+        setSuccess(data.message);
+        // Update player's scan mode in local state
+        setIrisPlayers(prev => prev.map(p => 
+          p._id === playerId 
+            ? { ...p, scanMode: data.scanModeEnabled, hasScanChannel: true }
+            : p
+        ));
       } else {
         setError(data.message || 'Erreur lors du scan');
       }
@@ -1431,6 +1433,31 @@ const AdminPanel = () => {
     } catch (err) {
       console.error('Kick member error:', err);
       setError('Erreur lors de l\'expulsion');
+    }
+  };
+
+  const handleResetSquadStricker = async (squad) => {
+    if (!window.confirm(`Voulez-vous vraiment réinitialiser les stats Stricker de l'escouade [${squad.tag}] ${squad.name} ?\n\nCela va remettre à 0:\n- Points Stricker\n- Victoires\n- Défaites\n- Munitions`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/squads/admin/${squad._id}/reset-stricker`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccess(`Stats Stricker de [${squad.tag}] ${squad.name} réinitialisées avec succès`);
+        fetchSquads();
+      } else {
+        setError(data.message || 'Erreur lors de la réinitialisation');
+      }
+    } catch (err) {
+      console.error('Reset squad stricker error:', err);
+      setError('Erreur lors de la réinitialisation');
     }
   };
 
@@ -2700,15 +2727,15 @@ const AdminPanel = () => {
         <div className="flex items-center gap-6 text-sm text-gray-400 flex-wrap">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            <span>Connecté (données &lt; 6 min)</span>
+            <span>Connecté (ping &lt; 3 min)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <span>Déconnecté (données &gt; 6 min)</span>
+            <span>Déconnecté (ping &gt; 3 min)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-gray-500"></div>
-            <span>PC sans Iris</span>
+            <span>Iris non installé</span>
           </div>
           <div className="flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-orange-400" />
@@ -2826,15 +2853,21 @@ const AdminPanel = () => {
                           <button
                             onClick={() => handleIrisScan(player._id)}
                             disabled={scanningPlayerId === player._id}
-                            className="px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
-                            title="Scan Iris - Créer un salon Discord pour ce joueur"
+                            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${
+                              player.scanMode 
+                                ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30' 
+                                : 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400'
+                            }`}
+                            title={player.scanMode ? 'Désactiver la surveillance' : 'Activer la surveillance'}
                           >
                             {scanningPlayerId === player._id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : player.scanMode ? (
+                              <Eye className="w-4 h-4" />
                             ) : (
                               <Search className="w-4 h-4" />
                             )}
-                            Scan
+                            {player.scanMode ? 'Surveillance' : 'Scan'}
                           </button>
                         </td>
                       )}
@@ -2853,9 +2886,8 @@ const AdminPanel = () => {
             <div>
               <h4 className="text-blue-400 font-medium">Système de Heartbeat</h4>
               <p className="text-gray-400 text-sm mt-1">
-                Chaque joueur envoie son statut de sécurité toutes les 5 minutes. 
-                Un joueur est considéré comme déconnecté s'il n'a pas envoyé de données depuis plus de 6 minutes.
-                Les joueurs PC sans Iris sont également affichés pour suivi.
+                Seuls les joueurs avec la plateforme PC sont affichés. Chaque joueur envoie un ping toutes les 2 minutes et son statut de sécurité toutes les 5 minutes. 
+                Un joueur est considéré comme déconnecté s'il n'a pas envoyé de ping depuis plus de 3 minutes.
               </p>
             </div>
           </div>
@@ -9765,6 +9797,7 @@ Cette action est irréversible!`)) {
             openSquadTrophyModal={openSquadTrophyModal}
             setDeleteConfirm={setDeleteConfirm}
             handleKickMember={handleKickMember}
+            handleResetSquadStricker={handleResetSquadStricker}
           />
         );
       case 'iris':

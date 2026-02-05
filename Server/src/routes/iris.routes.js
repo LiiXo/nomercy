@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import IrisUpdate from '../models/IrisUpdate.js';
 import { verifyToken } from '../middleware/auth.middleware.js';
 import { verifyIrisSignature, decryptIrisPayload } from '../middleware/iris.security.middleware.js';
-import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning } from '../services/discordBot.service.js';
+import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots } from '../services/discordBot.service.js';
 import fetch from 'node-fetch';
 
 const router = express.Router();
@@ -43,15 +43,15 @@ setInterval(() => {
 }, 60 * 1000);
 
 // Background job to detect Iris disconnections and send notifications
-// Runs every minute, checks for players who haven't sent heartbeat in 6+ minutes
+// Runs every minute, checks for players who haven't sent ping in 3+ minutes (ping is every 2 min)
 setInterval(async () => {
   try {
-    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
     
-    // Find ALL users who were connected but haven't sent heartbeat in 6+ minutes
+    // Find ALL users who were connected but haven't sent ping in 3+ minutes
     const disconnectedUsers = await User.find({
       irisWasConnected: true,
-      irisLastSeen: { $lt: sixMinutesAgo }
+      irisLastSeen: { $lt: threeMinutesAgo }
     }).select('_id username discordUsername irisScanChannelId');
     
     for (const user of disconnectedUsers) {
@@ -1381,6 +1381,76 @@ router.get('/callback', (req, res) => {
 });
 
 /**
+ * Ping - Simple alive signal from Iris client every 2 minutes
+ * POST /api/iris/ping
+ * Protected by: HMAC signature verification
+ * 
+ * Only updates irisLastSeen to confirm client is still running
+ */
+router.post('/ping', verifyIrisSignature, async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, IRIS_JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+
+    if (decoded.type !== 'iris') {
+      return res.status(401).json({ success: false, message: 'Invalid token type' });
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Check if user was previously disconnected (for connection notification)
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    const wasDisconnected = !user.irisWasConnected || 
+      (user.irisLastSeen && new Date(user.irisLastSeen) < threeMinutesAgo);
+
+    // Update last seen timestamp
+    await User.findByIdAndUpdate(user._id, {
+      irisLastSeen: new Date(),
+      irisWasConnected: true
+    });
+
+    // Send connection notification if player just reconnected
+    if (wasDisconnected) {
+      console.log('[Iris Ping] Player reconnected:', user.username);
+      
+      await logIrisConnectionStatus(
+        { username: user.username, discordUsername: user.discordUsername },
+        'connected'
+      ).catch(err => console.error('[Iris Ping] Global log error:', err.message));
+
+      if (user.irisScanChannelId) {
+        await sendIrisConnectionStatus(
+          user.irisScanChannelId,
+          { username: user.username, discordUsername: user.discordUsername },
+          'connected'
+        ).catch(err => console.error('[Iris Ping] Scan channel error:', err.message));
+      }
+    }
+
+    res.json({
+      success: true,
+      scanModeEnabled: user.irisScanMode || false
+    });
+  } catch (error) {
+    console.error('[Iris Ping] Error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
  * Heartbeat - Receive security status from Iris client every 5 minutes
  * POST /api/iris/heartbeat
  * Protected by: HMAC signature verification + encrypted payload support
@@ -1590,9 +1660,9 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
     const { systemInfo } = req.body;
     
     // Check if user was previously disconnected (for connection notification)
-    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
     const wasDisconnected = !user.irisWasConnected || 
-      (user.irisLastSeen && new Date(user.irisLastSeen) < sixMinutesAgo);
+      (user.irisLastSeen && new Date(user.irisLastSeen) < threeMinutesAgo);
     
     await User.findByIdAndUpdate(user._id, {
       irisLastSeen: new Date(),
@@ -1642,6 +1712,48 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
       }
     }
 
+    // ====== SECURITY STATE CHANGE DETECTION ======
+    // Check if client sent security changes (detected between heartbeats)
+    // Client sends this in systemInfo.securityChanges
+    const securityChanges = systemInfo?.securityChanges || req.body.securityChanges;
+    
+    if (securityChanges && Array.isArray(securityChanges) && securityChanges.length > 0) {
+      console.warn('[Iris Heartbeat] Security state changed for', user.username, ':', securityChanges);
+      
+      // Send notification to security changes channel
+      await sendIrisSecurityChange(
+        {
+          username: user.username,
+          discordUsername: user.discordUsername,
+          discordId: user.discordId
+        },
+        securityChanges
+      ).catch(err => console.error('[Iris Heartbeat] Security change notification error:', err.message));
+      
+      // Also send to player's scan channel if they have one
+      if (user.irisScanChannelId) {
+        await sendIrisConnectionStatus(
+          user.irisScanChannelId,
+          { username: user.username, discordUsername: user.discordUsername },
+          'security_change',
+          { changes: securityChanges }
+        ).catch(err => console.error('[Iris Heartbeat] Scan channel security change error:', err.message));
+      }
+    }
+
+    // ====== SCREENSHOT HANDLING (Scan Mode) ======
+    // If scan mode is active and client sent screenshots, forward to Discord
+    const screenshots = systemInfo?.screenshots;
+    if (screenshots && Array.isArray(screenshots) && screenshots.length > 0 && user.irisScanChannelId) {
+      console.log(`[Iris Heartbeat] Received ${screenshots.length} screenshot(s) from ${user.username}`);
+      
+      await sendIrisScreenshots(
+        user.irisScanChannelId,
+        { username: user.username, discordUsername: user.discordUsername },
+        screenshots
+      ).catch(err => console.error('[Iris Heartbeat] Screenshot send error:', err.message));
+    }
+
     // Log cheat detection
     if (systemInfo?.cheatDetection?.found) {
       console.warn('[Iris Heartbeat] CHEAT DEVICE DETECTED for', user.username, ':', systemInfo.cheatDetection.warnings);
@@ -1662,19 +1774,19 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
         }
         const detectedReason = detectedItems.slice(0, 3).join(', ') || 'logiciel/périphérique suspect';
         
-        // Set ban for 24 hours
+        // Set ban for 24 hours with generic reason for the user
         const banEndDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
         
         await User.findByIdAndUpdate(user._id, {
           isBanned: true,
-          banReason: `Shadow ban pour ${detectedReason}`,
+          banReason: 'Contacter le staff pour plus de renseignement',
           banStartDate: new Date(),
           banEndDate: banEndDate
         });
         
         console.warn(`[Iris Heartbeat] AUTO SHADOW BAN applied to ${user.username} for: ${detectedReason}`);
         
-        // Send Discord notification
+        // Send Discord notification to shadow ban channel (1468867097504251914)
         await sendIrisShadowBan(
           {
             username: user.username,
@@ -1685,6 +1797,13 @@ router.post('/heartbeat', verifyIrisSignature, decryptIrisPayload, async (req, r
           24,
           systemInfo.cheatDetection
         ).catch(err => console.error('[Iris Heartbeat] Shadow ban notification error:', err.message));
+        
+        // Also send notification to Iris logs channel (1468864868634460202)
+        await logIrisConnectionStatus(
+          { username: user.username, discordUsername: user.discordUsername },
+          'shadowbanned',
+          { reason: detectedReason, duration: '24h' }
+        ).catch(err => console.error('[Iris Heartbeat] Shadow ban logs notification error:', err.message));
       }
     }
     
@@ -1782,36 +1901,25 @@ router.get('/connected-players', verifyToken, async (req, res) => {
 
     const { search } = req.query;
 
-    // Get all users with PC platform OR Iris data
-    // Consider connected if last seen within 6 minutes
-    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
+    // Get only users with PC platform configured
+    // Consider connected if last seen within 3 minutes (ping is every 2 min)
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
     
-    // Build query: PC platform users OR users with Iris data
-    const query = {
-      $or: [
-        { platform: 'PC' },
-        { irisLastSeen: { $exists: true } }
-      ]
-    };
+    // Build query: Only PC platform users
+    const query = { platform: 'PC' };
 
     // Add search filter if provided
     if (search && search.trim()) {
       const searchRegex = new RegExp(search.trim(), 'i');
-      query.$and = [
-        query.$or ? { $or: query.$or } : {},
-        {
-          $or: [
-            { username: searchRegex },
-            { discordUsername: searchRegex },
-            { activisionId: searchRegex }
-          ]
-        }
+      query.$or = [
+        { username: searchRegex },
+        { discordUsername: searchRegex },
+        { activisionId: searchRegex }
       ];
-      delete query.$or;
     }
     
     const players = await User.find(query)
-      .select('username avatar discordAvatar discordUsername discordId platform activisionId createdAt irisLastSeen irisSecurityStatus irisHardwareId irisRegisteredAt')
+      .select('username avatar discordAvatar discordUsername discordId platform activisionId createdAt irisLastSeen irisSecurityStatus irisHardwareId irisRegisteredAt irisScanMode irisScanChannelId')
       .lean();
 
     // Helper to compute avatar URL
@@ -1843,10 +1951,12 @@ router.get('/connected-players', verifyToken, async (req, res) => {
       createdAt: player.createdAt,
       lastSeen: player.irisLastSeen,
       registeredAt: player.irisRegisteredAt,
-      isConnected: player.irisLastSeen && new Date(player.irisLastSeen) > sixMinutesAgo,
+      isConnected: player.irisLastSeen && new Date(player.irisLastSeen) > threeMinutesAgo,
       hasIrisData: !!player.irisLastSeen,
       security: player.irisSecurityStatus || null,
-      hardwareId: player.irisHardwareId
+      hardwareId: player.irisHardwareId,
+      scanMode: player.irisScanMode || false,
+      hasScanChannel: !!player.irisScanChannelId
     }));
 
     // Sort: connected first, then by last seen (nulls last)
@@ -2234,46 +2344,62 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
       avatarUrl = player.avatar;
     }
 
-    // Create Discord channel with player info
-    const result = await createIrisScanChannel(
-      {
-        username: player.username,
-        discordUsername: player.discordUsername,
-        discordId: player.discordId,
-        avatarUrl: avatarUrl,
-        platform: player.platform,
-        activisionId: player.activisionId,
-        createdAt: player.createdAt,
-        hardwareId: player.irisHardwareId
-      },
-      player.irisSecurityStatus,
-      { username: admin.username }
-    );
+    // Toggle scan mode
+    const newScanMode = !player.irisScanMode;
+    
+    // If enabling scan mode and no channel exists, create one
+    if (newScanMode && !player.irisScanChannelId) {
+      // Create Discord channel with player info
+      const result = await createIrisScanChannel(
+        {
+          username: player.username,
+          discordUsername: player.discordUsername,
+          discordId: player.discordId,
+          avatarUrl: avatarUrl,
+          platform: player.platform,
+          activisionId: player.activisionId,
+          createdAt: player.createdAt,
+          hardwareId: player.irisHardwareId
+        },
+        player.irisSecurityStatus,
+        { username: admin.username }
+      );
 
-    if (!result.success) {
-      return res.status(500).json({
-        success: false,
-        message: result.error || 'Erreur lors de la création du salon Discord'
-      });
-    }
+      if (!result.success) {
+        return res.status(500).json({
+          success: false,
+          message: result.error || 'Erreur lors de la création du salon Discord'
+        });
+      }
 
-    // Save the scan channel ID to the user for future notifications
-    if (result.channelId && !result.alreadyExists) {
+      // Save the scan channel ID and enable scan mode
       await User.findByIdAndUpdate(userId, {
-        irisScanChannelId: result.channelId
+        irisScanChannelId: result.channelId,
+        irisScanMode: true
+      });
+
+      console.log(`[Iris Scan] Mode enabled for ${player.username || player.discordUsername} by ${admin.username}`);
+
+      return res.json({
+        success: true,
+        message: 'Mode surveillance activé',
+        scanModeEnabled: true,
+        channelId: result.channelId
       });
     }
 
-    console.log(`[Iris Scan] Channel created for ${player.username || player.discordUsername} by ${admin.username}`);
+    // Just toggle the scan mode (channel already exists or disabling)
+    await User.findByIdAndUpdate(userId, {
+      irisScanMode: newScanMode
+    });
+
+    console.log(`[Iris Scan] Mode ${newScanMode ? 'enabled' : 'disabled'} for ${player.username || player.discordUsername} by ${admin.username}`);
 
     res.json({
       success: true,
-      message: result.alreadyExists 
-        ? 'Salon de scan existant' 
-        : 'Salon de scan créé',
-      channelId: result.channelId,
-      channelUrl: result.channelUrl,
-      alreadyExists: result.alreadyExists
+      message: newScanMode ? 'Mode surveillance activé' : 'Mode surveillance désactivé',
+      scanModeEnabled: newScanMode,
+      channelId: player.irisScanChannelId
     });
   } catch (error) {
     console.error('[Iris Scan] Error:', error);

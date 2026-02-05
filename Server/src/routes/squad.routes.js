@@ -2015,6 +2015,52 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
   }
 });
 
+// Reset squad Stricker stats (admin only)
+router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const squad = await Squad.findById(req.params.squadId);
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Reset Stricker stats
+    squad.statsStricker = {
+      points: 0,
+      wins: 0,
+      losses: 0,
+      rank: 'Recrues'
+    };
+    
+    // Reset Munitions (cranes)
+    squad.cranes = 0;
+
+    await squad.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Reset Squad Stricker Stats', squad.name, {
+      fields: [
+        { name: 'Tag', value: squad.tag },
+        { name: 'Action', value: 'RAZ complète des stats Stricker et munitions' }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: `Stats Stricker de [${squad.tag}] ${squad.name} réinitialisées avec succès`,
+      squad
+    });
+  } catch (error) {
+    console.error('Reset squad stricker stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
 // Delete squad (admin/staff)
 router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
   try {

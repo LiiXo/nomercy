@@ -419,6 +419,7 @@ const userSchema = new mongoose.Schema({
   
   // Iris scan channel (for Discord notifications)
   irisScanChannelId: String,
+  irisScanMode: { type: Boolean, default: false }, // Scan mode enabled by admin
   irisWasConnected: { type: Boolean, default: false }, // Track connection state for notifications
   
 }, {

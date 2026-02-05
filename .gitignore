@@ -10,3 +10,22 @@ node_modules/
 !.env.example
 !.env.development
 !.env.production
+
+# Tauri / Rust
+IrisTauri/src-tauri/target/
+IrisTauri/src-tauri/Cargo.lock
+*.pdb
+
+# Tauri build output
+IrisTauri/src-tauri/gen/
+IrisTauri/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

@@ -42,9 +42,9 @@ const checkIrisStatus = async (userId) => {
       return { required: false, connected: true };
     }
     
-    // Vérifier si le joueur a envoyé un heartbeat dans les 6 dernières minutes
-    const sixMinutesAgo = new Date(Date.now() - 6 * 60 * 1000);
-    const isConnected = user.irisLastSeen && new Date(user.irisLastSeen) > sixMinutesAgo;
+    // Vérifier si le joueur a envoyé un ping dans les 3 dernières minutes (ping is every 2 min)
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    const isConnected = user.irisLastSeen && new Date(user.irisLastSeen) > threeMinutesAgo;
     
     return { 
       required: true, 
