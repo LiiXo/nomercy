@@ -2020,42 +2020,84 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
 // Reset squad Stricker stats (admin only)
 router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const squad = await Squad.findById(req.params.squadId);
-    if (!squad) {
+    // First check if squad exists and populate members
+    const existingSquad = await Squad.findById(req.params.squadId).populate('members.user', '_id username statsStricker');
+    if (!existingSquad) {
       return res.status(404).json({
         success: false,
         message: 'Escouade non trouvée'
       });
     }
 
-    // Reset Stricker stats
-    squad.statsStricker = {
-      points: 0,
-      wins: 0,
-      losses: 0,
-      rank: 'Recrues'
-    };
-    
-    // Reset Munitions (cranes)
-    squad.cranes = 0;
+    console.log(`[ADMIN] BEFORE reset - Squad [${existingSquad.tag}] ${existingSquad.name}:`);
+    console.log(`[ADMIN] BEFORE squad.statsStricker:`, JSON.stringify(existingSquad.statsStricker));
+    console.log(`[ADMIN] BEFORE cranes:`, existingSquad.cranes);
+    console.log(`[ADMIN] Squad has ${existingSquad.members?.length || 0} members`);
 
-    // Mark nested object as modified to ensure Mongoose saves it
-    squad.markModified('statsStricker');
+    // Get member IDs to reset their individual stats
+    const memberIds = existingSquad.members
+      ?.filter(m => m.user)
+      .map(m => m.user._id || m.user) || [];
     
-    await squad.save();
+    console.log(`[ADMIN] Will reset individual statsStricker for ${memberIds.length} members`);
 
-    // Log to Discord
-    await logAdminAction(req.user, 'Reset Squad Stricker Stats', squad.name, {
+    // Use native MongoDB driver for direct updates (bypass Mongoose completely)
+    const mongoose = (await import('mongoose')).default;
+    
+    // 1. Reset squad stats
+    const squadResult = await mongoose.connection.db.collection('squads').updateOne(
+      { _id: existingSquad._id },
+      {
+        $set: {
+          'statsStricker.points': 0,
+          'statsStricker.wins': 0,
+          'statsStricker.losses': 0,
+          'statsStricker.rank': 'Recrues',
+          'cranes': 0
+        }
+      }
+    );
+    console.log(`[ADMIN] Squad update result:`, JSON.stringify(squadResult));
+
+    // 2. Reset all members' individual statsStricker
+    let usersResult = { modifiedCount: 0 };
+    if (memberIds.length > 0) {
+      usersResult = await mongoose.connection.db.collection('users').updateMany(
+        { _id: { $in: memberIds } },
+        {
+          $set: {
+            'statsStricker.points': 0,
+            'statsStricker.wins': 0,
+            'statsStricker.losses': 0,
+            'statsStricker.xp': 0
+          }
+        }
+      );
+      console.log(`[ADMIN] Users update result:`, JSON.stringify(usersResult));
+    }
+
+    // Fetch the updated squad
+    const squad = await Squad.findById(req.params.squadId);
+    
+    console.log(`[ADMIN] AFTER reset - Squad [${squad.tag}] ${squad.name}:`);
+    console.log(`[ADMIN] AFTER squad.statsStricker:`, JSON.stringify(squad.statsStricker));
+    console.log(`[ADMIN] AFTER cranes:`, squad.cranes);
+
+    // Log to Discord (non-blocking - don't fail the request if logging fails)
+    logAdminAction(req.user, 'Reset Squad Stricker Stats', squad.name, {
       fields: [
         { name: 'Tag', value: squad.tag },
-        { name: 'Action', value: 'RAZ complète des stats Stricker et munitions' }
+        { name: 'Action', value: 'RAZ complète des stats Stricker (escouade + membres)' },
+        { name: 'Membres réinitialisés', value: usersResult.modifiedCount.toString() }
       ]
-    });
+    }).catch(err => console.error('Discord logging error:', err));
 
     res.json({
       success: true,
-      message: `Stats Stricker de [${squad.tag}] ${squad.name} réinitialisées avec succès`,
-      squad
+      message: `Stats Stricker de [${squad.tag}] ${squad.name} réinitialisées avec succès (${usersResult.modifiedCount} membres)`,
+      squad,
+      squadUpdateResult: squadResult,
+      membersReset: usersResult.modifiedCount
     });
   } catch (error) {
     console.error('Reset squad stricker stats error:', error);

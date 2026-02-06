@@ -1849,6 +1849,81 @@ export const sendIrisScreenshots = async (channelId, player, screenshots, proces
   }
 };
 
+/**
+ * Send DM notification to console players (PlayStation/Xbox) when their ranked match starts
+ * @param {Array} players - Array of match players with user info
+ * @param {Object} matchInfo - { matchId, gameMode, mode, teamSize }
+ * @returns {Object} - { success, notifiedCount, errors }
+ */
+export const sendRankedMatchStartDM = async (players, matchInfo) => {
+  if (!client || !isReady) {
+    console.warn('[Discord Bot] Bot not ready, skipping ranked match start DM');
+    return { success: false, error: 'Bot not ready', notifiedCount: 0 };
+  }
+
+  const { matchId, gameMode, mode, teamSize } = matchInfo;
+  const format = `${teamSize}v${teamSize}`;
+  const modeDisplay = mode === 'cdl' ? 'CDL' : 'Hardcore';
+  
+  let notifiedCount = 0;
+  const errors = [];
+
+  for (const player of players) {
+    try {
+      // Skip if player has no user data or discordId
+      if (!player.user || player.isFake) continue;
+      
+      // Get the platform from the populated user data
+      const platform = player.user.platform;
+      const discordId = player.user.discordId;
+      
+      // Only send to console players (PlayStation or Xbox)
+      if (!platform || platform === 'PC' || !discordId) continue;
+      
+      // Fetch the Discord user
+      const discordUser = await client.users.fetch(discordId).catch(() => null);
+      if (!discordUser) {
+        console.warn(`[Discord Bot] Could not fetch Discord user for ${player.username}`);
+        continue;
+      }
+      
+      // Create the embed for the DM
+      const embed = new EmbedBuilder()
+        .setColor(0xE74C3C) // Red - urgent notification
+        .setTitle('🎮 MATCH RANKED TROUVÉ ! / RANKED MATCH FOUND!')
+        .setDescription('Votre match classé va commencer !\nYour ranked match is starting!')
+        .addFields(
+          { 
+            name: '🇫🇷 Français', 
+            value: `Votre match **${modeDisplay} ${format}** en **${gameMode}** a été trouvé !\n\n🚀 **Rendez-vous sur le site NoMercy** pour rejoindre la feuille de match et voter pour la map.\n\n⚠️ **Attention:** Ne pas rejoindre peut entraîner des sanctions.`, 
+            inline: false 
+          },
+          { 
+            name: '🇬🇧 English', 
+            value: `Your **${modeDisplay} ${format}** match in **${gameMode}** has been found!\n\n🚀 **Go to the NoMercy website** to join the match sheet and vote for the map.\n\n⚠️ **Warning:** Not joining may result in penalties.`, 
+            inline: false 
+          },
+          { name: '🎮 Format', value: format, inline: true },
+          { name: '📋 Mode', value: `${modeDisplay} - ${gameMode}`, inline: true }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'NoMercy Ranked' });
+
+      // Send the DM
+      await discordUser.send({ embeds: [embed] });
+      notifiedCount++;
+      console.log(`[Discord Bot] Ranked match start DM sent to ${player.username} (${platform})`);
+      
+    } catch (dmError) {
+      console.warn(`[Discord Bot] Failed to send ranked match DM to ${player.username}: ${dmError.message}`);
+      errors.push({ username: player.username, error: dmError.message });
+    }
+  }
+
+  console.log(`[Discord Bot] Ranked match start DM: ${notifiedCount} console players notified`);
+  return { success: true, notifiedCount, errors };
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -1876,5 +1951,6 @@ export default {
   sendIrisShadowBan,
   sendIrisSecurityWarning,
   sendIrisSecurityChange,
-  sendIrisScreenshots
+  sendIrisScreenshots,
+  sendRankedMatchStartDM
 };

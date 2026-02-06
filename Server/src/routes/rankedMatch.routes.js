@@ -2434,6 +2434,17 @@ router.post('/admin/:matchId/refund-player/:playerId', verifyToken, requireArbit
     
     await ranking.save();
     
+    // ========== ALSO UPDATE USER PUBLIC PROFILE STATS ==========
+    // The User model has statsCdl or statsHardcore with wins/losses for public profile display
+    const statsField = match.mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
+    if (!user[statsField]) user[statsField] = {};
+    
+    // Decrement the losses in the user's public profile stats
+    user[statsField].losses = Math.max(0, (user[statsField].losses || 0) - 1);
+    
+    await user.save();
+    console.log(`[REFUND] Updated ${user.username} ${statsField}.losses: -1 (now ${user[statsField].losses})`);
+    
     // Mark player as refunded in the match
     match.players[playerIndex].refunded = true;
     match.players[playerIndex].refundedAt = new Date();

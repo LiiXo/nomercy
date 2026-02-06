@@ -13,7 +13,7 @@ import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
 import GameMap from '../models/Map.js';
-import { createMatchVoiceChannels } from './discordBot.service.js';
+import { createMatchVoiceChannels, sendRankedMatchStartDM } from './discordBot.service.js';
 import { checkRankedMatchGGSecureStatus } from './ggsecureMonitoring.service.js';
 
 // API URL for constructing full avatar URLs
@@ -74,9 +74,6 @@ const getPlayerThresholds = (mode) => {
 // Timer de 120 secondes (2 minutes) pour lancer le match
 const MATCHMAKING_TIMER_SECONDS = 120;
 
-// Timeout de 15 minutes (900 secondes) - joueurs retirés de la file s'ils n'ont pas trouvé de match
-const QUEUE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
-
 // Timers actifs pour chaque file d'attente
 const queueTimers = {};
 
@@ -89,9 +86,6 @@ const recentTeamHistory = new Map();
 const TEAM_HISTORY_SIZE = 10; // Nombre de matchs à garder en historique
 const TEAM_HISTORY_DURATION_MS = 30 * 60 * 1000; // 30 minutes d'historique
 
-// Cleanup interval reference
-let cleanupInterval = null;
-
 // Rate limiting pour éviter les doubles join rapides (anti race condition)
 // Structure: Map<userId, timestamp>
 const recentJoinAttempts = new Map();
@@ -102,58 +96,6 @@ const JOIN_RATE_LIMIT_MS = 2000; // 2 secondes entre chaque tentative de join
  */
 export const initMatchmaking = (socketIo) => {
   io = socketIo;
-  
-  // Start the queue cleanup interval (runs every 30 seconds)
-  if (cleanupInterval) {
-    clearInterval(cleanupInterval);
-  }
-  cleanupInterval = setInterval(cleanupTimedOutPlayers, 30000);
-};
-
-/**
- * Nettoie les joueurs qui ont dépassé le timeout de 15 minutes dans la file
- */
-const cleanupTimedOutPlayers = () => {
-  const now = Date.now();
-  
-  for (const key in queues) {
-    const queue = queues[key];
-    const timedOutPlayers = [];
-    
-    // Find players who have been in queue for more than 15 minutes
-    for (let i = queue.length - 1; i >= 0; i--) {
-      const player = queue[i];
-      const timeInQueue = now - new Date(player.joinedAt).getTime();
-      
-      if (timeInQueue >= QUEUE_TIMEOUT_MS) {
-        timedOutPlayers.push(player);
-        queue.splice(i, 1);
-      }
-    }
-    
-    // Notify timed out players
-    for (const player of timedOutPlayers) {
-      if (io) {
-        io.to(`user-${player.userId}`).emit('rankedQueueUpdate', {
-          type: 'timeout',
-          message: 'Vous avez été retiré de la file d\'attente après 15 minutes sans match trouvé.',
-          queueSize: 0,
-          position: null
-        });
-      }
-    }
-    
-    // If players were removed, update remaining players
-    if (timedOutPlayers.length > 0 && queue.length > 0) {
-      const [gameMode, mode] = key.split('_');
-      broadcastQueueUpdate(gameMode, mode);
-      
-      // Cancel timer if we dropped below minimum players (8 for 4v4)
-      if (queue.length < 8) {
-        cancelMatchmakingTimer(gameMode, mode);
-      }
-    }
-  }
 };
 
 /**
@@ -1259,6 +1201,16 @@ const createMatchFromQueue = async (gameMode, mode) => {
         });
       }
     }
+    
+    // Send Discord DM to console players (PlayStation/Xbox) to notify them their match has started
+    sendRankedMatchStartDM(match.players, {
+      matchId: matchIdStr,
+      gameMode,
+      mode,
+      teamSize
+    }).catch(err => {
+      console.error('[Ranked Matchmaking] Error sending Discord DM to console players:', err);
+    });
     
     // Démarrer le timer de vote de map DIRECTEMENT (pas de roster selection)
     startMapVoteTimer(match._id, matchPlayers.filter(p => p.user));
@@ -3051,6 +3003,16 @@ const createStaffMatchFromQueue = async (gameMode, mode) => {
         });
       }
     }
+    
+    // Send Discord DM to console players (PlayStation/Xbox) to notify them their match has started
+    sendRankedMatchStartDM(newMatch.players, {
+      matchId: matchIdStr,
+      gameMode,
+      mode,
+      teamSize
+    }).catch(err => {
+      console.error('[Staff Queue] Error sending Discord DM to console players:', err);
+    });
     
     // Démarrer le timer de vote de map (utiliser startMapVoteTimer comme le mode normal)
     startMapVoteTimer(newMatch._id, matchPlayers.filter(p => p.user));

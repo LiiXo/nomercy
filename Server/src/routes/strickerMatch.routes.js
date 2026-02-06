@@ -1939,23 +1939,57 @@ function getPointsLossForRank(points) {
 // Distribute rewards for stricker match
 async function distributeStrickerRewards(match) {
   try {
+    console.log(`[STRICKER REWARDS] ========== STARTING REWARD DISTRIBUTION ==========`);
+    console.log(`[STRICKER REWARDS] Match ID: ${match._id}`);
+    console.log(`[STRICKER REWARDS] Winner: Team ${match.result.winner}`);
+    console.log(`[STRICKER REWARDS] Total players in match: ${match.players?.length || 0}`);
+    
     const winningTeam = match.result.winner;
     
     // Fixed points for victory (+30 for everyone)
     const POINTS_WIN = 30;
     
-    // Munitions rewards - Winners get 50, losers get 10 (consolation)
+    // Munitions rewards - Winners get 50, losers get 25 (consolation)
     const CRANES_WIN = 50;
-    const CRANES_LOSS = 10;
-    const squadsAwarded = new Map(); // Map<squadId, cranesEarned> to track rewards per squad
+    const CRANES_LOSS = 25;
+    const squadsAwarded = {}; // { squadId: cranesEarned } to track rewards per squad
+    
+    let processedPlayers = 0;
+    let skippedFake = 0;
+    let skippedNoUser = 0;
+    let skippedUserNotFound = 0;
     
     // Process each player
     for (const player of match.players) {
-      if (player.isFake || !player.user) continue;
+      console.log(`[STRICKER REWARDS] Processing player:`, {
+        username: player.username,
+        team: player.team,
+        isFake: player.isFake,
+        hasUser: !!player.user,
+        userId: player.user?.toString(),
+        squad: player.squad?.toString()
+      });
+      
+      if (player.isFake) {
+        skippedFake++;
+        console.log(`[STRICKER REWARDS] Skipping fake player: ${player.username}`);
+        continue;
+      }
+      
+      if (!player.user) {
+        skippedNoUser++;
+        console.log(`[STRICKER REWARDS] Skipping player without user ID: ${player.username}`);
+        continue;
+      }
       
       const user = await User.findById(player.user);
-      if (!user) continue;
+      if (!user) {
+        skippedUserNotFound++;
+        console.log(`[STRICKER REWARDS] User not found for player: ${player.username}, userId: ${player.user}`);
+        continue;
+      }
       
+      processedPlayers++;
       const isWinner = player.team === winningTeam;
       
       // Initialize stats if not exists
@@ -1985,9 +2019,9 @@ async function distributeStrickerRewards(match) {
         const squadId = player.squad.toString();
         
         // Check if this squad was already processed
-        if (squadsAwarded.has(squadId)) {
+        if (squadId in squadsAwarded) {
           // Squad already processed, just get the cranes value that was awarded
-          cranesAwarded = squadsAwarded.get(squadId);
+          cranesAwarded = squadsAwarded[squadId];
           console.log(`[STRICKER] Squad already processed for ${user.username}, using cached cranes: ${cranesAwarded}`);
         } else {
           // First player from this squad - process squad stats
@@ -2007,10 +2041,10 @@ async function distributeStrickerRewards(match) {
             }
             
             // Award munitions
-            // Winners get 50 munitions, losers get 10 munitions (consolation)
+            // Winners get 50 munitions, losers get 25 munitions (consolation)
             const cranesReward = isWinner ? CRANES_WIN : CRANES_LOSS;
             squad.cranes = (squad.cranes || 0) + cranesReward;
-            squadsAwarded.set(squadId, cranesReward); // Store cranes value for other players
+            squadsAwarded[squadId] = cranesReward; // Store cranes value for other players
             cranesAwarded = cranesReward;
             
             console.log(`[STRICKER] Squad ${squad.tag} (${squad._id}) ${isWinner ? 'WON' : 'LOST'} - Stats: ${oldSquadPoints} → ${squad.statsStricker.points} pts (${squadPointsChange > 0 ? '+' : ''}${squadPointsChange}), ${squad.statsStricker.wins}W/${squad.statsStricker.losses}L - Munitions: ${cranesReward} (total: ${squad.cranes})`);
@@ -2030,13 +2064,24 @@ async function distributeStrickerRewards(match) {
         newPoints: user.statsStricker.points,
         cranesEarned: cranesAwarded
       };
+      
+      console.log(`[STRICKER REWARDS] Stored rewards for ${user.username}:`, player.rewards);
     }
+    
+    console.log(`[STRICKER REWARDS] ========== DISTRIBUTION SUMMARY ==========`);
+    console.log(`[STRICKER REWARDS] Processed: ${processedPlayers}, Skipped (fake): ${skippedFake}, Skipped (no user): ${skippedNoUser}, Skipped (not found): ${skippedUserNotFound}`);
     
     match.markModified('players');
     await match.save();
     
+    console.log(`[STRICKER REWARDS] Match saved successfully. Players with rewards:`);
+    match.players.forEach(p => {
+      console.log(`  - ${p.username}: rewards =`, p.rewards);
+    });
+    console.log(`[STRICKER REWARDS] ========== DISTRIBUTION COMPLETE ==========`);
+    
   } catch (error) {
-    console.error('[STRICKER] Erreur distribution récompenses:', error);
+    console.error('[STRICKER REWARDS] ERROR during distribution:', error);
   }
 }
 
@@ -2374,9 +2419,9 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
       }
       
       // Refund squad stats and munitions
-      // Winners had 50 munitions, losers had 10 munitions
+      // Winners had 50 munitions, losers had 25 munitions
       const CRANES_WIN = 50;
-      const CRANES_LOSS = 10;
+      const CRANES_LOSS = 25;
       
       if (match.team1Squad) {
         const squad1 = await Squad.findById(match.team1Squad._id);
