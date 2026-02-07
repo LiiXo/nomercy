@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Users, Trophy, Shield, Crown, MessageCircle, 
   Send, Loader2, CheckCircle, XCircle, Phone, AlertTriangle,
-  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Crosshair
+  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Crosshair, BookOpen
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
@@ -179,7 +179,19 @@ const translations = {
     waitingOpponentCancelResponse: 'En attente de la réponse adverse',
     opponentRequestedCancellation: 'L\'équipe adverse demande l\'annulation',
     acceptCancellation: 'Accepter',
-    refuseCancellation: 'Refuser'
+    refuseCancellation: 'Refuser',
+    viewRules: 'Voir les règles',
+    rules: 'Règles',
+    loadingRules: 'Chargement des règles...',
+    noRulesConfigured: 'Aucune règle configurée pour ce mode.',
+    close: 'Fermer',
+    matchStartDeadline: 'Le match doit commencer dans les 10 minutes',
+    deadlineWarning: 'L\'arbitre peut sanctionner après ce délai',
+    deadlineExpired: 'Délai dépassé - Sanction possible',
+    ggsecureRequired: 'GGSecure requis',
+    ggsecureNotConnected: 'Non connecté à GGSecure',
+    ggsecureConnected: 'GGSecure connecté',
+    pcPlayer: 'Joueur PC'
   },
   en: {
     loading: 'Loading...',
@@ -290,7 +302,19 @@ const translations = {
     waitingOpponentCancelResponse: 'Waiting for opponent response',
     opponentRequestedCancellation: 'Opponent team requests cancellation',
     acceptCancellation: 'Accept',
-    refuseCancellation: 'Refuse'
+    refuseCancellation: 'Refuse',
+    viewRules: 'View rules',
+    rules: 'Rules',
+    loadingRules: 'Loading rules...',
+    noRulesConfigured: 'No rules configured for this mode.',
+    close: 'Close',
+    matchStartDeadline: 'Match must start within 10 minutes',
+    deadlineWarning: 'Arbitrator can sanction after this deadline',
+    deadlineExpired: 'Deadline passed - Sanction possible',
+    ggsecureRequired: 'GGSecure required',
+    ggsecureNotConnected: 'Not connected to GGSecure',
+    ggsecureConnected: 'GGSecure connected',
+    pcPlayer: 'PC Player'
   }
 };
 
@@ -304,11 +328,6 @@ const StrickerMatchSheet = () => {
   const chatRef = useRef(null);
   const preMatchAudioRef = useRef(null);
   
-  // Use mode from URL params first, fall back to selectedMode from context
-  const currentMode = mode || selectedMode || 'hardcore';
-
-  const t = translations[language] || translations.en;
-
   // States
   const [loading, setLoading] = useState(true);
   const [match, setMatch] = useState(null);
@@ -363,6 +382,20 @@ const StrickerMatchSheet = () => {
   const [showMatchReport, setShowMatchReport] = useState(false);
   const [matchReportData, setMatchReportData] = useState(null);
   const [matchReportShown, setMatchReportShown] = useState(false);
+
+  // Rules Modal
+  const [showRulesModal, setShowRulesModal] = useState(false);
+  const [rules, setRules] = useState(null);
+  const [loadingRules, setLoadingRules] = useState(false);
+
+  // 10-minute countdown state for match start deadline
+  const [startCountdown, setStartCountdown] = useState(null);
+
+  // Translations
+  const t = translations[language] || translations.en;
+  
+  // Use mode from URL params first, then match.mode, then selectedMode from context
+  const currentMode = mode || match?.mode || selectedMode || 'hardcore';
 
   // Fetch match data
   const fetchMatch = useCallback(async () => {
@@ -639,13 +672,15 @@ const StrickerMatchSheet = () => {
             pointsChange: rewards.pointsChange || 0,
             oldPoints: rewards.oldPoints || 0,
             newPoints: rewards.newPoints || 0,
-            goldEarned: rewards.goldEarned || 0
+            goldEarned: rewards.goldEarned || 0,
+            xpEarned: rewards.xpEarned || 0
           },
           oldRank: { points: rewards.oldPoints || 0 },
           newRank: { points: rewards.newPoints || 0 },
           squadName: myTeam === 1 ? match.team1Squad?.name : match.team2Squad?.name,
           cranesEarned: rewards.cranesEarned || 0,
-          goldEarned: rewards.goldEarned || 0
+          goldEarned: rewards.goldEarned || 0,
+          xpEarned: rewards.xpEarned || 0
         });
         
         setMatchReportShown(true);
@@ -653,6 +688,31 @@ const StrickerMatchSheet = () => {
       }
     }
   }, [match, user, matchReportShown, myTeam]);
+
+  // 10-minute countdown for match start deadline (before match completion)
+  useEffect(() => {
+    if (!match?.createdAt || match?.status === 'completed' || match?.status === 'cancelled') {
+      setStartCountdown(null);
+      return;
+    }
+    
+    const calculateRemaining = () => {
+      const created = new Date(match.createdAt).getTime();
+      const deadline = created + 10 * 60 * 1000; // 10 minutes
+      const remaining = Math.floor((deadline - Date.now()) / 1000);
+      return remaining;
+    };
+    
+    setStartCountdown(calculateRemaining());
+    
+    const timer = setInterval(() => {
+      const remaining = calculateRemaining();
+      setStartCountdown(remaining);
+      // Keep running even if expired to show negative state
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [match?.createdAt, match?.status]);
 
   // Select roster member with optimistic UI
   const [selectingMember, setSelectingMember] = useState(null);
@@ -885,6 +945,28 @@ const StrickerMatchSheet = () => {
       console.error('Error reporting AFK:', err);
     } finally {
       setReportingAfk(false);
+    }
+  };
+
+  // Fetch rules for Stricker mode
+  const fetchRules = async () => {
+    if (rules) return; // Already loaded
+    
+    setLoadingRules(true);
+    try {
+      // Stricker mode uses: /game-mode-rules/stricker/ranked/stricker-snd
+      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/stricker-snd`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      
+      if (data.success && data.rules) {
+        setRules(data.rules);
+      }
+    } catch (err) {
+      console.error('Error fetching rules:', err);
+    } finally {
+      setLoadingRules(false);
     }
   };
 
@@ -1218,10 +1300,14 @@ const StrickerMatchSheet = () => {
               </h3>
               <div className="space-y-2 max-h-[400px] overflow-y-auto custom-scrollbar">
                 {rosterSelection.availableMembers.map((member, idx) => {
-                  const canSelect = canSelectPlayers;
                   const equippedTitle = member.equippedTitle;
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
                   const isSelecting = selectingMember === member._id;
+                  
+                  // Check if PC player and not connected to GGSecure
+                  const isPcPlayer = member.platform === 'PC';
+                  const isGGSecureConnected = member.ggsecureConnected !== false; // null means non-PC or API unavailable
+                  const canSelectMember = canSelectPlayers && (isPcPlayer ? isGGSecureConnected : true);
                   
                   return (
                     <div 
@@ -1229,19 +1315,44 @@ const StrickerMatchSheet = () => {
                       className={`group flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
                         isSelecting
                           ? 'bg-lime-500/30 border border-lime-500 opacity-70'
-                          : canSelect 
+                          : canSelectMember && canSelectPlayers
                             ? 'bg-dark-800 border border-lime-500/30 hover:border-lime-500 hover:bg-lime-500/10 cursor-pointer' 
-                            : 'bg-dark-800/50 border border-gray-700 opacity-50'
+                            : isPcPlayer && !isGGSecureConnected
+                              ? 'bg-red-500/10 border border-red-500/30 opacity-60 cursor-not-allowed'
+                              : 'bg-dark-800/50 border border-gray-700 opacity-50'
                       }`}
-                      onClick={() => canSelect && !isSelecting && handleSelectRosterMember(member._id)}
+                      onClick={() => canSelectMember && !isSelecting && handleSelectRosterMember(member._id)}
+                      title={isPcPlayer && !isGGSecureConnected ? t.ggsecureNotConnected : ''}
                     >
-                      <img 
-                        src={getUserAvatar(member)} 
-                        alt={member.username}
-                        className="w-10 h-10 rounded-full object-cover transition-transform"
-                      />
+                      <div className="relative">
+                        <img 
+                          src={getUserAvatar(member)} 
+                          alt={member.username}
+                          className="w-10 h-10 rounded-full object-cover transition-transform"
+                        />
+                        {/* GGSecure status indicator for PC players */}
+                        {isPcPlayer && (
+                          <div 
+                            className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-dark-900 ${
+                              isGGSecureConnected ? 'bg-green-500' : 'bg-red-500'
+                            }`}
+                            title={isGGSecureConnected ? t.ggsecureConnected : t.ggsecureNotConnected}
+                          >
+                            <Shield className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
-                        <span className="text-white font-medium truncate block">{member.username}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-medium truncate">{member.username}</span>
+                          {isPcPlayer && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded ${
+                              isGGSecureConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              PC
+                            </span>
+                          )}
+                        </div>
                         {titleName && (
                           <span 
                             className={getTitleStyles(equippedTitle?.rarity).className}
@@ -1250,8 +1361,15 @@ const StrickerMatchSheet = () => {
                             {titleName}
                           </span>
                         )}
+                        {/* GGSecure warning message */}
+                        {isPcPlayer && !isGGSecureConnected && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <AlertTriangle className="w-3 h-3 text-red-400" />
+                            <span className="text-red-400 text-xs">{t.ggsecureNotConnected}</span>
+                          </div>
+                        )}
                       </div>
-                      {(canSelect || isSelecting) && (
+                      {(canSelectMember && canSelectPlayers) || isSelecting ? (
                         <div className="px-3 py-1.5 bg-lime-500/20 text-lime-400 rounded-lg text-sm font-medium transition-all group-hover:bg-lime-500/30">
                           {isSelecting ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1259,7 +1377,12 @@ const StrickerMatchSheet = () => {
                             t.selectPlayer
                           )}
                         </div>
-                      )}
+                      ) : isPcPlayer && !isGGSecureConnected ? (
+                        <div className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium flex items-center gap-1">
+                          <Shield className="w-3 h-3" />
+                          {t.ggsecureRequired}
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -1762,6 +1885,73 @@ const StrickerMatchSheet = () => {
                   <span className="text-white font-semibold text-sm">5v5</span>
                 </div>
                 
+                {/* 10-minute countdown warning - before match completion */}
+                {startCountdown !== null && match.status !== 'completed' && match.status !== 'cancelled' && (
+                  <div className={`mt-3 p-3 rounded-lg border ${
+                    startCountdown <= 0 
+                      ? 'bg-red-500/10 border-red-500/40' 
+                      : startCountdown <= 120 
+                        ? 'bg-orange-500/10 border-orange-500/40'
+                        : 'bg-amber-500/10 border-amber-500/40'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className={`w-4 h-4 ${
+                        startCountdown <= 0 
+                          ? 'text-red-400' 
+                          : startCountdown <= 120 
+                            ? 'text-orange-400'
+                            : 'text-amber-400'
+                      }`} />
+                      <span className={`text-xs font-medium ${
+                        startCountdown <= 0 
+                          ? 'text-red-400' 
+                          : startCountdown <= 120 
+                            ? 'text-orange-400'
+                            : 'text-amber-400'
+                      }`}>
+                        {startCountdown <= 0 ? t.deadlineExpired : t.matchStartDeadline}
+                      </span>
+                    </div>
+                    <div className={`text-2xl font-bold text-center my-2 ${
+                      startCountdown <= 0 
+                        ? 'text-red-400' 
+                        : startCountdown <= 120 
+                          ? 'text-orange-400'
+                          : 'text-amber-400'
+                    }`}>
+                      {startCountdown <= 0 ? (
+                        <span className="flex items-center justify-center gap-1">
+                          <AlertTriangle className="w-5 h-5" />
+                          00:00
+                        </span>
+                      ) : (
+                        `${String(Math.floor(startCountdown / 60)).padStart(2, '0')}:${String(startCountdown % 60).padStart(2, '0')}`
+                      )}
+                    </div>
+                    <p className={`text-xs text-center ${
+                      startCountdown <= 0 
+                        ? 'text-red-400/80' 
+                        : 'text-amber-400/80'
+                    }`}>
+                      ⚠️ {t.deadlineWarning}
+                    </p>
+                  </div>
+                )}
+                
+                {/* Host Team Display */}
+                {match.hostTeam && (
+                  <div className="flex justify-between items-center py-1.5 border-b border-white/5">
+                    <span className="text-gray-500 text-sm">{t.host}</span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                      match.hostTeam === 1 
+                        ? 'bg-lime-500/20 text-lime-400' 
+                        : 'bg-blue-500/20 text-blue-400'
+                    }`}>
+                      {match.hostTeam === 1 ? team1Name : team2Name}
+                    </span>
+                  </div>
+                )}
+                
                 {match.createdAt && (
                   <div className="flex justify-between items-center py-1.5">
                     <span className="text-gray-500 text-sm">{language === 'fr' ? 'Créé le' : 'Created'}</span>
@@ -1774,6 +1964,18 @@ const StrickerMatchSheet = () => {
                   </div>
                 )}
               </div>
+              
+              {/* Rules Button */}
+              <button
+                onClick={() => {
+                  fetchRules();
+                  setShowRulesModal(true);
+                }}
+                className="mt-4 w-full py-2.5 rounded-lg border border-lime-500/30 bg-lime-500/10 hover:bg-lime-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                <BookOpen className="w-4 h-4 text-lime-400" />
+                <span className="text-lime-400 font-medium text-sm">{t.viewRules}</span>
+              </button>
             </div>
 
             {/* Selected Map */}
@@ -2345,6 +2547,68 @@ const StrickerMatchSheet = () => {
         </div>
       </div>
 
+      {/* Rules Modal */}
+      {showRulesModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-dark-900 rounded-2xl border border-lime-500/30 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10 flex-shrink-0 bg-gradient-to-r from-lime-500/20 to-green-500/10">
+              <h2 className="text-xl font-bold text-white flex items-center gap-3">
+                <BookOpen className="w-6 h-6 text-lime-400" />
+                {t.rules} - Search & Destroy
+              </h2>
+              <button
+                onClick={() => setShowRulesModal(false)}
+                className="p-2 rounded-lg bg-dark-800 hover:bg-dark-700 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingRules ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-lime-500 animate-spin" />
+                  <span className="ml-3 text-gray-400">{t.loadingRules}</span>
+                </div>
+              ) : rules && rules.sections && rules.sections.length > 0 ? (
+                <div className="space-y-6">
+                  {rules.sections.map((section, idx) => (
+                    <div key={idx} className="bg-dark-800/50 rounded-xl p-4 border border-white/5">
+                      <h3 className="text-lg font-bold text-lime-400 mb-3 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded-full bg-lime-500/20 flex items-center justify-center text-sm font-bold text-lime-400">
+                          {idx + 1}
+                        </span>
+                        {section.title?.[language] || section.title?.fr || `Section ${idx + 1}`}
+                      </h3>
+                      <div className="prose prose-invert prose-sm max-w-none">
+                        {section.content?.[language] || section.content?.fr || 'Pas de contenu'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <BookOpen className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-500">{t.noRulesConfigured}</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className="p-4 border-t border-white/10 flex-shrink-0">
+              <button
+                onClick={() => setShowRulesModal(false)}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-lime-500 to-green-600 text-white font-semibold hover:opacity-90 transition-all"
+              >
+                {t.close}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Combat Report Modal */}
       {showMatchReport && matchReportData && (
         <StrickerMatchReport
@@ -2359,6 +2623,8 @@ const StrickerMatchSheet = () => {
           squadName={matchReportData.squadName}
           cranesEarned={matchReportData.cranesEarned}
           goldEarned={matchReportData.goldEarned}
+          xpEarned={matchReportData.xpEarned}
+          matchMode={match?.mode}
         />
       )}
     </div>

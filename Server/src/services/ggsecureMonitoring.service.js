@@ -361,9 +361,9 @@ const monitorRankedMatches = async () => {
  */
 const monitorStrickerMatches = async () => {
   try {
-    // Récupérer tous les matchs Stricker actifs (pending, ready, in_progress)
+    // Récupérer tous les matchs Stricker actifs (pending, ready, in_progress, disputed)
     const activeMatches = await StrickerMatch.find({
-      status: { $in: ['pending', 'ready', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
     })
       .populate('players.user', 'username platform _id')
       .lean();

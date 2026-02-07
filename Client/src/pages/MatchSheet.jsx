@@ -210,6 +210,9 @@ const MatchSheet = () => {
   // MVP voting state (voting is now handled in RankedMatchReport)
   const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
   
+  // 10-minute countdown state for match start deadline
+  const [startCountdown, setStartCountdown] = useState(null);
+  
   // Helper local pour obtenir le rang à partir des points
   const getRankFromPoints = (points, lang = language) => {
     return getRankFromPointsWithThresholds(points, rankThresholds, lang);
@@ -339,6 +342,9 @@ const MatchSheet = () => {
       refundError: 'Erreur lors du remboursement',
       refundConfirm: 'Rembourser les points perdus pour ce joueur ?',
       alreadyRefunded: 'Déjà remboursé',
+      matchStartDeadline: 'Le match doit commencer dans les 10 minutes',
+      deadlineWarning: 'L\'arbitre peut sanctionner après ce délai',
+      deadlineExpired: 'Délai dépassé - Sanction possible',
     },
     en: {
       back: 'Back',
@@ -462,6 +468,9 @@ const MatchSheet = () => {
       refundError: 'Refund error',
       refundConfirm: 'Refund lost points for this player?',
       alreadyRefunded: 'Already refunded',
+      matchStartDeadline: 'Match must start within 10 minutes',
+      deadlineWarning: 'Arbitrator can sanction after this deadline',
+      deadlineExpired: 'Deadline passed - Sanction possible',
     },
     de: {
       back: 'Zurück',
@@ -574,6 +583,9 @@ const MatchSheet = () => {
       changeMvpVote: 'MVP-Stimme ändern',
       waitingMvpVotes: 'Warten auf MVP-Stimmen',
       mvpConfirmed: 'MVP bestätigt!',
+      matchStartDeadline: 'Das Spiel muss innerhalb von 10 Minuten beginnen',
+      deadlineWarning: 'Der Schiedsrichter kann nach dieser Frist Sanktionen verhängen',
+      deadlineExpired: 'Frist abgelaufen - Sanktion möglich',
     },
     it: {
       back: 'Indietro',
@@ -686,6 +698,9 @@ const MatchSheet = () => {
       changeMvpVote: 'Cambia voto MVP',
       waitingMvpVotes: 'In attesa dei voti MVP',
       mvpConfirmed: 'MVP confermato!',
+      matchStartDeadline: 'La partita deve iniziare entro 10 minuti',
+      deadlineWarning: 'L\'arbitro può sanzionare dopo questo termine',
+      deadlineExpired: 'Termine scaduto - Sanzione possibile',
     },
   }[language] || {};
 
@@ -991,6 +1006,31 @@ const MatchSheet = () => {
       setIsReferent(userIsReferent);
     }
   }, [match?.players, match?.team1Referent, match?.team2Referent, user, isRankedMatch]);
+
+  // 10-minute countdown for match start deadline (ranked matches only, before completion)
+  useEffect(() => {
+    if (!isRankedMatch || !match?.createdAt || match?.status === 'completed' || match?.status === 'cancelled') {
+      setStartCountdown(null);
+      return;
+    }
+    
+    const calculateRemaining = () => {
+      const created = new Date(match.createdAt).getTime();
+      const deadline = created + 10 * 60 * 1000; // 10 minutes
+      const remaining = Math.floor((deadline - Date.now()) / 1000);
+      return remaining;
+    };
+    
+    setStartCountdown(calculateRemaining());
+    
+    const timer = setInterval(() => {
+      const remaining = calculateRemaining();
+      setStartCountdown(remaining);
+      // Keep running even if expired to show negative state
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [isRankedMatch, match?.createdAt, match?.status]);
 
   // Récupérer les seuils de rangs configurés depuis l'API (pour les matchs classés)
   useEffect(() => {
@@ -2413,6 +2453,59 @@ const MatchSheet = () => {
                       : `${match.teamSize}v${match.teamSize}`}
                   </span>
                 </div>
+                
+                {/* 10-minute countdown warning - only for ranked matches before completion */}
+                {isRankedMatch && startCountdown !== null && match.status !== 'completed' && match.status !== 'cancelled' && (
+                  <div className={`mt-3 p-3 rounded-lg border ${
+                    startCountdown <= 0 
+                      ? 'bg-red-500/10 border-red-500/40' 
+                      : startCountdown <= 120 
+                        ? 'bg-orange-500/10 border-orange-500/40'
+                        : 'bg-amber-500/10 border-amber-500/40'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className={`w-4 h-4 ${
+                        startCountdown <= 0 
+                          ? 'text-red-400' 
+                          : startCountdown <= 120 
+                            ? 'text-orange-400'
+                            : 'text-amber-400'
+                      }`} />
+                      <span className={`text-xs font-medium ${
+                        startCountdown <= 0 
+                          ? 'text-red-400' 
+                          : startCountdown <= 120 
+                            ? 'text-orange-400'
+                            : 'text-amber-400'
+                      }`}>
+                        {startCountdown <= 0 ? t.deadlineExpired : t.matchStartDeadline}
+                      </span>
+                    </div>
+                    <div className={`text-2xl font-bold text-center my-2 ${
+                      startCountdown <= 0 
+                        ? 'text-red-400' 
+                        : startCountdown <= 120 
+                          ? 'text-orange-400'
+                          : 'text-amber-400'
+                    }`}>
+                      {startCountdown <= 0 ? (
+                        <span className="flex items-center justify-center gap-1">
+                          <AlertTriangle className="w-5 h-5" />
+                          00:00
+                        </span>
+                      ) : (
+                        `${String(Math.floor(startCountdown / 60)).padStart(2, '0')}:${String(startCountdown % 60).padStart(2, '0')}`
+                      )}
+                    </div>
+                    <p className={`text-xs text-center ${
+                      startCountdown <= 0 
+                        ? 'text-red-400/80' 
+                        : 'text-amber-400/80'
+                    }`}>
+                      ⚠️ {t.deadlineWarning}
+                    </p>
+                  </div>
+                )}
                 
                 {(match.acceptedAt || match.scheduledAt || match.startedAt || match.createdAt) && (
                   <div className="flex justify-between items-center py-1.5">

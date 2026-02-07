@@ -574,6 +574,52 @@ export const logStrickerArbitratorCall = async (match, calledBy) => {
 };
 
 /**
+ * Log a Stricker dispute to Discord (ARBITRATOR_CHANNEL)
+ * Sends notification when both referents voted for different winners
+ */
+export const logStrickerDispute = async (match) => {
+  // Use the match mode (hardcore or cdl) for the URL
+  const mode = match.mode || 'hardcore';
+  const matchUrl = `https://nomercy.ggsecure.io/${mode}/stricker/match/${match._id}`;
+  
+  // Get team names
+  const team1Name = match.team1Squad?.name || 'Equipe 1';
+  const team2Name = match.team2Squad?.name || 'Equipe 2';
+  
+  // Get vote info
+  const team1Vote = match.result?.team1Report?.winner;
+  const team2Vote = match.result?.team2Report?.winner;
+  
+  const embed = new EmbedBuilder()
+    .setColor(0xFF0000) // Red for dispute
+    .setTitle('\u{26A0}\u{FE0F} DÉSACCORD DÉTECTÉ - MODE STRICKER')
+    .setDescription(`Les deux référents ont voté pour des gagnants différents !`)
+    .addFields(
+      { name: '\u{1F6E1}\u{FE0F} Equipe 1', value: team1Name, inline: true },
+      { name: '\u{1F5F3}\u{FE0F} Vote E1', value: team1Vote === 1 ? team1Name : team2Name, inline: true },
+      { name: '\u200B', value: '\u200B', inline: true },
+      { name: '\u{1F6E1}\u{FE0F} Equipe 2', value: team2Name, inline: true },
+      { name: '\u{1F5F3}\u{FE0F} Vote E2', value: team2Vote === 1 ? team1Name : team2Name, inline: true },
+      { name: '\u200B', value: '\u200B', inline: true },
+      { name: '\u{1F3AE} Mode', value: 'Stricker (5v5)', inline: true },
+      { name: '\u{1F3AF} Mode de jeu', value: 'Search & Destroy', inline: true },
+      { name: '\u{1F194} Match ID', value: match._id?.toString() || 'N/A', inline: true }
+    )
+    .setTimestamp()
+    .setFooter({ text: 'NoMercy Arbitrage - Stricker' });
+
+  // Add button-like link field
+  embed.addFields(
+    { name: '\u200B', value: `[Voir le match](${matchUrl})`, inline: false }
+  );
+
+  await sendToChannel(ARBITRATOR_CHANNEL_ID, { 
+    content: `<@&${ARBITRATOR_ROLE_ID}>`, 
+    embeds: [embed] 
+  });
+};
+
+/**
  * Generate a random channel number for voice channels
  */
 const generateRandomChannelNumber = () => {
@@ -1936,6 +1982,7 @@ export default {
   logAdminMessage,
   logArbitratorCall,
   logStrickerArbitratorCall,
+  logStrickerDispute,
   createMatchVoiceChannels,
   deleteMatchVoiceChannels,
   setShuttingDown,

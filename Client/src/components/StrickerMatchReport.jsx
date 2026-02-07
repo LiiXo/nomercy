@@ -57,12 +57,17 @@ const StrickerMatchReport = ({
   // Squad info
   squadName = '',
   cranesEarned = 0,
-  goldEarned = 0
+  goldEarned = 0,
+  xpEarned = 0,
+  // Match mode for navigation
+  matchMode = null
 }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { language } = useLanguage();
-  const { currentMode } = useMode();
+  const { selectedMode } = useMode();
+  // Use matchMode first (from match data), then selectedMode, then fallback to hardcore
+  const currentMode = matchMode || selectedMode || 'hardcore';
   const [animationStep, setAnimationStep] = useState(0);
   const [progressAnimation, setProgressAnimation] = useState(0);
   const [submittingMvpVote, setSubmittingMvpVote] = useState(false);
@@ -320,19 +325,51 @@ const StrickerMatchReport = ({
                 )}
               </div>
               
-              {/* Munitions - shown for winners */}
-              {isWinner && (
-                <div className="bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 border-amber-500/30">
+              {/* Gold - shown for both winners and losers */}
+              {goldEarned > 0 && (
+                <div className="bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 border-yellow-500/30">
                   <div className="flex items-center justify-center gap-2 mb-2">
-                    <span className="text-lg">💀</span>
-                    <span className="text-gray-400 text-xs sm:text-sm">Munitions</span>
+                    <Coins className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />
+                    <span className="text-gray-400 text-xs sm:text-sm">Gold</span>
                   </div>
-                  <div className="text-xl sm:text-2xl font-bold text-amber-400 text-center">
-                    +{cranesEarned || 0}
+                  <div className="text-xl sm:text-2xl font-bold text-yellow-400 text-center">
+                    +{goldEarned}
                   </div>
-                  <p className="text-amber-400/70 text-xs mt-1 text-center">Escouade</p>
+                  <p className="text-yellow-400/70 text-xs mt-1 text-center">
+                    {isWinner ? '💰 Victoire' : '🎁 Consolation'}
+                  </p>
                 </div>
               )}
+              
+              {/* XP - shown only for winners */}
+              {xpEarned > 0 && (
+                <div className="bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 border-cyan-500/30">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Star className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
+                    <span className="text-gray-400 text-xs sm:text-sm">XP</span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-bold text-cyan-400 text-center">
+                    +{xpEarned}
+                  </div>
+                  <p className="text-cyan-400/70 text-xs mt-1 text-center">
+                    ⚡ Expérience
+                  </p>
+                </div>
+              )}
+              
+              {/* Munitions - ALWAYS shown for Stricker mode (50 win, 25 loss) */}
+              <div className="bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 border-amber-500/30">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <span className="text-lg">💀</span>
+                  <span className="text-gray-400 text-xs sm:text-sm">Munitions</span>
+                </div>
+                <div className="text-xl sm:text-2xl font-bold text-amber-400 text-center">
+                  +{cranesEarned > 0 ? cranesEarned : (isWinner ? 50 : 25)}
+                </div>
+                <p className="text-amber-400/70 text-xs mt-1 text-center">
+                  {isWinner ? 'Escouade' : 'Consolation'}
+                </p>
+              </div>
             </div>
           </div>
           

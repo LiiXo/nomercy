@@ -97,7 +97,7 @@ setInterval(() => {
 router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const odId = req.user._id.toString();
-    const mode = req.query.mode || 'stricker'; // stricker mode
+    const mode = req.query.mode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
     
     // Update online status
     strickerOnlineUsers[odId] = Date.now();
@@ -118,6 +118,39 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
     const inQueue = modeQueue.some(p => p.squadId === userSquadId);
     const queueSize = modeQueue.length;
     
+    // 2-hour cooldown constant (in ms)
+    const REMATCH_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
+    
+    // Get recent matches for cooldown check
+    let recentMatches = [];
+    if (userSquadId) {
+      const cooldownCutoff = new Date(Date.now() - REMATCH_COOLDOWN_MS);
+      recentMatches = await StrickerMatch.find({
+        $or: [
+          { team1Squad: userSquadId },
+          { team2Squad: userSquadId }
+        ],
+        status: 'completed',
+        completedAt: { $gte: cooldownCutoff }
+      }).select('team1Squad team2Squad completedAt').lean();
+    }
+    
+    // Build a map of opponent squad IDs to their cooldown end time
+    const cooldownMap = {};
+    recentMatches.forEach(match => {
+      const opponentSquadId = match.team1Squad?.toString() === userSquadId 
+        ? match.team2Squad?.toString() 
+        : match.team1Squad?.toString();
+      
+      if (opponentSquadId) {
+        const cooldownEnd = new Date(match.completedAt).getTime() + REMATCH_COOLDOWN_MS;
+        // Keep the latest cooldown if multiple matches
+        if (!cooldownMap[opponentSquadId] || cooldownEnd > cooldownMap[opponentSquadId]) {
+          cooldownMap[opponentSquadId] = cooldownEnd;
+        }
+      }
+    });
+    
     // Get list of squads searching (excluding user's own squad)
     const searchingSquads = [];
     const seenSquads = new Set();
@@ -126,6 +159,10 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
         seenSquads.add(entry.squadId);
         // Don't include user's own squad in the list
         if (entry.squadId !== userSquadId) {
+          const cooldownEndTime = cooldownMap[entry.squadId];
+          const now = Date.now();
+          const isOnCooldown = cooldownEndTime && cooldownEndTime > now;
+          
           searchingSquads.push({
             odId: entry.odId,
             odUser: entry.odUser,
@@ -135,7 +172,11 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
             squadTag: entry.squadTag,
             squadLogo: entry.squad?.logo || null,
             points: entry.points,
-            joinedAt: entry.joinedAt
+            joinedAt: entry.joinedAt,
+            // Cooldown info
+            onCooldown: isOnCooldown,
+            cooldownEndsAt: isOnCooldown ? cooldownEndTime : null,
+            cooldownRemaining: isOnCooldown ? cooldownEndTime - now : 0
           });
         }
       }
@@ -147,7 +188,7 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
       activeMatch = await StrickerMatch.findOne({
         'players.user': req.user._id,
         mode: mode,
-        status: { $in: ['pending', 'ready', 'in_progress'] }
+        status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
       })
       .populate('players.user', 'username avatarUrl discordAvatar discordId')
       .populate('team1Squad', 'name tag logo')
@@ -181,7 +222,7 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
   try {
     const odId = req.user._id.toString();
     const now = Date.now();
-    const mode = req.body.mode || 'stricker'; // stricker mode
+    const mode = req.body.mode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
     
     // Rate limiting: Prevent rapid join attempts (anti race condition)
     const lastUserAttempt = recentJoinAttempts.get(`user:${odId}:${mode}`);
@@ -302,31 +343,40 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       });
     }
     
-    // Check for active match for user (mode-specific)
+    // Check for active match for user (mode-specific) - includes disputed matches
     const activeMatch = await StrickerMatch.findOne({
       'players.user': req.user._id,
       mode: mode,
-      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
     });
     
     if (activeMatch) {
-      return res.status(400).json({ success: false, message: 'Vous avez déjà un match en cours' });
+      const isDisputed = activeMatch.status === 'disputed';
+      return res.status(400).json({ 
+        success: false, 
+        message: isDisputed 
+          ? 'Vous avez un match en litige en attente d\'arbitrage. Vous ne pouvez pas lancer de nouveau match.'
+          : 'Vous avez déjà un match en cours' 
+      });
     }
     
-    // Check if squad already has an active match (mode-specific)
+    // Check if squad already has an active match (mode-specific) - includes disputed matches
     const squadActiveMatch = await StrickerMatch.findOne({
       $or: [
         { team1Squad: squad._id },
         { team2Squad: squad._id }
       ],
       mode: mode,
-      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
     });
     
     if (squadActiveMatch) {
+      const isDisputed = squadActiveMatch.status === 'disputed';
       return res.status(400).json({ 
         success: false, 
-        message: 'Votre escouade a déjà un match en cours' 
+        message: isDisputed
+          ? 'Votre escouade a un match en litige en attente d\'arbitrage. Vous ne pouvez pas lancer de nouveau match.'
+          : 'Votre escouade a déjà un match en cours' 
       });
     }
     
@@ -368,6 +418,24 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       }
     });
     
+    // Broadcast queue update to all users in stricker-mode room
+    const io = req.app.get('io');
+    if (io) {
+      io.to('stricker-mode').emit('strickerQueueUpdate', {
+        mode: mode,
+        action: 'join',
+        squad: {
+          squadId: squadId,
+          squadName: squad.name,
+          squadTag: squad.tag,
+          squadLogo: squad.logo || null,
+          points: user.statsStricker?.points || 0,
+          joinedAt: new Date()
+        },
+        queueSize: modeQueue.length
+      });
+    }
+    
     res.json({
       success: true,
       message: 'Vous avez rejoint la file d\'attente',
@@ -386,7 +454,7 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
 router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const { targetSquadId, mode: requestMode } = req.body;
-    const mode = requestMode || 'stricker'; // stricker mode
+    const mode = requestMode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
     const odId = req.user._id.toString();
     const now = Date.now();
     
@@ -477,10 +545,10 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         
     // Can't challenge own squad
     if (targetSquadId === challengerSquadId) {
-      return res.status(400).json({ success: false, message: 'Vous ne pouvez pas vous d\u00e9fier vous-m\u00eame' });
+      return res.status(400).json({ success: false, message: 'Vous ne pouvez pas vous défier vous-même' });
     }
         
-    // Check for active matches (mode-specific)
+    // Check for active matches (mode-specific) - includes disputed matches
     const activeMatch = await StrickerMatch.findOne({
       $or: [
         { 'players.user': req.user._id },
@@ -488,11 +556,45 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         { team2Squad: challengerSquad._id }
       ],
       mode: mode,
-      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
     });
     
     if (activeMatch) {
-      return res.status(400).json({ success: false, message: 'Vous avez déjà un match en cours' });
+      const isDisputed = activeMatch.status === 'disputed';
+      return res.status(400).json({ 
+        success: false, 
+        message: isDisputed
+          ? 'Vous avez un match en litige en attente d\'arbitrage. Vous ne pouvez pas lancer de nouveau match.'
+          : 'Vous avez déjà un match en cours'
+      });
+    }
+    
+    // 2-hour cooldown check - can't challenge same team twice within 2 hours
+    const REMATCH_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
+    const cooldownCutoff = new Date(Date.now() - REMATCH_COOLDOWN_MS);
+    
+    const recentMatchWithTarget = await StrickerMatch.findOne({
+      $or: [
+        { team1Squad: challengerSquadId, team2Squad: targetSquadId },
+        { team1Squad: targetSquadId, team2Squad: challengerSquadId }
+      ],
+      status: 'completed',
+      completedAt: { $gte: cooldownCutoff }
+    }).select('completedAt').lean();
+    
+    if (recentMatchWithTarget) {
+      const cooldownEnd = new Date(recentMatchWithTarget.completedAt).getTime() + REMATCH_COOLDOWN_MS;
+      const remainingMs = cooldownEnd - Date.now();
+      const remainingMinutes = Math.ceil(remainingMs / 60000);
+      const hours = Math.floor(remainingMinutes / 60);
+      const minutes = remainingMinutes % 60;
+      
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vous devez attendre ${hours}h${minutes.toString().padStart(2, '0')} avant de pouvoir rejouer contre cette équipe.`,
+        cooldownEndsAt: cooldownEnd,
+        cooldownRemaining: remainingMs
+      });
     }
     
     // Acquire lock for match creation
@@ -600,7 +702,8 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         io.to('stricker-mode').emit('strickerMatchCreated', {
           matchId: match._id,
           team1Squad: challengerSquad._id,
-          team2Squad: targetEntry.squad?._id || targetSquadId
+          team2Squad: targetEntry.squad?._id || targetSquadId,
+          mode: mode
         });
       }
       
@@ -632,19 +735,34 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
 router.post('/matchmaking/leave', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const odId = req.user._id.toString();
-    const mode = req.body.mode || 'stricker'; // stricker mode
+    const mode = req.body.mode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
     
     const playerIndex = strickerQueue.findIndex(p => p.odId === odId && p.mode === mode);
     if (playerIndex === -1) {
-      return res.status(400).json({ success: false, message: 'Vous n\'\u00eates pas dans la file d\'attente' });
+      return res.status(400).json({ success: false, message: 'Vous n\'êtes pas dans la file d\'attente' });
     }
+    
+    // Get squad info before removing
+    const leavingEntry = strickerQueue[playerIndex];
+    const squadId = leavingEntry?.squadId;
     
     strickerQueue.splice(playerIndex, 1);
     const modeQueue = strickerQueue.filter(p => p.mode === mode);
     
+    // Broadcast queue update to all users in stricker-mode room
+    const io = req.app.get('io');
+    if (io && squadId) {
+      io.to('stricker-mode').emit('strickerQueueUpdate', {
+        mode: mode,
+        action: 'leave',
+        squadId: squadId,
+        queueSize: modeQueue.length
+      });
+    }
+    
     res.json({
       success: true,
-      message: 'Vous avez quitt\u00e9 la file d\'attente',
+      message: 'Vous avez quitté la file d\'attente',
       queueSize: modeQueue.length
     });
   } catch (error) {
@@ -696,7 +814,7 @@ async function createStrickerMatch() {
     // Create the match with squad info
     const match = new StrickerMatch({
       gameMode: 'Search & Destroy',
-      mode: 'stricker',
+      mode: 'hardcore', // Default to hardcore (valid enum: 'hardcore' or 'cdl')
       teamSize: 5,
       // For now, just add the referents as players - roster selection happens in pre-match
       players: [
@@ -739,6 +857,15 @@ async function createStrickerMatch() {
         team1Selected: [],
         team2Selected: []
       }
+    });
+    
+    await match.save();
+    
+    // Add prevention warning message to chat
+    match.chat.push({
+      isSystem: true,
+      messageType: 'warning',
+      message: '⚠️ Tout comportement toxique ou insultant sera sévèrement sanctionné. Restez fair-play !'
     });
     
     await match.save();
@@ -1051,7 +1178,7 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
         mySquad = await Squad.findById(userSquadId)
           .populate({
             path: 'members.user',
-            select: 'username avatarUrl discordAvatar discordId statsStricker equippedTitle',
+            select: 'username avatarUrl discordAvatar discordId statsStricker equippedTitle platform',
             populate: {
               path: 'equippedTitle',
               select: 'name nameTranslations color rarity'
@@ -1065,9 +1192,37 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
             .map(p => p.user?._id?.toString() || p.user?.toString());
           
           // Available members = squad members not yet selected
-          availableMembers = mySquad.members
-            .filter(m => m.user && !selectedPlayerIds.includes(m.user._id?.toString()))
-            .map(m => ({
+          // Include platform and check GGSecure status for PC players
+          const membersToCheck = mySquad.members
+            .filter(m => m.user && !selectedPlayerIds.includes(m.user._id?.toString()));
+          
+          // Check GGSecure status for PC players
+          availableMembers = await Promise.all(membersToCheck.map(async (m) => {
+            let ggsecureStatus = null;
+            
+            // Check GGSecure for PC players
+            if (m.user.platform === 'PC') {
+              try {
+                const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${m.user._id}/status`, {
+                  headers: {
+                    'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
+                    'Content-Type': 'application/json'
+                  }
+                });
+                
+                if (ggsecureResponse.ok) {
+                  const ggsecureData = await ggsecureResponse.json();
+                  ggsecureStatus = ggsecureData.isOnline || ggsecureData.reason === 'api_key_missing';
+                } else {
+                  ggsecureStatus = true; // API error, allow selection
+                }
+              } catch (ggsecureError) {
+                console.error('[STRICKER] GGSecure check error for member:', ggsecureError);
+                ggsecureStatus = true; // API error, allow selection
+              }
+            }
+            
+            return {
               _id: m.user._id,
               username: m.user.username,
               avatarUrl: m.user.avatarUrl,
@@ -1075,8 +1230,11 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
               discordId: m.user.discordId,
               strickerPoints: m.user.statsStricker?.points || 0,
               role: m.role,
-              equippedTitle: m.user.equippedTitle
-            }));
+              equippedTitle: m.user.equippedTitle,
+              platform: m.user.platform,
+              ggsecureConnected: ggsecureStatus
+            };
+          }));
         }
       }
     }
@@ -1100,7 +1258,7 @@ router.get('/match/active/me', verifyToken, checkStrickerAccess, async (req, res
   try {
     const match = await StrickerMatch.findOne({
       'players.user': req.user._id,
-      status: { $in: ['pending', 'ready', 'in_progress'] }
+      status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
     })
     .populate('players.user', 'username avatarUrl discordAvatar discordId')
     .populate('team1Squad', 'name tag logo')
@@ -1897,6 +2055,15 @@ router.post('/match/:matchId/result', verifyToken, checkStrickerAccess, async (r
         // Disagreement - mark as disputed
         match.status = 'disputed';
         console.log(`[STRICKER] Match ${match._id} disputed - Team1 voted ${match.result.team1Report.winner}, Team2 voted ${match.result.team2Report.winner}`);
+        
+        // Send Discord notification to arbitrators
+        try {
+          await discordBot.logStrickerDispute(match);
+          console.log(`[STRICKER] Discord notification sent for dispute on match ${match._id}`);
+        } catch (discordError) {
+          console.error('[STRICKER] Error sending Discord dispute notification:', discordError);
+          // Don't fail the request if Discord notification fails
+        }
       }
     }
     
@@ -1926,14 +2093,23 @@ const STRICKER_RANK_POINTS = {
   immortel: { min: 1500, max: null, pointsLoss: -50 }
 };
 
-// Get points loss based on player's current rank
-function getPointsLossForRank(points) {
-  if (points >= 1500) return STRICKER_RANK_POINTS.immortel.pointsLoss;
-  if (points >= 1000) return STRICKER_RANK_POINTS.seigneurs.pointsLoss;
-  if (points >= 750) return STRICKER_RANK_POINTS.commandants.pointsLoss;
-  if (points >= 500) return STRICKER_RANK_POINTS.veterans.pointsLoss;
-  if (points >= 250) return STRICKER_RANK_POINTS.operateurs.pointsLoss;
-  return STRICKER_RANK_POINTS.recrues.pointsLoss;
+// Get player's stricker rank key based on points
+function getStrickerRankKey(points) {
+  if (points >= 1500) return 'immortel';
+  if (points >= 1000) return 'seigneurs';
+  if (points >= 750) return 'commandants';
+  if (points >= 500) return 'veterans';
+  if (points >= 250) return 'operateurs';
+  return 'recrues';
+}
+
+// Get points loss based on player's current rank (HARDCODED - ignores config)
+function getPointsLossForRank(points, pointsLossConfig = null) {
+  const rankKey = getStrickerRankKey(points);
+  
+  // STRICKER MODE: Point loss is HARDCODED based on rank (ignores config)
+  // Recrues: -15, Opérateurs: -20, Vétérans: -25, Commandants: -30, Seigneurs: -40, Immortel: -50
+  return STRICKER_RANK_POINTS[rankKey]?.pointsLoss || -15;
 }
 
 // Distribute rewards for stricker match
@@ -1944,15 +2120,32 @@ async function distributeStrickerRewards(match) {
     console.log(`[STRICKER REWARDS] Winner: Team ${match.result.winner}`);
     console.log(`[STRICKER REWARDS] Total players in match: ${match.players?.length || 0}`);
     
+    // Load config for rewards
+    const config = await Config.getOrCreate();
+    const rewardsConfig = config.strickerMatchRewards?.['Search & Destroy'] || {};
+    const pointsLossConfig = config.strickerPointsLossPerRank || {};
+    
+    console.log(`[STRICKER REWARDS] Config loaded:`, {
+      pointsWin: rewardsConfig.pointsWin,
+      coinsWin: rewardsConfig.coinsWin,
+      coinsLoss: rewardsConfig.coinsLoss,
+      xpWinMin: rewardsConfig.xpWinMin,
+      xpWinMax: rewardsConfig.xpWinMax,
+      pointsLossConfig
+    });
+    
     const winningTeam = match.result.winner;
     
-    // Fixed points for victory (+30 for everyone)
+    // STRICKER MODE: Victory is ALWAYS +30 pts (hardcoded, ignores config)
     const POINTS_WIN = 30;
+    
+    // Stricker mode: NO gold rewards, NO XP rewards
+    // Only: Points (+30 win, -X loss based on rank) and Munitions (+50 win, +25 loss consolation)
     
     // Munitions rewards - Winners get 50, losers get 25 (consolation)
     const CRANES_WIN = 50;
     const CRANES_LOSS = 25;
-    const squadsAwarded = {}; // { squadId: cranesEarned } to track rewards per squad
+    const squadsAwarded = {}; // { squadId: { cranes, pointsChange } } to track rewards per squad
     
     let processedPlayers = 0;
     let skippedFake = 0;
@@ -1997,11 +2190,17 @@ async function distributeStrickerRewards(match) {
       
       const oldPoints = user.statsStricker.points || 0;
       
-      // Calculate points change based on rank (hardcoded)
-      // Winners get +30, losers lose based on their current rank
-      const pointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldPoints);
+      // Calculate points change based on rank
+      // Winners get +30 pts, losers lose based on their current rank
+      const pointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldPoints, pointsLossConfig);
       
       user.statsStricker.points = Math.max(0, oldPoints + pointsChange);
+      
+      // NO gold rewards in Stricker mode
+      const goldEarned = 0;
+      
+      // NO XP rewards in Stricker mode
+      const xpEarned = 0;
       
       if (isWinner) {
         user.statsStricker.wins = (user.statsStricker.wins || 0) + 1;
@@ -2021,7 +2220,7 @@ async function distributeStrickerRewards(match) {
         // Check if this squad was already processed
         if (squadId in squadsAwarded) {
           // Squad already processed, just get the cranes value that was awarded
-          cranesAwarded = squadsAwarded[squadId];
+          cranesAwarded = squadsAwarded[squadId].cranes;
           console.log(`[STRICKER] Squad already processed for ${user.username}, using cached cranes: ${cranesAwarded}`);
         } else {
           // First player from this squad - process squad stats
@@ -2030,7 +2229,7 @@ async function distributeStrickerRewards(match) {
             if (!squad.statsStricker) squad.statsStricker = { points: 0, wins: 0, losses: 0 };
             
             const oldSquadPoints = squad.statsStricker.points || 0;
-            const squadPointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldSquadPoints);
+            const squadPointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldSquadPoints, pointsLossConfig);
             
             squad.statsStricker.points = Math.max(0, oldSquadPoints + squadPointsChange);
             
@@ -2044,7 +2243,7 @@ async function distributeStrickerRewards(match) {
             // Winners get 50 munitions, losers get 25 munitions (consolation)
             const cranesReward = isWinner ? CRANES_WIN : CRANES_LOSS;
             squad.cranes = (squad.cranes || 0) + cranesReward;
-            squadsAwarded[squadId] = cranesReward; // Store cranes value for other players
+            squadsAwarded[squadId] = { cranes: cranesReward, pointsChange: squadPointsChange }; // Store values for other players
             cranesAwarded = cranesReward;
             
             console.log(`[STRICKER] Squad ${squad.tag} (${squad._id}) ${isWinner ? 'WON' : 'LOST'} - Stats: ${oldSquadPoints} → ${squad.statsStricker.points} pts (${squadPointsChange > 0 ? '+' : ''}${squadPointsChange}), ${squad.statsStricker.wins}W/${squad.statsStricker.losses}L - Munitions: ${cranesReward} (total: ${squad.cranes})`);
@@ -2057,11 +2256,13 @@ async function distributeStrickerRewards(match) {
         }
       }
       
-      // Store rewards in match player data
+      // Store all rewards in match player data
       player.rewards = {
         pointsChange,
         oldPoints,
         newPoints: user.statsStricker.points,
+        goldEarned: 0,
+        xpEarned: 0,
         cranesEarned: cranesAwarded
       };
       
@@ -2403,7 +2604,7 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
         // Refund stricker points
         if (isWinner) {
           user.statsStricker = user.statsStricker || {};
-          user.statsStricker.points = Math.max(0, (user.statsStricker.points || 0) - (rewards.pointsWin || 35));
+          user.statsStricker.points = Math.max(0, (user.statsStricker.points || 0) - (rewards.pointsWin || 30));
           user.statsStricker.wins = Math.max(0, (user.statsStricker.wins || 0) - 1);
         } else {
           user.statsStricker = user.statsStricker || {};
@@ -2429,7 +2630,7 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
           squad1.statsStricker = squad1.statsStricker || {};
           if (match.winner === 1) {
             squad1.statsStricker.wins = Math.max(0, (squad1.statsStricker.wins || 0) - 1);
-            squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) - (rewards.pointsWin || 35));
+            squad1.statsStricker.points = Math.max(0, (squad1.statsStricker.points || 0) - (rewards.pointsWin || 30));
             // Refund winner munitions
             squad1.cranes = Math.max(0, (squad1.cranes || 0) - CRANES_WIN);
           } else {
@@ -2448,7 +2649,7 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
           squad2.statsStricker = squad2.statsStricker || {};
           if (match.winner === 2) {
             squad2.statsStricker.wins = Math.max(0, (squad2.statsStricker.wins || 0) - 1);
-            squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) - (rewards.pointsWin || 35));
+            squad2.statsStricker.points = Math.max(0, (squad2.statsStricker.points || 0) - (rewards.pointsWin || 30));
             // Refund winner munitions
             squad2.cranes = Math.max(0, (squad2.cranes || 0) - CRANES_WIN);
           } else {

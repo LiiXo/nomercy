@@ -170,16 +170,18 @@ const configSchema = new mongoose.Schema({
   // ==================== STRICKER MODE ====================
   
   // Récompenses pour le mode Stricker (Search & Destroy 5v5 uniquement)
+  // Victoire: +30 pts, +50 munitions (pas d'or ni d'XP)
+  // Défaite: -X pts selon rang, +25 munitions consolation
   strickerMatchRewards: {
     type: mongoose.Schema.Types.Mixed,
     default: () => ({
       'Search & Destroy': { 
-        pointsWin: 35, 
+        pointsWin: 30, 
         pointsLoss: -18, 
-        coinsWin: 80, 
-        coinsLoss: 25, 
-        xpWinMin: 700, 
-        xpWinMax: 800 
+        coinsWin: 0, 
+        coinsLoss: 0, 
+        xpWinMin: 0, 
+        xpWinMax: 0 
       }
     })
   },
@@ -198,15 +200,16 @@ const configSchema = new mongoose.Schema({
   },
   
   // Points perdus en défaite selon le rang Stricker
+  // Plus haut rang = plus de points perdus
   strickerPointsLossPerRank: {
     type: mongoose.Schema.Types.Mixed,
     default: () => ({
-      recrues: -10,
-      operateurs: -12,
-      veterans: -15,
-      commandants: -18,
-      seigneurs: -22,
-      immortel: -25
+      recrues: -15,
+      operateurs: -20,
+      veterans: -25,
+      commandants: -30,
+      seigneurs: -40,
+      immortel: -50
     })
   },
   

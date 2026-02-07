@@ -98,6 +98,73 @@ const getStrickerRank = (points) => {
   return STRICKER_RANKS.recrues;
 };
 
+// Cooldown Button Component - Shows live countdown, then challenge button when ready
+const CooldownButton = ({ cooldownEndsAt, onCooldownEnd, onChallenge, isDisabled, isLoading, buttonGradient }) => {
+  const [remaining, setRemaining] = useState(cooldownEndsAt - Date.now());
+  const [isReady, setIsReady] = useState(false);
+  
+  useEffect(() => {
+    if (remaining <= 0) {
+      setIsReady(true);
+      if (onCooldownEnd) onCooldownEnd();
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      const newRemaining = cooldownEndsAt - Date.now();
+      setRemaining(newRemaining);
+      if (newRemaining <= 0) {
+        setIsReady(true);
+        if (onCooldownEnd) onCooldownEnd();
+        clearInterval(interval);
+      }
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [cooldownEndsAt, onCooldownEnd, remaining]);
+  
+  // Cooldown finished - show challenge button
+  if (isReady || remaining <= 0) {
+    return (
+      <button
+        onClick={onChallenge}
+        disabled={isDisabled}
+        className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
+          !isDisabled
+            ? `bg-gradient-to-r ${buttonGradient} text-white`
+            : 'bg-dark-700 text-gray-500 cursor-not-allowed'
+        }`}
+      >
+        {isLoading ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Swords className="w-4 h-4 animate-pulse" />
+        )}
+        On vous provoque !
+      </button>
+    );
+  }
+  
+  // Still on cooldown - show countdown
+  const hours = Math.floor(remaining / (60 * 60 * 1000));
+  const minutes = Math.floor((remaining % (60 * 60 * 1000)) / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  
+  const timeStr = hours > 0 
+    ? `${hours}h${minutes.toString().padStart(2, '0')}m` 
+    : `${minutes}m${seconds.toString().padStart(2, '0')}s`;
+  
+  return (
+    <button
+      disabled
+      className="px-4 py-2 rounded-lg font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center gap-2 cursor-not-allowed"
+    >
+      <Clock className="w-4 h-4 animate-pulse" />
+      {timeStr}
+    </button>
+  );
+};
+
 // Translations
 const translations = {
   fr: {
@@ -150,6 +217,7 @@ const translations = {
     defeat: 'Défaite',
     squadsChallenging: 'Escouades en recherche',
     challenge: 'Défier',
+    provocation: 'On vous provoque !',
     mustChallenge: 'Une escouade vous attend !',
     unknownSquad: 'Escouade mystère',
     activeMatchFound: 'Match en cours détecté',
@@ -208,6 +276,7 @@ const translations = {
     defeat: 'Defeat',
     squadsChallenging: 'Squads looking for a match',
     challenge: 'Challenge',
+    provocation: 'We challenge you!',
     mustChallenge: 'A squad is waiting for you!',
     unknownSquad: 'Mystery squad',
     activeMatchFound: 'Active match detected',
@@ -604,11 +673,38 @@ const StrickerMode = () => {
       }
     });
     
+    // Listen for real-time queue updates (when squads join/leave)
+    const unsubQueueUpdate = on('strickerQueueUpdate', (data) => {
+      console.log('[StrickerMode] Queue update received:', data);
+      
+      // Only process updates for the current mode
+      if (data.mode !== (mode || 'hardcore')) return;
+      
+      setQueueSize(data.queueSize);
+      setSquadsSearching(data.queueSize);
+      
+      if (data.action === 'join' && data.squad) {
+        // Add the squad to the searching list if it's not our squad
+        const mySquadId = mySquad?._id;
+        if (data.squad.squadId !== mySquadId) {
+          setSearchingSquads(prev => {
+            // Avoid duplicates
+            if (prev.some(s => s.squadId === data.squad.squadId)) return prev;
+            return [...prev, data.squad];
+          });
+        }
+      } else if (data.action === 'leave' && data.squadId) {
+        // Remove the squad from the searching list
+        setSearchingSquads(prev => prev.filter(s => s.squadId !== data.squadId));
+      }
+    });
+    
     return () => {
       leaveStrickerMode();
       unsubMatchCreated();
+      unsubQueueUpdate();
     };
-  }, [hasAccess, isConnected, mySquad, joinStrickerMode, leaveStrickerMode, on, navigate]);
+  }, [hasAccess, isConnected, mySquad, joinStrickerMode, leaveStrickerMode, on, navigate, mode]);
   
   // Calculate countdown to next season using seasonEndDate from API
   useEffect(() => {
@@ -1123,7 +1219,11 @@ const StrickerMode = () => {
                       <Crosshair className="w-4 h-4 text-lime-400" />
                       {t.cranes}
                     </span>
-                    <span className="text-gray-200 font-bold">+20</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lime-400 font-bold">+50</span>
+                      <span className="text-gray-500">/</span>
+                      <span className="text-red-400 font-bold">+25</span>
+                    </div>
                   </div>
                 </div>
                 
@@ -1243,22 +1343,32 @@ const StrickerMode = () => {
                               <p className="text-red-400 text-sm">{squadRank.pointsLoss} pts</p>
                             </div>
                           </div>
-                          <button
-                            onClick={() => handleChallengeSquad(squad.squadId)}
-                            disabled={challengingSquad === squad.squadId || !canStartMatch}
-                            className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
-                              canStartMatch
-                                ? `bg-gradient-to-r ${getButtonGradient()} text-white`
-                                : 'bg-dark-700 text-gray-500 cursor-not-allowed'
-                            }`}
-                          >
-                            {challengingSquad === squad.squadId ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Swords className="w-4 h-4" />
-                            )}
-                            {t.challenge}
-                          </button>
+                          {squad.onCooldown && squad.cooldownEndsAt > Date.now() ? (
+                            <CooldownButton 
+                              cooldownEndsAt={squad.cooldownEndsAt} 
+                              onChallenge={() => handleChallengeSquad(squad.squadId)}
+                              isDisabled={challengingSquad === squad.squadId || !canStartMatch}
+                              isLoading={challengingSquad === squad.squadId}
+                              buttonGradient={getButtonGradient()}
+                            />
+                          ) : (
+                            <button
+                              onClick={() => handleChallengeSquad(squad.squadId)}
+                              disabled={challengingSquad === squad.squadId || !canStartMatch}
+                              className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
+                                canStartMatch
+                                  ? `bg-gradient-to-r ${getButtonGradient()} text-white`
+                                  : 'bg-dark-700 text-gray-500 cursor-not-allowed'
+                              }`}
+                            >
+                              {challengingSquad === squad.squadId ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Swords className="w-4 h-4 animate-pulse" />
+                              )}
+                              {t.provocation}
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -1555,9 +1665,9 @@ const StrickerMode = () => {
                         <div className="absolute inset-0 bg-gradient-to-br from-lime-500/10 to-transparent animate-pulse" />
                       )}
                       
-                      <div className="relative p-4 lg:p-5">
+                      <div className="relative p-4 lg:p-5 flex flex-col items-center">
                         {/* Rank image */}
-                        <div className={`relative w-32 h-32 lg:w-40 lg:h-40 mx-auto mb-3 ${
+                        <div className={`relative w-40 h-40 lg:w-48 lg:h-48 mb-3 ${
                           isCurrentRank 
                             ? 'animate-pulse' 
                             : isAchieved 
