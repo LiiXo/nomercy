@@ -163,34 +163,34 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
       }
     });
     
-    // Get list of squads searching (excluding user's own squad)
+    // Get list of squads searching (including user's own squad, marked as isOwnSquad)
     const searchingSquads = [];
     const seenSquads = new Set();
     modeQueue.forEach((entry) => {
       if (entry && entry.squadId && !seenSquads.has(entry.squadId)) {
         seenSquads.add(entry.squadId);
-        // Don't include user's own squad in the list
-        if (entry.squadId !== userSquadId) {
-          const cooldownEndTime = cooldownMap[entry.squadId];
-          const now = Date.now();
-          const isOnCooldown = cooldownEndTime && cooldownEndTime > now;
-          
-          searchingSquads.push({
-            odId: entry.odId,
-            odUser: entry.odUser,
-            username: entry.username,
-            squadId: entry.squadId,
-            squadName: entry.squadName,
-            squadTag: entry.squadTag,
-            squadLogo: entry.squad?.logo || null,
-            points: entry.points,
-            joinedAt: entry.joinedAt,
-            // Cooldown info
-            onCooldown: isOnCooldown,
-            cooldownEndsAt: isOnCooldown ? cooldownEndTime : null,
-            cooldownRemaining: isOnCooldown ? cooldownEndTime - now : 0
-          });
-        }
+        const isOwnSquad = entry.squadId === userSquadId;
+        const cooldownEndTime = cooldownMap[entry.squadId];
+        const now = Date.now();
+        const isOnCooldown = !isOwnSquad && cooldownEndTime && cooldownEndTime > now;
+        
+        searchingSquads.push({
+          odId: entry.odId,
+          odUser: entry.odUser,
+          username: entry.username,
+          squadId: entry.squadId,
+          squadName: entry.squadName,
+          squadTag: entry.squadTag,
+          squadLogo: entry.squad?.logo || null,
+          points: entry.points,
+          joinedAt: entry.joinedAt,
+          // Cooldown info (not applicable to own squad)
+          onCooldown: isOnCooldown,
+          cooldownEndsAt: isOnCooldown ? cooldownEndTime : null,
+          cooldownRemaining: isOnCooldown ? cooldownEndTime - now : 0,
+          // Mark if this is the user's own squad
+          isOwnSquad: isOwnSquad
+        });
       }
     });
     

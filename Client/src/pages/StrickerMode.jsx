@@ -686,18 +686,23 @@ const StrickerMode = () => {
       setSquadsSearching(data.queueSize);
       
       if (data.action === 'join' && data.squad) {
-        // Add the squad to the searching list if it's not our squad
-        const mySquadId = mySquad?._id;
-        if (data.squad.squadId !== mySquadId) {
-          setSearchingSquads(prev => {
-            // Avoid duplicates
-            if (prev.some(s => s.squadId === data.squad.squadId)) return prev;
-            return [...prev, data.squad];
-          });
-        }
+        // Add the squad to the searching list (including own squad)
+        const incomingSquadId = data.squad.squadId?.toString() || data.squad.squadId;
+        const mySquadId = mySquad?._id?.toString() || mySquad?._id;
+        // Mark if this is own squad
+        const squadWithFlag = {
+          ...data.squad,
+          isOwnSquad: incomingSquadId === mySquadId
+        };
+        setSearchingSquads(prev => {
+          // Avoid duplicates
+          if (prev.some(s => (s.squadId?.toString() || s.squadId) === incomingSquadId)) return prev;
+          return [...prev, squadWithFlag];
+        });
       } else if (data.action === 'leave' && data.squadId) {
         // Remove the squad from the searching list
-        setSearchingSquads(prev => prev.filter(s => s.squadId !== data.squadId));
+        const leavingSquadId = data.squadId?.toString() || data.squadId;
+        setSearchingSquads(prev => prev.filter(s => (s.squadId?.toString() || s.squadId) !== leavingSquadId));
       }
     });
     
@@ -1258,8 +1263,8 @@ const StrickerMode = () => {
                       <Lock className="w-5 h-5" />
                       {t.joinQueue}
                     </button>
-                  ) : searchingSquads.length > 0 ? (
-                    /* Block search button when squads are available - force challenge */
+                  ) : searchingSquads.some(squad => !squad.isOwnSquad && (!squad.onCooldown || squad.cooldownEndsAt <= Date.now())) ? (
+                    /* Block search button only when there's at least one OTHER squad we haven't played against (not on cooldown, not own squad) */
                     <div className="text-center">
                       <p className="text-orange-400 font-medium mb-2">{t.mustChallenge}</p>
                       <button
@@ -1293,8 +1298,8 @@ const StrickerMode = () => {
                 </div>
               </div>
               
-              {/* List of squads looking for a match */}
-              {searchingSquads.length > 0 && !inQueue && !activeMatch && (
+              {/* List of squads looking for a match - visible when there are squads OR when in queue */}
+              {searchingSquads.length > 0 && !activeMatch && (
                 <div className="mt-6">
                   <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                     <Flame className="w-5 h-5 text-orange-400" />
@@ -1306,7 +1311,11 @@ const StrickerMode = () => {
                       const points = squad.points || 0;
                       const squadRank = getStrickerRank(points);
                       
+                      // Check if this is own squad
+                      const isOwnSquad = squad.isOwnSquad;
+                      
                       const getBorderColor = () => {
+                        if (isOwnSquad) return 'border-lime-500/60';
                         if (points < 250) return 'border-green-500/40';
                         if (points < 500) return 'border-lime-500/40';
                         if (points < 750) return 'border-yellow-500/40';
@@ -1315,6 +1324,7 @@ const StrickerMode = () => {
                         return 'border-rose-500/40';
                       };
                       const getIconColor = () => {
+                        if (isOwnSquad) return 'text-lime-400';
                         if (points < 250) return 'text-green-400';
                         if (points < 500) return 'text-lime-400';
                         if (points < 750) return 'text-yellow-400';
@@ -1334,31 +1344,51 @@ const StrickerMode = () => {
                       return (
                         <div 
                           key={squad.squadId}
-                          className={`flex items-center justify-between p-4 bg-dark-800/80 border ${getBorderColor()} rounded-xl`}
+                          className={`flex items-center justify-between p-4 ${isOwnSquad ? 'bg-lime-500/10' : 'bg-dark-800/80'} border ${getBorderColor()} rounded-xl`}
                         >
                           <div className="flex items-center gap-3">
-                            <div className={`w-12 h-12 rounded-lg bg-dark-700 flex items-center justify-center ${getIconColor()}`}>
-                              <Crosshair className="w-7 h-7" />
+                            <div className={`w-12 h-12 rounded-lg ${isOwnSquad ? 'bg-lime-500/20' : 'bg-dark-700'} flex items-center justify-center ${getIconColor()}`}>
+                              {isOwnSquad ? (
+                                <Users className="w-7 h-7" />
+                              ) : (
+                                <Crosshair className="w-7 h-7" />
+                              )}
                             </div>
                             <div>
-                              <p className="text-green-400 font-bold">+{squadRank.pointsWin} pts</p>
-                              <p className="text-red-400 text-sm">{squadRank.pointsLoss} pts</p>
+                              {isOwnSquad ? (
+                                <>
+                                  <p className="text-lime-400 font-bold">[{squad.squadTag}] {squad.squadName}</p>
+                                  <p className="text-lime-400/70 text-sm flex items-center gap-1">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    {language === 'fr' ? 'En recherche...' : 'Searching...'}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-green-400 font-bold">+{squadRank.pointsWin} pts</p>
+                                  <p className="text-red-400 text-sm">{squadRank.pointsLoss} pts</p>
+                                </>
+                              )}
                             </div>
                           </div>
-                          {squad.onCooldown && squad.cooldownEndsAt > Date.now() ? (
+                          {isOwnSquad ? (
+                            <div className="px-4 py-2 bg-lime-500/20 rounded-lg text-lime-400 font-medium text-sm">
+                              {language === 'fr' ? 'Votre escouade' : 'Your squad'}
+                            </div>
+                          ) : squad.onCooldown && squad.cooldownEndsAt > Date.now() ? (
                             <CooldownButton 
                               cooldownEndsAt={squad.cooldownEndsAt} 
                               onChallenge={() => handleChallengeSquad(squad.squadId)}
-                              isDisabled={challengingSquad === squad.squadId || !canStartMatch}
+                              isDisabled={challengingSquad === squad.squadId || !canStartMatch || inQueue}
                               isLoading={challengingSquad === squad.squadId}
                               buttonGradient={getButtonGradient()}
                             />
                           ) : (
                             <button
                               onClick={() => handleChallengeSquad(squad.squadId)}
-                              disabled={challengingSquad === squad.squadId || !canStartMatch}
+                              disabled={challengingSquad === squad.squadId || !canStartMatch || inQueue}
                               className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
-                                canStartMatch
+                                canStartMatch && !inQueue
                                   ? `bg-gradient-to-r ${getButtonGradient()} text-white`
                                   : 'bg-dark-700 text-gray-500 cursor-not-allowed'
                               }`}

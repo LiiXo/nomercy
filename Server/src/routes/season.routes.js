@@ -684,14 +684,18 @@ router.post('/admin/ranked/reset', verifyToken, requireAdmin, async (req, res) =
   }
 });
 
-// Get ranked season info (for admin display) - calculated from match history
+// Get ranked season info (for admin display) - uses Ranking collection (same as public leaderboard)
 router.get('/admin/ranked/info', verifyToken, requireAdmin, async (req, res) => {
   try {
+    // Get mode from query (default to 'hardcore' to match public leaderboard behavior)
+    const { mode = 'hardcore' } = req.query;
+    
+    if (!['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ success: false, message: 'Invalid mode. Must be "hardcore" or "cdl"' });
+    }
+    
     // Get current season from month (February = 2, etc.)
     const currentSeason = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
-    const seasonStartDate = new Date(Date.UTC(currentYear, currentSeason - 1, 1, 9, 0, 0));
-    const seasonEndDate = new Date(Date.UTC(currentYear, currentSeason, 1, 9, 0, 0));
     
     // Get rank thresholds from AppSettings
     const settings = await AppSettings.getSettings();
@@ -701,83 +705,20 @@ router.get('/admin/ranked/info', verifyToken, requireAdmin, async (req, res) => 
       grandmaster: { min: 3000 }, champion: { min: 3500 }
     };
     
-    // Get all matches for the season, sorted chronologically for proper running total
-    const matches = await RankedMatch.find({
-      status: 'completed',
-      'result.winner': { $exists: true, $ne: null },
-      completedAt: { $gte: seasonStartDate, $lt: seasonEndDate },
-      isTestMatch: { $ne: true }
+    // Use Ranking collection directly - SAME SOURCE as public leaderboard
+    const rankings = await Ranking.find({
+      mode,
+      season: currentSeason,
+      $or: [{ wins: { $gt: 0 } }, { losses: { $gt: 0 } }] // Only players who have played
     })
-    .sort({ completedAt: 1 })
-    .select('players result completedAt')
+    .populate('user', 'username avatar discordAvatar discordId isBanned isDeleted avatarUrl')
+    .sort({ points: -1, wins: -1 }) // Sort by points, then wins
     .lean();
 
-    // Build player stats with proper running total (never goes below 0)
-    const playerStatsMap = new Map();
-
-    for (const match of matches) {
-      const winningTeam = Number(match.result.winner);
-
-      for (const player of match.players) {
-        if (!player.user || player.isFake) continue;
-
-        const odiserId = player.user.toString();
-        const playerTeam = Number(player.team);
-        const isWin = playerTeam === winningTeam;
-        const pointsChange = player.rewards?.pointsChange || 0;
-
-        if (!playerStatsMap.has(odiserId)) {
-          playerStatsMap.set(odiserId, {
-            odiserId,
-            wins: 0,
-            losses: 0,
-            totalMatches: 0,
-            runningPoints: 0
-          });
-        }
-
-        const stats = playerStatsMap.get(odiserId);
-        stats.totalMatches++;
-
-        if (isWin) {
-          stats.wins++;
-        } else {
-          stats.losses++;
-        }
-
-        // Running total that never goes below 0
-        stats.runningPoints = Math.max(0, stats.runningPoints + pointsChange);
-      }
-    }
-
-    // Convert to array and lookup user info
-    const User = (await import('../models/User.js')).default;
-    const userIds = Array.from(playerStatsMap.keys());
-    const users = await User.find({ _id: { $in: userIds } })
-      .select('_id username avatar isBanned isDeleted')
-      .lean();
-    const userMap = new Map(users.map(u => [u._id.toString(), u]));
-
-    const playerStats = [];
-    for (const [odiserId, stats] of playerStatsMap) {
-      const user = userMap.get(odiserId);
-      if (!user || user.isBanned || user.isDeleted) continue;
-
-      playerStats.push({
-        _id: odiserId,
-        wins: stats.wins,
-        losses: stats.losses,
-        totalMatches: stats.totalMatches,
-        totalPoints: stats.runningPoints,
-        userInfo: user
-      });
-    }
-
-    // Sort by points DESC, wins DESC
-    playerStats.sort((a, b) => {
-      if (b.totalPoints !== a.totalPoints) return b.totalPoints - a.totalPoints;
-      return b.wins - a.wins;
-    });
+    // Filter out banned/deleted users and those without username
+    const validRankings = rankings.filter(r => 
+      r.user && !r.user.isBanned && !r.user.isDeleted && r.user.username
+    );
     
     // Helper function to get division from points
     const getDivision = (points) => {
@@ -796,29 +737,30 @@ router.get('/admin/ranked/info', verifyToken, requireAdmin, async (req, res) => 
     const divisionCounts = {};
     ELIGIBLE_DIVISIONS.forEach(d => divisionCounts[d] = 0);
     
-    playerStats.forEach(p => {
-      const division = getDivision(p.totalPoints);
+    validRankings.forEach(r => {
+      const division = getDivision(r.points);
       if (ELIGIBLE_DIVISIONS.includes(division)) {
         divisionCounts[division]++;
       }
     });
     
     // Get top 5
-    const top5 = playerStats.slice(0, 5).map((p, i) => ({
+    const top5 = validRankings.slice(0, 5).map((r, i) => ({
       position: i + 1,
-      username: p.userInfo?.username || 'Unknown',
-      points: p.totalPoints,
-      wins: p.wins,
-      losses: p.losses,
-      division: getDivision(p.totalPoints),
+      username: r.user?.username || 'Unknown',
+      points: r.points,
+      wins: r.wins,
+      losses: r.losses,
+      division: getDivision(r.points),
       potentialGold: RANKED_REWARD_GOLD[i + 1]
     }));
     
     res.json({
       success: true,
       currentSeason,
-      totalPlayers: playerStats.length,
-      activePlayers: playerStats.length,
+      mode, // Include the mode used for filtering
+      totalPlayers: validRankings.length,
+      activePlayers: validRankings.length,
       divisionCounts,
       top5,
       rewardGold: RANKED_REWARD_GOLD,

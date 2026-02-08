@@ -7092,6 +7092,7 @@ Cette action est irréversible!`)) {
   const [seasonsLoading, setSeasonsLoading] = useState(false);
   const [seasonToDelete, setSeasonToDelete] = useState(null);
   const [rankedSeasonInfo, setRankedSeasonInfo] = useState(null);
+  const [rankedSeasonMode, setRankedSeasonMode] = useState('hardcore'); // 'hardcore' or 'cdl'
   const [rankedResetLoading, setRankedResetLoading] = useState(false);
   const [showRankedResetConfirm, setShowRankedResetConfirm] = useState(false);
   const [testTrophyLoading, setTestTrophyLoading] = useState(null);
@@ -7130,10 +7131,10 @@ Cette action est irréversible!`)) {
     }
   };
 
-  const fetchRankedSeasonInfo = async () => {
+  const fetchRankedSeasonInfo = async (mode = rankedSeasonMode) => {
     try {
       const [seasonRes, settingsRes] = await Promise.all([
-        fetch(`${API_URL}/seasons/admin/ranked/info`, { credentials: 'include' }),
+        fetch(`${API_URL}/seasons/admin/ranked/info?mode=${mode}`, { credentials: 'include' }),
         fetch(`${API_URL}/app-settings/admin`, { credentials: 'include' })
       ]);
       const seasonData = await seasonRes.json();
@@ -7581,13 +7582,46 @@ Cette action est irréversible!`)) {
         {/* RAZ Season Button */}
         <div className="bg-dark-800/50 border border-purple-500/30 rounded-xl overflow-hidden">
           <div className="p-6 bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-b border-white/10">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <RotateCcw className="w-5 h-5 text-purple-400" />
-              RAZ Saison Mode Classé
-            </h3>
-            <p className="text-gray-400 text-sm mt-1">
-              Cette action va terminer la saison actuelle et distribuer les récompenses
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <RotateCcw className="w-5 h-5 text-purple-400" />
+                  RAZ Saison Mode Classé
+                </h3>
+                <p className="text-gray-400 text-sm mt-1">
+                  Cette action va terminer la saison actuelle et distribuer les récompenses
+                </p>
+              </div>
+              {/* Mode Selector */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setRankedSeasonMode('hardcore');
+                    fetchRankedSeasonInfo('hardcore');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    rankedSeasonMode === 'hardcore'
+                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
+                      : 'bg-dark-700 text-gray-400 hover:bg-dark-600 hover:text-white'
+                  }`}
+                >
+                  Hardcore
+                </button>
+                <button
+                  onClick={() => {
+                    setRankedSeasonMode('cdl');
+                    fetchRankedSeasonInfo('cdl');
+                  }}
+                  className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                    rankedSeasonMode === 'cdl'
+                      ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30'
+                      : 'bg-dark-700 text-gray-400 hover:bg-dark-600 hover:text-white'
+                  }`}
+                >
+                  CDL
+                </button>
+              </div>
+            </div>
           </div>
           
           <div className="p-6">
@@ -7597,6 +7631,13 @@ Cette action est irréversible!`)) {
                 <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                   <Trophy className="w-4 h-4 text-amber-400" />
                   Distribution des trophées
+                  <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                    rankedSeasonMode === 'hardcore' 
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                      : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  }`}>
+                    {rankedSeasonMode === 'hardcore' ? 'Hardcore' : 'CDL'}
+                  </span>
                 </h4>
                 <p className="text-gray-400 text-sm mb-3">
                   Un trophée unique sera créé et distribué aux joueurs du rang Platine à Champion :
@@ -7620,6 +7661,13 @@ Cette action est irréversible!`)) {
                 <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                   <Coins className="w-4 h-4 text-yellow-400" />
                   Distribution des Golds - Top 5
+                  <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                    rankedSeasonMode === 'hardcore' 
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                      : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                  }`}>
+                    {rankedSeasonMode === 'hardcore' ? 'Hardcore' : 'CDL'}
+                  </span>
                 </h4>
                 <div className="space-y-2">
                   {[1, 2, 3, 4, 5].map(pos => {
@@ -7682,6 +7730,13 @@ Cette action est irréversible!`)) {
                   <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-cyan-400" />
                     Statistiques actuelles
+                    <span className={`ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                      rankedSeasonMode === 'hardcore' 
+                        ? 'bg-red-500/20 text-red-400 border border-red-500/30' 
+                        : 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
+                    }`}>
+                      {rankedSeasonMode === 'hardcore' ? 'Hardcore' : 'CDL'}
+                    </span>
                   </h4>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center p-3 bg-dark-800 rounded-lg">
