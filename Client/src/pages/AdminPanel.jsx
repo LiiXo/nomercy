@@ -5653,6 +5653,68 @@ Cette action est irréversible!`)) {
           </div>
         </div>
 
+        {/* Mode Stricker Toggle */}
+        <div className="bg-gradient-to-br from-lime-500/10 to-green-500/10 border border-lime-500/30 rounded-xl p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-lime-500/20 rounded-lg">
+                <Target className="w-6 h-6 text-lime-400" />
+              </div>
+              <div>
+                <h3 className="text-white font-bold">Mode Stricker</h3>
+                <p className="text-gray-400 text-sm">Activer le mode Stricker pour tous les joueurs</p>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${API_URL}/app-settings/admin/feature/strickerMode`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ enabled: !appSettings?.features?.strickerMode?.enabled })
+                  });
+                  const data = await response.json();
+                  if (data.success) {
+                    setSuccess(`Mode Stricker ${!appSettings?.features?.strickerMode?.enabled ? 'activé' : 'désactivé'}`);
+                    fetchAppSettings();
+                  }
+                } catch (err) {
+                  setError('Erreur');
+                }
+              }}
+              className={`relative w-14 h-8 rounded-full transition-colors ${
+                appSettings?.features?.strickerMode?.enabled ? 'bg-lime-500' : 'bg-dark-700'
+              }`}
+            >
+              <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full transition-transform ${
+                appSettings?.features?.strickerMode?.enabled ? 'translate-x-6' : ''
+              }`} />
+            </button>
+          </div>
+          <div className={`p-4 rounded-lg ${
+            appSettings?.features?.strickerMode?.enabled 
+              ? 'bg-lime-500/10 border border-lime-500/30' 
+              : 'bg-dark-800/50 border border-white/10'
+          }`}>
+            <p className={`text-sm flex items-center gap-2 ${
+              appSettings?.features?.strickerMode?.enabled ? 'text-lime-400' : 'text-gray-500'
+            }`}>
+              {appSettings?.features?.strickerMode?.enabled ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Le mode Stricker est visible dans le menu, sur l'accueil et dans le footer pour tous les joueurs
+                </>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4" />
+                  Le mode Stricker est masqué (réservé aux admin/staff/arbitre)
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
         {/* BO1/BO3 Format Toggle */}
         <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6 mb-6">
           <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">

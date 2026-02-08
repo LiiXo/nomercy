@@ -229,12 +229,37 @@ const Shop = () => {
 
   const rarityOrder = { legendary: 0, epic: 1, rare: 2, common: 3 };
 
-  // Sort by price (most expensive first), then by rarity
+  // Check if item is new (created within last 14 days)
+  const isNewItem = (item) => {
+    if (!item.createdAt) return false;
+    const createdDate = new Date(item.createdAt);
+    const now = new Date();
+    const daysDiff = (now - createdDate) / (1000 * 60 * 60 * 24);
+    return daysDiff <= 14;
+  };
+
+  // List of new Stricker/Ranked item names for highlighting
+  const newStrickerRankedItems = [
+    'Lucky Strike', 'Jackpot Hunter', 'Golden Gambler', 'Stricker God', 'Fortune Favored', 'Dice Master',
+    'ELO Destroyer', 'Diamond Climber', 'Ranked Royalty', 'Masters Elite', 'Ranked Predator', 'Unranked Terror', 'Season Champion', 'Winstreak Warrior',
+    'Slot Machine Fever', 'Lucky Clover', 'Diamond Rush', 'Fortune Wheel', 'Rainbow Luck',
+    "Champion's Glory", 'Rank Up Surge', 'Diamond Division', 'Victory Flames', 'Elo Master', 'Predator Instinct', 'Season Legend'
+  ];
+
+  const isFeaturedNewItem = (item) => {
+    return newStrickerRankedItems.includes(item.name) || isNewItem(item);
+  };
+
+  // Sort: Featured/New items first, then by price (most expensive first), then by rarity
   const sortedFilteredItems = (activeCategory === 'all' 
     ? items 
     : items.filter(item => item.category === activeCategory)
   ).sort((a, b) => {
-    // First sort by price (descending)
+    // First: Featured new items at the top
+    const aFeatured = isFeaturedNewItem(a) ? 0 : 1;
+    const bFeatured = isFeaturedNewItem(b) ? 0 : 1;
+    if (aFeatured !== bFeatured) return aFeatured - bFeatured;
+    // Then sort by price (descending)
     if (b.price !== a.price) return b.price - a.price;
     // Then by rarity
     return (rarityOrder[a.rarity] || 3) - (rarityOrder[b.rarity] || 3);
@@ -339,8 +364,56 @@ const Shop = () => {
               </p>
             </div>
           ) : (
-            /* Grille d'items */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <>
+              {/* Banner NEW Items - Stricker & Ranked */}
+              {sortedFilteredItems.some(item => isFeaturedNewItem(item)) && (
+                <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-purple-900/50 via-pink-900/50 to-cyan-900/50 border border-purple-500/30 relative overflow-hidden">
+                  {/* Animated background glow */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-cyan-500/10 animate-pulse" />
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500" />
+                  
+                  <div className="relative flex items-center gap-4">
+                    {/* Icon */}
+                    <div className="flex-shrink-0 w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                      <Sparkles className="w-7 h-7 text-white animate-pulse" />
+                    </div>
+                    
+                    {/* Text */}
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent">
+                          {language === 'fr' ? 'NOUVEAUTÉS STRICKER & RANKED !' : 'NEW STRICKER & RANKED ITEMS!'}
+                        </span>
+                        <span className="px-2 py-0.5 text-xs font-black bg-gradient-to-r from-pink-500 to-purple-500 rounded-full text-white animate-bounce">
+                          NEW
+                        </span>
+                      </h3>
+                      <p className="text-sm text-gray-400">
+                        {language === 'fr' 
+                          ? 'Découvre les nouveaux titres et animations exclusifs pour les modes Stricker et Ranked !'
+                          : 'Discover exclusive new titles and animations for Stricker and Ranked modes!'
+                        }
+                      </p>
+                    </div>
+
+                    {/* Decorative elements */}
+                    <div className="hidden md:flex items-center gap-2">
+                      <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center border border-yellow-500/30">
+                        <Trophy className="w-5 h-5 text-yellow-400" />
+                      </div>
+                      <div className="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center border border-cyan-500/30">
+                        <Crown className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center border border-green-500/30">
+                        <Diamond className="w-5 h-5 text-green-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Grille d'items */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {sortedFilteredItems.map((item) => {
                 const rarity = rarityColors[item.rarity] || rarityColors.common;
                 const Icon = getItemIcon(item.icon);
@@ -358,6 +431,18 @@ const Shop = () => {
                     <div className={`absolute top-3 right-3 px-2 py-1 rounded-md text-xs font-semibold ${rarity.bg} ${rarity.text}`}>
                       {rarity.label[language]}
                     </div>
+
+                    {/* Badge NEW pour items Stricker/Ranked */}
+                    {isFeaturedNewItem(item) && (
+                      <div className="absolute -top-1 -left-1 z-20">
+                        <div className="relative">
+                          <div className="px-3 py-1.5 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 rounded-br-xl rounded-tl-xl text-xs font-black text-white shadow-lg animate-pulse">
+                            NEW
+                          </div>
+                          <div className="absolute inset-0 bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 rounded-br-xl rounded-tl-xl blur-md opacity-60 animate-pulse" />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Badge catégorie (only when viewing 'All') */}
                     {activeCategory === 'all' && categoryLabels[item.category] && (
@@ -517,6 +602,7 @@ const Shop = () => {
                 );
               })}
             </div>
+            </>
           )}
 
 

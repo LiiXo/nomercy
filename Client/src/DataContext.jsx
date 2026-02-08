@@ -133,6 +133,14 @@ export const DataProvider = ({ children }) => {
     return appSettings?.features?.cdlMode?.enabled !== false;
   }, [appSettings]);
   
+  // Check if Stricker mode is enabled (for public access)
+  const isStrickerModeEnabled = useMemo(() => {
+    return appSettings?.features?.strickerMode?.enabled === true;
+  }, [appSettings]);
+  
+  // Stricker mode loading state
+  const strickerModeLoading = appSettingsLoading;
+  
   // Get gold coins for a ladder type
   const getGoldCoinsForLadder = useCallback((ladderId) => {
     if (ladderId === 'squad-team') {
@@ -156,6 +164,8 @@ export const DataProvider = ({ children }) => {
     isDuoTrioOpen,
     isHardcoreModeEnabled,
     isCdlModeEnabled,
+    isStrickerModeEnabled,
+    strickerModeLoading,
   }), [
     appSettings, 
     appSettingsLoading, 
@@ -165,7 +175,9 @@ export const DataProvider = ({ children }) => {
     getGoldCoinsForLadder,
     isDuoTrioOpen,
     isHardcoreModeEnabled,
-    isCdlModeEnabled
+    isCdlModeEnabled,
+    isStrickerModeEnabled,
+    strickerModeLoading
   ]);
   
   return (

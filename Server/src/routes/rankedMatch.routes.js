@@ -1196,6 +1196,11 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Le MVP doit être un joueur de l\'équipe gagnante' });
     }
 
+    // Prevent voting for yourself (only for real players)
+    if (!isFakeMvp && mvpPlayerId.toString() === user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'Impossible de voter pour soi-même' });
+    }
+
     // Initialize MVP object if needed
     if (!match.mvp) {
       match.mvp = {
@@ -1355,7 +1360,7 @@ router.post('/:matchId/mvp-vote', verifyToken, async (req, res) => {
       mvpStats: {
         votes: voteCount,
         totalVotes: totalMvpVotes,
-        totalPlayers: totalLosingTeamPlayers,
+        totalPlayers: totalRealPlayers,
         requiredVotes,
         winningTeam,
         losingTeam,

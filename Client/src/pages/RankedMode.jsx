@@ -347,6 +347,7 @@ const RankedMode = () => {
   // Pending MVP vote state (for re-opening dialog when returning to page)
   const [pendingMvpVote, setPendingMvpVote] = useState(null);
   const [showPendingMvpReport, setShowPendingMvpReport] = useState(false);
+  const [mvpVoteError, setMvpVoteError] = useState(null);
   
   // Note: Using totalOnlineUsers from SocketContext for global online count
   
@@ -1023,6 +1024,7 @@ const RankedMode = () => {
   // Handle MVP vote from pending report
   const handlePendingMvpVote = async (mvpPlayerId) => {
     if (!pendingMvpVote?.match?._id) return;
+    setMvpVoteError(null);
     try {
       const response = await fetch(`${API_URL}/ranked-matches/${pendingMvpVote.match._id}/mvp-vote`, {
         method: 'POST',
@@ -1037,11 +1039,14 @@ const RankedMode = () => {
         // Refresh pending vote status
         await checkPendingMvpVote();
       } else {
-        alert(data.message);
+        setMvpVoteError(data.message);
+        // Auto-clear error after 4 seconds
+        setTimeout(() => setMvpVoteError(null), 4000);
       }
     } catch (err) {
       console.error('Error submitting MVP vote:', err);
-      alert(language === 'fr' ? 'Erreur lors du vote MVP' : 'Error submitting MVP vote');
+      setMvpVoteError(language === 'fr' ? 'Erreur lors du vote MVP' : 'Error submitting MVP vote');
+      setTimeout(() => setMvpVoteError(null), 4000);
     }
   };
 
@@ -5084,6 +5089,20 @@ const RankedMode = () => {
           winningTeam={pendingMvpVote.winningTeam}
           userTeam={pendingMvpVote.userTeam}
         />
+      )}
+
+      {/* MVP Vote Error Toast */}
+      {mvpVoteError && (
+        <div className="fixed bottom-4 right-4 z-[9999] bg-red-500/20 border border-red-500/30 rounded-xl p-4 flex items-center gap-3 shadow-lg animate-fade-in">
+          <AlertTriangle className="w-5 h-5 text-red-400" />
+          <span className="text-red-400 font-medium">{mvpVoteError}</span>
+          <button 
+            onClick={() => setMvpVoteError(null)} 
+            className="text-red-400 hover:text-red-300 ml-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </div>
   );

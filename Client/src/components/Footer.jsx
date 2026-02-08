@@ -1,16 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useMode } from '../ModeContext';
 import { useAuth } from '../AuthContext';
 import { Zap, Shield, ExternalLink, Settings, Skull, Crosshair, Users, MessageSquare, BookOpen, Gamepad2, Heart } from 'lucide-react';
+import { API_URL } from '../config';
 
 const Footer = () => {
   const { t, language } = useLanguage();
   const { selectedMode } = useMode();
   const { isAuthenticated, user, isStaff, isArbitre, hasAdminAccess } = useAuth();
+  const [strickerModeEnabled, setStrickerModeEnabled] = useState(false);
   
   const isHardcore = selectedMode === 'hardcore';
+
+  // Fetch stricker mode enabled status
+  useEffect(() => {
+    const fetchStrickerMode = async () => {
+      try {
+        const response = await fetch(`${API_URL}/app-settings/public`);
+        const data = await response.json();
+        if (data.success) {
+          setStrickerModeEnabled(data.features?.strickerMode?.enabled || false);
+        }
+      } catch (err) {
+        console.error('Error fetching stricker mode status:', err);
+      }
+    };
+
+    fetchStrickerMode();
+  }, []);
 
   // Build quick links - ranked mode visible to everyone
   const quickLinks = [
@@ -18,8 +37,8 @@ const Footer = () => {
     { label: t('rankedMode'), href: `/${selectedMode}/ranked`, icon: <Crosshair className="w-3.5 h-3.5" /> },
   ];
 
-  // Staff-only links
-  const showStrickerLink = isAuthenticated && user && (hasAdminAccess?.() || isStaff?.() || isArbitre?.());
+  // Stricker link - visible when enabled globally OR for admin/staff/arbitre
+  const showStrickerLink = strickerModeEnabled || (isAuthenticated && user && (hasAdminAccess?.() || isStaff?.() || isArbitre?.()));
 
   const supportLinks = [
     { label: t('rules'), href: '/rules', icon: <BookOpen className="w-3.5 h-3.5" />, isLink: true },

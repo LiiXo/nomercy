@@ -71,6 +71,12 @@ const appSettingsSchema = new mongoose.Schema({
     registration: {
       enabled: { type: Boolean, default: true },
       disabledMessage: { type: String, default: 'Les inscriptions sont temporairement fermées.' }
+    },
+    
+    // Mode Stricker (visible pour tout le monde si activé)
+    strickerMode: {
+      enabled: { type: Boolean, default: false },
+      disabledMessage: { type: String, default: 'Le mode Stricker sera bientôt disponible.' }
     }
   },
   

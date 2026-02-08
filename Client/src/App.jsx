@@ -144,11 +144,12 @@ const AdminRoute = ({ children }) => {
   return children;
 };
 
-// Route stricker (for admin, staff, and arbitre only)
+// Route stricker (for admin, staff, arbitre, OR everyone when strickerMode is enabled)
 const StrickerRoute = ({ children }) => {
   const { isAuthenticated, isProfileComplete, loading, hasAdminAccess } = useAuth();
+  const { isStrickerModeEnabled, strickerModeLoading } = useData();
   
-  if (loading) {
+  if (loading || strickerModeLoading) {
     return <LoadingScreen />;
   }
 
@@ -156,7 +157,8 @@ const StrickerRoute = ({ children }) => {
     return <Navigate to="/" replace />;
   }
 
-  if (!hasAdminAccess()) {
+  // Allow access if strickerMode is enabled globally OR if user has admin access
+  if (!isStrickerModeEnabled && !hasAdminAccess()) {
     return <Navigate to="/" replace />;
   }
   

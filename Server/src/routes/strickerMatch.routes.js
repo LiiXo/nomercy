@@ -12,7 +12,7 @@ import discordBot from '../services/discordBot.service.js';
 
 const router = express.Router();
 
-// Middleware to check if user has admin access (admin, staff, or arbitre)
+// Middleware to check if user has access (admin/staff/arbitre OR strickerMode enabled for everyone)
 const checkStrickerAccess = async (req, res, next) => {
   try {
     if (!req.user || !req.user._id) {
@@ -26,8 +26,20 @@ const checkStrickerAccess = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
     }
     
-    const hasAccess = user.roles?.some(r => ['admin', 'staff', 'arbitre'].includes(r));
-    if (!hasAccess) {
+    // Check if user has admin/staff/arbitre role
+    const hasAdminAccess = user.roles?.some(r => ['admin', 'staff', 'arbitre'].includes(r));
+    
+    // Check if Stricker mode is globally enabled for everyone
+    let isStrickerModeEnabled = false;
+    try {
+      const appSettings = await AppSettings.findOne();
+      isStrickerModeEnabled = appSettings?.features?.strickerMode?.enabled === true;
+    } catch (err) {
+      console.error('Error checking strickerMode setting:', err);
+    }
+    
+    // Allow access if admin/staff/arbitre OR if stricker mode is enabled
+    if (!hasAdminAccess && !isStrickerModeEnabled) {
       return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs, staff et arbitres' });
     }
     
@@ -213,6 +225,47 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
     });
   } catch (error) {
     console.error('Stricker matchmaking status error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Obtenir les statistiques des matchs Stricker en cours (public - pour le dashboard)
+router.get('/active-matches/stats', async (req, res) => {
+  try {
+    const { mode = 'hardcore' } = req.query;
+    
+    // Récupérer tous les matchs Stricker actifs (pending, ready, roster_selection, map_vote, in_progress)
+    const activeMatches = await StrickerMatch.find({
+      mode,
+      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress'] }
+    }).select('status gameMode');
+    
+    // Calculer le nombre total de joueurs (5v5 = 10 joueurs par match)
+    const totalPlayers = activeMatches.length * 10;
+    
+    // Grouper par statut pour plus de détails
+    const matchesByStatus = {};
+    activeMatches.forEach(match => {
+      if (!matchesByStatus[match.status]) {
+        matchesByStatus[match.status] = 0;
+      }
+      matchesByStatus[match.status]++;
+    });
+    
+    res.json({
+      success: true,
+      totalMatches: activeMatches.length,
+      totalPlayers,
+      stats: Object.entries(matchesByStatus).map(([status, count]) => ({
+        status,
+        count
+      })),
+      mode,
+      format: '5v5',
+      gameMode: 'Search & Destroy'
+    });
+  } catch (error) {
+    console.error('Error fetching stricker active matches stats:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

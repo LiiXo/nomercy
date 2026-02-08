@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
+import { useData } from '../DataContext';
 import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
@@ -291,6 +292,7 @@ const StrickerMode = () => {
   const { language } = useLanguage();
   const { user, isAuthenticated, hasAdminAccess } = useAuth();
   const { isConnected, on, joinStrickerMode, leaveStrickerMode } = useSocket();
+  const { isStrickerModeEnabled } = useData();
   const navigate = useNavigate();
   const { mode } = useParams(); // hardcore or cdl from URL
   
@@ -338,8 +340,8 @@ const StrickerMode = () => {
     { _id: 'test9', team1Squad: { tag: 'WAR', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 5, team2Score: 6, winner: 'team1' },
   ]);
   
-  // Check access
-  const hasAccess = isAuthenticated && hasAdminAccess();
+  // Check access - allow everyone if Stricker mode is enabled, otherwise only admin/staff/arbitre
+  const hasAccess = isAuthenticated && (isStrickerModeEnabled || hasAdminAccess());
   
   // Fetch my ranking
   const fetchMyRanking = useCallback(async () => {

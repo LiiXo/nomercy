@@ -25,6 +25,7 @@ const Navbar = () => {
   const [squadRequestsCount, setSquadRequestsCount] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [canSpin, setCanSpin] = useState(false);
+  const [strickerModeEnabled, setStrickerModeEnabled] = useState(false);
 
   const languageRef = useRef(null);
   const userMenuRef = useRef(null);
@@ -173,6 +174,26 @@ const Navbar = () => {
     return () => clearInterval(interval);
   }, [isAuthenticated]);
 
+  // Fetch stricker mode enabled status from app settings
+  useEffect(() => {
+    const fetchStrickerMode = async () => {
+      try {
+        const response = await fetch(`${API_URL}/app-settings/public`);
+        const data = await response.json();
+        if (data.success) {
+          setStrickerModeEnabled(data.features?.strickerMode?.enabled || false);
+        }
+      } catch (err) {
+        console.error('Error fetching stricker mode status:', err);
+      }
+    };
+
+    fetchStrickerMode();
+    // Re-check every 30 seconds
+    const interval = setInterval(fetchStrickerMode, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const isActive = (path) => location.pathname === path;
 
   const handleChangeMode = () => {
@@ -231,8 +252,8 @@ const Navbar = () => {
                 <span>{label}</span>
               </Link>
             ))}
-            {/* Stricker Mode - Only visible to admin/staff/arbitre */}
-            {hasAdminAccess() && (
+            {/* Stricker Mode - Visible when enabled globally OR for admin/staff/arbitre */}
+            {(strickerModeEnabled || hasAdminAccess()) && (
               <Link
                 to={`/${selectedMode}/stricker`}
                 className={`nav-link flex items-center gap-2 ${isActive(`/${selectedMode}/stricker`) ? 'active' : ''} ${location.pathname.includes('/stricker') ? 'text-lime-400' : 'hover:text-lime-400'}`}
@@ -593,8 +614,8 @@ const Navbar = () => {
                     <span>{language === 'fr' ? 'Roue quotidienne' : 'Daily Wheel'}</span>
                   </button>
 
-                  {/* Stricker Mode - Only visible to admin/staff/arbitre (mobile) */}
-                  {hasAdminAccess() && (
+                  {/* Stricker Mode - Visible when enabled globally OR for admin/staff/arbitre (mobile) */}
+                  {(strickerModeEnabled || hasAdminAccess()) && (
                     <Link 
                       to={`/${selectedMode}/stricker`}
                       onClick={() => setMobileMenuOpen(false)} 

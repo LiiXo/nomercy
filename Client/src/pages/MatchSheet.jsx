@@ -1755,11 +1755,27 @@ const MatchSheet = () => {
         };
         setMessages(prev => [...prev, systemMessage]);
       } else {
-        alert(data.message);
+        // Show error message in chat as system message
+        const errorMessage = {
+          _id: `mvp-error-${Date.now()}`,
+          isSystem: true,
+          message: data.message || 'Erreur lors du vote MVP',
+          createdAt: new Date(),
+          user: { username: 'SYSTEM' }
+        };
+        setMessages(prev => [...prev, errorMessage]);
       }
     } catch (err) {
       console.error('Error submitting MVP vote:', err);
-      alert('Erreur lors du vote MVP');
+      // Show error message in chat as system message
+      const errorMessage = {
+        _id: `mvp-error-${Date.now()}`,
+        isSystem: true,
+        message: 'Erreur lors du vote MVP',
+        createdAt: new Date(),
+        user: { username: 'SYSTEM' }
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setSubmittingMvpVote(false);
     }
