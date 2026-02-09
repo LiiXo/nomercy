@@ -1508,7 +1508,8 @@ const HardcoreDashboard = () => {
           
           // Check if user's squad is in top 10
           if (mySquad) {
-            const isInTop10 = squads.some(s => s.id === mySquad._id);
+            const mySquadId = String(mySquad._id || mySquad.id);
+            const isInTop10 = squads.some(s => String(s.id) === mySquadId);
             if (!isInTop10) {
               // Fetch user's squad rank
               try {
@@ -1608,11 +1609,10 @@ const HardcoreDashboard = () => {
                       
                       {/* Avatar */}
                       <div className="relative ml-6">
-                        <div className="absolute inset-0 bg-yellow-500/30 rounded-full blur-md animate-pulse" />
                         <img
                           src={getAvatarUrl(topPlayer.avatarUrl || topPlayer.avatar) || '/avatar.jpg'}
                           alt={topPlayer.username}
-                          className="relative w-16 h-16 rounded-full object-cover border-2 border-yellow-500/50 group-hover:border-yellow-400 transition-colors"
+                          className="relative w-16 h-16 rounded-full object-cover"
                         />
                       </div>
                       
@@ -1664,11 +1664,10 @@ const HardcoreDashboard = () => {
                       
                       {/* Avatar */}
                       <div className="relative ml-6">
-                        <div className="absolute inset-0 bg-cyan-500/30 rounded-full blur-md animate-pulse" />
                         <img
                           src={getAvatarUrl(mvpLeader.avatarUrl || mvpLeader.avatar) || '/avatar.jpg'}
                           alt={mvpLeader.username}
-                          className="relative w-16 h-16 rounded-full object-cover border-2 border-cyan-500/50 group-hover:border-cyan-400 transition-colors"
+                          className="relative w-16 h-16 rounded-full object-cover"
                         />
                       </div>
                       
@@ -1720,9 +1719,8 @@ const HardcoreDashboard = () => {
                       
                       {/* Squad Logo */}
                       <div className="relative">
-                        <div className="absolute inset-0 bg-purple-500/30 rounded-xl blur-md animate-pulse" />
                         <div 
-                          className="relative w-16 h-16 rounded-xl flex items-center justify-center border-2 border-purple-500/50 group-hover:border-purple-400 transition-colors overflow-hidden"
+                          className="relative w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden"
                           style={{ backgroundColor: (topSquad.color || '#a855f7') + '30' }}
                         >
                           {topSquad.logo ? (
@@ -2073,32 +2071,40 @@ const HardcoreDashboard = () => {
                     <div className="text-center py-12 text-gray-500">{language === 'fr' ? 'Aucune escouade classée' : 'No ranked squads'}</div>
                   ) : (
                     <div className="divide-y divide-white/5">
-                      {topSquads.map((squad) => (
-                        <div key={squad.rank} className={`px-6 py-3 hover:bg-white/5 transition-all ${squad.rank <= 3 ? 'bg-gradient-to-r from-yellow-500/5 to-transparent' : ''}`}>
+                      {topSquads.map((squad) => {
+                        const isMySquadInList = mySquad && (squad.id === mySquad._id || squad.id === mySquad.id);
+                        return (
+                        <div key={squad.rank} className={`px-6 py-3 hover:bg-white/5 transition-all ${isMySquadInList ? 'bg-gradient-to-r from-neon-red/20 to-neon-orange/10' : squad.rank <= 3 ? 'bg-gradient-to-r from-yellow-500/5 to-transparent' : ''}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                               <div className="flex items-center gap-2 w-14">
                                 {squad.rank === 1 && <Medal className="w-4 h-4 text-yellow-500" />}
                                 {squad.rank === 2 && <Medal className="w-4 h-4 text-gray-400" />}
                                 {squad.rank === 3 && <Medal className="w-4 h-4 text-amber-600" />}
-                                <span className={`font-bold text-sm ${squad.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{squad.rank}</span>
+                                <span className={`font-bold text-sm ${isMySquadInList ? 'text-neon-red' : squad.rank <= 3 ? 'text-white' : 'text-gray-400'}`}>#{squad.rank}</span>
                               </div>
                               {squad.logo ? (
-                                <img src={squad.logo} alt="" className="w-8 h-8 rounded object-contain" />
+                                <img src={squad.logo} alt="" className={`w-8 h-8 rounded object-contain ${isMySquadInList ? 'ring-2 ring-neon-red/50' : ''}`} />
                               ) : (
-                                <div className="w-8 h-8 rounded flex items-center justify-center text-xs font-bold border border-white/10" style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30', color: squad.color === 'transparent' ? '#9ca3af' : squad.color }}>
+                                <div className={`w-8 h-8 rounded flex items-center justify-center text-xs font-bold ${isMySquadInList ? 'border-2 border-neon-red/50' : 'border border-white/10'}`} style={{ backgroundColor: squad.color === 'transparent' ? 'transparent' : squad.color + '30', color: squad.color === 'transparent' ? '#9ca3af' : squad.color }}>
                                   {squad.tag?.charAt(0) || 'S'}
                                 </div>
                               )}
-                              <Link to={`/squad/${squad.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${squad.rank === 1 ? 'text-yellow-500' : squad.rank === 2 ? 'text-gray-300' : squad.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
+                              <Link to={`/squad/${squad.id}`} className={`font-semibold text-sm hover:text-neon-red transition-colors ${isMySquadInList ? 'text-neon-red' : squad.rank === 1 ? 'text-yellow-500' : squad.rank === 2 ? 'text-gray-300' : squad.rank === 3 ? 'text-amber-600' : 'text-white'}`}>
                                 {squad.team}
-                                {squad.tag && <span className="text-gray-500 ml-1 text-xs">[{squad.tag}]</span>}
+                                {squad.tag && <span className={`${isMySquadInList ? 'text-neon-red/60' : 'text-gray-500'} ml-1 text-xs`}>[{squad.tag}]</span>}
+                                {isMySquadInList && (
+                                  <span className="ml-2 text-[10px] uppercase tracking-wider text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded">
+                                    {language === 'fr' ? 'Ton équipe' : 'Your team'}
+                                  </span>
+                                )}
                               </Link>
                             </div>
                             <span className="text-neon-red font-bold text-sm">{squad.points.toLocaleString()} PTS</span>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       
                       {/* User's squad position if not in top 10 */}
                       {mySquadRank && (

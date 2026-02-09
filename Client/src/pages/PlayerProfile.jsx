@@ -633,13 +633,6 @@ const PlayerProfile = () => {
         </button>
 
           <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border border-${accentColor}-500/20 overflow-hidden mb-6 relative`}>
-          {/* Profile Animation Effects with real particles */}
-          {playerData.equippedProfileAnimation && (
-            <ProfileAnimation 
-              animationData={playerData.equippedProfileAnimation.profileAnimationData}
-              className="z-0"
-            />
-          )}
           {/* Banner avec avatar qui chevauche */}
           <div className="relative">
             {playerData.banner ? (
@@ -698,7 +691,14 @@ const PlayerProfile = () => {
             </div>
           </div>
           
-          <div className="pt-16 sm:pt-20 pb-6 px-6 sm:px-8">
+          <div className="pt-16 sm:pt-20 pb-6 px-6 sm:px-8 relative">
+          {/* Profile Animation Effects - starts below the banner */}
+          {playerData.equippedProfileAnimation && (
+            <ProfileAnimation 
+              animationData={playerData.equippedProfileAnimation.profileAnimationData}
+              className="z-10"
+            />
+          )}
           <div className="flex flex-col items-center text-center">
               
               {/* Username */}

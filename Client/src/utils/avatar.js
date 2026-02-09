@@ -28,7 +28,7 @@ export const getDefaultAvatar = (name) => {
   }
 };
 
-const API_URL = 'https://api-nomercy.ggsecure.io';
+import { UPLOADS_BASE_URL } from '../config';
 
 /**
  * Get the full avatar URL, handling custom uploads and Discord avatars
@@ -41,7 +41,7 @@ export const getAvatarUrl = (avatar) => {
   try {
     // Custom uploaded avatar - needs API URL prefix
     if (avatar.startsWith('/uploads/')) {
-      return `${API_URL}${avatar}`;
+      return `${UPLOADS_BASE_URL}${avatar}`;
     }
     // Already a full URL (Discord, etc.)
     return avatar;

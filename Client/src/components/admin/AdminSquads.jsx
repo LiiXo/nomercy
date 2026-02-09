@@ -93,6 +93,22 @@ const AdminSquads = ({
                 </div>
               </div>
 
+              {/* Top Escouade Points */}
+              {(squad.statsHardcore?.totalPoints > 0 || squad.statsCdl?.totalPoints > 0) && (
+                <div className="mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-lg">
+                  <p className="text-[10px] sm:text-xs text-purple-400 mb-2 font-medium flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3" />
+                    Top Escouade
+                  </p>
+                  <div className="space-y-1 sm:space-y-1.5">
+                    <div className="flex items-center justify-between text-xs sm:text-sm">
+                      <span className="text-gray-300 text-[10px] sm:text-xs">Points</span>
+                      <span className="text-purple-400 font-bold">{squad.statsHardcore?.totalPoints || 0} pts</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Stricker Stats */}
               {squad.statsStricker && (squad.statsStricker.points > 0 || squad.statsStricker.wins > 0 || squad.statsStricker.losses > 0) && (
                 <div className="mb-4 p-2.5 sm:p-3 bg-gradient-to-r from-lime-500/10 to-green-500/10 border border-lime-500/20 rounded-lg">

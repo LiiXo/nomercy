@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const ProfileAnimation = ({ animationData, className = '' }) => {
+const ProfileAnimation = ({ animationData, className = '', style = {} }) => {
   if (!animationData || !animationData.particleEffect) {
     return null;
   }
@@ -64,15 +64,8 @@ const ProfileAnimation = ({ animationData, className = '' }) => {
   };
 
   return (
-    <div className={`absolute inset-0 pointer-events-none overflow-hidden rounded-2xl ${className}`}>
+    <div className={`absolute inset-0 pointer-events-none overflow-hidden rounded-2xl ${className}`} style={style}>
       {renderAnimation()}
-      {/* Center safe zone - gradient mask to keep player info visible */}
-      <div 
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(ellipse 60% 70% at 50% 50%, rgba(0,0,0,0.5) 0%, transparent 70%)'
-        }}
-      />
     </div>
   );
 };

@@ -191,7 +191,16 @@ const translations = {
     ggsecureRequired: 'GGSecure requis',
     ggsecureNotConnected: 'Non connecté à GGSecure',
     ggsecureConnected: 'GGSecure connecté',
-    pcPlayer: 'Joueur PC'
+    pcPlayer: 'Joueur PC',
+    // Admin controls
+    adminControls: 'Panneau Admin',
+    changeStatus: 'Changer le statut',
+    forceVictory: 'Forcer la victoire',
+    forceVictoryConfirm: 'Confirmer la victoire forcée',
+    forceVictoryDesc: 'Cette action va terminer le match et distribuer les récompenses. Êtes-vous sûr ?',
+    confirm: 'Confirmer',
+    cancelAction: 'Annuler',
+    forceWinTeam: 'Forcer victoire'
   },
   en: {
     loading: 'Loading...',
@@ -314,7 +323,16 @@ const translations = {
     ggsecureRequired: 'GGSecure required',
     ggsecureNotConnected: 'Not connected to GGSecure',
     ggsecureConnected: 'GGSecure connected',
-    pcPlayer: 'PC Player'
+    pcPlayer: 'PC Player',
+    // Admin controls
+    adminControls: 'Admin Panel',
+    changeStatus: 'Change status',
+    forceVictory: 'Force victory',
+    forceVictoryConfirm: 'Confirm forced victory',
+    forceVictoryDesc: 'This action will end the match and distribute rewards. Are you sure?',
+    confirm: 'Confirm',
+    cancelAction: 'Cancel',
+    forceWinTeam: 'Force win'
   }
 };
 
@@ -322,7 +340,7 @@ const StrickerMatchSheet = () => {
   const { matchId, mode } = useParams(); // Get both matchId and mode from URL
   const navigate = useNavigate();
   const { language } = useLanguage();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, hasAdminAccess } = useAuth();
   const { socket, on, emit, joinStrickerMatch, leaveStrickerMatch } = useSocket();
   const { selectedMode } = useMode();
   const chatRef = useRef(null);
@@ -390,6 +408,11 @@ const StrickerMatchSheet = () => {
 
   // 10-minute countdown state for match start deadline
   const [startCountdown, setStartCountdown] = useState(null);
+
+  // Admin controls
+  const [forcingWinner, setForcingWinner] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [showForceConfirm, setShowForceConfirm] = useState(null); // null | 1 | 2
 
   // Translations
   const t = translations[language] || translations.en;
@@ -558,6 +581,44 @@ const StrickerMatchSheet = () => {
       }
     });
 
+    // Listen for GGSecure disconnect events (real-time, like ranked mode)
+    const unsubGGSecureDisconnect = on('playerGGSecureDisconnect', (data) => {
+      if (data.matchId === matchId || data.matchId?.toString() === matchId) {
+        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+        const systemMessage = {
+          _id: `ggsecure-disconnect-${Date.now()}`,
+          isSystem: true,
+          messageType: 'ggsecure_disconnect',
+          username: data.username,
+          createdAt: timestamp,
+          user: { username: 'SYSTEM' }
+        };
+        setMessages(prev => [...prev, systemMessage]);
+        if (chatRef.current) {
+          setTimeout(() => { chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 50);
+        }
+      }
+    });
+
+    // Listen for GGSecure reconnect events (real-time, like ranked mode)
+    const unsubGGSecureReconnect = on('playerGGSecureReconnect', (data) => {
+      if (data.matchId === matchId || data.matchId?.toString() === matchId) {
+        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+        const systemMessage = {
+          _id: `ggsecure-reconnect-${Date.now()}`,
+          isSystem: true,
+          messageType: 'ggsecure_reconnect',
+          username: data.username,
+          createdAt: timestamp,
+          user: { username: 'SYSTEM' }
+        };
+        setMessages(prev => [...prev, systemMessage]);
+        if (chatRef.current) {
+          setTimeout(() => { chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 50);
+        }
+      }
+    });
+
     return () => {
       unsubRosterUpdate();
       unsubRosterComplete();
@@ -567,6 +628,8 @@ const StrickerMatchSheet = () => {
       unsubMatchUpdate();
       unsubCancelVote();
       unsubMatchCancelled();
+      unsubGGSecureDisconnect();
+      unsubGGSecureReconnect();
     };
   }, [socket, matchId, on, fetchMatch]);
 
@@ -680,7 +743,8 @@ const StrickerMatchSheet = () => {
           squadName: myTeam === 1 ? match.team1Squad?.name : match.team2Squad?.name,
           cranesEarned: rewards.cranesEarned || 0,
           goldEarned: rewards.goldEarned || 0,
-          xpEarned: rewards.xpEarned || 0
+          xpEarned: rewards.xpEarned || 0,
+          topSquadPointsChange: rewards.topSquadPointsChange || 0
         });
         
         setMatchReportShown(true);
@@ -833,6 +897,51 @@ const StrickerMatchSheet = () => {
       console.error('Error submitting result:', err);
     } finally {
       setSubmittingResult(false);
+    }
+  };
+
+  // Admin: Force winner
+  const handleForceWinner = async (team) => {
+    if (forcingWinner) return;
+    setForcingWinner(true);
+    try {
+      const response = await fetch(`${API_URL}/stricker/admin/match/${matchId}/force-winner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ winner: team })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setShowForceConfirm(null);
+        fetchMatch();
+      }
+    } catch (err) {
+      console.error('Error forcing winner:', err);
+    } finally {
+      setForcingWinner(false);
+    }
+  };
+
+  // Admin: Change match status
+  const handleAdminStatusChange = async (status) => {
+    if (changingStatus) return;
+    setChangingStatus(true);
+    try {
+      const response = await fetch(`${API_URL}/stricker/admin/matches/${matchId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status })
+      });
+      const data = await response.json();
+      if (data.success) {
+        fetchMatch();
+      }
+    } catch (err) {
+      console.error('Error changing status:', err);
+    } finally {
+      setChangingStatus(false);
     }
   };
 
@@ -1832,36 +1941,6 @@ const StrickerMatchSheet = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Match Complete Banner */}
-        {isCompleted && (
-          <div className={`mb-6 p-6 rounded-2xl ${didWin ? 'bg-gradient-to-r from-lime-500/20 to-green-500/20 border border-lime-500/30' : 'bg-gradient-to-r from-red-500/20 to-orange-500/20 border border-red-500/30'}`}>
-            <div className="text-center">
-              <h2 className={`text-3xl font-black mb-2 ${didWin ? 'text-lime-400' : 'text-red-400'}`}>
-                {didWin ? t.victory : t.defeat}
-              </h2>
-              <p className="text-gray-400">
-                {didWin ? t.yourTeamWon : t.yourTeamLost}
-              </p>
-              {myPlayer?.rewards && (
-                <div className="flex items-center justify-center gap-4 sm:gap-6 mt-4 flex-wrap">
-                  <div className={`px-4 py-2 rounded-lg ${didWin ? 'bg-lime-500/20 text-lime-400' : 'bg-red-500/20 text-red-400'}`}>
-                    <span className="font-bold">{didWin ? '+' : ''}{myPlayer.rewards.pointsChange}</span> pts
-                  </div>
-                  <div className="px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400">
-                    <span className="font-bold">+{myPlayer.rewards.goldEarned}</span> gold
-                  </div>
-                  {myPlayer.rewards.cranesEarned > 0 && (
-                    <div className="px-4 py-2 rounded-lg bg-gray-500/20 text-gray-300 flex items-center gap-2">
-                      <Crosshair className="w-4 h-4 text-lime-400" />
-                      <span className="font-bold">+{myPlayer.rewards.cranesEarned}</span> {t.cranes}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column - Match Info */}
           <div className="lg:col-span-1 space-y-4">
@@ -2148,6 +2227,89 @@ const StrickerMatchSheet = () => {
                       </>
                     )}
                   </button>
+                )}
+              </div>
+            )}
+
+            {/* Admin Controls - Admin/Staff/Arbitre Only */}
+            {hasAdminAccess() && (
+              <div className="bg-gradient-to-br from-red-500/10 to-amber-500/10 border-2 border-red-500/30 rounded-xl p-4">
+                <h3 className="text-sm font-bold text-red-400 mb-3 flex items-center gap-2">
+                  <Shield className="w-4 h-4" />
+                  {t.adminControls}
+                </h3>
+                
+                {/* Status Change */}
+                <div className="mb-3">
+                  <label className="text-xs text-gray-400 mb-1.5 block">{t.changeStatus}</label>
+                  <select
+                    value={match.status}
+                    onChange={(e) => handleAdminStatusChange(e.target.value)}
+                    disabled={changingStatus}
+                    className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white text-sm focus:border-red-500 focus:outline-none disabled:opacity-50"
+                  >
+                    <option value="pending">{language === 'fr' ? 'En attente' : 'Pending'}</option>
+                    <option value="ready">{language === 'fr' ? 'Pr\u00eat' : 'Ready'}</option>
+                    <option value="in_progress">{language === 'fr' ? 'En cours' : 'In Progress'}</option>
+                    <option value="completed">{language === 'fr' ? 'Termin\u00e9' : 'Completed'}</option>
+                    <option value="disputed">{language === 'fr' ? 'En litige' : 'Disputed'}</option>
+                    <option value="cancelled">{language === 'fr' ? 'Annul\u00e9' : 'Cancelled'}</option>
+                  </select>
+                </div>
+                
+                {/* Force Victory */}
+                {match.status !== 'completed' && (
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1.5 block">{t.forceVictory}</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setShowForceConfirm(1)}
+                        disabled={forcingWinner}
+                        className="py-2 bg-lime-500/20 hover:bg-lime-500/30 text-lime-400 font-bold rounded-lg border border-lime-500/40 transition-all disabled:opacity-50 text-xs"
+                      >
+                        {t.forceWinTeam} {team1Name}
+                      </button>
+                      <button
+                        onClick={() => setShowForceConfirm(2)}
+                        disabled={forcingWinner}
+                        className="py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 font-bold rounded-lg border border-blue-500/40 transition-all disabled:opacity-50 text-xs"
+                      >
+                        {t.forceWinTeam} {team2Name}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Force Victory Confirmation */}
+                {showForceConfirm && (
+                  <div className="mt-3 p-3 bg-red-500/10 border border-red-500/40 rounded-lg">
+                    <p className="text-red-400 font-bold text-sm mb-1 flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      {t.forceVictoryConfirm}
+                    </p>
+                    <p className="text-gray-400 text-xs mb-3">
+                      {t.forceVictoryDesc}
+                    </p>
+                    <p className="text-white text-sm font-medium mb-3">
+                      {language === 'fr' ? 'Gagnant' : 'Winner'}: <span className={showForceConfirm === 1 ? 'text-lime-400' : 'text-blue-400'}>{showForceConfirm === 1 ? team1Name : team2Name}</span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleForceWinner(showForceConfirm)}
+                        disabled={forcingWinner}
+                        className="py-2 bg-red-500/30 hover:bg-red-500/40 text-red-400 font-bold rounded-lg border border-red-500/50 transition-all disabled:opacity-50 text-xs flex items-center justify-center gap-1"
+                      >
+                        {forcingWinner ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <><CheckCircle className="w-3.5 h-3.5" /> {t.confirm}</>}
+                      </button>
+                      <button
+                        onClick={() => setShowForceConfirm(null)}
+                        disabled={forcingWinner}
+                        className="py-2 bg-dark-700 hover:bg-dark-600 text-gray-300 rounded-lg border border-gray-600 transition-all disabled:opacity-50 text-xs"
+                      >
+                        {t.cancelAction}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -2582,9 +2744,10 @@ const StrickerMatchSheet = () => {
                         </span>
                         {section.title?.[language] || section.title?.fr || `Section ${idx + 1}`}
                       </h3>
-                      <div className="prose prose-invert prose-sm max-w-none">
-                        {section.content?.[language] || section.content?.fr || 'Pas de contenu'}
-                      </div>
+                      <div 
+                        className="prose prose-invert prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: section.content?.[language] || section.content?.fr || 'Pas de contenu' }}
+                      />
                     </div>
                   ))}
                 </div>
@@ -2624,6 +2787,7 @@ const StrickerMatchSheet = () => {
           cranesEarned={matchReportData.cranesEarned}
           goldEarned={matchReportData.goldEarned}
           xpEarned={matchReportData.xpEarned}
+          topSquadPointsChange={matchReportData.topSquadPointsChange}
           matchMode={match?.mode}
         />
       )}

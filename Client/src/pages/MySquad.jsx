@@ -932,37 +932,7 @@ const MySquad = () => {
                   </div>
                 </div>
 
-                {/* Right Section: Quick Stats Cards */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-3 lg:w-64">
-                  <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-white/10 p-4 hover:border-white/20 transition-all">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Users className={`w-4 h-4 text-${accentColor}-400`} />
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.members}</p>
-                    </div>
-                    <p className="text-2xl font-black text-white">{squad.members?.length || 0}</p>
-                  </div>
-                  <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-green-500/20 p-4 hover:border-green-500/30 transition-all">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Trophy className="w-4 h-4 text-green-400" />
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.wins}</p>
-                    </div>
-                    <p className="text-2xl font-black text-green-400">{totalWins}</p>
-                  </div>
-                  <div className="bg-dark-800/50 backdrop-blur-sm rounded-xl border border-red-500/20 p-4 hover:border-red-500/30 transition-all">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Target className="w-4 h-4 text-red-400" />
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.losses}</p>
-                    </div>
-                    <p className="text-2xl font-black text-red-400">{totalLosses}</p>
-                  </div>
-                  <div className={`bg-dark-800/50 backdrop-blur-sm rounded-xl border border-${accentColor}-500/20 p-4 hover:border-${accentColor}-500/30 transition-all`}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Award className={`w-4 h-4 text-${accentColor}-400`} />
-                      <p className="text-xs text-gray-500 uppercase tracking-wider">{t.winRate}</p>
-                    </div>
-                    <p className={`text-2xl font-black text-${accentColor}-400`}>{winRate}%</p>
-                  </div>
-                </div>
+
               </div>
             </div>
           </div>

@@ -225,7 +225,10 @@ const translations = {
     activeMatchDesc: 'Vous avez un match en cours. Vous devez le terminer avant d\'en lancer un autre.',
     rejoin: 'Rejoindre le match',
     cranes: 'Munitions',
-    shop: 'Boutique'
+    shop: 'Boutique',
+    activeMatches: 'match(s) en cours',
+    playersInMatch: 'joueurs en match',
+    noActiveMatches: 'Aucun match en cours actuellement'
   },
   en: {
     title: 'Stricker Mode',
@@ -284,7 +287,10 @@ const translations = {
     activeMatchDesc: 'You have a match in progress. You must finish it before starting another.',
     rejoin: 'Rejoin match',
     cranes: 'Ammo',
-    shop: 'Shop'
+    shop: 'Shop',
+    activeMatches: 'active match(es)',
+    playersInMatch: 'players in match',
+    noActiveMatches: 'No active matches currently'
   },
 };
 
@@ -328,17 +334,8 @@ const StrickerMode = () => {
   const [showTop100Modal, setShowTop100Modal] = useState(false); // Top 100 modal
   const [top100Squads, setTop100Squads] = useState([]); // Top 100 squads data
   const [loadingTop100, setLoadingTop100] = useState(false); // Loading state for top 100
-  const [recentMatches, setRecentMatches] = useState([
-    // Test matches for preview
-    { _id: 'test1', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'FTW', logo: '' }, team1Score: 6, team2Score: 4, winner: 'team1' },
-    { _id: 'test3', team1Squad: { tag: 'PRO', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 3, team2Score: 6, winner: 'team1' },
-    { _id: 'test4', team1Squad: { tag: 'ACE', logo: '' }, team2Squad: { tag: 'VIP', logo: '' }, team1Score: 6, team2Score: 5, winner: 'team1' },
-    { _id: 'test5', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'GOD', logo: '' }, team1Score: 6, team2Score: 3, winner: 'team1' },
-    { _id: 'test6', team1Squad: { tag: 'TOP', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 4, team2Score: 6, winner: 'team1' },
-    { _id: 'test7', team1Squad: { tag: 'REX', logo: '' }, team2Squad: { tag: 'ZAP', logo: '' }, team1Score: 6, team2Score: 1, winner: 'team1' },
-    { _id: 'test8', team1Squad: { tag: 'NMC', logo: '' }, team2Squad: { tag: 'OOF', logo: '' }, team1Score: 6, team2Score: 0, winner: 'team1' },
-    { _id: 'test9', team1Squad: { tag: 'WAR', logo: '' }, team2Squad: { tag: 'NMC', logo: '' }, team1Score: 5, team2Score: 6, winner: 'team1' },
-  ]);
+  const [activeMatchesStats, setActiveMatchesStats] = useState({ totalMatches: 0, totalPlayers: 0 }); // Active matches stats
+  const [recentMatches, setRecentMatches] = useState([]);
   
   // Check access - allow everyone if Stricker mode is enabled, otherwise only admin/staff/arbitre
   const hasAccess = isAuthenticated && (isStrickerModeEnabled || hasAdminAccess());
@@ -448,6 +445,22 @@ const StrickerMode = () => {
     }
   }, [hasAccess]);
   
+  // Fetch active matches stats (public - for display like ranked mode)
+  const fetchActiveMatchesStats = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/stricker/active-matches/stats?mode=${mode || 'hardcore'}`);
+      const data = await response.json();
+      if (data.success) {
+        setActiveMatchesStats({
+          totalMatches: data.totalMatches || 0,
+          totalPlayers: data.totalPlayers || 0
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching stricker active matches stats:', err);
+    }
+  }, [mode]);
+  
   // Fetch my squad info
   const fetchMySquad = useCallback(async () => {
     if (!hasAccess) return;
@@ -473,7 +486,7 @@ const StrickerMode = () => {
     if (!hasAccess) return;
     
     try {
-      const response = await fetch(`${API_URL}/stricker/history/recent?limit=10`, {
+      const response = await fetch(`${API_URL}/stricker/history/recent?limit=20`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -628,6 +641,8 @@ const StrickerMode = () => {
   useEffect(() => {
     // Fetch season info regardless of access
     fetchCurrentSeason();
+    // Fetch active matches stats regardless of access (public data)
+    fetchActiveMatchesStats();
     
     if (hasAccess) {
       fetchMyRanking();
@@ -639,7 +654,11 @@ const StrickerMode = () => {
     } else {
       setLoading(false);
     }
-  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad, fetchRecentMatches, fetchCurrentSeason]);
+    
+    // Refresh active matches stats periodically
+    const statsInterval = setInterval(fetchActiveMatchesStats, 30000);
+    return () => clearInterval(statsInterval);
+  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad, fetchRecentMatches, fetchCurrentSeason, fetchActiveMatchesStats]);
   
   // Polling for matchmaking status - Always active for real-time updates
   useEffect(() => {
@@ -984,16 +1003,11 @@ const StrickerMode = () => {
               <div className="flex-1 overflow-hidden">
                 <div className="flex animate-scroll-left">
                   {[...recentMatches, ...recentMatches, ...recentMatches, ...recentMatches].map((match, index) => {
-                    const team1Won = match.winner === 'team1';
-                    const team1Score = match.team1Score || 0;
-                    const team1ScoreDisplay = team1Score === 2 ? '✓' : team1Score;
-                    const team2Score = match.team2Score || 0;
-                    const team2ScoreDisplay = team2Score === 2 ? '✓' : team2Score;
+                    const team1Won = match.winner === 1 || match.winner === 'team1';
                     return (
                       <div 
                         key={`${match._id}-${index}`}
-                        className="flex items-center gap-3 px-6 py-3 border-r border-lime-500/10 flex-shrink-0 hover:bg-lime-500/5 transition-colors cursor-pointer"
-                        onClick={() => navigate(`/${mode || 'hardcore'}/stricker/match/${match._id}`)}
+                        className="flex items-center gap-3 px-6 py-3 border-r border-lime-500/10 flex-shrink-0"
                       >
                         {/* Team 1 */}
                         <div className="flex items-center gap-2">
@@ -1009,14 +1023,14 @@ const StrickerMode = () => {
                           </span>
                         </div>
                         
-                        {/* Score */}
-                        <div className="flex items-center gap-1">
-                          <span className={`font-black ${team1Won ? 'text-green-400' : 'text-red-400'}`}>
-                            {team1ScoreDisplay}
+                        {/* Result indicator */}
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-black px-1.5 py-0.5 rounded ${team1Won ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {team1Won ? 'W' : 'L'}
                           </span>
-                          <span className="text-gray-500">-</span>
-                          <span className={`font-black ${!team1Won ? 'text-green-400' : 'text-red-400'}`}>
-                            {team2ScoreDisplay}
+                          <span className="text-gray-600 text-xs">vs</span>
+                          <span className={`text-xs font-black px-1.5 py-0.5 rounded ${!team1Won ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                            {!team1Won ? 'W' : 'L'}
                           </span>
                         </div>
                         
@@ -1157,6 +1171,26 @@ const StrickerMode = () => {
                 <Crosshair className="w-5 h-5 text-lime-400" />
                 Matchmaking
               </h2>
+              
+              {/* Active Matches Stats */}
+              {activeMatchesStats.totalMatches > 0 && (
+                <div className="mb-4 p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-lime-500/20 border border-lime-500/30">
+                      <Swords className="w-3 h-3 text-lime-400" />
+                      <span className="text-lime-400 text-xs font-semibold">
+                        {activeMatchesStats.totalMatches} {t.activeMatches}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-green-500/20 border border-green-500/30">
+                      <Users className="w-3 h-3 text-green-400" />
+                      <span className="text-green-400 text-xs font-semibold">
+                        {activeMatchesStats.totalPlayers} {t.playersInMatch}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {error && (
                 <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">

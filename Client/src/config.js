@@ -36,10 +36,22 @@ export const API_URL = getApiUrl();
 export const SOCKET_URL = getSocketUrl();
 
 // Base URL for uploads (banners, avatars, etc.)
-export const UPLOADS_BASE_URL = SOCKET_URL;
+// In development, uploads are served from production since files don't exist locally
+const getUploadsBaseUrl = () => {
+  if (import.meta.env.VITE_UPLOADS_BASE_URL) {
+    return import.meta.env.VITE_UPLOADS_BASE_URL;
+  }
+  // In dev mode, use production URL so banners/avatars load correctly
+  if (import.meta.env.DEV) {
+    return 'https://api-nomercy.ggsecure.io';
+  }
+  return SOCKET_URL;
+};
+export const UPLOADS_BASE_URL = getUploadsBaseUrl();
 
 // For debugging
 if (import.meta.env.DEV) {
   console.log('[Config] API_URL:', API_URL);
   console.log('[Config] SOCKET_URL:', SOCKET_URL);
+  console.log('[Config] UPLOADS_BASE_URL:', UPLOADS_BASE_URL);
 }

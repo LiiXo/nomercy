@@ -649,7 +649,7 @@ const Shop = () => {
                     {previewItem.profileAnimationData && (
                       <ProfileAnimation 
                         animationData={previewItem.profileAnimationData}
-                        className="z-0"
+                        className="z-10"
                       />
                     )}
                     {/* Content layer */}

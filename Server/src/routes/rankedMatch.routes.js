@@ -267,7 +267,6 @@ async function distributeRankedRewards(match) {
             wins: 0, 
             losses: 0 
           });
-        } else {
         }
         
         // Appliquer les changements de points ladder classé (minimum 0)
@@ -275,7 +274,6 @@ async function distributeRankedRewards(match) {
         ranking.points = Math.max(0, (ranking.points || 0) + rankedPointsChange);
         const newRankedPoints = ranking.points;
         
-        // Mettre à jour les stats win/loss du ladder classé
         if (isWinner) {
           ranking.wins = (ranking.wins || 0) + 1;
           ranking.currentStreak = (ranking.currentStreak || 0) + 1;

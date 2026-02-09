@@ -6813,7 +6813,7 @@ Cette action est irréversible!`)) {
                         </div>
                         <div className="flex items-center gap-2">
                           <a
-                            href={`/stricker/match/${match._id}`}
+                            href={`/${match.mode || 'hardcore'}/stricker/match/${match._id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 px-3 py-2 bg-lime-500/20 text-lime-400 rounded-lg hover:bg-lime-500/30 transition-colors text-sm"
@@ -8806,23 +8806,23 @@ Cette action est irréversible!`)) {
               />
                   </div>
             
-            {/* Stats Section - Admin Only */}
+            {/* Stats Top Escouade - Admin Only */}
             {userIsAdmin && (
               <div className="border-t border-white/10 pt-4 mt-4">
                 <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4" />
-                  Statistiques Escouade
+                  Top Escouade (Classement Général)
                 </h4>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Points Top Escouade</label>
                     <input
                       type="number"
-                      value={formData.stats?.totalPoints ?? editingItem?.stats?.totalPoints ?? 0}
+                      value={formData.statsHardcore?.totalPoints ?? editingItem?.statsHardcore?.totalPoints ?? 0}
                       onChange={(e) => setFormData({ 
                         ...formData, 
-                        stats: { 
-                          ...formData.stats,
+                        statsHardcore: { 
+                          ...formData.statsHardcore,
                           totalPoints: parseInt(e.target.value) || 0 
                         } 
                       })}
@@ -8834,11 +8834,11 @@ Cette action est irréversible!`)) {
                     <label className="block text-xs font-medium text-gray-400 mb-1">Victoires</label>
                     <input
                       type="number"
-                      value={formData.stats?.totalWins ?? editingItem?.stats?.totalWins ?? 0}
+                      value={formData.statsHardcore?.totalWins ?? editingItem?.statsHardcore?.totalWins ?? 0}
                       onChange={(e) => setFormData({ 
                         ...formData, 
-                        stats: { 
-                          ...formData.stats,
+                        statsHardcore: { 
+                          ...formData.statsHardcore,
                           totalWins: parseInt(e.target.value) || 0 
                         } 
                       })}
@@ -8850,11 +8850,11 @@ Cette action est irréversible!`)) {
                     <label className="block text-xs font-medium text-gray-400 mb-1">Défaites</label>
                     <input
                       type="number"
-                      value={formData.stats?.totalLosses ?? editingItem?.stats?.totalLosses ?? 0}
+                      value={formData.statsHardcore?.totalLosses ?? editingItem?.statsHardcore?.totalLosses ?? 0}
                       onChange={(e) => setFormData({ 
                         ...formData, 
-                        stats: { 
-                          ...formData.stats,
+                        statsHardcore: { 
+                          ...formData.statsHardcore,
                           totalLosses: parseInt(e.target.value) || 0 
                         } 
                       })}

@@ -59,6 +59,7 @@ const StrickerMatchReport = ({
   cranesEarned = 0,
   goldEarned = 0,
   xpEarned = 0,
+  topSquadPointsChange = 0,
   // Match mode for navigation
   matchMode = null
 }) => {
@@ -370,6 +371,28 @@ const StrickerMatchReport = ({
                   {isWinner ? 'Escouade' : 'Consolation'}
                 </p>
               </div>
+              
+              {/* Top Squad Points - shown when topSquadPointsChange is non-zero */}
+              {topSquadPointsChange !== 0 && (
+                <div className={`bg-dark-900/50 rounded-xl p-3 sm:p-4 border-2 ${
+                  topSquadPointsChange > 0 ? 'border-blue-500/30' : 'border-orange-500/30'
+                }`}>
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
+                    <span className="text-gray-400 text-xs sm:text-sm">Top Escouade</span>
+                  </div>
+                  <div className={`text-xl sm:text-2xl font-bold text-center ${
+                    topSquadPointsChange > 0 ? 'text-blue-400' : 'text-orange-400'
+                  }`}>
+                    {topSquadPointsChange > 0 ? '+' : ''}{topSquadPointsChange}
+                  </div>
+                  <p className={`text-xs mt-1 text-center ${
+                    topSquadPointsChange > 0 ? 'text-blue-400/70' : 'text-orange-400/70'
+                  }`}>
+                    {topSquadPointsChange > 0 ? '🏆 Classement' : '📉 Classement'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
 import Match from '../models/Match.js';
+import StrickerMatch from '../models/StrickerMatch.js';
 import { verifyToken, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { logAdminAction } from '../services/discordBot.service.js';
 
@@ -898,6 +899,22 @@ router.delete('/:squadId/disband', verifyToken, async (req, res) => {
       return res.status(400).json({ 
         success: false, 
         message: `Vous ne pouvez pas dissoudre votre escouade car vous avez ${pendingDisputes} litige(s) en cours. Veuillez attendre leur résolution.` 
+      });
+    }
+    
+    // Check if squad has any active Stricker matches
+    const activeStrickerMatches = await StrickerMatch.countDocuments({
+      $or: [
+        { team1Squad: squadId },
+        { team2Squad: squadId }
+      ],
+      status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
+    });
+    
+    if (activeStrickerMatches > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous ne pouvez pas dissoudre votre escouade car un match Stricker est en cours. Veuillez attendre la fin du match.' 
       });
     }
     
@@ -1865,7 +1882,7 @@ router.post('/admin/:squadId/reset-progression', verifyToken, requireAdmin, asyn
 // Update squad (admin/staff)
 router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, tag, description, mode, color, maxMembers, experience, logo, stats } = req.body;
+    const { name, tag, description, mode, color, maxMembers, experience, logo, stats, statsHardcore, statsCdl } = req.body;
     
     const squad = await Squad.findById(req.params.squadId);
     if (!squad) {
@@ -1890,6 +1907,24 @@ router.put('/admin/:squadId', verifyToken, requireStaff, async (req, res) => {
       if (stats.totalPoints !== undefined) squad.stats.totalPoints = parseInt(stats.totalPoints) || 0;
       if (stats.totalWins !== undefined) squad.stats.totalWins = parseInt(stats.totalWins) || 0;
       if (stats.totalLosses !== undefined) squad.stats.totalLosses = parseInt(stats.totalLosses) || 0;
+    }
+
+    // Update statsHardcore (Top Escouade general ranking)
+    if (statsHardcore !== undefined) {
+      if (!squad.statsHardcore) squad.statsHardcore = { totalWins: 0, totalLosses: 0, totalPoints: 0 };
+      if (statsHardcore.totalPoints !== undefined) squad.statsHardcore.totalPoints = parseInt(statsHardcore.totalPoints) || 0;
+      if (statsHardcore.totalWins !== undefined) squad.statsHardcore.totalWins = parseInt(statsHardcore.totalWins) || 0;
+      if (statsHardcore.totalLosses !== undefined) squad.statsHardcore.totalLosses = parseInt(statsHardcore.totalLosses) || 0;
+      squad.markModified('statsHardcore');
+    }
+
+    // Update statsCdl if provided
+    if (statsCdl !== undefined) {
+      if (!squad.statsCdl) squad.statsCdl = { totalWins: 0, totalLosses: 0, totalPoints: 0 };
+      if (statsCdl.totalPoints !== undefined) squad.statsCdl.totalPoints = parseInt(statsCdl.totalPoints) || 0;
+      if (statsCdl.totalWins !== undefined) squad.statsCdl.totalWins = parseInt(statsCdl.totalWins) || 0;
+      if (statsCdl.totalLosses !== undefined) squad.statsCdl.totalLosses = parseInt(statsCdl.totalLosses) || 0;
+      squad.markModified('statsCdl');
     }
 
     await squad.save();
@@ -2116,6 +2151,22 @@ router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => 
       return res.status(404).json({
         success: false,
         message: 'Escouade non trouvée'
+      });
+    }
+
+    // Check if squad has any active Stricker matches
+    const activeStrickerMatches = await StrickerMatch.countDocuments({
+      $or: [
+        { team1Squad: req.params.squadId },
+        { team2Squad: req.params.squadId }
+      ],
+      status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
+    });
+    
+    if (activeStrickerMatches > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Impossible de supprimer cette escouade car un match Stricker est en cours. Veuillez attendre la fin du match.'
       });
     }
 
