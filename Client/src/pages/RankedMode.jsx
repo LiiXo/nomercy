@@ -1105,19 +1105,24 @@ const RankedMode = () => {
     await unlockMatchFoundAudio();
   };
 
+  // Client-side cooldown to prevent button spam (mirrors server's 2s rate limit)
+  const [joinCooldown, setJoinCooldown] = useState(false);
+  
   // Join queue
   const joinQueue = async () => {
+    if (joiningQueue || joinCooldown) return; // Prevent double-clicks
     unlockAudio(); // Unlock audio on user interaction
     setMatchmakingError(null);
-    if (user?.platform === 'PC') {
-      const connected = await checkGGSecure();
-      if (!connected) {
-        setMatchmakingError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
-        return;
-      }
-    }
-    setJoiningQueue(true);
+    setJoiningQueue(true); // Disable button IMMEDIATELY before any async work
+    
     try {
+      if (user?.platform === 'PC') {
+        const connected = await checkGGSecure();
+        if (!connected) {
+          setMatchmakingError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
+          return;
+        }
+      }
       const response = await fetch(`${API_URL}/ranked-matches/matchmaking/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1136,9 +1141,14 @@ const RankedMode = () => {
       } else {
         setMatchmakingError(data.message);
         if (data.activeMatchId) setActiveMatch({ _id: data.activeMatchId });
+        // Cooldown: keep button disabled for 3s after a failed attempt to prevent spam loops
+        setJoinCooldown(true);
+        setTimeout(() => setJoinCooldown(false), 3000);
       }
     } catch (err) {
       setMatchmakingError(language === 'fr' ? 'Erreur de connexion' : 'Connection error');
+      setJoinCooldown(true);
+      setTimeout(() => setJoinCooldown(false), 3000);
     } finally {
       setJoiningQueue(false);
     }
@@ -1948,21 +1958,29 @@ const RankedMode = () => {
     }
   };
 
-  // Initial load
+  // Initial load - all fetches run in parallel for maximum speed
   useEffect(() => {
     setSeasonLoaded(false);
-    // Note: fetchMyRanking is now called in the seasonLoaded effect below with proper season filtering
-    fetchActiveMatchesStats();
-    fetchMatchmakingStatus();
-    fetchRankThresholds(); // Fetch dynamic rank thresholds from config (sets seasonLoaded)
-    fetchRankedRewards(); // Fetch ranked rewards per game mode
-    fetchSeasonRewardsInfo(); // Fetch season rewards info and countdown
+    
+    // Run all independent fetches in parallel
+    const fetches = [
+      fetchActiveMatchesStats(),
+      fetchMatchmakingStatus(),
+      fetchRankThresholds(),
+      fetchRankedRewards(),
+      fetchSeasonRewardsInfo()
+    ];
+    
     if (isAuthenticated) {
-      checkActiveMatch();
-      fetchQueueStatus();
-      fetchBoosters(); // Fetch available and active boosters
-      if (user?.platform === 'PC') checkGGSecure();
+      fetches.push(
+        checkActiveMatch(),
+        fetchQueueStatus(),
+        fetchBoosters()
+      );
+      if (user?.platform === 'PC') fetches.push(checkGGSecure());
     }
+    
+    Promise.all(fetches);
     
     // Refresh active matches stats every 30 seconds
     const statsInterval = setInterval(fetchActiveMatchesStats, 30000);
@@ -3403,7 +3421,7 @@ const RankedMode = () => {
                       {(!isAdmin || !staffQueueMode) && (
                         <button
                           onClick={joinQueue}
-                          disabled={joiningQueue || (activeMatch && !activeMatch.isTestMatch) || (user?.platform === 'PC' && ggsecureConnected === false) || (!matchmakingEnabled && !isStaffOrAdmin)}
+                          disabled={joiningQueue || joinCooldown || (activeMatch && !activeMatch.isTestMatch) || (user?.platform === 'PC' && ggsecureConnected === false) || (!matchmakingEnabled && !isStaffOrAdmin)}
                           className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
                             isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'
                           } text-white font-bold text-lg shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group`}

@@ -122,6 +122,12 @@ const strickerMatchSchema = new mongoose.Schema({
     image: String,
     votes: { type: Number, default: 0 }
   },
+  // Maps sélectionnées aléatoirement après les bans (3 maps)
+  selectedMaps: [{
+    name: String,
+    image: String,
+    order: { type: Number, default: 1 }
+  }],
   // Maps proposées pour le vote (3 maps)
   mapVoteOptions: [{
     name: String,
@@ -264,6 +270,11 @@ const strickerMatchSchema = new mongoose.Schema({
   },
   // Match de test
   isTestMatch: {
+    type: Boolean,
+    default: false
+  },
+  // Flag to prevent double reward distribution
+  rewardsDistributed: {
     type: Boolean,
     default: false
   },

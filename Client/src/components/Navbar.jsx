@@ -525,6 +525,18 @@ const Navbar = () => {
                 <span>{label}</span>
               </Link>
             ))}
+
+            {/* Stricker Mode - right below Ranked (mobile) */}
+            {(strickerModeEnabled || hasAdminAccess()) && (
+              <Link 
+                to={`/${selectedMode}/stricker`}
+                onClick={() => setMobileMenuOpen(false)} 
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-lime-500/10 border border-lime-500/30 text-lime-400"
+              >
+                <Target className="w-4 h-4" />
+                <span>Mode Stricker</span>
+              </Link>
+            )}
             
             {/* Mobile Search Bar */}
             <div className="mb-3">
@@ -613,18 +625,6 @@ const Navbar = () => {
                     <Gift className="w-4 h-4" />
                     <span>{language === 'fr' ? 'Roue quotidienne' : 'Daily Wheel'}</span>
                   </button>
-
-                  {/* Stricker Mode - Visible when enabled globally OR for admin/staff/arbitre (mobile) */}
-                  {(strickerModeEnabled || hasAdminAccess()) && (
-                    <Link 
-                      to={`/${selectedMode}/stricker`}
-                      onClick={() => setMobileMenuOpen(false)} 
-                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-lime-500/10 border border-lime-500/30 text-lime-400"
-                    >
-                      <Target className="w-4 h-4" />
-                      <span>Mode Stricker</span>
-                    </Link>
-                  )}
 
                   {/* Shop - Available to everyone (mobile) */}
                   <Link 

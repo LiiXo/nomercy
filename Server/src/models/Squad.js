@@ -220,6 +220,12 @@ const squadSchema = new mongoose.Schema({
 squadSchema.index({ name: 'text', tag: 'text' });
 squadSchema.index({ 'members.user': 1 });
 squadSchema.index({ leader: 1 });
+// Performance indexes for leaderboard queries
+squadSchema.index({ 'statsHardcore.totalPoints': -1 }); // Top squad hardcore
+squadSchema.index({ 'statsCdl.totalPoints': -1 }); // Top squad CDL
+squadSchema.index({ 'statsStricker.points': -1 }); // Stricker squad leaderboard
+squadSchema.index({ isDeleted: 1, 'statsStricker.points': -1 }); // Stricker leaderboard filtered
+squadSchema.index({ 'registeredLadders.ladderId': 1 }); // Ladder queries
 
 // Virtual for member count
 squadSchema.virtual('memberCount').get(function() {

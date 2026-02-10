@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
@@ -86,12 +86,8 @@ const JoinSquad = () => {
   };
   const t = texts[language] || texts.en;
 
-  // Check if user already has a squad
-  useEffect(() => {
-    if (isAuthenticated && user?.squad) {
-      setError(t.alreadyInSquad);
-    }
-  }, [isAuthenticated, user]);
+  // No premature squad check here - the server validates based on the squad's mode
+  // A user can have a squad in hardcore and join a CDL squad via invite, etc.
 
   // Handle join
   const handleJoin = async () => {
@@ -192,18 +188,8 @@ const JoinSquad = () => {
                     {t.loginButton}
                   </button>
                 </div>
-              ) : user?.squad ? (
-                // Already in a squad
-                <div className="text-center">
-                  <Link
-                    to="/my-profile"
-                    className={`inline-flex items-center gap-2 px-6 py-3 bg-gray-700 text-white font-medium rounded-xl hover:bg-gray-600 transition-colors`}
-                  >
-                    {t.goToProfile}
-                  </Link>
-                </div>
               ) : (
-                // Can join
+                // Can join - server will validate mode-specific squad
                 <div className="flex gap-3">
                   <button
                     onClick={() => navigate(-1)}

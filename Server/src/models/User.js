@@ -461,6 +461,14 @@ userSchema.methods.hasAdminAccess = function() {
   return this.roles.includes('admin') || this.roles.includes('staff') || this.roles.includes('arbitre');
 };
 
+// Performance indexes for leaderboard and ranking queries
+userSchema.index({ 'statsHardcore.xp': -1 }); // Top players hardcore
+userSchema.index({ 'statsCdl.xp': -1 }); // Top players CDL
+userSchema.index({ 'statsStricker.points': -1 }); // Stricker leaderboard
+userSchema.index({ mvpCountHardcore: -1 }); // MVP leader hardcore
+userSchema.index({ mvpCountCdl: -1 }); // MVP leader CDL
+userSchema.index({ isBanned: 1, username: 1 }); // Filtered user queries
+
 // Ensure virtual fields are serialized
 userSchema.set('toJSON', { virtuals: true });
 userSchema.set('toObject', { virtuals: true });

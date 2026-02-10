@@ -689,8 +689,18 @@ const Rankings = () => {
           </h3>
 
           {loading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className={`w-6 h-6 ${colors.text} animate-spin`} />
+            <div className="space-y-2 p-2">
+              {Array(10).fill(null).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 rounded-xl animate-pulse">
+                  <div className="w-8 h-8 rounded-lg bg-dark-700" />
+                  <div className="w-9 h-9 rounded-lg bg-dark-700" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-4 bg-dark-700 rounded w-28" />
+                    <div className="h-3 bg-dark-700 rounded w-14" />
+                  </div>
+                  <div className="h-4 bg-dark-700 rounded w-16" />
+                </div>
+              ))}
             </div>
           ) : leaderboard.length > 0 ? (
             <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">

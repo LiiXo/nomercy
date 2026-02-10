@@ -8,6 +8,24 @@ import { verifyToken, requireAdmin, requireStaff } from '../middleware/auth.midd
 
 const router = express.Router();
 
+// ==================== IN-MEMORY CACHE ====================
+// Cache for expensive public endpoints (top-player, top-squad, mvp-leader, leaderboard)
+// These are hit by every user on every dashboard load + every 30s refresh
+const cache = new Map();
+const CACHE_TTL = 15000; // 15 seconds - fresh enough for real-time feel
+
+function getCached(key) {
+  const entry = cache.get(key);
+  if (entry && (Date.now() - entry.timestamp) < CACHE_TTL) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setCache(key, data) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
 // ==================== PUBLIC ROUTES ====================
 
 // Helper function to calculate wins/losses/points from RankedMatch history
@@ -175,6 +193,11 @@ router.get('/top-player', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
     
+    // Check cache
+    const cacheKey = `top-player-${mode}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+    
     // Use the appropriate stats field based on mode
     const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
 
@@ -186,16 +209,19 @@ router.get('/top-player', async (req, res) => {
       [`${statsField}.xp`]: { $gt: 0 }
     })
       .select(`username avatar discordAvatar discordId ${statsField}`)
-      .sort({ [`${statsField}.xp`]: -1 });
+      .sort({ [`${statsField}.xp`]: -1 })
+      .lean();
 
     if (!topUser) {
-      return res.json({ success: true, player: null });
+      const result = { success: true, player: null };
+      setCache(cacheKey, result);
+      return res.json(result);
     }
     
     // Use ONLY mode-specific stats, no fallback to general stats
     const modeStats = topUser[statsField] || {};
 
-    res.json({
+    const result = {
       success: true,
       player: {
         _id: topUser._id,
@@ -209,7 +235,9 @@ router.get('/top-player', async (req, res) => {
         losses: modeStats.losses || 0,
         points: modeStats.points || 0
       }
-    });
+    };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching top player:', error);
     res.status(500).json({ success: false, message: 'Error fetching top player' });
@@ -225,6 +253,11 @@ router.get('/mvp-leader', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
     
+    // Check cache
+    const cacheKey = `mvp-leader-${mode}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+    
     // Use the appropriate MVP count field based on mode
     const mvpCountField = mode === 'cdl' ? 'mvpCountCdl' : 'mvpCountHardcore';
 
@@ -236,13 +269,16 @@ router.get('/mvp-leader', async (req, res) => {
       [mvpCountField]: { $gt: 0 }
     })
       .select(`username avatar avatarUrl discordAvatar discordId ${mvpCountField}`)
-      .sort({ [mvpCountField]: -1 });
+      .sort({ [mvpCountField]: -1 })
+      .lean();
 
     if (!mvpLeader) {
-      return res.json({ success: true, player: null });
+      const result = { success: true, player: null };
+      setCache(cacheKey, result);
+      return res.json(result);
     }
 
-    res.json({
+    const result = {
       success: true,
       player: {
         _id: mvpLeader._id,
@@ -253,7 +289,9 @@ router.get('/mvp-leader', async (req, res) => {
         discordId: mvpLeader.discordId,
         mvpCount: mvpLeader[mvpCountField] || 0
       }
-    });
+    };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching MVP leader:', error);
     res.status(500).json({ success: false, message: 'Error fetching MVP leader' });
@@ -264,6 +302,11 @@ router.get('/mvp-leader', async (req, res) => {
 router.get('/top-squad', async (req, res) => {
   try {
     const { mode = 'hardcore' } = req.query;
+    
+    // Check cache
+    const cacheKey = `top-squad-${mode}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
     
     // Use the appropriate stats field based on mode
     const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
@@ -279,13 +322,15 @@ router.get('/top-squad', async (req, res) => {
       .lean();
 
     if (!topSquad) {
-      return res.json({ success: true, squad: null });
+      const result = { success: true, squad: null };
+      setCache(cacheKey, result);
+      return res.json(result);
     }
     
     // Use ONLY mode-specific stats, no fallback to general stats
     const modeStats = topSquad[statsField] || {};
 
-    res.json({
+    const result = {
       success: true,
       squad: {
         _id: topSquad._id,
@@ -298,7 +343,9 @@ router.get('/top-squad', async (req, res) => {
         totalWins: modeStats.totalWins || 0,
         totalLosses: modeStats.totalLosses || 0
       }
-    });
+    };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching top squad:', error);
     res.status(500).json({ success: false, message: 'Error fetching top squad' });
@@ -315,6 +362,11 @@ router.get('/top-players/:mode', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid mode' });
     }
     
+    // Check cache
+    const cacheKey = `top-players-${mode}-${limit}`;
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+    
     // Use the appropriate stats field based on mode
     const statsField = mode === 'cdl' ? 'statsCdl' : 'statsHardcore';
 
@@ -328,7 +380,8 @@ router.get('/top-players/:mode', async (req, res) => {
     })
       .select(`username avatar discordAvatar discordId ${statsField}`)
       .sort({ [`${statsField}.xp`]: -1 }) // Tri par XP du mode
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
 
     const rankings = users.map((u, index) => {
       // Use ONLY mode-specific stats, no fallback to general stats
@@ -349,7 +402,9 @@ router.get('/top-players/:mode', async (req, res) => {
       };
     });
 
-    res.json({ success: true, rankings });
+    const result = { success: true, rankings };
+    setCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Error fetching top players:', error);
     res.status(500).json({ success: false, message: 'Error fetching top players' });

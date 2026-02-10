@@ -540,6 +540,7 @@ const AdminPanel = () => {
   const handleUpdateStrickerStats = async () => {
     if (!squadForStrickerStats) return;
     
+    setSaving(true);
     try {
       const response = await fetch(`${API_URL}/squads/admin/${squadForStrickerStats._id}/stricker-stats`, {
         method: 'PUT',
@@ -564,6 +565,8 @@ const AdminPanel = () => {
       }
     } catch (err) {
       setError('Erreur lors de la mise à jour des stats');
+    } finally {
+      setSaving(false);
     }
   };
 

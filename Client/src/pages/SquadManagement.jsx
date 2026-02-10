@@ -88,7 +88,7 @@ const SquadManagement = () => {
       squadColor: 'Couleur de l\'escouade',
       saveSettings: 'Sauvegarder',
       disbandSquad: 'Dissoudre l\'escouade',
-      disbandWarning: 'Cette action est irréversible. Tous les membres seront retirés.',
+      disbandWarning: 'Pour dissoudre votre escouade, veuillez créer un ticket sur notre serveur Discord.',
       confirmDisband: 'Êtes-vous sûr de vouloir dissoudre l\'escouade ?',
       confirmKick: 'Êtes-vous sûr de vouloir expulser ce membre ?',
       confirmTransfer: 'Êtes-vous sûr de vouloir transférer le leadership ?',
@@ -165,7 +165,7 @@ const SquadManagement = () => {
       squadColor: 'Squad color',
       saveSettings: 'Save',
       disbandSquad: 'Disband squad',
-      disbandWarning: 'This action is irreversible. All members will be removed.',
+      disbandWarning: 'To disband your squad, please create a ticket on our Discord server.',
       confirmDisband: 'Are you sure you want to disband the squad?',
       confirmKick: 'Are you sure you want to kick this member?',
       confirmTransfer: 'Are you sure you want to transfer leadership?',
@@ -242,7 +242,7 @@ const SquadManagement = () => {
       squadColor: 'Squad-Farbe',
       saveSettings: 'Speichern',
       disbandSquad: 'Squad auflösen',
-      disbandWarning: 'Diese Aktion ist unwiderruflich. Alle Mitglieder werden entfernt.',
+      disbandWarning: 'Um dein Squad aufzulösen, erstelle bitte ein Ticket auf unserem Discord-Server.',
       confirmDisband: 'Bist du sicher, dass du das Squad auflösen möchtest?',
       confirmKick: 'Bist du sicher, dass du dieses Mitglied rauswerfen möchtest?',
       confirmTransfer: 'Bist du sicher, dass du die Führung übertragen möchtest?',
@@ -313,7 +313,7 @@ const SquadManagement = () => {
       squadColor: 'Colore squadra',
       saveSettings: 'Salva',
       disbandSquad: 'Sciogli squadra',
-      disbandWarning: 'Questa azione è irreversibile. Tutti i membri saranno rimossi.',
+      disbandWarning: 'Per sciogliere la tua squadra, crea un ticket sul nostro server Discord.',
       confirmDisband: 'Sei sicuro di voler sciogliere la squadra?',
       confirmKick: 'Sei sicuro di voler espellere questo membro?',
       confirmTransfer: 'Sei sicuro di voler trasferire la leadership?',
@@ -1637,20 +1637,13 @@ const SquadManagement = () => {
                 {/* Danger Zone */}
                 <div className="pt-6 border-t border-red-500/20">
                   <div className="p-4 bg-red-500/10 rounded-xl border border-red-500/30">
-                    <div className="flex items-start gap-3 mb-4">
+                    <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-red-400 font-medium">{t.disbandSquad}</p>
                         <p className="text-red-400/70 text-sm">{t.disbandWarning}</p>
                       </div>
                     </div>
-                    <button
-                      onClick={() => setConfirmAction({ type: 'disband' })}
-                      className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-red-500/20 text-red-400 font-medium rounded-lg hover:bg-red-500/30 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      {t.disbandSquad}
-                    </button>
                   </div>
                 </div>
               </div>

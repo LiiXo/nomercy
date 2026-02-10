@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
@@ -8,7 +8,7 @@ import { getUserAvatar } from '../utils/avatar';
 import { 
   Trophy, Crown, Zap, Shield, Target, Loader2, TrendingUp, Swords, Lock, 
   Users, Clock, Play, Square, AlertTriangle, ShieldCheck, Crosshair, 
-  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, ShoppingCart
+  Medal, Star, ChevronRight, Flame, Sparkles, Eye, Bot, Radio, BookOpen, Coins, X, Map, ShoppingCart, RotateCcw
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -296,7 +296,7 @@ const translations = {
 
 const StrickerMode = () => {
   const { language } = useLanguage();
-  const { user, isAuthenticated, hasAdminAccess } = useAuth();
+  const { user, isAuthenticated, hasAdminAccess, isAdmin } = useAuth();
   const { isConnected, on, joinStrickerMode, leaveStrickerMode } = useSocket();
   const { isStrickerModeEnabled } = useData();
   const navigate = useNavigate();
@@ -336,6 +336,8 @@ const StrickerMode = () => {
   const [loadingTop100, setLoadingTop100] = useState(false); // Loading state for top 100
   const [activeMatchesStats, setActiveMatchesStats] = useState({ totalMatches: 0, totalPlayers: 0 }); // Active matches stats
   const [recentMatches, setRecentMatches] = useState([]);
+  const [resettingCooldowns, setResettingCooldowns] = useState(false);
+  const [cooldownResetSuccess, setCooldownResetSuccess] = useState(null);
   
   // Check access - allow everyone if Stricker mode is enabled, otherwise only admin/staff/arbitre
   const hasAccess = isAuthenticated && (isStrickerModeEnabled || hasAdminAccess());
@@ -596,6 +598,32 @@ const StrickerMode = () => {
     }
   };
     
+  // Admin: Reset all cooldowns
+  const handleResetCooldowns = async () => {
+    if (resettingCooldowns) return;
+    setResettingCooldowns(true);
+    setCooldownResetSuccess(null);
+    try {
+      const response = await fetch(`${API_URL}/stricker/admin/reset-cooldowns`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCooldownResetSuccess(data.message);
+        // Refresh matchmaking to clear cooldown timers
+        fetchMatchmakingStatus();
+        setTimeout(() => setCooldownResetSuccess(null), 5000);
+      } else {
+        setError(data.message || 'Erreur lors du reset des cooldowns');
+      }
+    } catch (err) {
+      setError('Erreur lors du reset des cooldowns');
+    } finally {
+      setResettingCooldowns(false);
+    }
+  };
+
   // Challenge a squad
   const handleChallengeSquad = async (targetSquadId) => {
     if (!hasAccess || challengingSquad) return;
@@ -637,7 +665,7 @@ const StrickerMode = () => {
     }
   };
   
-  // Initial load
+  // Initial load - all fetches run in parallel, no dependency on callback refs
   useEffect(() => {
     // Fetch season info regardless of access
     fetchCurrentSeason();
@@ -645,12 +673,15 @@ const StrickerMode = () => {
     fetchActiveMatchesStats();
     
     if (hasAccess) {
-      fetchMyRanking();
-      fetchSquadLeaderboard();
-      fetchMatchmakingStatus();
-      fetchConfig();
-      fetchMySquad();
-      fetchRecentMatches();
+      // Run all fetches in parallel for maximum speed
+      Promise.all([
+        fetchMyRanking(),
+        fetchSquadLeaderboard(),
+        fetchMatchmakingStatus(),
+        fetchConfig(),
+        fetchMySquad(),
+        fetchRecentMatches()
+      ]);
     } else {
       setLoading(false);
     }
@@ -658,18 +689,22 @@ const StrickerMode = () => {
     // Refresh active matches stats periodically
     const statsInterval = setInterval(fetchActiveMatchesStats, 30000);
     return () => clearInterval(statsInterval);
-  }, [hasAccess, fetchMyRanking, fetchSquadLeaderboard, fetchMatchmakingStatus, fetchConfig, fetchMySquad, fetchRecentMatches, fetchCurrentSeason, fetchActiveMatchesStats]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAccess, mode]);
   
-  // Polling for matchmaking status - Always active for real-time updates
+  // No more aggressive polling - socket events (strickerQueueUpdate, strickerMatchCreated) 
+  // handle real-time updates. Only refetch on visibility change as a fallback.
   useEffect(() => {
     if (!hasAccess) return;
     
-    // Poll more frequently for real-time feel
-    const interval = setInterval(() => {
-      fetchMatchmakingStatus();
-    }, 3000); // Every 3 seconds
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMatchmakingStatus();
+      }
+    };
     
-    return () => clearInterval(interval);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [hasAccess, fetchMatchmakingStatus]);
   
   // Socket: Join stricker-mode room and listen for match created
@@ -930,18 +965,18 @@ const StrickerMode = () => {
           
           {/* Row 2: Season Banner - Full Width */}
           {currentSeason && (
-            <div className="bg-gradient-to-r from-lime-500/10 via-lime-500/20 to-lime-500/10 border border-lime-500/30 rounded-2xl p-5">
-              <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-12">
+            <div className="bg-gradient-to-r from-lime-500/10 via-lime-500/20 to-lime-500/10 border border-lime-500/30 rounded-2xl p-3 sm:p-5">
+              <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12">
                 {/* Season Info */}
-                <div className="flex items-center gap-4">
-                  <div className="p-3 bg-lime-500/20 rounded-xl">
-                    <Trophy className="w-8 h-8 text-lime-400" />
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="p-2 sm:p-3 bg-lime-500/20 rounded-xl">
+                    <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-lime-400" />
                   </div>
                   <div className="text-center md:text-left">
-                    <p className="text-xs text-lime-400/60 uppercase tracking-widest font-semibold">
+                    <p className="text-[10px] sm:text-xs text-lime-400/60 uppercase tracking-widest font-semibold">
                       {language === 'fr' ? 'Saison Actuelle' : 'Current Season'}
                     </p>
-                    <p className="text-3xl font-black text-white">
+                    <p className="text-xl sm:text-3xl font-black text-white">
                       {language === 'fr' ? 'Saison' : 'Season'} {currentSeason.currentSeason}
                     </p>
                   </div>
@@ -953,36 +988,36 @@ const StrickerMode = () => {
                 
                 {/* Countdown */}
                 <div className="text-center">
-                  <p className="text-xs text-lime-400/60 uppercase tracking-widest font-semibold mb-3">
+                  <p className="text-[10px] sm:text-xs text-lime-400/60 uppercase tracking-widest font-semibold mb-2 sm:mb-3">
                     {language === 'fr' ? 'Prochaine saison dans' : 'Next season in'}
                   </p>
-                  <div className="flex items-center justify-center gap-3">
+                  <div className="flex items-center justify-center gap-1.5 sm:gap-3">
                     <div className="text-center">
-                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
                         {String(seasonCountdown.days).padStart(2, '0')}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'JOURS' : 'DAYS'}</p>
+                      <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'JOURS' : 'DAYS'}</p>
                     </div>
-                    <span className="text-2xl text-lime-500 font-bold">:</span>
+                    <span className="text-base sm:text-2xl text-lime-500 font-bold">:</span>
                     <div className="text-center">
-                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
                         {String(seasonCountdown.hours).padStart(2, '0')}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'HEURES' : 'HOURS'}</p>
+                      <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'HEURES' : 'HOURS'}</p>
                     </div>
-                    <span className="text-2xl text-lime-500 font-bold">:</span>
+                    <span className="text-base sm:text-2xl text-lime-500 font-bold">:</span>
                     <div className="text-center">
-                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
                         {String(seasonCountdown.minutes).padStart(2, '0')}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'MIN' : 'MIN'}</p>
+                      <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'MIN' : 'MIN'}</p>
                     </div>
-                    <span className="text-2xl text-lime-500 font-bold">:</span>
+                    <span className="text-base sm:text-2xl text-lime-500 font-bold">:</span>
                     <div className="text-center">
-                      <div className="text-3xl font-black text-white bg-dark-900/80 px-4 py-2 rounded-lg border border-lime-500/20 min-w-[60px]">
+                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
                         {String(seasonCountdown.seconds).padStart(2, '0')}
                       </div>
-                      <p className="text-xs text-gray-500 mt-1">{language === 'fr' ? 'SEC' : 'SEC'}</p>
+                      <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'SEC' : 'SEC'}</p>
                     </div>
                   </div>
                 </div>
@@ -1441,6 +1476,33 @@ const StrickerMode = () => {
                   </div>
                 </div>
               )}
+
+              {/* Admin: Reset Cooldowns - Admin Only */}
+              {isAdmin && isAdmin() && (
+                <div className="mt-4 p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-red-400 font-bold text-sm">RAZ Cooldowns</p>
+                      <p className="text-gray-500 text-xs">Réinitialiser les délais de 2h entre chaque équipe</p>
+                    </div>
+                    <button
+                      onClick={handleResetCooldowns}
+                      disabled={resettingCooldowns}
+                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 font-semibold rounded-xl transition-colors border border-red-500/30 flex items-center gap-2 whitespace-nowrap disabled:opacity-50"
+                    >
+                      {resettingCooldowns ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4" />
+                      )}
+                      RAZ Cooldowns
+                    </button>
+                  </div>
+                  {cooldownResetSuccess && (
+                    <p className="text-green-400 text-sm mt-2">{cooldownResetSuccess}</p>
+                  )}
+                </div>
+              )}
             </div>
             
             {/* Squad Leaderboard */}
@@ -1460,8 +1522,17 @@ const StrickerMode = () => {
               </div>
               
               {loadingLeaderboard ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-8 h-8 text-lime-400 animate-spin" />
+                <div className="space-y-2">
+                  {Array(8).fill(null).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 p-4 rounded-xl bg-dark-800/50 animate-pulse">
+                      <div className="w-10 h-10 rounded-full bg-dark-700" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-dark-700 rounded w-32" />
+                        <div className="h-3 bg-dark-700 rounded w-20" />
+                      </div>
+                      <div className="h-4 bg-dark-700 rounded w-16" />
+                    </div>
+                  ))}
                 </div>
               ) : squadLeaderboard.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">

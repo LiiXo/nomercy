@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import mongoose from 'mongoose';
 import StrickerMatch from '../models/StrickerMatch.js';
 import User from '../models/User.js';
@@ -6,40 +6,56 @@ import Squad from '../models/Squad.js';
 import Config from '../models/Config.js';
 import AppSettings from '../models/AppSettings.js';
 import Map from '../models/Map.js';
-import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
+import { verifyToken, requireAdmin, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import ggsecureMonitoring from '../services/ggsecureMonitoring.service.js';
 import discordBot from '../services/discordBot.service.js';
 
 const router = express.Router();
 
+// ==================== CACHED STRICKER ACCESS CHECK ====================
+// Cache AppSettings to avoid hitting DB on every single request
+let cachedStrickerEnabled = null;
+let strickerEnabledCacheTime = 0;
+const STRICKER_ACCESS_CACHE_TTL = 30000; // 30 seconds
+
+async function isStrickerModeEnabledCached() {
+  const now = Date.now();
+  if (cachedStrickerEnabled !== null && (now - strickerEnabledCacheTime) < STRICKER_ACCESS_CACHE_TTL) {
+    return cachedStrickerEnabled;
+  }
+  try {
+    const appSettings = await AppSettings.findOne().select('features.strickerMode.enabled').lean();
+    cachedStrickerEnabled = appSettings?.features?.strickerMode?.enabled === true;
+    strickerEnabledCacheTime = now;
+  } catch (err) {
+    console.error('Error checking strickerMode setting:', err);
+    // Return last known value or false
+    if (cachedStrickerEnabled === null) cachedStrickerEnabled = false;
+  }
+  return cachedStrickerEnabled;
+}
+
 // Middleware to check if user has access (admin/staff/arbitre OR strickerMode enabled for everyone)
 const checkStrickerAccess = async (req, res, next) => {
   try {
     if (!req.user || !req.user._id) {
-      console.error('Stricker access check: No user in request');
       return res.status(401).json({ success: false, message: 'Non authentifié' });
     }
     
-    const user = await User.findById(req.user._id);
+    // Use select to only fetch needed fields instead of entire User document
+    const user = await User.findById(req.user._id).select('_id username roles squadStricker squadHardcore squadCdl squad discordId discordAvatar avatar platform statsStricker activisionId isBanned isProfileComplete');
     if (!user) {
-      console.error('Stricker access check: User not found:', req.user._id);
       return res.status(401).json({ success: false, message: 'Utilisateur non trouvé' });
     }
     
     // Check if user has admin/staff/arbitre role
     const hasAdminAccess = user.roles?.some(r => ['admin', 'staff', 'arbitre'].includes(r));
     
-    // Check if Stricker mode is globally enabled for everyone
-    let isStrickerModeEnabled = false;
-    try {
-      const appSettings = await AppSettings.findOne();
-      isStrickerModeEnabled = appSettings?.features?.strickerMode?.enabled === true;
-    } catch (err) {
-      console.error('Error checking strickerMode setting:', err);
-    }
+    // Use cached AppSettings check instead of querying DB every time
+    const isStrickerEnabled = await isStrickerModeEnabledCached();
     
     // Allow access if admin/staff/arbitre OR if stricker mode is enabled
-    if (!hasAdminAccess && !isStrickerModeEnabled) {
+    if (!hasAdminAccess && !isStrickerEnabled) {
       return res.status(403).json({ success: false, message: 'Accès réservé aux administrateurs, staff et arbitres' });
     }
     
@@ -69,6 +85,22 @@ function getStrickerRank(points) {
   if (points >= 500) return 'veterans';
   if (points >= 250) return 'operateurs';
   return 'recrues';
+}
+
+// ==================== STRICKER LEADERBOARD CACHE ====================
+const strickerCache = new Map();
+const STRICKER_CACHE_TTL = 15000; // 15 seconds
+
+function getStrickerCached(key) {
+  const entry = strickerCache.get(key);
+  if (entry && (Date.now() - entry.timestamp) < STRICKER_CACHE_TTL) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setStrickerCache(key, data) {
+  strickerCache.set(key, { data, timestamp: Date.now() });
 }
 
 // ==================== QUEUE MANAGEMENT ====================
@@ -114,14 +146,9 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
     // Update online status
     strickerOnlineUsers[odId] = Date.now();
     
-    // Get user's squad ID
-    const user = await User.findById(req.user._id)
-      .populate('squadStricker', '_id')
-      .populate('squadHardcore', '_id')
-      .populate('squadCdl', '_id')
-      .populate('squad', '_id');
-    const userSquad = user?.squadStricker || user?.squadHardcore || user?.squadCdl || user?.squad;
-    const userSquadId = userSquad?._id?.toString();
+    // Get user's squad ID - reuse from middleware (already fetched in checkStrickerAccess)
+    const userSquad = req.user?.squadStricker || req.user?.squadHardcore || req.user?.squadCdl || req.user?.squad;
+    const userSquadId = userSquad?._id?.toString() || userSquad?.toString();
     
     // Filter queue by mode
     const modeQueue = strickerQueue.filter(p => p.mode === mode);
@@ -204,7 +231,8 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
       })
       .populate('players.user', 'username avatarUrl discordAvatar discordId')
       .populate('team1Squad', 'name tag logo')
-      .populate('team2Squad', 'name tag logo');
+      .populate('team2Squad', 'name tag logo')
+      .lean();
     } catch (matchErr) {
       console.error('Error finding active stricker match:', matchErr);
       // Continue without active match
@@ -238,7 +266,7 @@ router.get('/active-matches/stats', async (req, res) => {
     const activeMatches = await StrickerMatch.find({
       mode,
       status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress'] }
-    }).select('status gameMode');
+    }).select('status gameMode').lean();
     
     // Calculer le nombre total de joueurs (5v5 = 10 joueurs par match)
     const totalPlayers = activeMatches.length * 10;
@@ -450,7 +478,6 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
     
     // Filter queue by mode for display
     const modeQueue = strickerQueue.filter(p => p.mode === mode);
-    console.log(`[STRICKER] User ${user.username} (${odId}) joined ${mode} queue | Squad: ${squad.tag} | Mode queue size: ${modeQueue.length}`);
     
     // Get updated list of searching squads (excluding own squad) - mode specific
     const searchingSquads = [];
@@ -676,7 +703,6 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         });
       }
       
-      console.log(`[STRICKER] Challenge: ${challengerSquad.tag} vs ${targetEntry.squadTag} (mode: ${mode})`);
       
       // Get ALL stricker maps for ban phase (each team bans 1, then random from remaining)
       let maps = await Map.find({
@@ -740,7 +766,6 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       
       await match.save();
       
-      console.log(`[STRICKER] Match created via challenge: ${match._id}`);
       
       // Remove both squads from queue
       for (let i = strickerQueue.length - 1; i >= 0; i--) {
@@ -847,7 +872,6 @@ async function createStrickerMatch() {
     const team1Entry = squadEntries[0];
     const team2Entry = squadEntries[1];
     
-    console.log(`[STRICKER] Creating match: ${team1Entry.squadTag} vs ${team2Entry.squadTag}`);
     
     // Get ALL stricker maps for ban phase (each team bans 1, then random from remaining)
     const maps = await Map.find({
@@ -923,7 +947,6 @@ async function createStrickerMatch() {
     
     await match.save();
     
-    console.log(`[STRICKER] Match created: ${match._id} | ${team1Entry.squadTag} vs ${team2Entry.squadTag}`);
     
     // Remove both squad entries from queue
     const matchedSquadIds = [team1Entry.squadId, team2Entry.squadId];
@@ -933,7 +956,6 @@ async function createStrickerMatch() {
       }
     }
     
-    console.log(`[STRICKER] Queue cleared for matched squads | Remaining queue size: ${strickerQueue.length}`);
     
     // Vérifier immédiatement le statut GGSecure des joueurs PC et notifier sur la feuille de match
     ggsecureMonitoring.checkStrickerMatchGGSecureStatus(match).catch(err => {
@@ -952,11 +974,29 @@ async function createStrickerMatch() {
 // Get squad leaderboard for stricker mode
 router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
-    console.log('[STRICKER LEADERBOARD] Fetching squad leaderboard...');
-    
     // Get user's squad
-    const user = await User.findById(req.user._id).select('squadStricker');
-    const userSquadId = user?.squadStricker?.toString();
+    const userSquadId = req.user?.squadStricker?.toString();
+    
+    // Check cache first (keyed by existence of userSquadId to handle position lookup)
+    const cacheKey = 'stricker-leaderboard-squads';
+    const cached = getStrickerCached(cacheKey);
+    
+    if (cached) {
+      // Reuse cached leaderboard, just find user's squad position
+      let userSquad = null;
+      if (userSquadId) {
+        const userSquadIndex = cached.allSquads.findIndex(s => s._id.toString() === userSquadId);
+        if (userSquadIndex >= 15) {
+          userSquad = cached.allSquads[userSquadIndex];
+        }
+      }
+      return res.json({
+        success: true,
+        top15: cached.allSquads.slice(0, 15),
+        userSquad,
+        totalSquads: cached.allSquads.length
+      });
+    }
     
     // Get all squads with stricker stats sorted by points
     const allSquads = await Squad.aggregate([
@@ -1004,7 +1044,6 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
       }
     ]);
     
-    console.log(`[STRICKER LEADERBOARD] Found ${allSquads.length} squads with Stricker stats`);
     
     // Add positions to all squads
     const allSquadsWithPosition = allSquads.map((squad, index) => ({
@@ -1013,6 +1052,9 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
       rank: getStrickerRank(squad.stats?.points || squad.strickerPoints || 0),
       rankImage: STRICKER_RANKS[getStrickerRank(squad.stats?.points || squad.strickerPoints || 0)]?.image
     }));
+    
+    // Cache the full leaderboard
+    setStrickerCache(cacheKey, { allSquads: allSquadsWithPosition });
     
     // Get top 15
     const top15 = allSquadsWithPosition.slice(0, 15);
@@ -1041,7 +1083,10 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
 // Get top 100 squad leaderboard for stricker mode
 router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
-    console.log('[STRICKER TOP 100] Fetching top 100 squads...');
+    // Check cache first
+    const cacheKey = 'stricker-top100-squads';
+    const cached = getStrickerCached(cacheKey);
+    if (cached) return res.json(cached);
     
     // Get all squads with stricker stats sorted by points
     const top100Squads = await Squad.aggregate([
@@ -1092,7 +1137,6 @@ router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async
       }
     ]);
     
-    console.log(`[STRICKER TOP 100] Found ${top100Squads.length} squads`);
     
     // Add positions and rank info
     const top100WithPosition = top100Squads.map((squad, index) => ({
@@ -1102,11 +1146,13 @@ router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async
       rankImage: STRICKER_RANKS[getStrickerRank(squad.stats?.points || squad.strickerPoints || 0)]?.image
     }));
     
-    res.json({
+    const result = {
       success: true,
       squads: top100WithPosition,
       total: top100Squads.length
-    });
+    };
+    setStrickerCache(cacheKey, result);
+    res.json(result);
   } catch (error) {
     console.error('Stricker top 100 error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -1133,7 +1179,7 @@ router.get('/my-ranking', verifyToken, checkStrickerAccess, async (req, res) => 
     let squadPosition = null;
     if (user.squadStricker) {
       const higherSquads = await Squad.countDocuments({
-        isActive: true,
+        isDeleted: { $ne: true },
         'statsStricker.points': { $gt: user.squadStricker.statsStricker?.points || 0 }
       });
       squadPosition = higherSquads + 1;
@@ -1209,16 +1255,6 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
     const isReferent = match.team1Referent?._id?.toString() === req.user._id.toString() ||
                        match.team2Referent?._id?.toString() === req.user._id.toString();
     
-    console.log('[STRICKER GET MATCH] Debug:', {
-      matchId,
-      userId: req.user._id.toString(),
-      team1ReferentId: match.team1Referent?._id?.toString(),
-      team2ReferentId: match.team2Referent?._id?.toString(),
-      isReferent,
-      myTeam,
-      matchStatus: match.status
-    });
-    
     // Get available members for roster selection if active
     let availableMembers = [];
     let mySquad = null;
@@ -1249,44 +1285,49 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
           const membersToCheck = mySquad.members
             .filter(m => m.user && !selectedPlayerIds.includes(m.user._id?.toString()));
           
-          // Check GGSecure status for PC players
-          availableMembers = await Promise.all(membersToCheck.map(async (m) => {
-            let ggsecureStatus = null;
-            
-            // Check GGSecure for PC players
-            if (m.user.platform === 'PC') {
+          // Only check GGSecure for PC players (batch with Promise.all + 3s timeout per call)
+          const pcMembers = membersToCheck.filter(m => m.user.platform === 'PC');
+          const ggsecureStatusMap = new Map(); // userId -> boolean
+          
+          if (pcMembers.length > 0) {
+            const GGSECURE_TIMEOUT = 3000; // 3 seconds max per check
+            const ggsecureChecks = pcMembers.map(async (m) => {
               try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), GGSECURE_TIMEOUT);
                 const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${m.user._id}/status`, {
                   headers: {
                     'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
                     'Content-Type': 'application/json'
-                  }
+                  },
+                  signal: controller.signal
                 });
-                
+                clearTimeout(timeoutId);
                 if (ggsecureResponse.ok) {
-                  const ggsecureData = await ggsecureResponse.json();
-                  ggsecureStatus = ggsecureData.isOnline || ggsecureData.reason === 'api_key_missing';
+                  const data = await ggsecureResponse.json();
+                  ggsecureStatusMap.set(m.user._id.toString(), data.isOnline || data.reason === 'api_key_missing');
                 } else {
-                  ggsecureStatus = true; // API error, allow selection
+                  ggsecureStatusMap.set(m.user._id.toString(), true);
                 }
-              } catch (ggsecureError) {
-                console.error('[STRICKER] GGSecure check error for member:', ggsecureError);
-                ggsecureStatus = true; // API error, allow selection
+              } catch {
+                ggsecureStatusMap.set(m.user._id.toString(), true); // On error, allow selection
               }
-            }
-            
-            return {
-              _id: m.user._id,
-              username: m.user.username,
-              avatarUrl: m.user.avatarUrl,
-              discordAvatar: m.user.discordAvatar,
-              discordId: m.user.discordId,
-              strickerPoints: m.user.statsStricker?.points || 0,
-              role: m.role,
-              equippedTitle: m.user.equippedTitle,
-              platform: m.user.platform,
-              ggsecureConnected: ggsecureStatus
-            };
+            });
+            await Promise.all(ggsecureChecks);
+          }
+          
+          // Build available members list (fast - no async)
+          availableMembers = membersToCheck.map(m => ({
+            _id: m.user._id,
+            username: m.user.username,
+            avatarUrl: m.user.avatarUrl,
+            discordAvatar: m.user.discordAvatar,
+            discordId: m.user.discordId,
+            strickerPoints: m.user.statsStricker?.points || 0,
+            role: m.role,
+            equippedTitle: m.user.equippedTitle,
+            platform: m.user.platform,
+            ggsecureConnected: m.user.platform === 'PC' ? (ggsecureStatusMap.get(m.user._id.toString()) ?? true) : null
           }));
         }
       }
@@ -1544,7 +1585,6 @@ router.post('/match/:matchId/roster/deselect', verifyToken, checkStrickerAccess,
       });
     }
     
-    console.log(`[STRICKER] Player ${removedPlayer.username} removed from roster by referent`);
     
     res.json({
       success: true,
@@ -1662,7 +1702,6 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
     const { matchId } = req.params;
     const { mapName } = req.body;
     
-    console.log(`[STRICKER MAP BAN] User ${req.user.username} trying to ban map: ${mapName} for match ${matchId}`);
     
     if (!mapName) {
       return res.status(400).json({ success: false, message: 'Nom de map non sp\u00e9cifi\u00e9' });
@@ -1692,7 +1731,6 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
     const team1RefId = match.team1Referent?._id?.toString() || match.team1Referent?.toString();
     const team2RefId = match.team2Referent?._id?.toString() || match.team2Referent?.toString();
     
-    console.log(`[STRICKER MAP BAN] userId: ${userId}, team1RefId: ${team1RefId}, team2RefId: ${team2RefId}`);
     
     // Only referents can ban maps
     const isTeam1Referent = userId === team1RefId;
@@ -1722,7 +1760,6 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
     }
     
     const currentTurn = match.mapBans.currentTurn;
-    console.log(`[STRICKER MAP BAN] currentTurn: ${currentTurn}, isTeam1Referent: ${isTeam1Referent}, isTeam2Referent: ${isTeam2Referent}`);
     
     // Check if it's this referent's turn
     if ((isTeam1Referent && currentTurn !== 1) || (isTeam2Referent && currentTurn !== 2)) {
@@ -1773,14 +1810,21 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
         return res.status(400).json({ success: false, message: 'Aucune map disponible' });
       }
       
-      // Randomly select from remaining maps
-      const randomIndex = Math.floor(Math.random() * remainingMaps.length);
-      const selectedMap = remainingMaps[randomIndex];
+      // Shuffle remaining maps and pick up to 3
+      const shuffled = [...remainingMaps].sort(() => 0.5 - Math.random());
+      const pickedMaps = shuffled.slice(0, Math.min(3, shuffled.length));
       
-      // selectedMap is an object in the schema, not a string
+      // Store the 3 selected maps
+      match.selectedMaps = pickedMaps.map((m, index) => ({
+        name: m.name,
+        image: m.image,
+        order: index + 1
+      }));
+      
+      // Keep selectedMap as the first one for backward compatibility
       match.selectedMap = {
-        name: selectedMap.name,
-        image: selectedMap.image,
+        name: pickedMaps[0].name,
+        image: pickedMaps[0].image,
         votes: 0
       };
       match.status = 'ready';
@@ -1792,8 +1836,9 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
       if (io) {
         io.to(`stricker-match-${matchId}`).emit('strickerMapSelected', {
           matchId,
-          selectedMap: selectedMap.name,
-          mapImage: selectedMap.image,
+          selectedMap: pickedMaps[0].name,
+          mapImage: pickedMaps[0].image,
+          selectedMaps: match.selectedMaps,
           mapBans: {
             team1BannedMap: match.mapBans.team1BannedMap,
             team2BannedMap: match.mapBans.team2BannedMap
@@ -1826,6 +1871,7 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
         currentTurn: match.mapBans.currentTurn
       },
       selectedMap: match.selectedMap || null,
+      selectedMaps: match.selectedMaps || [],
       banComplete: bothBanned
     });
   } catch (error) {
@@ -1911,7 +1957,6 @@ router.post('/match/:matchId/cancel-vote', verifyToken, checkStrickerAccess, asy
       match.cancelledBy = 'mutual_agreement';
       matchCancelled = true;
       
-      console.log(`[STRICKER] Match ${matchId} cancelled by mutual agreement`);
     } else if (oneDeclined && match.cancellationVotes.team1 !== null && match.cancellationVotes.team2 !== null) {
       // One team declined, reset the votes
       match.cancellationVotes = {
@@ -2023,7 +2068,6 @@ router.post('/match/:matchId/call-arbitrator', verifyToken, checkStrickerAccess,
       io.to(`stricker-match-${matchId}`).emit('strickerMatchUpdate', { matchId });
     }
     
-    console.log(`[STRICKER] Arbitrator called for match ${matchId} by ${req.user.username}`);
     
     res.json({
       success: true,
@@ -2100,19 +2144,16 @@ router.post('/match/:matchId/result', verifyToken, checkStrickerAccess, async (r
         match.status = 'completed';
         match.completedAt = new Date();
         
-        console.log(`[STRICKER] Match ${match._id} completed - Winner: Team ${match.winner}`);
         
         // Distribute rewards (no MVP system for Stricker)
         await distributeStrickerRewards(match);
       } else {
         // Disagreement - mark as disputed
         match.status = 'disputed';
-        console.log(`[STRICKER] Match ${match._id} disputed - Team1 voted ${match.result.team1Report.winner}, Team2 voted ${match.result.team2Report.winner}`);
         
         // Send Discord notification to arbitrators
         try {
           await discordBot.logStrickerDispute(match);
-          console.log(`[STRICKER] Discord notification sent for dispute on match ${match._id}`);
         } catch (discordError) {
           console.error('[STRICKER] Error sending Discord dispute notification:', discordError);
           // Don't fail the request if Discord notification fails
@@ -2168,24 +2209,16 @@ function getPointsLossForRank(points, pointsLossConfig = null) {
 // Distribute rewards for stricker match
 async function distributeStrickerRewards(match) {
   try {
-    console.log(`[STRICKER REWARDS] ========== STARTING REWARD DISTRIBUTION ==========`);
-    console.log(`[STRICKER REWARDS] Match ID: ${match._id}`);
-    console.log(`[STRICKER REWARDS] Winner: Team ${match.result.winner}`);
-    console.log(`[STRICKER REWARDS] Total players in match: ${match.players?.length || 0}`);
+    // Prevent double distribution
+    if (match.rewardsDistributed) {
+      return;
+    }
+    
     
     // Load config for rewards
     const config = await Config.getOrCreate();
     const rewardsConfig = config.strickerMatchRewards?.['Search & Destroy'] || {};
     const pointsLossConfig = config.strickerPointsLossPerRank || {};
-    
-    console.log(`[STRICKER REWARDS] Config loaded:`, {
-      pointsWin: rewardsConfig.pointsWin,
-      coinsWin: rewardsConfig.coinsWin,
-      coinsLoss: rewardsConfig.coinsLoss,
-      xpWinMin: rewardsConfig.xpWinMin,
-      xpWinMax: rewardsConfig.xpWinMax,
-      pointsLossConfig
-    });
     
     const winningTeam = match.result.winner;
     
@@ -2211,31 +2244,19 @@ async function distributeStrickerRewards(match) {
     
     // Process each player
     for (const player of match.players) {
-      console.log(`[STRICKER REWARDS] Processing player:`, {
-        username: player.username,
-        team: player.team,
-        isFake: player.isFake,
-        hasUser: !!player.user,
-        userId: player.user?.toString(),
-        squad: player.squad?.toString()
-      });
-      
       if (player.isFake) {
         skippedFake++;
-        console.log(`[STRICKER REWARDS] Skipping fake player: ${player.username}`);
         continue;
       }
       
       if (!player.user) {
         skippedNoUser++;
-        console.log(`[STRICKER REWARDS] Skipping player without user ID: ${player.username}`);
         continue;
       }
       
       const user = await User.findById(player.user);
       if (!user) {
         skippedUserNotFound++;
-        console.log(`[STRICKER REWARDS] User not found for player: ${player.username}, userId: ${player.user}`);
         continue;
       }
       
@@ -2267,7 +2288,6 @@ async function distributeStrickerRewards(match) {
       
       await user.save();
       
-      console.log(`[STRICKER] ${user.username}: ${isWinner ? 'WIN' : 'LOSS'} - Points: ${oldPoints} -> ${user.statsStricker.points} (${pointsChange > 0 ? '+' : ''}${pointsChange})`);
       
       // Update squad stats if player has a squad
       let cranesAwarded = 0;
@@ -2278,7 +2298,6 @@ async function distributeStrickerRewards(match) {
         if (squadId in squadsAwarded) {
           // Squad already processed, just get the cranes value that was awarded
           cranesAwarded = squadsAwarded[squadId].cranes;
-          console.log(`[STRICKER] Squad already processed for ${user.username}, using cached cranes: ${cranesAwarded}`);
         } else {
           // First player from this squad - process squad stats
           const squad = await Squad.findById(player.squad);
@@ -2316,10 +2335,8 @@ async function distributeStrickerRewards(match) {
             squadsAwarded[squadId] = { cranes: cranesReward, pointsChange: squadPointsChange, topSquadPointsChange }; // Store values for other players
             cranesAwarded = cranesReward;
             
-            console.log(`[STRICKER] Squad ${squad.tag} (${squad._id}) ${isWinner ? 'WON' : 'LOST'} - Stats: ${oldSquadPoints} → ${squad.statsStricker.points} pts (${squadPointsChange > 0 ? '+' : ''}${squadPointsChange}), ${squad.statsStricker.wins}W/${squad.statsStricker.losses}L - Munitions: ${cranesReward} (total: ${squad.cranes}) - Top Squad: ${oldTopSquadPoints} → ${squad.statsHardcore.totalPoints} (${topSquadPointsChange > 0 ? '+' : ''}${topSquadPointsChange})`);
             
             await squad.save();
-            console.log(`[STRICKER] Squad ${squad.tag} saved successfully. Current statsStricker:`, squad.statsStricker);
           } else {
             console.warn(`[STRICKER] Squad ${squadId} not found for player ${user.username}`);
           }
@@ -2338,20 +2355,12 @@ async function distributeStrickerRewards(match) {
         topSquadPointsChange: topSquadPtsChange
       };
       
-      console.log(`[STRICKER REWARDS] Stored rewards for ${user.username}:`, player.rewards);
     }
     
-    console.log(`[STRICKER REWARDS] ========== DISTRIBUTION SUMMARY ==========`);
-    console.log(`[STRICKER REWARDS] Processed: ${processedPlayers}, Skipped (fake): ${skippedFake}, Skipped (no user): ${skippedNoUser}, Skipped (not found): ${skippedUserNotFound}`);
     
+    match.rewardsDistributed = true;
     match.markModified('players');
     await match.save();
-    
-    console.log(`[STRICKER REWARDS] Match saved successfully. Players with rewards:`);
-    match.players.forEach(p => {
-      console.log(`  - ${p.username}: rewards =`, p.rewards);
-    });
-    console.log(`[STRICKER REWARDS] ========== DISTRIBUTION COMPLETE ==========`);
     
   } catch (error) {
     console.error('[STRICKER REWARDS] ERROR during distribution:', error);
@@ -2869,7 +2878,8 @@ router.post('/admin/match/:matchId/force-winner', verifyToken, requireArbitre, a
     }
     
     // Prevent forcing if rewards were already distributed
-    if (match.status === 'completed' && match.result?.confirmed && match.rewardsDistributed) {
+    const alreadyRewarded = match.rewardsDistributed || match.players?.some(p => p.rewards);
+    if (match.status === 'completed' && match.result?.confirmed && alreadyRewarded) {
       return res.status(400).json({ success: false, message: 'Match déjà terminé avec récompenses distribuées' });
     }
     
@@ -2886,12 +2896,10 @@ router.post('/admin/match/:matchId/force-winner', verifyToken, requireArbitre, a
     
     await match.save();
     
-    console.log(`[STRICKER ADMIN] Match ${matchId} force-completed by ${req.user.username} - Winner: Team ${winner}`);
     
     // Distribute rewards
     try {
       await distributeStrickerRewards(match);
-      console.log(`[STRICKER ADMIN] Rewards distributed for force-completed match ${matchId}`);
     } catch (rewardError) {
       console.error(`[STRICKER ADMIN] Error distributing rewards for match ${matchId}:`, rewardError);
     }
@@ -2922,6 +2930,41 @@ router.post('/admin/match/:matchId/force-winner', verifyToken, requireArbitre, a
     });
   } catch (error) {
     console.error('Admin force winner error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== ADMIN: RESET ALL COOLDOWNS ====================
+// Push completedAt back by 3 hours on all recent completed matches so the 2h cooldown no longer applies
+router.post('/admin/reset-cooldowns', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const REMATCH_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+    const cooldownCutoff = new Date(Date.now() - REMATCH_COOLDOWN_MS);
+
+    // Find all completed matches within the cooldown window
+    const result = await StrickerMatch.updateMany(
+      {
+        status: 'completed',
+        completedAt: { $gte: cooldownCutoff }
+      },
+      [
+        {
+          $set: {
+            completedAt: {
+              $subtract: ['$completedAt', 3 * 60 * 60 * 1000] // Push back 3 hours
+            }
+          }
+        }
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: `Cooldowns réinitialisés. ${result.modifiedCount} match(s) affectés.`,
+      matchesAffected: result.modifiedCount
+    });
+  } catch (error) {
+    console.error('Admin reset cooldowns error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });

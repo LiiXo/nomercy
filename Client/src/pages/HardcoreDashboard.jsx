@@ -557,21 +557,20 @@ const HardcoreDashboard = () => {
     fetchMySquad();
   }, [isAuthenticated]);
 
-  // Fetch matches
+  // Fetch matches - parallel fetching for both ladders
   const fetchMatches = async (isInitial = false) => {
     if (isInitial) setLoadingMatches(true);
     try {
-      const squadRes = await fetch(`${API_URL}/matches/available/squad-team?mode=hardcore`);
-      const squadData = await squadRes.json();
+      const [squadRes, duoRes] = await Promise.all([
+        fetch(`${API_URL}/matches/available/squad-team?mode=hardcore`),
+        fetch(`${API_URL}/matches/available/duo-trio?mode=hardcore`)
+      ]);
+      const [squadData, duoData] = await Promise.all([squadRes.json(), duoRes.json()]);
+      
       if (squadData.success) {
-        console.log('[HardcoreDashboard] Fetched squadTeamMatches:', squadData.matches?.length);
         setSquadTeamMatches(squadData.matches);
       }
-      
-      const duoRes = await fetch(`${API_URL}/matches/available/duo-trio?mode=hardcore`);
-      const duoData = await duoRes.json();
       if (duoData.success) {
-        console.log('[HardcoreDashboard] Fetched duoTrioMatches:', duoData.matches?.length);
         setDuoTrioMatches(duoData.matches);
       }
     } catch (err) {
@@ -651,21 +650,26 @@ const HardcoreDashboard = () => {
 
   // Initial fetch and unified refresh interval
   useEffect(() => {
-    fetchMatches(true);
-    fetchInProgressCounts();
-    fetchRankedMatchesStats();
-    fetchStrickerMatchesStats();
-    fetchSiteStats();
-    if (isAuthenticated) fetchMyActiveMatches();
+    // Run all initial fetches in parallel
+    Promise.all([
+      fetchMatches(true),
+      fetchInProgressCounts(),
+      fetchRankedMatchesStats(),
+      fetchStrickerMatchesStats(),
+      fetchSiteStats(),
+      ...(isAuthenticated ? [fetchMyActiveMatches()] : [])
+    ]);
     
     // Single unified interval for all periodic refreshes
     const refreshInterval = setInterval(() => {
-      fetchMatches(false);
-      fetchInProgressCounts();
-      fetchRankedMatchesStats();
-      fetchStrickerMatchesStats();
-      fetchSiteStats();
-      if (isAuthenticated) fetchMyActiveMatches();
+      Promise.all([
+        fetchMatches(false),
+        fetchInProgressCounts(),
+        fetchRankedMatchesStats(),
+        fetchStrickerMatchesStats(),
+        fetchSiteStats(),
+        ...(isAuthenticated ? [fetchMyActiveMatches()] : [])
+      ]);
     }, 30000);
     
     return () => clearInterval(refreshInterval);
@@ -1993,8 +1997,19 @@ const HardcoreDashboard = () => {
                 </div>
                 <div className="flex-1 min-h-[520px]">
                   {loadingPlayers ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="w-6 h-6 text-neon-red animate-spin" />
+                    <div className="divide-y divide-white/5">
+                      {Array(10).fill(null).map((_, i) => (
+                        <div key={i} className="px-6 py-3 animate-pulse">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="w-14 h-4 bg-dark-700 rounded" />
+                              <div className="w-8 h-8 rounded-full bg-dark-700" />
+                              <div className="w-24 h-4 bg-dark-700 rounded" />
+                            </div>
+                            <div className="w-16 h-4 bg-dark-700 rounded" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : topPlayers.length === 0 ? (
                     <div className="text-center py-12 text-gray-500">{language === 'fr' ? 'Aucun joueur classé' : 'No ranked players'}</div>

@@ -1,4 +1,4 @@
-import Squad from '../models/Squad.js';
+﻿import Squad from '../models/Squad.js';
 import Trophy from '../models/Trophy.js';
 import AppSettings from '../models/AppSettings.js';
 
@@ -51,13 +51,11 @@ const getRankFromPoints = (points) => {
  * - Increments season number
  */
 export const resetStrickerSeason = async (adminUserId) => {
-  console.log('[STRICKER SEASON RESET] Starting season reset...');
   
   // Get current settings
   const settings = await AppSettings.getSettings();
   const endingSeason = settings?.strickerSettings?.currentSeason || 1;
   
-  console.log(`[STRICKER SEASON RESET] Ending season ${endingSeason}`);
   
   const results = {
     seasonNumber: endingSeason,
@@ -83,7 +81,6 @@ export const resetStrickerSeason = async (adminUserId) => {
     .sort({ 'statsStricker.points': -1 })
     .populate('leader', 'username');
   
-  console.log(`[STRICKER SEASON RESET] Found ${eligibleSquads.length} squads eligible for trophies (Vétérans+)`);
   
   // Create trophies cache by rank to avoid creating duplicates
   const trophyCache = {};
@@ -114,7 +111,6 @@ export const resetStrickerSeason = async (adminUserId) => {
       });
       await trophy.save();
       trophyCache[rankKey] = trophy;
-      console.log(`[STRICKER SEASON RESET] Trophy created for rank ${rankInfo.name}: ${trophy.name}`);
     }
     
     const trophy = trophyCache[rankKey];
@@ -167,7 +163,6 @@ export const resetStrickerSeason = async (adminUserId) => {
         cranesReward
       });
       
-      console.log(`[STRICKER SEASON RESET] #${position}: [${squad.tag}] ${squad.name} - +${cranesReward} cranes`);
     }
     
     await squad.save();
@@ -175,7 +170,6 @@ export const resetStrickerSeason = async (adminUserId) => {
     results.trophiesDistributed++;
     results.trophiesByRank[rankKey]++;
     
-    console.log(`[STRICKER SEASON RESET] #${position}: [${squad.tag}] ${squad.name} - ${points} pts (${rankInfo.name}) - Trophy assigned${goldReward > 0 ? ` + ${goldReward} gold` : ''}`);
   }
   
   // Reset all squad stricker stats
@@ -192,7 +186,6 @@ export const resetStrickerSeason = async (adminUserId) => {
   );
   
   results.squadsReset = resetResult.modifiedCount;
-  console.log(`[STRICKER SEASON RESET] Reset ${results.squadsReset} squad stats`);
   
   // Increment season number and update start date
   const newSeasonNumber = endingSeason + 1;
@@ -207,8 +200,6 @@ export const resetStrickerSeason = async (adminUserId) => {
     { upsert: true }
   );
   
-  console.log(`[STRICKER SEASON RESET] Season incremented to ${newSeasonNumber}`);
-  console.log(`[STRICKER SEASON RESET] Complete! Trophies: ${results.trophiesDistributed} (Immortel: ${results.trophiesByRank.immortel}, Seigneurs: ${results.trophiesByRank.seigneurs}, Commandants: ${results.trophiesByRank.commandants}, Vétérans: ${results.trophiesByRank.veterans}), Gold: ${results.goldDistributed}, Cranes: ${results.cranesDistributed}, Squads reset: ${results.squadsReset}`);
   
   return results;
 };

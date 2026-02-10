@@ -105,58 +105,44 @@ router.post('/admin/reset-all', verifyToken, requireAdmin, async (req, res) => {
   }
 });
 
-// Get site statistics (public)
+// In-memory cache for site stats (refreshed every 30 seconds)
+let cachedStats = null;
+let lastStatsRefresh = 0;
+const STATS_CACHE_TTL = 30000; // 30 seconds
+
+// Get site statistics (public) - cached to avoid hammering DB
 router.get('/stats', async (req, res) => {
   try {
-    // Count total users (not banned, not deleted)
-    const totalUsers = await User.countDocuments({
-      isBanned: { $ne: true },
-      isDeleted: { $ne: true }
-    });
-
-    // Count total squads (not deleted)
-    const totalSquads = await Squad.countDocuments({
-      isDeleted: { $ne: true }
-    });
-
-    // Count total matches (both ladder and ranked, completed only)
-    const totalLadderMatches = await Match.countDocuments({
-      status: 'completed'
-    });
-
-    const totalRankedMatches = await RankedMatch.countDocuments({
-      status: 'completed'
-    });
-
-    const totalMatches = totalLadderMatches + totalRankedMatches;
-
-    // Calculate average ranked matches per day (last 10 days - same as admin panel)
+    const now = Date.now();
+    
+    // Return cached stats if still fresh
+    if (cachedStats && (now - lastStatsRefresh) < STATS_CACHE_TTL) {
+      return res.json({ success: true, stats: cachedStats });
+    }
+    
+    // Run all counts in parallel
     const tenDaysAgo = new Date();
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
     tenDaysAgo.setHours(0, 0, 0, 0);
 
-    const rankedLast10 = await RankedMatch.countDocuments({
-      status: 'completed',
-      createdAt: { $gte: tenDaysAgo }
-    });
+    const [totalUsers, totalSquads, totalLadderMatches, totalRankedMatches, rankedLast10] = await Promise.all([
+      User.countDocuments({ isBanned: { $ne: true }, isDeleted: { $ne: true } }),
+      Squad.countDocuments({ isDeleted: { $ne: true } }),
+      Match.countDocuments({ status: 'completed' }),
+      RankedMatch.countDocuments({ status: 'completed' }),
+      RankedMatch.countDocuments({ status: 'completed', createdAt: { $gte: tenDaysAgo } })
+    ]);
 
+    const totalMatches = totalLadderMatches + totalRankedMatches;
     const avgMatchesPerDay = Math.round(rankedLast10 / 10 * 10) / 10;
 
-    res.json({
-      success: true,
-      stats: {
-        totalUsers,
-        totalSquads,
-        totalMatches,
-        avgMatchesPerDay
-      }
-    });
+    cachedStats = { totalUsers, totalSquads, totalMatches, avgMatchesPerDay };
+    lastStatsRefresh = now;
+
+    res.json({ success: true, stats: cachedStats });
   } catch (error) {
     console.error('Get site stats error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur serveur'
-    });
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
 

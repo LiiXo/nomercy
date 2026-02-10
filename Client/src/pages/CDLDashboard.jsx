@@ -557,21 +557,20 @@ const CDLDashboard = () => {
     fetchMySquad();
   }, [isAuthenticated]);
 
-  // Fetch matches
+  // Fetch matches - parallel fetching for both ladders
   const fetchMatches = async (isInitial = false) => {
     if (isInitial) setLoadingMatches(true);
     try {
-      const squadRes = await fetch(`${API_URL}/matches/available/squad-team?mode=cdl`);
-      const squadData = await squadRes.json();
+      const [squadRes, duoRes] = await Promise.all([
+        fetch(`${API_URL}/matches/available/squad-team?mode=cdl`),
+        fetch(`${API_URL}/matches/available/duo-trio?mode=cdl`)
+      ]);
+      const [squadData, duoData] = await Promise.all([squadRes.json(), duoRes.json()]);
+      
       if (squadData.success) {
-        console.log('[CDLDashboard] Fetched squadTeamMatches:', squadData.matches?.length);
         setSquadTeamMatches(squadData.matches);
       }
-      
-      const duoRes = await fetch(`${API_URL}/matches/available/duo-trio?mode=cdl`);
-      const duoData = await duoRes.json();
       if (duoData.success) {
-        console.log('[CDLDashboard] Fetched duoTrioMatches:', duoData.matches?.length);
         setDuoTrioMatches(duoData.matches);
       }
     } catch (err) {
@@ -651,21 +650,26 @@ const CDLDashboard = () => {
 
   // Initial fetch and unified refresh interval
   useEffect(() => {
-    fetchMatches(true);
-    fetchInProgressCounts();
-    fetchRankedMatchesStats();
-    fetchStrickerMatchesStats();
-    fetchSiteStats();
-    if (isAuthenticated) fetchMyActiveMatches();
+    // Run all initial fetches in parallel
+    Promise.all([
+      fetchMatches(true),
+      fetchInProgressCounts(),
+      fetchRankedMatchesStats(),
+      fetchStrickerMatchesStats(),
+      fetchSiteStats(),
+      ...(isAuthenticated ? [fetchMyActiveMatches()] : [])
+    ]);
     
     // Single unified interval for all periodic refreshes
     const refreshInterval = setInterval(() => {
-      fetchMatches(false);
-      fetchInProgressCounts();
-      fetchRankedMatchesStats();
-      fetchStrickerMatchesStats();
-      fetchSiteStats();
-      if (isAuthenticated) fetchMyActiveMatches();
+      Promise.all([
+        fetchMatches(false),
+        fetchInProgressCounts(),
+        fetchRankedMatchesStats(),
+        fetchStrickerMatchesStats(),
+        fetchSiteStats(),
+        ...(isAuthenticated ? [fetchMyActiveMatches()] : [])
+      ]);
     }, 30000);
     
     return () => clearInterval(refreshInterval);

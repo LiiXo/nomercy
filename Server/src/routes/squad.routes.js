@@ -1244,21 +1244,34 @@ router.post('/join/:inviteCode', verifyToken, async (req, res) => {
     const { inviteCode } = req.params;
     const userId = req.user._id;
     
-    // Check if user already has a squad
-    const user = await User.findById(userId);
-    if (user.squad) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade.' 
-      });
-    }
-    
-    // Find squad by invite code
+    // Find squad by invite code first to know its mode
     const squad = await Squad.findOne({ inviteCode: inviteCode.toUpperCase() });
     if (!squad) {
       return res.status(404).json({ 
         success: false, 
         message: 'Code d\'invitation invalide.' 
+      });
+    }
+    
+    // Check if user already has a squad FOR THIS SQUAD'S MODE
+    const user = await User.findById(userId);
+    const squadMode = squad.mode;
+    const squadField = getSquadFieldForMode(squadMode);
+    
+    if (squadMode === 'hardcore' && user.squadHardcore) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade en mode Hardcore.' 
+      });
+    } else if (squadMode === 'cdl' && user.squadCdl) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade en mode CDL.' 
+      });
+    } else if (squadMode === 'both' && (user.squadHardcore || user.squadCdl || user.squad)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà dans une escouade.' 
       });
     }
     
@@ -1278,6 +1291,15 @@ router.post('/join/:inviteCode', verifyToken, async (req, res) => {
       });
     }
     
+    // Check if user is already a member
+    const alreadyMember = squad.members.some(m => m.user.toString() === userId.toString());
+    if (alreadyMember) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vous êtes déjà membre de cette escouade.' 
+      });
+    }
+    
     // Add member
     squad.members.push({
       user: userId,
@@ -1287,8 +1309,8 @@ router.post('/join/:inviteCode', verifyToken, async (req, res) => {
     
     await squad.save();
     
-    // Update user's squad reference
-    user.squad = squad._id;
+    // Update user's mode-specific squad reference
+    user[squadField] = squad._id;
     await user.save();
     
     await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
@@ -2012,11 +2034,10 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
 
     // Update Stricker stats
     if (statsStricker && typeof statsStricker === 'object') {
-      squad.statsStricker = {
-        points: parseInt(statsStricker.points) || 0,
-        wins: parseInt(statsStricker.wins) || 0,
-        losses: parseInt(statsStricker.losses) || 0
-      };
+      if (!squad.statsStricker) squad.statsStricker = {};
+      squad.statsStricker.points = parseInt(statsStricker.points) || 0;
+      squad.statsStricker.wins = parseInt(statsStricker.wins) || 0;
+      squad.statsStricker.losses = parseInt(statsStricker.losses) || 0;
       // Mark nested object as modified to ensure Mongoose saves it
       squad.markModified('statsStricker');
     }
@@ -2028,15 +2049,15 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
 
     await squad.save();
 
-    // Log to Discord
-    await logAdminAction(req.user, 'Update Stricker Stats', squad.name, {
+    // Log to Discord (non-blocking - don't fail the request if logging fails)
+    logAdminAction(req.user, 'Update Stricker Stats', squad.name, {
       fields: [
         { name: 'Points', value: `${squad.statsStricker.points} pts` },
         { name: 'Victoires', value: squad.statsStricker.wins.toString() },
         { name: 'Défaites', value: squad.statsStricker.losses.toString() },
         { name: 'Munitions', value: squad.cranes.toString() }
       ]
-    });
+    }).catch(err => console.error('Discord logging error:', err));
 
     res.json({
       success: true,

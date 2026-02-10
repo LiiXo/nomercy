@@ -404,7 +404,12 @@ const startServer = async () => {
 
   // Connect to MongoDB and start server
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nomercy');
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nomercy', {
+      maxPoolSize: 50,       // Allow up to 50 concurrent DB connections (default is 5)
+      minPoolSize: 10,       // Keep at least 10 connections warm
+      maxIdleTimeMS: 30000,  // Close idle connections after 30s
+      serverSelectionTimeoutMS: 5000, // Fail fast if DB is unreachable
+    });
     
     httpServer.listen(PORT, () => {
       

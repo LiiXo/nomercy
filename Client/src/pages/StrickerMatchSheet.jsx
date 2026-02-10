@@ -79,7 +79,7 @@ const translations = {
     vs: 'VS',
     host: 'Hôte',
     referent: 'Référent',
-    selectedMap: 'Map sélectionnée',
+    selectedMap: 'Maps sélectionnées',
     status: {
       pending: 'En attente',
       roster_selection: 'Sélection du roster',
@@ -152,7 +152,7 @@ const translations = {
     doYouWantToCancel: 'Souhaitez-vous annuler ?',
     // Map ban
     mapBan: 'Bannissement de Maps',
-    mapBanDesc: 'Chaque référent bannit 1 map, puis une map sera tirée au sort parmi les restantes',
+    mapBanDesc: 'Chaque référent bannit 1 map, puis 3 maps seront tirées au sort parmi les restantes',
     banMap: 'Bannir',
     banned: 'Bannie',
     yourTurnToBan: 'C\'est votre tour de bannir une map',
@@ -211,7 +211,7 @@ const translations = {
     vs: 'VS',
     host: 'Host',
     referent: 'Referent',
-    selectedMap: 'Selected map',
+    selectedMap: 'Selected Maps',
     status: {
       pending: 'Pending',
       roster_selection: 'Roster Selection',
@@ -284,7 +284,7 @@ const translations = {
     doYouWantToCancel: 'Do you want to cancel?',
     // Map ban
     mapBan: 'Map Ban',
-    mapBanDesc: 'Each referent bans 1 map, then a map will be randomly selected from the remaining',
+    mapBanDesc: 'Each referent bans 1 map, then 3 maps will be randomly selected from the remaining',
     banMap: 'Ban',
     banned: 'Banned',
     yourTurnToBan: 'Your turn to ban a map',
@@ -454,7 +454,7 @@ const StrickerMatchSheet = () => {
             team2Selected: data.match.players?.filter(p => p.team === 2) || [],
             timeRemaining: data.match.rosterSelection.timeRemaining || 30
           });
-        } else if (data.match.status === 'pending' && !(data.match.selectedMap && (typeof data.match.selectedMap === 'string' ? data.match.selectedMap : data.match.selectedMap.name))) {
+        } else if (data.match.status === 'pending' && !(data.match.selectedMaps?.length > 0 || (data.match.selectedMap && (typeof data.match.selectedMap === 'string' ? data.match.selectedMap : data.match.selectedMap.name)))) {
           // Map ban phase - roster done but no map selected yet
           setPreMatchPhase('map_vote');
           if (data.match.mapVoteOptions?.length > 0) {
@@ -633,12 +633,26 @@ const StrickerMatchSheet = () => {
     };
   }, [socket, matchId, on, fetchMatch]);
 
-  // Polling for updates
+  // Fallback polling - only as safety net since socket events handle all updates
+  // (strickerMatchUpdate, strickerRosterUpdate, strickerMapVoteUpdate, etc.)
   useEffect(() => {
     if (!match || match.status === 'completed' || match.status === 'cancelled') return;
     
-    const interval = setInterval(fetchMatch, 5000);
-    return () => clearInterval(interval);
+    // Poll every 30s as fallback only (was 5s - caused server overload with many players)
+    const interval = setInterval(fetchMatch, 30000);
+    
+    // Also refetch when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchMatch();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [match, fetchMatch]);
 
   // Auto scroll chat
@@ -783,7 +797,29 @@ const StrickerMatchSheet = () => {
   const handleSelectRosterMember = async (memberId) => {
     if (!isReferent || selectingMember) return;
     
+    // Find the member data for optimistic update
+    const member = rosterSelection.availableMembers.find(m => m._id === memberId);
+    
     setSelectingMember(memberId);
+    
+    // Optimistic: immediately move member to selected team
+    if (member) {
+      const optimisticPlayer = {
+        user: { _id: memberId, username: member.username, avatarUrl: member.avatarUrl, discordAvatar: member.discordAvatar, discordId: member.discordId, equippedTitle: member.equippedTitle },
+        username: member.username,
+        team: myTeam,
+        isReferent: false
+      };
+      setRosterSelection(prev => ({
+        ...prev,
+        availableMembers: prev.availableMembers.filter(m => m._id !== memberId),
+        ...(myTeam === 1 
+          ? { team1Selected: [...prev.team1Selected, optimisticPlayer] }
+          : { team2Selected: [...prev.team2Selected, optimisticPlayer] }
+        )
+      }));
+    }
+    
     try {
       const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/select`, {
         method: 'POST',
@@ -793,11 +829,15 @@ const StrickerMatchSheet = () => {
       });
       const data = await response.json();
       
-      if (data.success) {
+      if (!data.success) {
+        // Revert optimistic update on failure
         await fetchMatch();
       }
+      // On success, optimistic state is already correct - no need to refetch
     } catch (err) {
       console.error('Error selecting roster member:', err);
+      // Revert on error
+      await fetchMatch();
     } finally {
       setSelectingMember(null);
     }
@@ -809,6 +849,24 @@ const StrickerMatchSheet = () => {
     if (!isReferent || deselectingMember) return;
     
     setDeselectingMember(memberId);
+    
+    // Find the player being removed for optimistic rollback
+    const teamSelected = myTeam === 1 ? rosterSelection.team1Selected : rosterSelection.team2Selected;
+    const removedPlayer = teamSelected.find(p => (p.user?._id || p.user) === memberId);
+    
+    // Optimistic: immediately remove from selected, add back to available
+    if (removedPlayer) {
+      const memberData = removedPlayer.user && typeof removedPlayer.user === 'object' ? removedPlayer.user : { _id: memberId, username: removedPlayer.username };
+      setRosterSelection(prev => ({
+        ...prev,
+        availableMembers: [...prev.availableMembers, { _id: memberData._id, username: memberData.username || removedPlayer.username, avatarUrl: memberData.avatarUrl, discordAvatar: memberData.discordAvatar, discordId: memberData.discordId, equippedTitle: memberData.equippedTitle }],
+        ...(myTeam === 1 
+          ? { team1Selected: prev.team1Selected.filter(p => (p.user?._id || p.user) !== memberId) }
+          : { team2Selected: prev.team2Selected.filter(p => (p.user?._id || p.user) !== memberId) }
+        )
+      }));
+    }
+    
     try {
       const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/deselect`, {
         method: 'POST',
@@ -818,11 +876,14 @@ const StrickerMatchSheet = () => {
       });
       const data = await response.json();
       
-      if (data.success) {
+      if (!data.success) {
+        // Revert optimistic update on failure
         await fetchMatch();
       }
+      // On success, optimistic state is already correct
     } catch (err) {
       console.error('Error deselecting roster member:', err);
+      await fetchMatch();
     } finally {
       setDeselectingMember(null);
     }
@@ -854,22 +915,39 @@ const StrickerMatchSheet = () => {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || sendingMessage) return;
     
+    const messageText = newMessage.trim();
     setSendingMessage(true);
+    setNewMessage(''); // Clear input immediately for responsiveness
+    
+    // Optimistic: add message to chat immediately
+    const optimisticMsg = {
+      user: { _id: user?._id || user?.id, username: user?.username },
+      message: messageText,
+      timestamp: new Date().toISOString(),
+      isSystem: false,
+      _optimistic: true
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+    
     try {
       const response = await fetch(`${API_URL}/stricker/match/${matchId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ message: newMessage.trim() })
+        body: JSON.stringify({ message: messageText })
       });
       const data = await response.json();
       
-      if (data.success) {
-        setNewMessage('');
-        fetchMatch();
+      if (!data.success) {
+        // Revert optimistic message on failure
+        setMessages(prev => prev.filter(m => !m._optimistic));
+        setNewMessage(messageText); // Restore the message
       }
+      // Socket event will update messages for everyone
     } catch (err) {
       console.error('Error sending message:', err);
+      setMessages(prev => prev.filter(m => !m._optimistic));
+      setNewMessage(messageText);
     } finally {
       setSendingMessage(false);
     }
@@ -1690,6 +1768,41 @@ const StrickerMatchSheet = () => {
             return null;
           })()}
           
+          {/* Report AFK Section - map ban phase */}
+          {isReferent && (
+            <div className="text-center mb-6">
+              {hasReportedAfk ? (
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-500/20 border border-green-500/30 rounded-xl">
+                  <CheckCircle className="w-4 h-4 text-green-400" />
+                  <span className="text-green-400 font-medium">{t.reportAfkSent}</span>
+                  {reportAfkCooldown > 0 && (
+                    <span className="text-gray-400 text-sm">
+                      ({t.reportAfkCooldown} {Math.floor(reportAfkCooldown / 60)}:{String(reportAfkCooldown % 60).padStart(2, '0')})
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={handleReportAfk}
+                  disabled={reportingAfk || reportAfkCooldown > 0 || afkWaitCountdown > 0}
+                  className="px-6 py-3 bg-dark-800 hover:bg-dark-700 border border-orange-500/30 text-orange-400 rounded-xl font-medium transition-colors inline-flex items-center gap-2 disabled:opacity-50"
+                >
+                  {reportingAfk ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="w-4 h-4" />
+                  )}
+                  {afkWaitCountdown > 0
+                    ? `${t.reportAfkCooldown} ${Math.floor(afkWaitCountdown / 60)}:${String(afkWaitCountdown % 60).padStart(2, '0')}`
+                    : reportAfkCooldown > 0 
+                      ? `${t.reportAfkCooldown} ${Math.floor(reportAfkCooldown / 60)}:${String(reportAfkCooldown % 60).padStart(2, '0')}`
+                      : t.reportAfk
+                  }
+                </button>
+              )}
+            </div>
+          )}
+          
           {/* Turn indicator */}
           <div className="text-center mb-8">
             {isMyTurnToBan ? (
@@ -2057,24 +2170,46 @@ const StrickerMatchSheet = () => {
               </button>
             </div>
 
-            {/* Selected Map */}
-            {match.selectedMap?.name && (
+            {/* Selected Maps (3 maps drawn after bans) */}
+            {(match.selectedMaps?.length > 0 || match.selectedMap?.name) && (
               <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-lime-500/20 p-4 sm:p-5">
                 <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
                   <Map className="w-4 h-4 text-lime-400" />
                   {t.selectedMap}
                 </h2>
-                <div className="text-center">
-                  {match.selectedMap.image && (
-                    <div className="rounded-lg overflow-hidden border border-white/10 mb-3">
-                      <img 
-                        src={match.selectedMap.image} 
-                        alt={match.selectedMap.name}
-                        className="w-full h-24 object-cover"
-                      />
+                <div className="space-y-3">
+                  {match.selectedMaps?.length > 0 ? (
+                    match.selectedMaps.map((m, idx) => (
+                      <div key={idx} className="text-center">
+                        {m.image && (
+                          <div className="rounded-lg overflow-hidden border border-white/10 mb-2">
+                            <img 
+                              src={m.image} 
+                              alt={m.name}
+                              className="w-full h-20 object-cover"
+                            />
+                          </div>
+                        )}
+                        <p className="text-lg font-bold text-lime-400">
+                          <span className="text-gray-500 text-sm mr-2">#{idx + 1}</span>
+                          {m.name}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center">
+                      {match.selectedMap.image && (
+                        <div className="rounded-lg overflow-hidden border border-white/10 mb-3">
+                          <img 
+                            src={match.selectedMap.image} 
+                            alt={match.selectedMap.name}
+                            className="w-full h-24 object-cover"
+                          />
+                        </div>
+                      )}
+                      <p className="text-xl font-bold text-lime-400">{match.selectedMap.name}</p>
                     </div>
                   )}
-                  <p className="text-xl font-bold text-lime-400">{match.selectedMap.name}</p>
                   {match.startedAt && (
                     <div className="mt-2 pt-2 border-t border-lime-500/20">
                       <div className="flex items-center justify-center gap-2 text-xs">

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { LanguageProvider } from './LanguageContext';
 import { ModeProvider, useMode } from './ModeContext';
@@ -14,37 +14,39 @@ import GlobalAlerts from './components/GlobalAlerts';
 import HelperConfirmationDialog from './components/HelperConfirmationDialog';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import LandingPage from './pages/LandingPage';
-import ModeSelection from './pages/ModeSelection';
-import HardcoreDashboard from './pages/HardcoreDashboard';
-import CDLDashboard from './pages/CDLDashboard';
-import Rankings from './pages/Rankings';
-import RankingsInfo from './pages/RankingsInfo';
-import RankedMode from './pages/RankedMode';
-import Shop from './pages/Shop';
-import PlayerProfile from './pages/PlayerProfile';
-import SquadProfile from './pages/SquadProfile';
-import AllSquads from './pages/AllSquads';
-import SetupProfile from './pages/SetupProfile';
-import MyProfile from './pages/MyProfile';
-import SquadManagement from './pages/SquadManagement';
-import JoinSquad from './pages/JoinSquad';
-import AdminPanel from './pages/AdminPanel';
-import MatchSheet from './pages/MatchSheet';
-import Rules from './pages/Rules';
-import Anticheat from './pages/Anticheat';
-import IrisAuthorize from './pages/IrisAuthorize';
-import IrisCallback from './pages/IrisCallback';
-import TermsOfService from './pages/TermsOfService';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import Messages from './pages/Messages';
-import MySquad from './pages/MySquad';
-import MyPurchases from './pages/MyPurchases';
-import GameModeRulesEditor from './components/GameModeRulesEditor';
-import RecentRankedMatches from './pages/RecentRankedMatches';
-import StrickerMode from './pages/StrickerMode';
-import StrickerMatchSheet from './pages/StrickerMatchSheet';
-import Team from './pages/Team';
+
+// Lazy-loaded pages for code splitting - dramatically reduces initial bundle size
+const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+const ModeSelection = React.lazy(() => import('./pages/ModeSelection'));
+const HardcoreDashboard = React.lazy(() => import('./pages/HardcoreDashboard'));
+const CDLDashboard = React.lazy(() => import('./pages/CDLDashboard'));
+const Rankings = React.lazy(() => import('./pages/Rankings'));
+const RankingsInfo = React.lazy(() => import('./pages/RankingsInfo'));
+const RankedMode = React.lazy(() => import('./pages/RankedMode'));
+const Shop = React.lazy(() => import('./pages/Shop'));
+const PlayerProfile = React.lazy(() => import('./pages/PlayerProfile'));
+const SquadProfile = React.lazy(() => import('./pages/SquadProfile'));
+const AllSquads = React.lazy(() => import('./pages/AllSquads'));
+const SetupProfile = React.lazy(() => import('./pages/SetupProfile'));
+const MyProfile = React.lazy(() => import('./pages/MyProfile'));
+const SquadManagement = React.lazy(() => import('./pages/SquadManagement'));
+const JoinSquad = React.lazy(() => import('./pages/JoinSquad'));
+const AdminPanel = React.lazy(() => import('./pages/AdminPanel'));
+const MatchSheet = React.lazy(() => import('./pages/MatchSheet'));
+const Rules = React.lazy(() => import('./pages/Rules'));
+const Anticheat = React.lazy(() => import('./pages/Anticheat'));
+const IrisAuthorize = React.lazy(() => import('./pages/IrisAuthorize'));
+const IrisCallback = React.lazy(() => import('./pages/IrisCallback'));
+const TermsOfService = React.lazy(() => import('./pages/TermsOfService'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
+const Messages = React.lazy(() => import('./pages/Messages'));
+const MySquad = React.lazy(() => import('./pages/MySquad'));
+const MyPurchases = React.lazy(() => import('./pages/MyPurchases'));
+const GameModeRulesEditor = React.lazy(() => import('./components/GameModeRulesEditor'));
+const RecentRankedMatches = React.lazy(() => import('./pages/RecentRankedMatches'));
+const StrickerMode = React.lazy(() => import('./pages/StrickerMode'));
+const StrickerMatchSheet = React.lazy(() => import('./pages/StrickerMatchSheet'));
+const Team = React.lazy(() => import('./pages/Team'));
 
 // Loading component
 const LoadingScreen = () => (
@@ -213,6 +215,7 @@ function AppContent() {
       />
       {showNavbar && <Navbar />}
       <main className="flex-grow">
+        <Suspense fallback={<LoadingScreen />}>
         <Routes>
           <Route path="/" element={
             <PageTransition>
@@ -582,6 +585,7 @@ function AppContent() {
             } 
           />
         </Routes>
+        </Suspense>
       </main>
       {showNavbar && <Footer />}
       
