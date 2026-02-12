@@ -14,28 +14,16 @@ const irisUpdateSchema = new mongoose.Schema({
     match: /^\d+\.\d+\.\d+$/ // Semantic versioning: 1.0.0
   },
   
-  // Code hash for this version (for integrity verification)
-  codeHash: {
-    type: String,
-    required: true
-  },
-  
   // Download URL for the installer
   downloadUrl: {
     type: String,
     required: true
   },
   
-  // File size in bytes
+  // File size in bytes (optional - auto-detected if possible)
   fileSize: {
     type: Number,
     default: 0
-  },
-  
-  // SHA256 hash of the installer file for verification
-  fileHash: {
-    type: String,
-    required: true
   },
   
   // Changelog / release notes
@@ -145,7 +133,6 @@ irisUpdateSchema.statics.checkForUpdate = async function(currentVersion, platfor
     version: latestUpdate.version,
     downloadUrl: latestUpdate.downloadUrl,
     fileSize: latestUpdate.fileSize,
-    fileHash: latestUpdate.fileHash,
     changelog: latestUpdate.changelog,
     mandatory: latestUpdate.mandatory,
     releasedAt: latestUpdate.releasedAt

@@ -342,8 +342,8 @@ const startServer = async () => {
     },
     credentials: true
   }));
-  app.use(express.json({ limit: '10mb' })); // Increased limit for image uploads (base64)
-  app.use(express.urlencoded({ limit: '10mb', extended: true }));
+  app.use(express.json({ limit: '50mb' })); // Increased limit for Iris screenshots (base64)
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
   app.use(cookieParser());
   app.use(passport.initialize());
 

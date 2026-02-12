@@ -75,7 +75,11 @@ impl IrisApiClient {
 
         Self {
             client: Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(60)) // 60s timeout for large payloads
+                .pool_idle_timeout(std::time::Duration::from_secs(90)) // Longer idle timeout (> heartbeat interval)
+                .pool_max_idle_per_host(1) // Only 1 idle connection per host
+                .tcp_keepalive(std::time::Duration::from_secs(30)) // More aggressive keepalive
+                .tcp_nodelay(true) // Disable Nagle's algorithm for faster small packets
                 .build()
                 .expect("Failed to create HTTP client"),
             base_url,
@@ -195,6 +199,18 @@ impl IrisApiClient {
             "systemInfo": system_info
         });
         self.request("POST", "/iris/heartbeat", Some(token), Some(body)).await
+    }
+
+    /// Test basic connectivity (no auth required)
+    pub async fn health_check(&self) -> Result<bool, String> {
+        let url = format!("{}/iris/health", self.base_url);
+        let response = self.client.get(&url)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| format!("Health check failed: {}", e))?;
+        
+        Ok(response.status().is_success())
     }
 
     /// Send simple ping (alive signal)

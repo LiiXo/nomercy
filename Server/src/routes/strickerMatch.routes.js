@@ -1205,6 +1205,8 @@ router.get('/my-ranking', verifyToken, checkStrickerAccess, async (req, res) => 
           tag: user.squadStricker.tag,
           logo: user.squadStricker.logo,
           points: user.squadStricker.statsStricker?.points || 0,
+          wins: user.squadStricker.statsStricker?.wins || 0,
+          losses: user.squadStricker.statsStricker?.losses || 0,
           position: squadPosition,
           cranes: user.squadStricker.cranes || 0
         } : null
@@ -1333,13 +1335,19 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
       }
     }
     
+    // Check if team has a helper
+    const team1HasHelper = match.players.some(p => p.team === 1 && p.isHelper);
+    const team2HasHelper = match.players.some(p => p.team === 2 && p.isHelper);
+    
     res.json({
       success: true,
       match,
       myTeam,
       isReferent,
       availableMembers,
-      mySquad: mySquad ? { _id: mySquad._id, name: mySquad.name, tag: mySquad.tag, logo: mySquad.logo } : null
+      mySquad: mySquad ? { _id: mySquad._id, name: mySquad.name, tag: mySquad.tag, logo: mySquad.logo } : null,
+      team1HasHelper,
+      team2HasHelper
     });
   } catch (error) {
     console.error('Stricker get match error:', error);
@@ -1599,6 +1607,255 @@ router.post('/match/:matchId/roster/deselect', verifyToken, checkStrickerAccess,
   }
 });
 
+// Search users to add as helper for stricker match
+router.get('/match/:matchId/roster/search-helper', verifyToken, checkStrickerAccess, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { query } = req.query;
+    
+    if (!query || query.length < 2) {
+      return res.status(400).json({ success: false, message: 'La recherche doit contenir au moins 2 caractères' });
+    }
+    
+    const match = await StrickerMatch.findById(matchId)
+      .populate('team1Referent', '_id')
+      .populate('team2Referent', '_id');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    if (!match.rosterSelection?.isActive) {
+      return res.status(400).json({ success: false, message: 'La sélection du roster n\'est pas active' });
+    }
+    
+    // Check if user is a referent
+    const userId = req.user._id.toString();
+    const isTeam1Referent = match.team1Referent?._id?.toString() === userId || match.team1Referent?.toString() === userId;
+    const isTeam2Referent = match.team2Referent?._id?.toString() === userId || match.team2Referent?.toString() === userId;
+    
+    if (!isTeam1Referent && !isTeam2Referent) {
+      return res.status(403).json({ success: false, message: 'Seul le référent peut rechercher des aides' });
+    }
+    
+    const myTeam = isTeam1Referent ? 1 : 2;
+    
+    // Check if team already has a helper
+    const hasHelper = match.players.some(p => p.team === myTeam && p.isHelper);
+    if (hasHelper) {
+      return res.status(400).json({ success: false, message: 'Vous avez déjà sélectionné une aide pour ce match' });
+    }
+    
+    // Get IDs of players already in the match
+    const playersInMatch = match.players.map(p => p.user?.toString()).filter(Boolean);
+    
+    // Search for users matching the query (not already in match, not banned, not the opponent squad members)
+    const users = await User.find({
+      _id: { $nin: playersInMatch.map(id => new mongoose.Types.ObjectId(id)) },
+      username: { $regex: query, $options: 'i' },
+      isBanned: { $ne: true }
+    })
+    .select('_id username avatarUrl discordAvatar discordId platform statsStricker equippedTitle')
+    .limit(10)
+    .lean();
+    
+    // Check if each user is currently in an active Stricker match
+    const userIds = users.map(u => u._id);
+    const activeMatches = await StrickerMatch.find({
+      'players.user': { $in: userIds },
+      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
+    }).select('players.user').lean();
+    
+    // Build a Set of user IDs that are in active matches
+    const usersInActiveMatch = new Set();
+    activeMatches.forEach(m => {
+      m.players.forEach(p => {
+        if (p.user) {
+          usersInActiveMatch.add(p.user.toString());
+        }
+      });
+    });
+    
+    res.json({
+      success: true,
+      users: users.map(u => ({
+        _id: u._id,
+        username: u.username,
+        avatarUrl: u.avatarUrl,
+        discordAvatar: u.discordAvatar,
+        discordId: u.discordId,
+        platform: u.platform,
+        strickerPoints: u.statsStricker?.points || 0,
+        equippedTitle: u.equippedTitle,
+        inActiveMatch: usersInActiveMatch.has(u._id.toString())
+      }))
+    });
+  } catch (error) {
+    console.error('Stricker helper search error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Select a helper player for stricker match
+router.post('/match/:matchId/roster/select-helper', verifyToken, checkStrickerAccess, async (req, res) => {
+  try {
+    const { matchId } = req.params;
+    const { helperId } = req.body;
+    
+    if (!helperId) {
+      return res.status(400).json({ success: false, message: 'Aide non spécifié' });
+    }
+    
+    const match = await StrickerMatch.findById(matchId)
+      .populate('team1Squad', 'members')
+      .populate('team2Squad', 'members')
+      .populate('team1Referent', '_id')
+      .populate('team2Referent', '_id');
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    if (!match.rosterSelection?.isActive) {
+      return res.status(400).json({ success: false, message: 'La sélection du roster n\'est pas active' });
+    }
+    
+    // Check if user is a referent
+    const userId = req.user._id.toString();
+    const isTeam1Referent = match.team1Referent?._id?.toString() === userId || match.team1Referent?.toString() === userId;
+    const isTeam2Referent = match.team2Referent?._id?.toString() === userId || match.team2Referent?.toString() === userId;
+    
+    if (!isTeam1Referent && !isTeam2Referent) {
+      return res.status(403).json({ success: false, message: 'Seul le référent peut sélectionner des aides' });
+    }
+    
+    const myTeam = isTeam1Referent ? 1 : 2;
+    
+    // Check if this team already has 5 players
+    const myTeamCount = match.players.filter(p => p.team === myTeam).length;
+    if (myTeamCount >= 5) {
+      return res.status(400).json({ success: false, message: 'Votre équipe est déjà complète (5 joueurs)' });
+    }
+    
+    // Check if team already has a helper
+    const hasHelper = match.players.some(p => p.team === myTeam && p.isHelper);
+    if (hasHelper) {
+      return res.status(400).json({ success: false, message: 'Vous avez déjà sélectionné une aide pour ce match. Une seule aide est autorisée.' });
+    }
+    
+    // Get the helper user
+    const helperUser = await User.findById(helperId).select('_id username avatarUrl discordAvatar discordId platform statsStricker activisionId equippedTitle');
+    if (!helperUser) {
+      return res.status(404).json({ success: false, message: 'Joueur non trouvé' });
+    }
+    
+    // Check if helper is already in the match
+    const alreadySelected = match.players.some(p => 
+      p.user?.toString() === helperId || p.user?._id?.toString() === helperId
+    );
+    
+    if (alreadySelected) {
+      return res.status(400).json({ success: false, message: 'Ce joueur est déjà dans le match' });
+    }
+    
+    // Check if helper is currently in an active Stricker match (different from this one)
+    const helperActiveMatch = await StrickerMatch.findOne({
+      _id: { $ne: matchId },
+      'players.user': helperId,
+      status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
+    }).lean();
+    
+    if (helperActiveMatch) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `${helperUser.username} est actuellement en match et ne peut pas être sélectionné comme aide.`
+      });
+    }
+    
+    // GGSecure check for PC players
+    if (helperUser.platform === 'PC') {
+      try {
+        const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${helperId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (ggsecureResponse.ok) {
+          const ggsecureData = await ggsecureResponse.json();
+          if (!ggsecureData.isOnline && ggsecureData.reason !== 'api_key_missing') {
+            return res.status(400).json({ 
+              success: false, 
+              message: `${helperUser.username} n'est pas connecté à GGSecure. Les joueurs PC doivent être connectés pour jouer.`
+            });
+          }
+        }
+      } catch (ggsecureError) {
+        console.error('[STRICKER] GGSecure check error for helper:', ggsecureError);
+        // Continue anyway if GGSecure API is unavailable
+      }
+    }
+    
+    // Add helper to the match
+    const mySquad = myTeam === 1 ? match.team1Squad : match.team2Squad;
+    const newPlayer = {
+      user: helperUser._id,
+      username: helperUser.username,
+      rank: getStrickerRank(helperUser.statsStricker?.points || 0),
+      points: helperUser.statsStricker?.points || 0,
+      team: myTeam,
+      squad: mySquad?._id || null, // Helper may not be in the squad but gets associated for rewards
+      isReferent: false,
+      isHelper: true
+    };
+    
+    match.players.push(newPlayer);
+    
+    // Count players per team
+    const team1Count = match.players.filter(p => p.team === 1).length;
+    const team2Count = match.players.filter(p => p.team === 2).length;
+    
+    // Switch turns or complete roster selection
+    if (team1Count >= 5 && team2Count >= 5) {
+      match.rosterSelection.isActive = false;
+      
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`stricker-match-${matchId}`).emit('strickerRosterComplete', {
+          matchId,
+          mapVoteOptions: match.mapVoteOptions
+        });
+      }
+    } else {
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`stricker-match-${matchId}`).emit('strickerRosterUpdate', {
+          matchId,
+          team1Selected: match.players.filter(p => p.team === 1),
+          team2Selected: match.players.filter(p => p.team === 2),
+          team1Count,
+          team2Count
+        });
+      }
+    }
+    
+    await match.save();
+    
+    res.json({
+      success: true,
+      message: 'Aide ajoutée au roster',
+      player: newPlayer,
+      team1Count: match.players.filter(p => p.team === 1).length,
+      team2Count: match.players.filter(p => p.team === 2).length,
+      rosterComplete: !match.rosterSelection.isActive
+    });
+  } catch (error) {
+    console.error('Stricker helper select error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Map vote for stricker match
 router.post('/match/:matchId/map-vote', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
@@ -1806,39 +2063,31 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
         m.name !== match.mapBans.team2BannedMap
       );
       
-      if (remainingMaps.length === 0) {
-        return res.status(400).json({ success: false, message: 'Aucune map disponible' });
-      }
-      
-      // Shuffle remaining maps and pick up to 3
-      const shuffled = [...remainingMaps].sort(() => 0.5 - Math.random());
-      const pickedMaps = shuffled.slice(0, Math.min(3, shuffled.length));
-      
-      // Store the 3 selected maps
-      match.selectedMaps = pickedMaps.map((m, index) => ({
+      // Shuffle remaining maps and select up to 3 for tiebreaker
+      // (in case some maps have already been played by teams)
+      const shuffled = [...remainingMaps].sort(() => Math.random() - 0.5);
+      const randomMaps = shuffled.slice(0, Math.min(3, shuffled.length)).map(m => ({
         name: m.name,
-        image: m.image,
-        order: index + 1
+        image: m.image
       }));
       
-      // Keep selectedMap as the first one for backward compatibility
-      match.selectedMap = {
-        name: pickedMaps[0].name,
-        image: pickedMaps[0].image,
-        votes: 0
-      };
+      // Set free map choice with random maps generated
+      match.freeMapChoice = true;
+      match.randomMaps = randomMaps;
+      match.randomMap = null; // Deprecated, use randomMaps instead
+      match.selectedMap = null;
+      match.maps = [];
       match.status = 'ready';
       
       // IMPORTANT: Save BEFORE emitting socket so data is ready when clients fetch
       await match.save();
       
-      // Emit socket event for map selected
+      // Emit socket event for bans complete - free map choice with random maps
       if (io) {
         io.to(`stricker-match-${matchId}`).emit('strickerMapSelected', {
           matchId,
-          selectedMap: pickedMaps[0].name,
-          mapImage: pickedMaps[0].image,
-          selectedMaps: match.selectedMaps,
+          freeMapChoice: true,
+          randomMaps: match.randomMaps,
           mapBans: {
             team1BannedMap: match.mapBans.team1BannedMap,
             team2BannedMap: match.mapBans.team2BannedMap
@@ -1870,8 +2119,8 @@ router.post('/match/:matchId/map-ban', verifyToken, checkStrickerAccess, async (
         team2BannedMap: match.mapBans.team2BannedMap,
         currentTurn: match.mapBans.currentTurn
       },
-      selectedMap: match.selectedMap || null,
-      selectedMaps: match.selectedMaps || [],
+      freeMapChoice: bothBanned ? true : false,
+      randomMaps: bothBanned ? match.randomMaps : null,
       banComplete: bothBanned
     });
   } catch (error) {
@@ -1897,7 +2146,7 @@ router.post('/match/:matchId/cancel-vote', verifyToken, checkStrickerAccess, asy
     // Allow cancellation during pre-match AND during ready/in_progress
     const isRosterSelectionActive = match.rosterSelection?.isActive === true;
     // Check selectedMap.name because selectedMap is an embedded object that may be {} when empty
-    const isMapBanPhase = match.status === 'pending' && !match.rosterSelection?.isActive && !match.selectedMap?.name;
+    const isMapBanPhase = match.status === 'pending' && !match.rosterSelection?.isActive && !match.selectedMap?.name && !match.freeMapChoice;
     const isMatchPhase = match.status === 'ready' || match.status === 'in_progress';
     const canCancel = isRosterSelectionActive || isMapBanPhase || isMatchPhase;
     
@@ -2083,9 +2332,10 @@ router.post('/match/:matchId/call-arbitrator', verifyToken, checkStrickerAccess,
 router.post('/match/:matchId/result', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { winner } = req.body; // 1 or 2
+    // Ensure winner is a number for type consistency
+    const winner = Number(req.body.winner); // 1 or 2
     
-    if (![1, 2].includes(winner)) {
+    if (!winner || ![1, 2].includes(winner)) {
       return res.status(400).json({ success: false, message: 'Gagnant invalide' });
     }
     
@@ -2220,7 +2470,8 @@ async function distributeStrickerRewards(match) {
     const rewardsConfig = config.strickerMatchRewards?.['Search & Destroy'] || {};
     const pointsLossConfig = config.strickerPointsLossPerRank || {};
     
-    const winningTeam = match.result.winner;
+    // IMPORTANT: Ensure winningTeam is a Number to avoid type comparison issues
+    const winningTeam = Number(match.result.winner);
     
     // STRICKER MODE: Victory is ALWAYS +30 pts (hardcoded, ignores config)
     const POINTS_WIN = 30;
@@ -2261,7 +2512,8 @@ async function distributeStrickerRewards(match) {
       }
       
       processedPlayers++;
-      const isWinner = player.team === winningTeam;
+      // IMPORTANT: Use Number() for comparison to avoid type mismatch
+      const isWinner = Number(player.team) === winningTeam;
       
       // Initialize stats if not exists
       if (!user.statsStricker) user.statsStricker = { points: 0, wins: 0, losses: 0, xp: 0 };
@@ -2732,7 +2984,8 @@ router.delete('/admin/matches/:matchId', verifyToken, checkStrickerAccess, async
         const user = await User.findById(player.user._id);
         if (!user) continue;
         
-        const isWinner = player.team === match.winner;
+        // IMPORTANT: Use Number() for type-safe comparison
+        const isWinner = Number(player.team) === Number(match.winner);
         
         // Refund stricker points
         if (isWinner) {
@@ -2863,9 +3116,10 @@ router.patch('/admin/matches/:matchId/status', verifyToken, checkStrickerAccess,
 router.post('/admin/match/:matchId/force-winner', verifyToken, requireArbitre, async (req, res) => {
   try {
     const { matchId } = req.params;
-    const { winner } = req.body;
+    // Ensure winner is a number (fix type comparison issues)
+    const winner = Number(req.body.winner);
     
-    if (![1, 2].includes(winner)) {
+    if (!winner || ![1, 2].includes(winner)) {
       return res.status(400).json({ success: false, message: 'Gagnant invalide (1 ou 2)' });
     }
     

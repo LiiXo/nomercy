@@ -79,7 +79,8 @@ const translations = {
     vs: 'VS',
     host: 'Hôte',
     referent: 'Référent',
-    selectedMap: 'Maps sélectionnées',
+    selectedMap: 'Map sélectionnée',
+    drawnMaps: 'Maps tirées au sort',
     status: {
       pending: 'En attente',
       roster_selection: 'Sélection du roster',
@@ -200,7 +201,17 @@ const translations = {
     forceVictoryDesc: 'Cette action va terminer le match et distribuer les récompenses. Êtes-vous sûr ?',
     confirm: 'Confirmer',
     cancelAction: 'Annuler',
-    forceWinTeam: 'Forcer victoire'
+    forceWinTeam: 'Forcer victoire',
+    // Helper translations
+    searchHelper: 'Rechercher une aide',
+    searchHelperPlaceholder: 'Rechercher un joueur...',
+    addHelper: 'Ajouter une aide',
+    helperBadge: 'Aide',
+    oneHelperAllowed: 'Une seule aide autorisée par équipe',
+    helperAlreadySelected: 'Aide déjà sélectionnée',
+    selectAsHelper: 'Sélectionner comme aide',
+    noResultsFound: 'Aucun résultat',
+    minSearchChars: 'Minimum 2 caractères'
   },
   en: {
     loading: 'Loading...',
@@ -211,7 +222,8 @@ const translations = {
     vs: 'VS',
     host: 'Host',
     referent: 'Referent',
-    selectedMap: 'Selected Maps',
+    selectedMap: 'Selected map',
+    drawnMaps: 'Drawn maps',
     status: {
       pending: 'Pending',
       roster_selection: 'Roster Selection',
@@ -332,7 +344,17 @@ const translations = {
     forceVictoryDesc: 'This action will end the match and distribute rewards. Are you sure?',
     confirm: 'Confirm',
     cancelAction: 'Cancel',
-    forceWinTeam: 'Force win'
+    forceWinTeam: 'Force win',
+    // Helper translations
+    searchHelper: 'Search for helper',
+    searchHelperPlaceholder: 'Search for a player...',
+    addHelper: 'Add helper',
+    helperBadge: 'Helper',
+    oneHelperAllowed: 'Only one helper allowed per team',
+    helperAlreadySelected: 'Helper already selected',
+    selectAsHelper: 'Select as helper',
+    noResultsFound: 'No results found',
+    minSearchChars: 'Minimum 2 characters'
   }
 };
 
@@ -414,6 +436,13 @@ const StrickerMatchSheet = () => {
   const [changingStatus, setChangingStatus] = useState(false);
   const [showForceConfirm, setShowForceConfirm] = useState(null); // null | 1 | 2
 
+  // Helper search
+  const [helperSearchQuery, setHelperSearchQuery] = useState('');
+  const [helperSearchResults, setHelperSearchResults] = useState([]);
+  const [searchingHelper, setSearchingHelper] = useState(false);
+  const [selectingHelper, setSelectingHelper] = useState(null);
+  const [myTeamHasHelper, setMyTeamHasHelper] = useState(false);
+
   // Translations
   const t = translations[language] || translations.en;
   
@@ -454,8 +483,8 @@ const StrickerMatchSheet = () => {
             team2Selected: data.match.players?.filter(p => p.team === 2) || [],
             timeRemaining: data.match.rosterSelection.timeRemaining || 30
           });
-        } else if (data.match.status === 'pending' && !(data.match.selectedMaps?.length > 0 || (data.match.selectedMap && (typeof data.match.selectedMap === 'string' ? data.match.selectedMap : data.match.selectedMap.name)))) {
-          // Map ban phase - roster done but no map selected yet
+        } else if (data.match.status === 'pending' && !(data.match.selectedMap && (typeof data.match.selectedMap === 'string' ? data.match.selectedMap : data.match.selectedMap.name)) && !data.match.freeMapChoice) {
+          // Map ban phase - roster done but no map selected yet and not free choice
           setPreMatchPhase('map_vote');
           if (data.match.mapVoteOptions?.length > 0) {
             setMapVoteOptions(data.match.mapVoteOptions);
@@ -493,6 +522,10 @@ const StrickerMatchSheet = () => {
         if (data.match.mapBans) {
           setMapBans(data.match.mapBans);
         }
+        
+        // Check if my team has helper
+        const hasHelper = data.myTeam === 1 ? data.team1HasHelper : data.team2HasHelper;
+        setMyTeamHasHelper(hasHelper || false);
       } else {
         setError(data.message || t.matchNotFound);
       }
@@ -857,14 +890,29 @@ const StrickerMatchSheet = () => {
     // Optimistic: immediately remove from selected, add back to available
     if (removedPlayer) {
       const memberData = removedPlayer.user && typeof removedPlayer.user === 'object' ? removedPlayer.user : { _id: memberId, username: removedPlayer.username };
-      setRosterSelection(prev => ({
-        ...prev,
-        availableMembers: [...prev.availableMembers, { _id: memberData._id, username: memberData.username || removedPlayer.username, avatarUrl: memberData.avatarUrl, discordAvatar: memberData.discordAvatar, discordId: memberData.discordId, equippedTitle: memberData.equippedTitle }],
-        ...(myTeam === 1 
-          ? { team1Selected: prev.team1Selected.filter(p => (p.user?._id || p.user) !== memberId) }
-          : { team2Selected: prev.team2Selected.filter(p => (p.user?._id || p.user) !== memberId) }
-        )
-      }));
+      
+      // If removing a helper, update the helper state
+      if (removedPlayer.isHelper) {
+        setMyTeamHasHelper(false);
+        // Don't add helper back to available members (they weren't from the squad)
+        setRosterSelection(prev => ({
+          ...prev,
+          ...(myTeam === 1 
+            ? { team1Selected: prev.team1Selected.filter(p => (p.user?._id || p.user) !== memberId) }
+            : { team2Selected: prev.team2Selected.filter(p => (p.user?._id || p.user) !== memberId) }
+          )
+        }));
+      } else {
+        // Regular member - add back to available
+        setRosterSelection(prev => ({
+          ...prev,
+          availableMembers: [...prev.availableMembers, { _id: memberData._id, username: memberData.username || removedPlayer.username, avatarUrl: memberData.avatarUrl, discordAvatar: memberData.discordAvatar, discordId: memberData.discordId, equippedTitle: memberData.equippedTitle }],
+          ...(myTeam === 1 
+            ? { team1Selected: prev.team1Selected.filter(p => (p.user?._id || p.user) !== memberId) }
+            : { team2Selected: prev.team2Selected.filter(p => (p.user?._id || p.user) !== memberId) }
+          )
+        }));
+      }
     }
     
     try {
@@ -886,6 +934,82 @@ const StrickerMatchSheet = () => {
       await fetchMatch();
     } finally {
       setDeselectingMember(null);
+    }
+  };
+
+  // Search for helper players
+  const handleHelperSearch = async (query) => {
+    setHelperSearchQuery(query);
+    
+    if (query.length < 2) {
+      setHelperSearchResults([]);
+      return;
+    }
+    
+    setSearchingHelper(true);
+    try {
+      const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/search-helper?query=${encodeURIComponent(query)}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setHelperSearchResults(data.users || []);
+      }
+    } catch (err) {
+      console.error('Error searching helpers:', err);
+    } finally {
+      setSearchingHelper(false);
+    }
+  };
+
+  // Select helper player
+  const handleSelectHelper = async (helperId) => {
+    if (!isReferent || selectingHelper || myTeamHasHelper) return;
+    
+    const helper = helperSearchResults.find(u => u._id === helperId);
+    
+    setSelectingHelper(helperId);
+    
+    // Optimistic: immediately add helper to selected team
+    if (helper) {
+      const optimisticPlayer = {
+        user: { _id: helperId, username: helper.username, avatarUrl: helper.avatarUrl, discordAvatar: helper.discordAvatar, discordId: helper.discordId, equippedTitle: helper.equippedTitle },
+        username: helper.username,
+        team: myTeam,
+        isReferent: false,
+        isHelper: true
+      };
+      setRosterSelection(prev => ({
+        ...prev,
+        ...(myTeam === 1 
+          ? { team1Selected: [...prev.team1Selected, optimisticPlayer] }
+          : { team2Selected: [...prev.team2Selected, optimisticPlayer] }
+        )
+      }));
+      setMyTeamHasHelper(true);
+      setHelperSearchQuery('');
+      setHelperSearchResults([]);
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/stricker/match/${matchId}/roster/select-helper`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ helperId })
+      });
+      const data = await response.json();
+      
+      if (!data.success) {
+        // Revert optimistic update on failure
+        await fetchMatch();
+      }
+    } catch (err) {
+      console.error('Error selecting helper:', err);
+      await fetchMatch();
+    } finally {
+      setSelectingHelper(null);
     }
   };
 
@@ -1441,6 +1565,11 @@ const StrickerMatchSheet = () => {
                         <div className="flex items-center gap-2">
                           <span className="text-white font-medium">{player.username}</span>
                           {player.isReferent && <Crown className="w-4 h-4 text-amber-400" />}
+                          {player.isHelper && (
+                            <span className="px-1.5 py-0.5 bg-purple-500/30 border border-purple-500/50 text-purple-300 text-xs font-bold rounded">
+                              {t.helperBadge}
+                            </span>
+                          )}
                         </div>
                         {titleName && (
                           <span 
@@ -1574,6 +1703,112 @@ const StrickerMatchSheet = () => {
                   );
                 })}
               </div>
+              
+              {/* Helper Search Section */}
+              {isReferent && !myTeamFull && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Users className="w-4 h-4 text-purple-400" />
+                    <span className="text-purple-400 font-medium text-sm">{t.addHelper}</span>
+                    {myTeamHasHelper && (
+                      <span className="text-xs text-gray-500">({t.helperAlreadySelected})</span>
+                    )}
+                  </div>
+                  <p className="text-gray-500 text-xs mb-3">{t.oneHelperAllowed}</p>
+                  
+                  {!myTeamHasHelper && (
+                    <>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={helperSearchQuery}
+                          onChange={(e) => handleHelperSearch(e.target.value)}
+                          placeholder={t.searchHelperPlaceholder}
+                          className="w-full px-4 py-2.5 bg-dark-800 border border-purple-500/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition-colors"
+                        />
+                        {searchingHelper && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                      
+                      {helperSearchQuery.length > 0 && helperSearchQuery.length < 2 && (
+                        <p className="text-gray-500 text-xs mt-2">{t.minSearchChars}</p>
+                      )}
+                      
+                      {/* Search Results */}
+                      {helperSearchResults.length > 0 && (
+                        <div className="mt-2 space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                          {helperSearchResults.map((user, idx) => {
+                            const equippedTitle = user.equippedTitle;
+                            const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
+                            const isSelectingThis = selectingHelper === user._id;
+                            const isInMatch = user.inActiveMatch;
+                            
+                            return (
+                              <div 
+                                key={idx}
+                                onClick={() => !isSelectingThis && !isInMatch && handleSelectHelper(user._id)}
+                                className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
+                                  isInMatch
+                                    ? 'bg-dark-800/50 border border-gray-700 opacity-60 cursor-not-allowed'
+                                    : isSelectingThis
+                                      ? 'bg-purple-500/30 border border-purple-500 opacity-70 cursor-pointer'
+                                      : 'bg-dark-800 border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 cursor-pointer'
+                                }`}
+                                title={isInMatch ? (language === 'fr' ? 'Ce joueur est actuellement en match' : 'This player is currently in a match') : ''}
+                              >
+                                <img 
+                                  src={getUserAvatar(user)} 
+                                  alt={user.username}
+                                  className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-white font-medium" title={user.username}>{user.username}</span>
+                                    <span className="text-purple-400 text-xs flex-shrink-0">{user.strickerPoints || 0} pts</span>
+                                    {isInMatch && (
+                                      <span className="text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded flex-shrink-0">
+                                        {language === 'fr' ? 'En match' : 'In match'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {titleName && (
+                                    <span 
+                                      className={getTitleStyles(equippedTitle?.rarity).className}
+                                      style={getTitleStyles(equippedTitle?.rarity).style}
+                                    >
+                                      {titleName}
+                                    </span>
+                                  )}
+                                </div>
+                                {isInMatch ? (
+                                  <div className="px-3 py-1.5 bg-gray-500/20 text-gray-400 rounded-lg text-xs font-medium flex-shrink-0">
+                                    {language === 'fr' ? 'Indisponible' : 'Unavailable'}
+                                  </div>
+                                ) : (
+                                  <div className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium flex-shrink-0">
+                                    {isSelectingThis ? (
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                      t.selectAsHelper
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      
+                      {helperSearchQuery.length >= 2 && helperSearchResults.length === 0 && !searchingHelper && (
+                        <p className="text-gray-500 text-sm mt-2 text-center">{t.noResultsFound}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             
             {/* Team 2 */}
@@ -1620,6 +1855,11 @@ const StrickerMatchSheet = () => {
                         <div className="flex items-center gap-2">
                           <span className="text-white font-medium">{player.username}</span>
                           {player.isReferent && <Crown className="w-4 h-4 text-amber-400" />}
+                          {player.isHelper && (
+                            <span className="px-1.5 py-0.5 bg-purple-500/30 border border-purple-500/50 text-purple-300 text-xs font-bold rounded">
+                              {t.helperBadge}
+                            </span>
+                          )}
                         </div>
                         {titleName && (
                           <span 
@@ -2170,61 +2410,106 @@ const StrickerMatchSheet = () => {
               </button>
             </div>
 
-            {/* Selected Maps (3 maps drawn after bans) */}
-            {(match.selectedMaps?.length > 0 || match.selectedMap?.name) && (
+            {/* Drawn Maps (3 maps) or Free Map Choice */}
+            {(match.maps?.length > 0 || match.selectedMap?.name || match.freeMapChoice) && (
               <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-lime-500/20 p-4 sm:p-5">
                 <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
                   <Map className="w-4 h-4 text-lime-400" />
-                  {t.selectedMap}
+                  {match.freeMapChoice 
+                    ? (language === 'fr' ? 'Carte' : 'Map')
+                    : match.maps?.length > 0 ? t.drawnMaps : t.selectedMap
+                  }
                 </h2>
-                <div className="space-y-3">
-                  {match.selectedMaps?.length > 0 ? (
-                    match.selectedMaps.map((m, idx) => (
-                      <div key={idx} className="text-center">
-                        {m.image && (
-                          <div className="rounded-lg overflow-hidden border border-white/10 mb-2">
-                            <img 
-                              src={m.image} 
-                              alt={m.name}
-                              className="w-full h-20 object-cover"
-                            />
-                          </div>
-                        )}
-                        <p className="text-lg font-bold text-lime-400">
-                          <span className="text-gray-500 text-sm mr-2">#{idx + 1}</span>
-                          {m.name}
+                
+                {/* Free Map Choice */}
+                {match.freeMapChoice ? (
+                  <div className="text-center py-4 px-4">
+                    <p className="text-lg font-bold text-lime-400 mb-3">
+                      {language === 'fr' ? 'Choix map libre' : 'Free map choice'}
+                    </p>
+                    <p className="text-gray-400 text-xs mb-4">
+                      {language === 'fr' 
+                        ? 'Chaque équipe choisit sa map, la 3ème est déterminée par le goal average (si égalité, map aléatoire)'
+                        : 'Each team picks their map, 3rd by goal average (if tied, random map)'
+                      }
+                    </p>
+                    
+                    {/* Random Maps Display (3 maps for tiebreaker) */}
+                    {match.randomMaps?.length > 0 && (
+                      <div className="mt-4 p-3 bg-dark-800/50 rounded-xl border border-lime-500/30">
+                        <p className="text-gray-400 text-xs mb-3">
+                          {language === 'fr' ? 'Maps aléatoires (prendre une map non jouée)' : 'Random maps (pick one not yet played)'}
                         </p>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center">
-                      {match.selectedMap.image && (
-                        <div className="rounded-lg overflow-hidden border border-white/10 mb-3">
-                          <img 
-                            src={match.selectedMap.image} 
-                            alt={match.selectedMap.name}
-                            className="w-full h-24 object-cover"
-                          />
+                        <div className="grid grid-cols-3 gap-2">
+                          {match.randomMaps.map((map, index) => (
+                            <div key={index} className="text-center">
+                              {map.image && (
+                                <div className="rounded-lg overflow-hidden border border-white/10 mb-1">
+                                  <img 
+                                    src={map.image} 
+                                    alt={map.name}
+                                    className="w-full h-14 object-cover"
+                                  />
+                                </div>
+                              )}
+                              <p className="text-lime-400 text-xs font-medium truncate">{map.name}</p>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                      <p className="text-xl font-bold text-lime-400">{match.selectedMap.name}</p>
-                    </div>
-                  )}
-                  {match.startedAt && (
-                    <div className="mt-2 pt-2 border-t border-lime-500/20">
-                      <div className="flex items-center justify-center gap-2 text-xs">
-                        <Clock className="w-3.5 h-3.5 text-gray-400" />
-                        <span className="text-gray-400">{t.matchStartTime}:</span>
-                        <span className="text-white font-medium">
-                          {new Date(match.startedAt).toLocaleTimeString(language === 'fr' ? 'fr-FR' : 'en-US', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </span>
                       </div>
+                    )}
+                  </div>
+                ) : match.maps?.length > 0 ? (
+                  /* Display 3 maps in a grid */
+                  <div className="grid grid-cols-3 gap-2">
+                    {match.maps.map((map, index) => (
+                      <div key={index} className="text-center">
+                        <div className="relative rounded-lg overflow-hidden border border-white/10 mb-2">
+                          {map.image && (
+                            <img 
+                              src={map.image} 
+                              alt={map.name}
+                              className="w-full h-16 sm:h-20 object-cover"
+                            />
+                          )}
+                          <div className="absolute top-1 left-1 w-5 h-5 rounded-full bg-lime-500 flex items-center justify-center text-xs font-bold text-black">
+                            {index + 1}
+                          </div>
+                        </div>
+                        <p className="text-xs sm:text-sm font-bold text-lime-400 truncate">{map.name}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* Fallback for old format with single map */
+                  <div className="text-center">
+                    {match.selectedMap.image && (
+                      <div className="rounded-lg overflow-hidden border border-white/10 mb-3">
+                        <img 
+                          src={match.selectedMap.image} 
+                          alt={match.selectedMap.name}
+                          className="w-full h-24 object-cover"
+                        />
+                      </div>
+                    )}
+                    <p className="text-xl font-bold text-lime-400">{match.selectedMap.name}</p>
+                  </div>
+                )}
+                
+                {match.startedAt && (
+                  <div className="mt-3 pt-2 border-t border-lime-500/20">
+                    <div className="flex items-center justify-center gap-2 text-xs">
+                      <Clock className="w-3.5 h-3.5 text-gray-400" />
+                      <span className="text-gray-400">{t.matchStartTime}:</span>
+                      <span className="text-white font-medium">
+                        {new Date(match.startedAt).toLocaleTimeString(language === 'fr' ? 'fr-FR' : 'en-US', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </span>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             )}
 

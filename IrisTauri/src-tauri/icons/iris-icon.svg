@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="irisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff2d55;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#ff4545;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff6b2c;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="innerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ff6b2c;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#ff2d55;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="pupilGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="80%" style="stop-color:#0a0a0f;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#000000;stop-opacity:1" />
+    </radialGradient>
+    <radialGradient id="scanGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#ff2d55;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#ff2d55;stop-opacity:0" />
+    </radialGradient>
+    <filter id="outerGlow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="innerGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="circleClip">
+      <circle cx="128" cy="128" r="118"/>
+    </clipPath>
+  </defs>
+
+  <!-- Dark background circle -->
+  <circle cx="128" cy="128" r="124" fill="#0a0a0f"/>
+  <circle cx="128" cy="128" r="122" fill="none" stroke="url(#irisGrad)" stroke-width="3" opacity="0.7"/>
+
+  <!-- Outer eye shape (almond) -->
+  <g filter="url(#outerGlow)" clip-path="url(#circleClip)">
+    <!-- Top eyelid curve -->
+    <path d="M30 128 Q128 40 226 128" fill="none" stroke="url(#irisGrad)" stroke-width="4" opacity="0.4"/>
+    <!-- Bottom eyelid curve -->
+    <path d="M30 128 Q128 216 226 128" fill="none" stroke="url(#irisGrad)" stroke-width="4" opacity="0.4"/>
+  </g>
+
+  <!-- Iris outer ring -->
+  <circle cx="128" cy="128" r="62" fill="none" stroke="url(#irisGrad)" stroke-width="12" filter="url(#outerGlow)"/>
+
+  <!-- Iris detail lines (radial pattern) -->
+  <g opacity="0.35" clip-path="url(#circleClip)">
+    <line x1="128" y1="72" x2="128" y2="66" stroke="#ff2d55" stroke-width="2"/>
+    <line x1="128" y1="184" x2="128" y2="190" stroke="#ff6b2c" stroke-width="2"/>
+    <line x1="72" y1="128" x2="66" y2="128" stroke="#ff2d55" stroke-width="2"/>
+    <line x1="184" y1="128" x2="190" y2="128" stroke="#ff6b2c" stroke-width="2"/>
+    <line x1="88" y1="88" x2="84" y2="84" stroke="#ff2d55" stroke-width="2"/>
+    <line x1="168" y1="88" x2="172" y2="84" stroke="#ff4545" stroke-width="2"/>
+    <line x1="88" y1="168" x2="84" y2="172" stroke="#ff4545" stroke-width="2"/>
+    <line x1="168" y1="168" x2="172" y2="172" stroke="#ff6b2c" stroke-width="2"/>
+    <!-- More detailed radial lines -->
+    <line x1="108" y1="74" x2="106" y2="68" stroke="#ff2d55" stroke-width="1.5"/>
+    <line x1="148" y1="74" x2="150" y2="68" stroke="#ff4545" stroke-width="1.5"/>
+    <line x1="108" y1="182" x2="106" y2="188" stroke="#ff4545" stroke-width="1.5"/>
+    <line x1="148" y1="182" x2="150" y2="188" stroke="#ff6b2c" stroke-width="1.5"/>
+    <line x1="74" y1="108" x2="68" y2="106" stroke="#ff2d55" stroke-width="1.5"/>
+    <line x1="74" y1="148" x2="68" y2="150" stroke="#ff4545" stroke-width="1.5"/>
+    <line x1="182" y1="108" x2="188" y2="106" stroke="#ff4545" stroke-width="1.5"/>
+    <line x1="182" y1="148" x2="188" y2="150" stroke="#ff6b2c" stroke-width="1.5"/>
+  </g>
+
+  <!-- Iris inner ring (thinner) -->
+  <circle cx="128" cy="128" r="48" fill="none" stroke="url(#innerGrad)" stroke-width="3" opacity="0.5"/>
+
+  <!-- Iris gradient fill (semi-transparent) -->
+  <circle cx="128" cy="128" r="45" fill="url(#irisGrad)" opacity="0.15"/>
+
+  <!-- Pupil -->
+  <circle cx="128" cy="128" r="24" fill="url(#pupilGrad)"/>
+
+  <!-- Pupil inner glow / scan effect -->
+  <circle cx="128" cy="128" r="18" fill="url(#scanGrad)" filter="url(#innerGlow)"/>
+
+  <!-- Central scan dot -->
+  <circle cx="128" cy="128" r="5" fill="#ff2d55" opacity="0.9" filter="url(#innerGlow)"/>
+
+  <!-- Light reflection on the eye -->
+  <circle cx="118" cy="118" r="6" fill="white" opacity="0.25"/>
+  <circle cx="138" cy="122" r="3" fill="white" opacity="0.15"/>
+
+  <!-- Horizontal scan line across the eye -->
+  <line x1="40" y1="128" x2="216" y2="128" stroke="url(#irisGrad)" stroke-width="1" opacity="0.2"/>
+
+  <!-- Subtle crosshair -->
+  <line x1="128" y1="98" x2="128" y2="108" stroke="#ff2d55" stroke-width="1.5" opacity="0.4"/>
+  <line x1="128" y1="148" x2="128" y2="158" stroke="#ff2d55" stroke-width="1.5" opacity="0.4"/>
+  <line x1="98" y1="128" x2="108" y2="128" stroke="#ff2d55" stroke-width="1.5" opacity="0.4"/>
+  <line x1="148" y1="128" x2="158" y2="128" stroke="#ff2d55" stroke-width="1.5" opacity="0.4"/>
+</svg>

@@ -1155,7 +1155,7 @@ const StrickerMode = () => {
                 {/* Squad Info */}
                 {mySquad && (
                   <div className="p-4 bg-dark-800/50 rounded-xl border border-lime-500/20 mb-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 mb-3">
                       {mySquad.logo && (
                         <img 
                           src={mySquad.logo} 
@@ -1170,6 +1170,19 @@ const StrickerMode = () => {
                         )}
                       </div>
                     </div>
+                    {/* Squad Stricker Stats */}
+                    {myRanking?.squad && (
+                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-lime-500/20">
+                        <div className="text-center p-2 bg-dark-900/50 rounded-lg">
+                          <p className="text-lg font-bold text-green-400">{myRanking.squad.wins || 0}</p>
+                          <p className="text-xs text-gray-400">{t.wins}</p>
+                        </div>
+                        <div className="text-center p-2 bg-dark-900/50 rounded-lg">
+                          <p className="text-lg font-bold text-red-400">{myRanking.squad.losses || 0}</p>
+                          <p className="text-xs text-gray-400">{t.losses}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 

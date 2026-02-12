@@ -69,6 +69,11 @@ export const getUserAvatar = (user) => {
     return getAvatarUrl(user.avatarUrl);
   }
   
+  // Check for Discord avatar (construct URL from discordId + discordAvatar)
+  if (user.discordAvatar && user.discordId) {
+    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png?size=128`;
+  }
+  
   return getDefaultAvatar(user.username || user.discordUsername);
 };
 

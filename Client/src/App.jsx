@@ -47,6 +47,7 @@ const RecentRankedMatches = React.lazy(() => import('./pages/RecentRankedMatches
 const StrickerMode = React.lazy(() => import('./pages/StrickerMode'));
 const StrickerMatchSheet = React.lazy(() => import('./pages/StrickerMatchSheet'));
 const Team = React.lazy(() => import('./pages/Team'));
+const IrisTermsOfUse = React.lazy(() => import('./pages/IrisTermsOfUse'));
 
 // Loading component
 const LoadingScreen = () => (
@@ -187,9 +188,10 @@ function AppContent() {
   const isAnticheatPage = location.pathname === '/anticheat';
   const isTermsPage = location.pathname === '/terms';
   const isPrivacyPage = location.pathname === '/privacy';
+  const isIrisTermsPage = location.pathname === '/iris-terms';
 
   // Pages qui n'ont pas besoin d'un mode mais doivent afficher la navbar
-  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isRulesPage || isAnticheatPage || isTermsPage || isPrivacyPage;
+  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isRulesPage || isAnticheatPage || isTermsPage || isPrivacyPage || isIrisTermsPage;
 
   // Si on est sur une page standalone sans mode, on sélectionne hardcore par défaut
   React.useEffect(() => {
@@ -508,6 +510,18 @@ function AppContent() {
               <ProtectedRoute>
                 <PageTransition>
                   <PrivacyPolicy />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Iris Terms of Use */}
+          <Route 
+            path="/iris-terms" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <IrisTermsOfUse />
                 </PageTransition>
               </ProtectedRoute>
             } 

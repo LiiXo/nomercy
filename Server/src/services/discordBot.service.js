@@ -1109,143 +1109,21 @@ export const createIrisScanChannel = async (player, securityStatus, admin) => {
       });
     }
 
-    // Send cheat detection embed if cheats were found
-    if (securityStatus?.cheatDetection?.found) {
-      // Risk level colors
-      const riskColors = {
-        'critical': 0xFF0000, // Red
-        'high': 0xFF6B2C,     // Orange
-        'medium': 0xFFA500,   // Yellow-Orange
-        'low': 0x10B981       // Green
-      };
-      
-      const riskLevel = securityStatus.cheatDetection.riskLevel || 'critical';
-      const riskScore = securityStatus.cheatDetection.riskScore || 100;
-      
-      // Risk Assessment Summary Embed
-      const riskEmbed = new EmbedBuilder()
-        .setColor(riskColors[riskLevel] || 0xFF0000)
-        .setTitle(`🚨 ALERTE SÉCURITÉ - NIVEAU ${riskLevel.toUpperCase()}`)
-        .setDescription(`**Score de risque: ${riskScore}/100**\n\n${riskLevel === 'critical' ? '🔴 **Périphérique de triche confirmé!**' : riskLevel === 'high' ? '🟠 **Forte suspicion de triche**' : '🟡 **Activité suspecte détectée**'}`);
-      
-      // Add games running
-      if (securityStatus.cheatDetection.gamesRunning?.length > 0) {
-        riskEmbed.addFields({ 
-          name: '🎮 Jeux en cours', 
-          value: securityStatus.cheatDetection.gamesRunning.map(g => `• **${g.display}** (${g.processName})`).join('\n').substring(0, 1024), 
-          inline: true 
-        });
-      }
-      
-      // Quick stats
-      riskEmbed.addFields(
-        { name: '🔌 Périphériques triche', value: `${securityStatus.cheatDetection.devices?.length || 0}`, inline: true },
-        { name: '💻 Logiciels suspects', value: `${securityStatus.cheatDetection.processes?.length || 0}`, inline: true }
-      );
-      
-      await channel.send({ embeds: [riskEmbed] });
-      
-      // Detailed cheat detection embed
-      const cheatEmbed = new EmbedBuilder()
-        .setColor(0xFF0000)
-        .setTitle('🔍 DÉTAILS DE DÉTECTION');
-
-      // Add detected devices with severity
-      if (securityStatus.cheatDetection.devices?.length > 0) {
-        const criticalDevices = securityStatus.cheatDetection.devices.filter(d => d.severity === 'critical');
-        const otherDevices = securityStatus.cheatDetection.devices.filter(d => d.severity !== 'critical');
-        
-        if (criticalDevices.length > 0) {
-          const devicesList = criticalDevices
-            .map(d => `🔴 **${d.type}**: ${d.name || 'N/A'} (VID:${d.vid || 'N/A'} PID:${d.pid || 'N/A'})`)
-            .join('\n');
-          cheatEmbed.addFields({ name: '⚠️ Périphériques CRITIQUES', value: devicesList.substring(0, 1024), inline: false });
-        }
-        
-        if (otherDevices.length > 0) {
-          const devicesList = otherDevices
-            .map(d => `🟡 **${d.type}**: ${d.name || 'N/A'}`)
-            .join('\n');
-          cheatEmbed.addFields({ name: '🟠 Adaptateurs suspects', value: devicesList.substring(0, 1024), inline: false });
-        }
-      }
-
-      // Add detected processes
-      if (securityStatus.cheatDetection.processes?.length > 0) {
-        const processesList = securityStatus.cheatDetection.processes
-          .map(p => `• **${p.name}** (PID: ${p.pid}) - Détecté: *${p.matchedCheat || 'suspect'}*`)
-          .join('\n');
-        cheatEmbed.addFields({ name: '💻 Logiciels de triche/macro', value: processesList.substring(0, 1024), inline: false });
-      }
-      
-      // Add suspicious USB devices (microcontrollers)
-      if (securityStatus.cheatDetection.suspiciousUsb?.length > 0) {
-        const suspiciousList = securityStatus.cheatDetection.suspiciousUsb
-          .map(u => `• ${u.name} - *${u.reason || 'Suspect'}*`)
-          .join('\n');
-        cheatEmbed.addFields({ name: '🔌 USB Suspects (Microcontrôleurs)', value: suspiciousList.substring(0, 1024), inline: false });
-      }
-
-      // Add all warnings
-      if (securityStatus.cheatDetection.warnings?.length > 0) {
-        cheatEmbed.addFields({ 
-          name: '📝 Résumé', 
-          value: securityStatus.cheatDetection.warnings.join('\n').substring(0, 1024), 
-          inline: false 
-        });
-      }
-
-      await channel.send({ embeds: [cheatEmbed] });
-    }
-
-    // Send USB devices embed
-    if (securityStatus?.usbDevices?.length > 0) {
-      const usbEmbed = new EmbedBuilder()
-        .setColor(0x10B981) // Green
-        .setTitle('🔌 Périphériques USB')
-        .setDescription(`${securityStatus.usbDevices.length} périphérique(s) USB détecté(s)`);
-
-      // Group USB devices in chunks of 10 for readability
-      const usbList = securityStatus.usbDevices.slice(0, 25).map(device => {
-        const vidPid = device.vid && device.pid ? ` (VID:${device.vid} PID:${device.pid})` : '';
-        return `• ${device.name || 'Inconnu'}${vidPid}`;
-      }).join('\n');
-
-      usbEmbed.addFields({ name: 'Liste des périphériques', value: usbList.substring(0, 1024) || 'Aucun', inline: false });
-
-      if (securityStatus.usbDevices.length > 25) {
-        usbEmbed.setFooter({ text: `Et ${securityStatus.usbDevices.length - 25} autres périphériques...` });
-      }
-
-      await channel.send({ embeds: [usbEmbed] });
-    }
-
-    // Send processes embed
-    if (securityStatus?.processes?.length > 0) {
-      // Sort processes and show top ones by relevance
-      const processEmbed = new EmbedBuilder()
-        .setColor(0x6366F1) // Indigo
-        .setTitle('⚙️ Liste des Processus')
-        .setDescription(`${securityStatus.processes.length} processus en cours d'exécution`);
-
-      // Show first 30 processes
-      const processList = securityStatus.processes.slice(0, 30).map(p => {
-        const path = p.path ? ` - ${p.path.substring(0, 40)}...` : '';
-        return `• ${p.name} (PID: ${p.pid})`;
-      }).join('\n');
-
-      processEmbed.addFields({ name: 'Processus actifs', value: processList.substring(0, 1024) || 'Aucun', inline: false });
-
-      if (securityStatus.processes.length > 30) {
-        processEmbed.setFooter({ text: `Et ${securityStatus.processes.length - 30} autres processus...` });
-      }
-
-      await channel.send({ embeds: [processEmbed] });
-    }
+    // Note: USB devices, processes, and detailed cheat info are visible in admin panel
+    // Only screenshots will be sent to this channel during scan mode
 
     console.log(`[Discord Bot] Iris Scan channel created for ${player.username || player.discordUsername}`);
     if (securityStatus?.cheatDetection?.found) {
       console.warn(`[Discord Bot] CHEAT DETECTED for ${player.username || player.discordUsername}`);
+      
+      // Send a simple cheat alert
+      const alertEmbed = new EmbedBuilder()
+        .setColor(0xFF0000)
+        .setTitle('🚨 ALERTE - Détection de triche')
+        .setDescription(`Logiciel ou périphérique suspect détecté.\nConsultez le panel admin pour plus de détails.`)
+        .setTimestamp();
+      
+      await channel.send({ embeds: [alertEmbed] });
     }
 
     return { 
@@ -1396,30 +1274,7 @@ export const logIrisConnectionStatus = async (player, status, extraData = null) 
 
     let embed;
     
-    if (status === 'connected') {
-      embed = new EmbedBuilder()
-        .setColor(extraData?.cheatDetection?.found ? 0xFF6B2C : 0x22C55E)
-        .setTitle('🟢 Connexion Iris')
-        .setDescription(`**${player.username || player.discordUsername}** s'est connecté à Iris`)
-        .addFields(
-          { name: '⏰ Heure', value: now, inline: true }
-        )
-        .setTimestamp();
-      
-      // Add cheat alert if detected
-      if (extraData?.cheatDetection?.found) {
-        embed.addFields(
-          { name: '🚨 Alerte', value: `Niveau: **${extraData.cheatDetection.riskLevel?.toUpperCase() || 'SUSPECT'}**`, inline: true }
-        );
-        if (extraData.cheatDetection.devices?.length > 0) {
-          embed.addFields({
-            name: '🔌 Détection',
-            value: extraData.cheatDetection.devices.slice(0, 3).map(d => d.type || d.name).join(', '),
-            inline: true
-          });
-        }
-      }
-    } else if (status === 'shadowbanned') {
+    if (status === 'shadowbanned') {
       // Shadow ban notification for logs channel
       embed = new EmbedBuilder()
         .setColor(0xFF0000) // Red
@@ -1432,14 +1287,8 @@ export const logIrisConnectionStatus = async (player, status, extraData = null) 
         )
         .setTimestamp();
     } else {
-      embed = new EmbedBuilder()
-        .setColor(0xEF4444)
-        .setTitle('🔴 Déconnexion Iris')
-        .setDescription(`**${player.username || player.discordUsername}** s'est déconnecté d'Iris`)
-        .addFields(
-          { name: '⏰ Heure', value: now, inline: true }
-        )
-        .setTimestamp();
+      // Unknown status, ignore
+      return;
     }
 
     await sendToChannel(IRIS_LOGS_CHANNEL_ID, { embeds: [embed] });
@@ -1483,10 +1332,7 @@ export const alertIrisMatchDisconnected = async (player, matchInfo) => {
 
     await sendToChannel(IRIS_LOGS_CHANNEL_ID, { embeds: [embed] });
     
-    // Also send to the player's scan channel if they have one
-    if (player.irisScanChannelId) {
-      await sendToChannel(player.irisScanChannelId, { embeds: [embed] });
-    }
+    // Note: No longer sending to scan channel - only screenshots go there
   } catch (error) {
     console.error('[Discord Bot] Error alerting Iris match disconnected:', error.message);
   }
@@ -1587,10 +1433,10 @@ export const deleteIrisScanModeChannel = async (channelId, playerUsername) => {
   }
 };
 
-// Channel for Iris shadow bans and security warnings
-const IRIS_SHADOW_BAN_CHANNEL_ID = '1468867097504251914';
-// Channel for security state changes (between heartbeats)
-const IRIS_SECURITY_CHANGES_CHANNEL_ID = '1468857779547803733';
+// Channel for Iris shadow bans notifications
+const IRIS_SHADOW_BAN_CHANNEL_ID = '1463997518412255488';
+// Channel for ALL Iris detection alerts (cheats, overlays, DLLs, VMs, etc.)
+const IRIS_DETECTION_ALERTS_CHANNEL_ID = '1471469883941195917';
 
 /**
  * Send notification when a player is shadow banned for cheat detection
@@ -1644,80 +1490,24 @@ export const sendIrisShadowBan = async (player, reason, durationHours = 24, dete
 
 /**
  * Send warning notification when a player has missing security modules
+ * DISABLED - No longer sending notifications for disabled modules
  * @param {Object} player - Player data
  * @param {Array} missingModules - List of missing/disabled security modules
  */
 export const sendIrisSecurityWarning = async (player, missingModules) => {
-  if (!client || !isReady) return;
-
-  try {
-    const modulesList = missingModules.map(m => {
-      const icons = {
-        'TPM': '🔐',
-        'Secure Boot': '🛡️',
-        'Virtualization': '💻',
-        'IOMMU': '🔄',
-        'HVCI': '🔒',
-        'VBS': '🛡️',
-        'Defender': '🦠'
-      };
-      return `${icons[m.name] || '⚠️'} **${m.name}**: ${m.status}`;
-    }).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setColor(0xFFA500) // Orange
-      .setTitle('⚠️ ALERTE SÉCURITÉ - MODULES MANQUANTS')
-      .setDescription(`${player.discordId ? `<@${player.discordId}>` : player.username}, des modules de sécurité sont désactivés sur votre PC.`)
-      .addFields(
-        { name: '👤 Joueur', value: player.username || 'N/A', inline: true },
-        { name: '🎮 Discord', value: player.discordUsername ? `<@${player.discordId}>` : 'N/A', inline: true },
-        { name: '\u200B', value: '\u200B', inline: true },
-        { name: '🔧 Modules à activer', value: modulesList, inline: false },
-        { name: '📋 Action requise', value: 'Veuillez activer ces modules dans les paramètres BIOS/UEFI de votre PC.\n**Des sanctions peuvent suivre si ces modules restent désactivés.**', inline: false }
-      )
-      .setTimestamp()
-      .setFooter({ text: 'Iris Anticheat - Avertissement automatique' });
-
-    // Send to security changes channel (1468857779547803733) as per spec
-    await sendToChannel(IRIS_SECURITY_CHANGES_CHANNEL_ID, { 
-      content: player.discordId ? `<@${player.discordId}>` : '', 
-      embeds: [embed] 
-    });
-    console.log(`[Discord Bot] Security warning sent for ${player.username}`);
-  } catch (error) {
-    console.error('[Discord Bot] Error sending security warning:', error.message);
-  }
+  // Disabled - do not send notifications for disabled modules
+  return;
 };
 
 /**
  * Send notification when a player's security status changes between heartbeats
+ * DISABLED - No longer sending notifications for security module changes
  * @param {Object} player - Player data
  * @param {Array} changes - List of security changes detected
  */
 export const sendIrisSecurityChange = async (player, changes) => {
-  if (!client || !isReady) return;
-
-  try {
-    const changesList = changes.map(change => `• ${change}`).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setColor(0xFF6B2C) // Orange-Red
-      .setTitle('🔄 CHANGEMENT SÉCURITÉ IRIS')
-      .setDescription(`L'état de sécurité de **${player.username}** a changé entre deux heartbeats.`)
-      .addFields(
-        { name: '👤 Joueur', value: player.username || 'N/A', inline: true },
-        { name: '🎮 Discord', value: player.discordUsername ? `<@${player.discordId}>` : 'N/A', inline: true },
-        { name: '⏰ Détecté à', value: new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' }), inline: true },
-        { name: '🔄 Changements détectés', value: changesList.substring(0, 1024), inline: false }
-      )
-      .setTimestamp()
-      .setFooter({ text: 'Iris Anticheat - Surveillance automatique' });
-
-    await sendToChannel(IRIS_SECURITY_CHANGES_CHANNEL_ID, { embeds: [embed] });
-    console.log(`[Discord Bot] Security change notification sent for ${player.username}:`, changes);
-  } catch (error) {
-    console.error('[Discord Bot] Error sending security change notification:', error.message);
-  }
+  // Disabled - do not send notifications for security module changes
+  return;
 };
 
 /**
@@ -1786,8 +1576,8 @@ export const sendIrisScreenshots = async (channelId, player, screenshots, proces
       const screenshot = screenshots[i];
       
       try {
-        // Convert base64 to buffer
-        const imageBuffer = Buffer.from(screenshot.data_base64 || screenshot.dataBase64, 'base64');
+        // Convert base64 to buffer (camelCase from Rust serde)
+        const imageBuffer = Buffer.from(screenshot.dataBase64 || screenshot.data_base64, 'base64');
         
         // Create attachment - use .jpg if it's JPEG compressed
         const extension = imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8 ? 'jpg' : 'png';
@@ -1970,6 +1760,313 @@ export const sendRankedMatchStartDM = async (players, matchInfo) => {
   return { success: true, notifiedCount, errors };
 };
 
+// Channel for extended detection alerts (uses same channel as security changes)
+const IRIS_EXTENDED_ALERTS_CHANNEL_ID = '1471469883941195917';
+
+/**
+ * Send notification for extended anticheat detection alerts
+ * Covers: Network Monitor, Registry Scan, Driver Integrity, Macro Detection
+ * @param {Object} player - Player data { username, discordUsername, discordId }
+ * @param {string} alertType - 'network' | 'registry' | 'driver' | 'macro'
+ * @param {Object} data - Detection data
+ */
+export const sendIrisExtendedAlert = async (player, alertType, data) => {
+  if (!client || !isReady) return;
+
+  try {
+    let embed;
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerInfo = player.discordId ? `<@${player.discordId}>` : player.username;
+
+    switch (alertType) {
+      case 'network': {
+        const adaptersList = data.vpnAdapters?.length > 0
+          ? data.vpnAdapters.map(a => `• ${a}`).join('\n').substring(0, 500)
+          : 'Aucun';
+        const processesList = data.vpnProcesses?.length > 0
+          ? data.vpnProcesses.map(p => `• ${p}`).join('\n').substring(0, 500)
+          : 'Aucun';
+
+        embed = new EmbedBuilder()
+          .setColor(0x3B82F6) // Blue
+          .setTitle('🌐 ALERTE RÉSEAU - VPN/PROXY DÉTECTÉ')
+          .setDescription(`Activité réseau suspecte détectée pour **${player.username}**.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '🔒 VPN Détecté', value: data.vpnDetected ? '✅ Oui' : '❌ Non', inline: true },
+            { name: '🌍 Proxy Détecté', value: data.proxyDetected ? '✅ Oui' : '❌ Non', inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true }
+          );
+
+        if (data.vpnAdapters?.length > 0) {
+          embed.addFields({ name: '🔌 Adaptateurs VPN', value: adaptersList, inline: false });
+        }
+        if (data.vpnProcesses?.length > 0) {
+          embed.addFields({ name: '💻 Processus VPN', value: processesList, inline: false });
+        }
+        if (data.proxySettings) {
+          embed.addFields({ name: '🌐 Proxy configuré', value: data.proxySettings.substring(0, 256), inline: false });
+        }
+        break;
+      }
+
+      case 'registry': {
+        const tracesList = data.traces?.slice(0, 15).map(t => {
+          const typeIcons = { install: '📦', uninstall: '🗑️', spoofer: '🎭', driver: '⚙️' };
+          return `${typeIcons[t.traceType] || '❓'} **${t.cheatName}** (${t.traceType})\n  \`${t.path}\``;
+        }).join('\n') || 'Aucune trace';
+
+        embed = new EmbedBuilder()
+          .setColor(0xEF4444) // Red
+          .setTitle('🔍 SCAN REGISTRE - TRACES DE TRICHE DÉTECTÉES')
+          .setDescription(`Des traces de logiciels de triche ont été trouvées dans le registre de **${player.username}**.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '📊 Nombre de traces', value: `${data.traces?.length || 0}`, inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🔎 Traces détectées', value: tracesList.substring(0, 1024), inline: false }
+          );
+        break;
+      }
+
+      case 'driver': {
+        const driversList = data.suspiciousDrivers?.slice(0, 10).map(d => {
+          return `• **${d.displayName || d.name}**\n  Raison: ${d.reason}${d.path ? `\n  Chemin: \`${d.path.substring(0, 60)}\`` : ''}`;
+        }).join('\n') || 'Aucun';
+
+        embed = new EmbedBuilder()
+          .setColor(0xF97316) // Orange
+          .setTitle('⚙️ INTÉGRITÉ DRIVERS - PILOTES SUSPECTS DÉTECTÉS')
+          .setDescription(`Des pilotes suspects ont été détectés sur le système de **${player.username}**.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '📊 Pilotes suspects', value: `${data.suspiciousDrivers?.length || 0}`, inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🔧 Détails des pilotes', value: driversList.substring(0, 1024), inline: false }
+          );
+        break;
+      }
+
+      case 'macro': {
+        const highRiskList = data.highRiskMacros?.slice(0, 10).map(m => {
+          const typeIcons = { ahk: '⌨️', generic: '🖱️', logitech: '🎮', razer: '🐍', corsair: '🏴' };
+          return `${typeIcons[m.macroType] || '❓'} **${m.name}** (${m.macroType}) - Source: ${m.source}`;
+        }).join('\n') || 'Aucun';
+
+        const allMacrosList = data.detectedSoftware?.slice(0, 10).map(m => {
+          return `• ${m.name} (${m.macroType})`;
+        }).join('\n') || 'Aucun';
+
+        embed = new EmbedBuilder()
+          .setColor(0x8B5CF6) // Purple
+          .setTitle('⌨️ DÉTECTION MACROS - LOGICIELS SUSPECTS')
+          .setDescription(`Des logiciels de macros/scripts ont été détectés sur le système de **${player.username}**.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '📊 Total détecté', value: `${data.detectedSoftware?.length || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🚨 Macros à haut risque', value: highRiskList.substring(0, 1024), inline: false }
+          );
+        
+        if (data.detectedSoftware?.length > data.highRiskMacros?.length) {
+          embed.addFields({ name: '📋 Tous les logiciels détectés', value: allMacrosList.substring(0, 1024), inline: false });
+        }
+        break;
+      }
+
+      case 'overlay': {
+        const highRiskList = data.highRiskOverlays?.slice(0, 10).map(o => {
+          const reasonIcons = { cheat_process: '🎯', suspicious_class: '⚠️', transparent_topmost: '👁️', layered_topmost: '🖼️' };
+          return `${reasonIcons[o.reason] || '❓'} **${o.processName || 'Inconnu'}** - ${o.windowTitle || 'Sans titre'}\n  └ Classe: ${o.className || 'N/A'} | Raison: ${o.reason}`;
+        }).join('\n') || 'Aucun';
+
+        const allOverlaysList = data.suspiciousOverlays?.slice(0, 10).map(o => {
+          return `• ${o.processName || o.windowTitle || 'Inconnu'} (${o.reason})`;
+        }).join('\n') || 'Aucun';
+
+        embed = new EmbedBuilder()
+          .setColor(0xEC4899) // Pink
+          .setTitle('🖼️ OVERLAY SUSPECT DÉTECTÉ')
+          .setDescription(`Des fenêtres overlay suspectes ont été détectées sur le système de **${player.username}**.\n\nCes overlays peuvent être utilisés pour afficher des ESP, aimbot visuels, ou autres triches.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '📊 Total détecté', value: `${data.suspiciousOverlays?.length || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🚨 Overlays à haut risque', value: highRiskList.substring(0, 1024), inline: false }
+          );
+        
+        if (data.suspiciousOverlays?.length > data.highRiskOverlays?.length) {
+          embed.addFields({ name: '📋 Tous les overlays détectés', value: allOverlaysList.substring(0, 1024), inline: false });
+        }
+        break;
+      }
+
+      case 'dll_injection': {
+        const suspiciousDllsList = data.suspiciousDlls?.slice(0, 10).map(d => {
+          const isHighRisk = d.reason.toLowerCase().includes('cheat') || d.reason.toLowerCase().includes('inject') || d.reason.toLowerCase().includes('hook');
+          return `${isHighRisk ? '🚨' : '⚠️'} **${d.name}**\n  └ ${d.reason}\n  └ Chemin: ${d.path ? d.path.substring(0, 80) : 'N/A'}`;
+        }).join('\n\n') || 'Aucun';
+
+        embed = new EmbedBuilder()
+          .setColor(0xDC2626) // Deep red
+          .setTitle('💉 INJECTION DLL DÉTECTÉE')
+          .setDescription(`Des DLLs suspectes ou des outils d'injection ont été détectés sur le système de **${player.username}**.\n\n⚠️ **Alerte critique** - L'injection de DLL est souvent utilisée pour charger des cheats.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '📊 Total détecté', value: `${data.suspiciousDlls?.length || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🔍 DLLs suspectes', value: suspiciousDllsList.substring(0, 1024), inline: false }
+          );
+        break;
+      }
+
+      case 'vm': {
+        const indicatorsList = data.vmIndicators?.slice(0, 10).map(indicator => {
+          return `• ${indicator}`;
+        }).join('\n') || 'Aucun';
+
+        embed = new EmbedBuilder()
+          .setColor(0x6366F1) // Indigo
+          .setTitle('🖥️ MACHINE VIRTUELLE DÉTECTÉE')
+          .setDescription(`Le joueur **${player.username}** semble jouer depuis une machine virtuelle.\n\n⚠️ Les VMs peuvent être utilisées pour tester des cheats ou contourner des bans.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '🖥️ Type de VM', value: data.vmType || 'Inconnu', inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '📊 Indicateurs', value: `${data.vmIndicators?.length || 0}`, inline: true },
+            { name: '🔍 Détails de détection', value: indicatorsList.substring(0, 1024), inline: false }
+          );
+        break;
+      }
+
+      case 'cloud_pc': {
+        const indicatorsList = data.cloudIndicators?.slice(0, 10).map(indicator => {
+          return `• ${indicator}`;
+        }).join('\n') || 'Aucun';
+
+        const isGamingEmoji = data.isGamingCloud ? '🎮' : '☁️';
+        const gamingLabel = data.isGamingCloud ? 'Cloud Gaming' : 'Cloud PC Général';
+
+        embed = new EmbedBuilder()
+          .setColor(data.isGamingCloud ? 0x10B981 : 0xF59E0B) // Green for gaming, Orange for general
+          .setTitle(`${isGamingEmoji} ${data.isGamingCloud ? 'CLOUD GAMING' : 'CLOUD PC'} DÉTECTÉ`)
+          .setDescription(`Le joueur **${player.username}** semble jouer depuis un **${gamingLabel}**.\n\n${data.isGamingCloud ? 'ℹ️ Les services de cloud gaming (Shadow, GeForce NOW, etc.) sont détectés.' : '⚠️ Les cloud PCs peuvent être utilisés pour masquer l\'identité ou tester des cheats.'}`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '☁️ Fournisseur', value: data.cloudProvider || 'Inconnu', inline: true },
+            { name: '🎮 Cloud Gaming', value: data.isGamingCloud ? 'Oui' : 'Non', inline: true },
+            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+            { name: '🔍 Détails de détection', value: indicatorsList.substring(0, 1024), inline: false }
+          );
+        break;
+      }
+
+      case 'cheat': {
+        // Cheat devices (Cronus, XIM, etc.) and processes (DS4Windows, etc.)
+        const devicesList = data.devices?.slice(0, 10).map(d => {
+          return `🎮 **${d.deviceType || d.name}** ${d.vid ? `(VID: ${d.vid}${d.pid ? `, PID: ${d.pid}` : ''})` : ''}`;
+        }).join('\n') || 'Aucun';
+
+        const processesList = data.processes?.slice(0, 10).map(p => {
+          return `💻 **${p.name}** (détecté: ${p.matchedCheat}) - PID: ${p.pid}`;
+        }).join('\n') || 'Aucun';
+
+        const riskColors = { critical: 0xFF0000, high: 0xFF6B2C, medium: 0xFFA500, low: 0x10B981 };
+        const riskEmojis = { critical: '🚨', high: '⚠️', medium: '⚡', low: 'ℹ️' };
+        const riskLevel = data.riskLevel || 'low';
+
+        embed = new EmbedBuilder()
+          .setColor(riskColors[riskLevel] || 0xFF0000)
+          .setTitle(`${riskEmojis[riskLevel] || '🎮'} DÉTECTION CHEAT - ${riskLevel.toUpperCase()}`)
+          .setDescription(`Des périphériques ou logiciels suspects ont été détectés sur le système de **${player.username}**.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '⚠️ Niveau de risque', value: riskLevel.toUpperCase(), inline: true },
+            { name: '📊 Score', value: `${data.riskScore || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true }
+          );
+
+        if (data.devices?.length > 0) {
+          embed.addFields({ name: '🎮 Périphériques détectés', value: devicesList.substring(0, 1024), inline: false });
+        }
+        if (data.processes?.length > 0) {
+          embed.addFields({ name: '💻 Processus détectés', value: processesList.substring(0, 1024), inline: false });
+        }
+        break;
+      }
+
+      case 'cheat_window': {
+        // Cheat window/panel detection (CoD specific)
+        const windowsList = data.detectedWindows?.slice(0, 15).map(w => {
+          const riskIcons = { critical: '🚨', high: '⚠️', medium: '⚡' };
+          return `${riskIcons[w.riskLevel] || '❓'} **${w.matchedCheat}**\n  └ Fenêtre: ${w.windowTitle.substring(0, 50)}\n  └ Processus: ${w.processName || 'N/A'}`;
+        }).join('\n\n') || 'Aucun';
+
+        // Count by risk level
+        const criticalCount = data.detectedWindows?.filter(w => w.riskLevel === 'critical').length || 0;
+        const highCount = data.detectedWindows?.filter(w => w.riskLevel === 'high').length || 0;
+        const mediumCount = data.detectedWindows?.filter(w => w.riskLevel === 'medium').length || 0;
+
+        // Color based on highest risk
+        const embedColor = criticalCount > 0 ? 0xFF0000 : highCount > 0 ? 0xFF6B2C : 0xFFA500;
+
+        embed = new EmbedBuilder()
+          .setColor(embedColor)
+          .setTitle(`🔍 CHEAT PANEL/WINDOW DÉTECTÉ - CoD`)
+          .setDescription(`Des fenêtres ou panels de cheats connus ont été détectés sur le système de **${player.username}**.\n\n⚠️ **Alerte sérieuse** - Ces panels sont généralement associés à des logiciels de triche actifs.`)
+          .addFields(
+            { name: '👤 Joueur', value: playerInfo, inline: true },
+            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+            { name: '⏰ Détecté à', value: timestamp, inline: true },
+            { name: '🚨 Critique', value: `${criticalCount}`, inline: true },
+            { name: '⚠️ Haut risque', value: `${highCount}`, inline: true },
+            { name: '⚡ Moyen', value: `${mediumCount}`, inline: true },
+            { name: '📊 Score total', value: `${data.riskScore || 0}`, inline: true },
+            { name: '📄 Total détecté', value: `${data.detectedWindows?.length || 0}`, inline: true },
+            { name: '\u200B', value: '\u200B', inline: true },
+            { name: '🔍 Détails des détections', value: windowsList.substring(0, 1024), inline: false }
+          );
+        break;
+      }
+
+      default:
+        console.warn(`[Discord Bot] Unknown extended alert type: ${alertType}`);
+        return;
+    }
+
+    embed.setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Détection étendue' });
+
+    await sendToChannel(IRIS_EXTENDED_ALERTS_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Extended alert (${alertType}) sent for ${player.username}`);
+  } catch (error) {
+    console.error(`[Discord Bot] Error sending extended alert (${alertType}):`, error.message);
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -1999,5 +2096,6 @@ export default {
   sendIrisSecurityWarning,
   sendIrisSecurityChange,
   sendIrisScreenshots,
+  sendIrisExtendedAlert,
   sendRankedMatchStartDM
 };

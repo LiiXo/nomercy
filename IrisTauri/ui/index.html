@@ -62,14 +62,19 @@
     .title-bar-text svg { width: 16px; height: 16px; color: var(--neon-red); }
     .window-controls { display: flex; gap: 8px; position: relative; z-index: 9999; }
     .window-btn {
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       border: none;
       cursor: pointer;
       transition: transform 0.2s, filter 0.2s;
       position: relative;
       z-index: 9999;
+      font-size: 9px;
+      line-height: 14px;
+      text-align: center;
+      color: rgba(0,0,0,0.5);
+      padding: 0;
     }
     .window-btn:hover { transform: scale(1.1); filter: brightness(1.2); }
     .btn-minimize { background: #ffbd2e; }
@@ -249,27 +254,7 @@
       text-transform: uppercase;
       letter-spacing: 2px;
     }
-    .security-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 6px;
-      margin-bottom: 12px;
-    }
-    .security-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 8px;
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 6px;
-      font-size: 11px;
-    }
-    .security-item .icon { width: 14px; height: 14px; flex-shrink: 0; }
-    .security-item .icon.ok { color: #22c55e; }
-    .security-item .icon.fail { color: #ef4444; }
-    .security-item .icon.pending { color: var(--dark-400); animation: spin 1s linear infinite; }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .security-item .label { color: var(--dark-400); }
+
     /* Module loading animation */
     .module-loading {
       display: flex;
@@ -323,9 +308,9 @@
       </svg>
       <span>IRIS ANTICHEAT</span>
     </div>
-    <div class="window-controls" onmousedown="event.stopPropagation()">
-      <button class="window-btn btn-minimize" onclick="minimizeWindow(); event.stopPropagation();"></button>
-      <button class="window-btn btn-close" onclick="closeWindow(); event.stopPropagation();"></button>
+    <div class="window-controls" id="window-controls">
+      <button class="window-btn btn-minimize" id="btn-minimize" title="Réduire">&#8211;</button>
+      <button class="window-btn btn-close" id="btn-close" title="Fermer">&#10005;</button>
     </div>
   </div>
 
@@ -336,8 +321,8 @@
         <div class="logo-container">
           <div class="logo-glow"></div>
           <div class="logo">
-            <img src="https://nomercy.ggsecure.io/logo.png" alt="NoMercy" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+            <img id="logo-img" src="https://nomercy.ggsecure.io/logo.png" alt="NoMercy">
+            <svg id="logo-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
             </svg>
           </div>
@@ -353,7 +338,7 @@
             Connectez-vous avec votre compte Discord lié à NoMercy pour activer la protection anticheat.
           </p>
           <div id="login-error" class="error-message"></div>
-          <button class="discord-btn" onclick="startAuth()">
+          <button class="discord-btn" id="discord-btn">
             <svg viewBox="0 0 24 24" fill="currentColor">
               <path d="M20.317 4.37a19.79 19.79 0 00-4.885-1.515.074.074 0 00-.079.037 13.13 13.13 0 00-.608 1.25 18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037 19.736 19.736 0 00-4.884 1.515.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028 14.09 14.09 0 001.226-1.994.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128c.122-.093.244-.19.361-.289a.074.074 0 01.078-.012c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.118.098.24.195.361.288a.077.077 0 01-.006.128 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
             </svg>
@@ -388,56 +373,16 @@
             <div class="trust-score-label" id="trust-score-label">Score de confiance</div>
           </div>
           
-          <!-- Loading indicator for module check -->
-          <div id="module-loading" class="module-loading" style="display: none;">
-            <div class="module-loading-spinner"></div>
-            <span>Analyse des modules de sécurité...</span>
-          </div>
+
           
-          <!-- Security Modules Grid -->
-          <div class="security-grid" id="security-grid">
-            <div class="security-item" id="sec-tpm">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">TPM 2.0</span>
-            </div>
-            <div class="security-item" id="sec-secureboot">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">Secure Boot</span>
-            </div>
-            <div class="security-item" id="sec-virt">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">VT-x/AMD-V</span>
-            </div>
-            <div class="security-item" id="sec-iommu">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">VT-d/IOMMU</span>
-            </div>
-            <div class="security-item" id="sec-vbs">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">VBS</span>
-            </div>
-            <div class="security-item" id="sec-hvci">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">HVCI</span>
-            </div>
-            <div class="security-item" id="sec-defender">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">Defender</span>
-            </div>
-            <div class="security-item" id="sec-realtime">
-              <svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-              <span class="label">Temps réel</span>
-            </div>
-          </div>
-          
-          <button class="logout-btn" onclick="logout()">Déconnexion</button>
+          <button class="logout-btn" id="logout-btn">Déconnexion</button>
         </div>
       </div>
 
       <div class="footer">
         <p class="footer-text">
           En utilisant Iris, vous acceptez les 
-          <a class="footer-link" onclick="openExternal('https://nomercy.gg/terms')">conditions d'utilisation</a>
+          <a class="footer-link" id="terms-link">conditions d'utilisation</a>
         </p>
         <p class="version">v1.0.0</p>
       </div>
@@ -456,6 +401,39 @@
     const connectedView = document.getElementById('connected-view');
     const loginError = document.getElementById('login-error');
     const loadingMessage = document.getElementById('loading-message');
+
+    // --- Event listeners (no inline handlers for CSP compatibility) ---
+    const windowControls = document.getElementById('window-controls');
+    if (windowControls) {
+      windowControls.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    }
+    document.getElementById('btn-minimize').addEventListener('click', function(e) {
+      e.stopPropagation();
+      minimizeWindow();
+    });
+    document.getElementById('btn-close').addEventListener('click', function(e) {
+      e.stopPropagation();
+      closeWindow();
+    });
+    document.getElementById('discord-btn').addEventListener('click', function() {
+      startAuth();
+    });
+    document.getElementById('logout-btn').addEventListener('click', function() {
+      logout();
+    });
+    document.getElementById('terms-link').addEventListener('click', function() {
+      openExternal('https://nomercy.gg/terms');
+    });
+
+    // Logo fallback
+    var logoImg = document.getElementById('logo-img');
+    var logoFallback = document.getElementById('logo-fallback');
+    if (logoImg) {
+      logoImg.addEventListener('error', function() {
+        logoImg.style.display = 'none';
+        logoFallback.style.display = 'block';
+      });
+    }
 
     function showView(view) {
       loginView.style.display = 'none';
@@ -523,19 +501,12 @@
       // Reset score to 0% and show loading state
       const scoreEl = document.getElementById('trust-score');
       const scoreLabelEl = document.getElementById('trust-score-label');
-      const moduleLoadingEl = document.getElementById('module-loading');
       
       scoreEl.textContent = '-';
       scoreEl.className = 'trust-score-value low';
       scoreLabelEl.textContent = 'Initialisation...';
-      moduleLoadingEl.style.display = 'flex';
       
-      // Reset all security items to loading state
-      const pendingIcon = '<svg class="icon pending" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>';
-      document.querySelectorAll('.security-item').forEach(el => {
-        const label = el.querySelector('.label')?.textContent || '';
-        el.innerHTML = pendingIcon + `<span class="label">${label}</span>`;
-      });
+
       
       // Fetch and display security status with animation
       fetchSecurityStatus();
@@ -553,56 +524,28 @@
     }
 
     async function animateSecurityDisplay(security) {
-      const checkIcon = '<svg class="icon ok" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>';
-      const crossIcon = '<svg class="icon fail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-      
-      // Hide loading indicator
-      document.getElementById('module-loading').style.display = 'none';
+      // Update label
       document.getElementById('trust-score-label').textContent = 'Score de confiance';
-      document.getElementById('trust-score').textContent = '0%';
       
-      // Define modules with their values and labels
+      // Define modules with their values (internal only for score calculation)
       const modules = [
-        { id: 'sec-tpm', enabled: security.tpm?.enabled || security.tpm?.present, label: 'TPM 2.0' },
-        { id: 'sec-secureboot', enabled: security.secure_boot?.enabled, label: 'Secure Boot' },
-        { id: 'sec-virt', enabled: security.virtualization?.enabled, label: 'VT-x/AMD-V' },
-        { id: 'sec-iommu', enabled: security.virtualization?.iommu, label: 'VT-d/IOMMU' },
-        { id: 'sec-vbs', enabled: security.vbs?.enabled, label: 'VBS' },
-        { id: 'sec-hvci', enabled: security.vbs?.hvci_enabled, label: 'HVCI' },
-        { id: 'sec-defender', enabled: security.defender?.enabled, label: 'Defender' },
-        { id: 'sec-realtime', enabled: security.defender?.real_time_protection, label: 'Temps réel' }
+        { enabled: security.tpm?.enabled || security.tpm?.present },
+        { enabled: security.secure_boot?.enabled },
+        { enabled: security.virtualization?.enabled },
+        { enabled: security.virtualization?.iommu },
+        { enabled: security.vbs?.enabled },
+        { enabled: security.vbs?.hvci_enabled },
+        { enabled: security.defender?.enabled },
+        { enabled: security.defender?.real_time_protection }
       ];
       
       const totalCount = modules.length;
-      const scoreEl = document.getElementById('trust-score');
-      let currentScore = 0;
-      let enabledCount = 0;
+      const enabledCount = modules.filter(m => m.enabled).length;
+      const finalScore = Math.round((enabledCount / totalCount) * 100);
       
-      // Animate each module check
-      for (let i = 0; i < modules.length; i++) {
-        const module = modules[i];
-        const el = document.getElementById(module.id);
-        
-        // Wait before showing each result
-        await new Promise(resolve => setTimeout(resolve, 150));
-        
-        if (el) {
-          el.innerHTML = (module.enabled ? checkIcon : crossIcon) + `<span class="label">${module.label}</span>`;
-          el.style.animation = 'none';
-          el.offsetHeight; // Trigger reflow
-          el.style.animation = 'fadeIn 0.3s ease-out';
-        }
-        
-        if (module.enabled) enabledCount++;
-        
-        // Calculate and animate score
-        const targetScore = Math.round((enabledCount / totalCount) * 100);
-        animateScore(currentScore, targetScore, scoreEl);
-        currentScore = targetScore;
-        
-        // Small delay to let animation play
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      // Animate score from 0 to final value
+      const scoreEl = document.getElementById('trust-score');
+      animateScore(0, finalScore, scoreEl);
     }
     
     function animateScore(from, to, element) {

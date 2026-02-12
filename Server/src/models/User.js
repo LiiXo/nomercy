@@ -362,9 +362,8 @@ const userSchema = new mongoose.Schema({
     }],
     usbDevices: [{
       name: String,
-      manufacturer: String,
-      vid: String,
-      pid: String
+      device_id: String,
+      manufacturer: String
     }],
     cheatDetection: {
       found: { type: Boolean, default: false },
@@ -408,7 +407,83 @@ const userSchema = new mongoose.Schema({
     verifiedAt: Date,
     // Client tampering
     clientTampered: { type: Boolean, default: false },
-    tamperDetectedAt: Date
+    tamperDetectedAt: Date,
+    // Network Monitor (VPN/Proxy detection)
+    networkMonitor: {
+      vpnDetected: { type: Boolean, default: false },
+      proxyDetected: { type: Boolean, default: false },
+      vpnAdapters: [String],
+      vpnProcesses: [String],
+      proxySettings: String,
+      riskScore: { type: Number, default: 0 }
+    },
+    // Registry Scan (cheat traces)
+    registryScan: {
+      tracesFound: { type: Boolean, default: false },
+      traces: [{
+        path: String,
+        cheatName: String,
+        traceType: { type: String, enum: ['install', 'uninstall', 'spoofer', 'driver'] }
+      }],
+      riskScore: { type: Number, default: 0 }
+    },
+    // Driver Integrity (suspicious kernel drivers)
+    driverIntegrity: {
+      suspiciousFound: { type: Boolean, default: false },
+      suspiciousDrivers: [{
+        name: String,
+        displayName: String,
+        path: String,
+        reason: String
+      }],
+      riskScore: { type: Number, default: 0 }
+    },
+    // Macro Detection (AHK, Logitech macros, etc.)
+    macroDetection: {
+      macrosDetected: { type: Boolean, default: false },
+      detectedSoftware: [{
+        name: String,
+        macroType: { type: String, enum: ['ahk', 'logitech', 'razer', 'corsair', 'generic'] },
+        source: { type: String, enum: ['process', 'registry', 'window'] }
+      }],
+      riskScore: { type: Number, default: 0 }
+    },
+    // Overlay Detection (cheat overlays, ESP, aimbot visual)
+    overlayDetection: {
+      overlaysFound: { type: Boolean, default: false },
+      suspiciousOverlays: [{
+        windowTitle: String,
+        processName: String,
+        className: String,
+        reason: { type: String, enum: ['transparent_topmost', 'layered_topmost', 'cheat_process', 'suspicious_class'] }
+      }],
+      riskScore: { type: Number, default: 0 }
+    },
+    // DLL Injection Detection
+    dllInjection: {
+      injectionDetected: { type: Boolean, default: false },
+      suspiciousDlls: [{
+        name: String,
+        path: String,
+        reason: String
+      }],
+      riskScore: { type: Number, default: 0 }
+    },
+    // VM Detection (Virtual Machine)
+    vmDetection: {
+      vmDetected: { type: Boolean, default: false },
+      vmType: String, // "VMware", "VirtualBox", "Hyper-V", "QEMU", etc.
+      vmIndicators: [String],
+      riskScore: { type: Number, default: 0 }
+    },
+    // Cloud PC Detection (Shadow, GeForce NOW, etc.)
+    cloudPcDetection: {
+      cloudPcDetected: { type: Boolean, default: false },
+      cloudProvider: String, // "Shadow", "GeForce NOW", "Parsec", etc.
+      cloudIndicators: [String],
+      isGamingCloud: { type: Boolean, default: false },
+      riskScore: { type: Number, default: 0 }
+    }
   },
   
   // Iris client verification
@@ -421,6 +496,27 @@ const userSchema = new mongoose.Schema({
   irisScanChannelId: String,
   irisScanMode: { type: Boolean, default: false }, // Scan mode enabled by admin
   irisWasConnected: { type: Boolean, default: false }, // Track connection state for notifications
+  
+  // Iris detection history (keeps track of all detections even if no longer active)
+  irisDetectionHistory: [{
+    detectedAt: { type: Date, required: true },
+    type: { type: String, required: true }, // 'cheat', 'macro', 'cheat_window', 'driver', 'registry', etc.
+    name: { type: String, required: true }, // e.g., 'DS4Windows', 'EngineOwning', etc.
+    details: { type: String }, // Additional details
+    riskLevel: { type: String }, // 'critical', 'high', 'medium', 'low'
+    riskScore: { type: Number }
+  }],
+  
+  // Iris session history (connection/disconnection tracking)
+  irisSessionHistory: [{
+    connectedAt: { type: Date, required: true },
+    disconnectedAt: { type: Date, default: null },
+    duration: { type: Number, default: null }, // Duration in seconds
+    clientVersion: String,
+    hardwareId: String
+  }],
+  // Current session ID (to track ongoing session)
+  irisCurrentSessionId: { type: mongoose.Schema.Types.ObjectId, default: null },
   
 }, {
   timestamps: true

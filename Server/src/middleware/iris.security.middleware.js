@@ -137,17 +137,37 @@ export const verifyIrisSignature = (req, res, next) => {
   }
   
   // Generate expected signature
-  const expectedSignature = generateExpectedSignature(
-    req.method,
-    path,
-    timestamp,
-    clientNonce,
-    req.body
-  );
+  let expectedSignature;
+  try {
+    expectedSignature = generateExpectedSignature(
+      req.method,
+      path,
+      timestamp,
+      clientNonce,
+      req.body
+    );
+  } catch (error) {
+    console.error('[Iris Security] Error generating signature:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal signature error',
+      code: 'IRIS_SEC_INTERNAL_ERROR'
+    });
+  }
   
   // Constant-time comparison to prevent timing attacks
-  const signatureBuffer = Buffer.from(clientSignature, 'hex');
-  const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+  let signatureBuffer, expectedBuffer;
+  try {
+    signatureBuffer = Buffer.from(clientSignature, 'hex');
+    expectedBuffer = Buffer.from(expectedSignature, 'hex');
+  } catch (error) {
+    console.error('[Iris Security] Error creating signature buffers:', error.message);
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid signature format',
+      code: 'IRIS_SEC_INVALID_FORMAT'
+    });
+  }
   
   if (signatureBuffer.length !== expectedBuffer.length || 
       !crypto.timingSafeEqual(signatureBuffer, expectedBuffer)) {

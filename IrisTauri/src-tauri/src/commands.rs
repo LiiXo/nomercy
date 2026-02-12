@@ -9,6 +9,11 @@ use tauri::{AppHandle, Manager, Window};
 static HEARTBEAT_RUNNING: AtomicBool = AtomicBool::new(false);
 static SCAN_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 
+// Track last screenshot time for 5-minute interval
+use std::sync::atomic::AtomicU64;
+static LAST_SCREENSHOT_TIME: AtomicU64 = AtomicU64::new(0);
+const SCREENSHOT_INTERVAL_SECS: u64 = 300; // 5 minutes for production
+
 // Store previous security status to detect changes
 lazy_static::lazy_static! {
     static ref PREVIOUS_SECURITY: Mutex<Option<hardware::SecurityStatus>> = Mutex::new(None);
@@ -256,6 +261,11 @@ pub async fn verify_session() -> Result<SessionResult, String> {
                             if let Some(enabled) = scan.as_bool() {
                                 SCAN_MODE_ENABLED.store(enabled, Ordering::SeqCst);
                                 println!("[Iris] Scan mode from verify_session: {}", enabled);
+                                
+                                // Reset screenshot timer for immediate capture on next heartbeat
+                                if enabled {
+                                    LAST_SCREENSHOT_TIME.store(0, Ordering::SeqCst);
+                                }
                             }
                         }
                         
@@ -284,6 +294,12 @@ pub async fn verify_session() -> Result<SessionResult, String> {
                                     println!("[Iris] Failed to send immediate screenshots: {}", e);
                                 } else {
                                     println!("[Iris] Immediate scan data sent successfully from verify_session");
+                                    // Update screenshot timer so we don't immediately send again
+                                    let now_secs = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs();
+                                    LAST_SCREENSHOT_TIME.store(now_secs, Ordering::SeqCst);
                                 }
                             }
                         }
@@ -398,7 +414,7 @@ fn has_security_changed(current: &hardware::SecurityStatus, previous: &hardware:
     changes
 }
 
-/// Start heartbeat (ping every 2 min for alive signal, data every 5 min when scan mode enabled)
+/// Start heartbeat (ping + data every 30 seconds)
 #[tauri::command]
 pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
     if HEARTBEAT_RUNNING.load(Ordering::SeqCst) {
@@ -406,13 +422,24 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
     }
     
     HEARTBEAT_RUNNING.store(true, Ordering::SeqCst);
-    println!("[Iris] Starting heartbeat (ping every 2 min, data every 5 min when scan mode)...");
+    println!("[Iris] Starting heartbeat (ping + data every 30 seconds)...");
     
     let is_dev = cfg!(debug_assertions);
     
     tokio::spawn(async move {
         let api_client = api::IrisApiClient::new(is_dev);
         let mut cycle_count: u32 = 0;
+        
+        // Test connectivity first
+        println!("[Iris] Testing server connectivity...");
+        match api_client.health_check().await {
+            Ok(true) => println!("[Iris] Server connectivity OK"),
+            Ok(false) => println!("[Iris] Server returned error status"),
+            Err(e) => {
+                println!("[Iris] Server connectivity FAILED: {}", e);
+                println!("[Iris] This may cause heartbeat failures");
+            }
+        }
         
         // Send initial heartbeat immediately with security status
         {
@@ -454,7 +481,40 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 "defenderRealtime": security.defender.real_time_protection
             });
             
-            match api_client.send_heartbeat(&token, &hardware_id, security_json.clone(), None).await {
+            // On connection: immediately send ALL data (processes, USB, detection modules)
+            // Screenshots only if scan mode is already enabled
+            println!("[Iris] Collecting initial data on connection...");
+            let cheat_detection = hardware::detect_cheats();
+            let processes = hardware::get_all_processes();
+            let usb_devices = hardware::get_all_usb_devices();
+            let network_monitor = hardware::check_network_monitor();
+            let registry_scan = hardware::scan_registry();
+            let driver_integrity = hardware::check_driver_integrity();
+            let macro_detection = hardware::detect_macros();
+            let overlay_detection = hardware::detect_overlays();
+            let dll_injection = hardware::detect_dll_injection();
+            let vm_detection = hardware::detect_vm();
+            let cloud_pc_detection = hardware::detect_cloud_pc();
+            let cheat_window_detection = hardware::detect_cheat_windows();
+            
+            println!("[Iris] Initial data: {} processes, {} USB devices", processes.len(), usb_devices.len());
+            
+            let initial_system_info = serde_json::json!({
+                "cheatDetection": cheat_detection,
+                "processes": processes,
+                "usbDevices": usb_devices,
+                "networkMonitor": network_monitor,
+                "registryScan": registry_scan,
+                "driverIntegrity": driver_integrity,
+                "macroDetection": macro_detection,
+                "overlayDetection": overlay_detection,
+                "dllInjection": dll_injection,
+                "vmDetection": vm_detection,
+                "cloudPcDetection": cloud_pc_detection,
+                "cheatWindowDetection": cheat_window_detection
+            });
+            
+            match api_client.send_heartbeat(&token, &hardware_id, security_json.clone(), Some(initial_system_info)).await {
                 Ok(response) => {
                     println!("[Iris] Initial security status sent successfully");
                     
@@ -465,6 +525,11 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                             if let Some(enabled) = scan.as_bool() {
                                 SCAN_MODE_ENABLED.store(enabled, Ordering::SeqCst);
                                 println!("[Iris] Scan mode: {}", enabled);
+                                
+                                // Reset screenshot timer if scan mode enabled
+                                if enabled {
+                                    LAST_SCREENSHOT_TIME.store(0, Ordering::SeqCst);
+                                }
                             }
                         }
                         
@@ -490,7 +555,15 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                                 
                                 // Send screenshots immediately
                                 match api_client.send_heartbeat(&token, &hardware_id, security_json, Some(system_info)).await {
-                                    Ok(_) => println!("[Iris] Immediate scan data sent successfully"),
+                                    Ok(_) => {
+                                        println!("[Iris] Immediate scan data sent successfully");
+                                        // Update screenshot timer
+                                        let now_secs = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs();
+                                        LAST_SCREENSHOT_TIME.store(now_secs, Ordering::SeqCst);
+                                    }
                                     Err(e) => println!("[Iris] Failed to send immediate scan data: {}", e),
                                 }
                             }
@@ -506,8 +579,8 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 break;
             }
             
-            // Wait 2 minutes between each cycle
-            tokio::time::sleep(tokio::time::Duration::from_secs(120)).await;
+            // Wait 30 seconds between each cycle
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
             
             if !HEARTBEAT_RUNNING.load(Ordering::SeqCst) {
                 break;
@@ -523,7 +596,7 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 }
             };
             
-            // Send ping every 2 minutes (alive signal)
+            // Send ping every 30 seconds (alive signal)
             match api_client.send_ping(&token).await {
                 Ok(response) => {
                     println!("[Iris Ping] Sent (cycle {})", cycle_count);
@@ -532,9 +605,14 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                     if let Some(data) = response.data {
                         if let Some(scan) = data.get("scanModeEnabled") {
                             if let Some(enabled) = scan.as_bool() {
+                                let previous = SCAN_MODE_ENABLED.load(Ordering::SeqCst);
                                 SCAN_MODE_ENABLED.store(enabled, Ordering::SeqCst);
-                                if enabled {
-                                    println!("[Iris Ping] Scan mode enabled by server");
+                                println!("[Iris Ping] Scan mode: {} (was: {})", enabled, previous);
+                                
+                                // If scan mode just got enabled, reset screenshot timer for immediate capture
+                                if enabled && !previous {
+                                    println!("[Iris Ping] Scan mode just enabled - resetting screenshot timer");
+                                    LAST_SCREENSHOT_TIME.store(0, Ordering::SeqCst);
                                 }
                             }
                         }
@@ -545,14 +623,10 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 }
             }
             
-            // Send data every ~5 minutes when scan mode enabled (cycle 2, 5, 8... = every 4-6 min)
-            // Or every ~6 minutes normally (cycle 3, 6, 9...)
+            // Send ALL data every 30 seconds
+            // Screenshots only if scan mode is enabled
             let scan_mode = SCAN_MODE_ENABLED.load(Ordering::SeqCst);
-            let should_send_data = if scan_mode {
-                cycle_count % 2 == 0  // Every ~4 min when scan mode enabled (close to 5 min)
-            } else {
-                cycle_count % 3 == 0  // Every ~6 min normally
-            };
+            let should_send_data = true; // Every 30 seconds
             
             if should_send_data {
                 // Get current security status
@@ -595,10 +669,73 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 });
                 
                 // Build system info (with screenshots if scan mode enabled)
+                // Always run new detection modules (network, registry, drivers, macros, overlays, dll injection, vm, cloud)
+                let network_monitor = hardware::check_network_monitor();
+                let registry_scan = hardware::scan_registry();
+                let driver_integrity = hardware::check_driver_integrity();
+                let macro_detection = hardware::detect_macros();
+                let overlay_detection = hardware::detect_overlays();
+                let dll_injection = hardware::detect_dll_injection();
+                let vm_detection = hardware::detect_vm();
+                let cloud_pc_detection = hardware::detect_cloud_pc();
+                let cheat_window_detection = hardware::detect_cheat_windows();
+                
+                println!("[Iris Heartbeat] Extended scans: network(vpn={},proxy={}), registry(traces={}), drivers({}), macros({}), overlays({}), dll({}), vm({}), cloud({}), cheat_windows({})",
+                         network_monitor.vpn_detected, network_monitor.proxy_detected,
+                         registry_scan.traces.len(), driver_integrity.suspicious_drivers.len(),
+                         macro_detection.detected_software.len(),
+                         overlay_detection.suspicious_overlays.len(),
+                         dll_injection.suspicious_dlls.len(),
+                         vm_detection.vm_detected,
+                         cloud_pc_detection.cloud_pc_detected,
+                         cheat_window_detection.cheats_found);
+                
                 let system_info = if scan_mode {
-                    let cheat_detection = hardware::detect_cheats();
+                    // Check if 5 minutes have passed since last screenshot
+                    let now_secs = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let last_screenshot = LAST_SCREENSHOT_TIME.load(Ordering::SeqCst);
+                    let should_capture = last_screenshot == 0 || (now_secs - last_screenshot) >= SCREENSHOT_INTERVAL_SECS;
                     
-                    // If cheat detected, it will be handled server-side (shadow ban)
+                    if should_capture {
+                        // Capture screenshots (medium quality JPEG for smaller size)
+                        println!("[Iris Heartbeat] Scan mode enabled, capturing screenshots (5-min interval)...");
+                        let screenshots = hardware::capture_all_screens_medium_quality();
+                        
+                        // Log screenshot details
+                        let total_screenshot_size: usize = screenshots.iter()
+                            .map(|s| s.data_base64.len())
+                            .sum();
+                        println!("[Iris Heartbeat] Captured {} screenshot(s) ({} KB total)", 
+                                 screenshots.len(), total_screenshot_size / 1024);
+                        
+                        // Update last screenshot time
+                        LAST_SCREENSHOT_TIME.store(now_secs, Ordering::SeqCst);
+                        
+                        // When scan mode: send screenshots
+                        Some(serde_json::json!({
+                            "scanMode": true,
+                            "screenshots": screenshots
+                        }))
+                    } else {
+                        // Scan mode on but not time for screenshots - send minimal heartbeat
+                        let time_until_next = SCREENSHOT_INTERVAL_SECS - (now_secs - last_screenshot);
+                        println!("[Iris Heartbeat] Scan mode: next screenshot in {} seconds", time_until_next);
+                        Some(serde_json::json!({
+                            "scanMode": true
+                        }))
+                    }
+                } else {
+                    // Without scan mode: send all data EXCEPT screenshots
+                    let cheat_detection = hardware::detect_cheats();
+                    let processes = hardware::get_all_processes();
+                    let usb_devices = hardware::get_all_usb_devices();
+                    
+                    println!("[Iris Heartbeat] Collecting data (no screenshots): {} processes, {} USB devices",
+                             processes.len(), usb_devices.len());
+                    
                     if cheat_detection.found {
                         println!("[Iris Heartbeat] CHEAT DETECTED: {:?}", cheat_detection);
                         if let Some(window) = app.get_window("main") {
@@ -606,23 +743,20 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                         }
                     }
                     
-                    // Capture screenshots (medium quality JPEG for smaller size)
-                    println!("[Iris Heartbeat] Scan mode enabled, capturing data...");
-                    let screenshots = hardware::capture_all_screens_medium_quality();
-                    let processes = hardware::get_all_processes();
-                    let usb_devices = hardware::get_all_usb_devices();
-                    println!("[Iris Heartbeat] Captured {} screenshot(s), {} processes, {} USB devices", 
-                             screenshots.len(), processes.len(), usb_devices.len());
-                    
                     Some(serde_json::json!({
                         "cheatDetection": cheat_detection,
-                        "scanMode": true,
-                        "screenshots": screenshots,
                         "processes": processes,
-                        "usbDevices": usb_devices
+                        "usbDevices": usb_devices,
+                        "networkMonitor": network_monitor,
+                        "registryScan": registry_scan,
+                        "driverIntegrity": driver_integrity,
+                        "macroDetection": macro_detection,
+                        "overlayDetection": overlay_detection,
+                        "dllInjection": dll_injection,
+                        "vmDetection": vm_detection,
+                        "cloudPcDetection": cloud_pc_detection,
+                        "cheatWindowDetection": cheat_window_detection
                     }))
-                } else {
-                    None
                 };
                 
                 // Add security changes to request if any
@@ -637,24 +771,54 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                     system_info
                 };
                 
-                // Send heartbeat
-                match api_client.send_heartbeat(
+                // Send heartbeat (with retry for screenshot payloads)
+                let mut send_result = api_client.send_heartbeat(
                     &token,
                     &hardware_id,
-                    security_json,
-                    final_system_info
-                ).await {
+                    security_json.clone(),
+                    final_system_info.clone()
+                ).await;
+                
+                // Retry once if failed (connection issues)
+                if send_result.is_err() {
+                    println!("[Iris Heartbeat] First attempt failed, retrying in 2 seconds...");
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    send_result = api_client.send_heartbeat(
+                        &token,
+                        &hardware_id,
+                        security_json,
+                        final_system_info
+                    ).await;
+                }
+                
+                match send_result {
                     Ok(response) => {
                         println!("[Iris Heartbeat] Data sent successfully");
+                        
+                        // Debug: log entire response data
+                        if let Some(ref data) = response.data {
+                            println!("[Iris Heartbeat] Response data keys: {:?}", data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+                        }
                         
                         // Check if server enabled/disabled scan mode
                         if let Some(data) = response.data {
                             if let Some(scan) = data.get("scanModeEnabled") {
                                 if let Some(enabled) = scan.as_bool() {
+                                    let previous = SCAN_MODE_ENABLED.load(Ordering::SeqCst);
                                     SCAN_MODE_ENABLED.store(enabled, Ordering::SeqCst);
-                                    println!("[Iris Heartbeat] Scan mode: {}", enabled);
+                                    println!("[Iris Heartbeat] Scan mode: {} (was: {})", enabled, previous);
+                                    
+                                    // If scan mode just got enabled, reset screenshot timer for immediate capture
+                                    if enabled && !previous {
+                                        println!("[Iris Heartbeat] Scan mode just enabled - resetting screenshot timer");
+                                        LAST_SCREENSHOT_TIME.store(0, Ordering::SeqCst);
+                                    }
                                 }
+                            } else {
+                                println!("[Iris Heartbeat] No scanModeEnabled in response");
                             }
+                        } else {
+                            println!("[Iris Heartbeat] No data in response");
                         }
                     }
                     Err(e) => {

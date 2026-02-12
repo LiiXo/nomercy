@@ -1,11 +1,12 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import IrisUpdate from '../models/IrisUpdate.js';
 import { verifyToken } from '../middleware/auth.middleware.js';
 import { verifyIrisSignature, decryptIrisPayload } from '../middleware/iris.security.middleware.js';
-import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots, deleteIrisScanModeChannel } from '../services/discordBot.service.js';
+import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots, deleteIrisScanModeChannel, sendIrisExtendedAlert } from '../services/discordBot.service.js';
 import fetch from 'node-fetch';
 
 const router = express.Router();
@@ -46,33 +47,52 @@ setInterval(() => {
 }, 60 * 1000);
 
 // Background job to detect Iris disconnections and send notifications
-// Runs every minute, checks for players who haven't sent ping in 3+ minutes (ping is every 2 min)
+// Runs every minute, checks for players who haven't sent ping in 1+ minute (ping is every 30 sec)
 setInterval(async () => {
   try {
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
     
-    // Find ALL users who were connected but haven't sent ping in 3+ minutes
+    // Find ALL users who were connected but haven't sent ping in 1+ minute
     const disconnectedUsers = await User.find({
       irisWasConnected: true,
-      irisLastSeen: { $lt: threeMinutesAgo }
-    }).select('_id username discordUsername irisScanChannelId');
+      irisLastSeen: { $lt: oneMinuteAgo }
+    }).select('_id username discordUsername irisScanChannelId irisCurrentSessionId irisSessionHistory irisLastSeen');
     
     for (const user of disconnectedUsers) {
       console.log('[Iris Monitor] Detected disconnection for:', user.username);
       
-      // Send to player's scan channel if they have one (not to global logs)
-      if (user.irisScanChannelId) {
-        await sendIrisConnectionStatus(
-          user.irisScanChannelId,
-          { username: user.username, discordUsername: user.discordUsername },
-          'disconnected'
-        ).catch(err => console.error('[Iris Monitor] Scan channel notification error:', err.message));
+      // Note: Disconnection status no longer sent to scan channel - only screenshots go there
+      
+      // Close the current session in history
+      const disconnectedAt = new Date();
+      const updateData = {
+        irisWasConnected: false,
+        irisCurrentSessionId: null
+      };
+      
+      // Find and close the open session
+      if (user.irisSessionHistory && user.irisSessionHistory.length > 0) {
+        const lastSession = user.irisSessionHistory[user.irisSessionHistory.length - 1];
+        if (lastSession && !lastSession.disconnectedAt) {
+          // Calculate duration in seconds
+          const connectedAt = new Date(lastSession.connectedAt);
+          const duration = Math.round((disconnectedAt - connectedAt) / 1000);
+          
+          // Update the last session with disconnection time
+          await User.updateOne(
+            { _id: user._id, 'irisSessionHistory._id': lastSession._id },
+            {
+              $set: {
+                'irisSessionHistory.$.disconnectedAt': disconnectedAt,
+                'irisSessionHistory.$.duration': duration
+              }
+            }
+          );
+        }
       }
       
       // Update user to mark as disconnected
-      await User.findByIdAndUpdate(user._id, {
-        irisWasConnected: false
-      });
+      await User.findByIdAndUpdate(user._id, updateData);
     }
     
     if (disconnectedUsers.length > 0) {
@@ -93,6 +113,12 @@ const DISCORD_REDIRECT_URI = process.env.NODE_ENV === 'production'
 console.log('[Iris] Discord Redirect URI:', DISCORD_REDIRECT_URI);
 console.log('[Iris] Security middleware enabled');
 console.log('[Iris] Client authentication enabled');
+
+// Simple health check (no auth required) - for debugging connectivity
+router.get('/health', (req, res) => {
+  console.log('[Iris Health] Request from:', req.ip);
+  res.json({ success: true, status: 'ok', timestamp: Date.now() });
+});
 
 // ====== DESKTOP AUTH SESSION ENDPOINTS ======
 
@@ -720,8 +746,9 @@ router.get('/discord-callback', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    // Update user last seen
+    // Update user last seen and set platform to PC (Iris is PC-only)
     user.irisLastSeen = new Date();
+    user.platform = 'PC';
     await user.save();
 
     // If state (session ID) is provided, store token in session for polling
@@ -1504,23 +1531,17 @@ router.post('/ping', verifyIrisSignature, async (req, res) => {
     const wasDisconnected = !user.irisWasConnected || 
       (user.irisLastSeen && new Date(user.irisLastSeen) < threeMinutesAgo);
 
-    // Update last seen timestamp
+    // Update last seen timestamp and ensure platform is set to PC
     await User.findByIdAndUpdate(user._id, {
       irisLastSeen: new Date(),
-      irisWasConnected: true
+      irisWasConnected: true,
+      platform: 'PC'
     });
 
     // Send connection notification if player just reconnected (only to scan channel, not global logs)
     if (wasDisconnected) {
       console.log('[Iris Ping] Player reconnected:', user.username);
-
-      if (user.irisScanChannelId) {
-        await sendIrisConnectionStatus(
-          user.irisScanChannelId,
-          { username: user.username, discordUsername: user.discordUsername },
-          'connected'
-        ).catch(err => console.error('[Iris Ping] Scan channel error:', err.message));
-      }
+      // Note: Connection status no longer sent to scan channel - only screenshots go there
     }
 
     res.json({
@@ -1541,7 +1562,10 @@ router.post('/ping', verifyIrisSignature, async (req, res) => {
  * Includes server-side verification of raw outputs to prevent data falsification
  */
 // Increase body limit for heartbeat route (screenshots can be large)
-router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, decryptIrisPayload, async (req, res) => {
+router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
+  console.log('[Iris Heartbeat] Request received, body size:', JSON.stringify(req.body).length, 'bytes');
+  next();
+}, verifyIrisSignature, decryptIrisPayload, async (req, res) => {
   try {
     // Get token from Authorization header
     const token = req.headers.authorization?.split(' ')[1];
@@ -1757,6 +1781,15 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, 
         processes: systemInfo?.processes || [],
         usbDevices: systemInfo?.usbDevices || [],
         cheatDetection: systemInfo?.cheatDetection || { found: false, devices: [], processes: [], warnings: [] },
+        // New detection modules
+        networkMonitor: systemInfo?.networkMonitor || { vpnDetected: false, proxyDetected: false, vpnAdapters: [], vpnProcesses: [], riskScore: 0 },
+        registryScan: systemInfo?.registryScan || { tracesFound: false, traces: [], riskScore: 0 },
+        driverIntegrity: systemInfo?.driverIntegrity || { suspiciousFound: false, suspiciousDrivers: [], riskScore: 0 },
+        macroDetection: systemInfo?.macroDetection || { macrosDetected: false, detectedSoftware: [], riskScore: 0 },
+        overlayDetection: systemInfo?.overlayDetection || { overlaysFound: false, suspiciousOverlays: [], riskScore: 0 },
+        dllInjection: systemInfo?.dllInjection || { injectionDetected: false, suspiciousDlls: [], riskScore: 0 },
+        vmDetection: systemInfo?.vmDetection || { vmDetected: false, vmType: null, vmIndicators: [], riskScore: 0 },
+        cloudPcDetection: systemInfo?.cloudPcDetection || { cloudPcDetected: false, cloudProvider: null, cloudIndicators: [], isGamingCloud: false, riskScore: 0 },
         // Add verification metadata
         verified: verificationResult.verified,
         tamperDetected: verificationResult.tamperDetected,
@@ -1773,27 +1806,52 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, 
     if (wasDisconnected) {
       console.log('[Iris Heartbeat] Player reconnected:', user.username);
       
-      // Include cheat detection data in notification
-      const securityData = systemInfo?.cheatDetection?.found ? {
-        cheatDetection: systemInfo.cheatDetection
-      } : null;
-      
-      // Send to global Iris logs channel (for all players)
-      await logIrisConnectionStatus(
-        { username: user.username, discordUsername: user.discordUsername },
-        'connected',
-        securityData
-      ).catch(err => console.error('[Iris Heartbeat] Global log error:', err.message));
-      
-      // Send to player's scan channel if they have one
-      if (user.irisScanChannelId) {
-        await sendIrisConnectionStatus(
-          user.irisScanChannelId,
-          { username: user.username, discordUsername: user.discordUsername },
-          'connected',
-          securityData
-        ).catch(err => console.error('[Iris Heartbeat] Scan channel notification error:', err.message));
+      // First, close any previous open session (in case disconnect wasn't detected)
+      if (user.irisSessionHistory && user.irisSessionHistory.length > 0) {
+        const lastSession = user.irisSessionHistory[user.irisSessionHistory.length - 1];
+        if (lastSession && !lastSession.disconnectedAt) {
+          // Close the previous session with estimated disconnect time (last seen + 1 min)
+          const estimatedDisconnect = new Date(user.irisLastSeen?.getTime() + 60000 || Date.now() - 60000);
+          const connectedAt = new Date(lastSession.connectedAt);
+          const duration = Math.round((estimatedDisconnect - connectedAt) / 1000);
+          
+          await User.updateOne(
+            { _id: user._id, 'irisSessionHistory._id': lastSession._id },
+            {
+              $set: {
+                'irisSessionHistory.$.disconnectedAt': estimatedDisconnect,
+                'irisSessionHistory.$.duration': duration
+              }
+            }
+          );
+          console.log('[Iris Heartbeat] Closed previous session for', user.username, '- Duration:', duration, 's');
+        }
       }
+      
+      // Create a new session entry in history
+      const newSession = {
+        _id: new mongoose.Types.ObjectId(),
+        connectedAt: new Date(),
+        disconnectedAt: null,
+        duration: null,
+        clientVersion: req.body.clientVersion || user.irisClientVersion || 'unknown',
+        hardwareId: hardwareId
+      };
+      
+      // Add to session history (keep last 50 sessions)
+      await User.findByIdAndUpdate(user._id, {
+        $push: {
+          irisSessionHistory: {
+            $each: [newSession],
+            $slice: -50 // Keep only last 50 sessions
+          }
+        },
+        irisCurrentSessionId: newSession._id
+      });
+      
+      console.log('[Iris Heartbeat] New session created for', user.username, '- Session ID:', newSession._id);
+      
+      // Note: Connection status no longer sent to scan channel - only screenshots go there
     }
 
     // ====== SECURITY STATE CHANGE DETECTION ======
@@ -1814,15 +1872,7 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, 
         securityChanges
       ).catch(err => console.error('[Iris Heartbeat] Security change notification error:', err.message));
       
-      // Also send to player's scan channel if they have one
-      if (user.irisScanChannelId) {
-        await sendIrisConnectionStatus(
-          user.irisScanChannelId,
-          { username: user.username, discordUsername: user.discordUsername },
-          'security_change',
-          { changes: securityChanges }
-        ).catch(err => console.error('[Iris Heartbeat] Scan channel security change error:', err.message));
-      }
+      // Note: Security changes no longer sent to scan channel - only screenshots go there
     }
     
     // ====== SECURITY MONITORING (NON-SCAN MODE ONLY) ======
@@ -1951,78 +2001,8 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, 
       }
     }
 
-    // ====== SCAN MODE DATA HANDLING ======
-    // If scan mode is active and client sent screenshots, forward ALL data to player's Discord channel
-    const screenshots = systemInfo?.screenshots;
-    const processes = systemInfo?.processes;
-    const usbDevices = systemInfo?.usbDevices;
-    
-    if (screenshots && Array.isArray(screenshots) && screenshots.length > 0 && user.irisScanChannelId) {
-      console.log(`[Iris Heartbeat] Received ${screenshots.length} screenshot(s), ${processes?.length || 0} processes, ${usbDevices?.length || 0} USB devices from ${user.username}`);
-      
-      await sendIrisScreenshots(
-        user.irisScanChannelId,
-        { username: user.username, discordUsername: user.discordUsername },
-        screenshots,
-        processes || [],
-        usbDevices || [],
-        security || null // Pass security status for the embed
-      ).catch(err => console.error('[Iris Heartbeat] Screenshot send error:', err.message));
-    }
-
-    // Log cheat detection
-    if (systemInfo?.cheatDetection?.found) {
-      console.warn('[Iris Heartbeat] CHEAT DEVICE DETECTED for', user.username, ':', systemInfo.cheatDetection.warnings);
-      
-      // ====== AUTO SHADOW BAN for cheat detection ======
-      // Only ban if not already banned and detection is critical/high
-      const riskLevel = systemInfo.cheatDetection.riskLevel || 'low';
-      const shouldBan = (riskLevel === 'critical' || riskLevel === 'high') && !user.isBanned;
-      
-      if (shouldBan) {
-        // Build reason from detected items
-        const detectedItems = [];
-        if (systemInfo.cheatDetection.devices?.length > 0) {
-          detectedItems.push(...systemInfo.cheatDetection.devices.map(d => d.type || d.name));
-        }
-        if (systemInfo.cheatDetection.processes?.length > 0) {
-          detectedItems.push(...systemInfo.cheatDetection.processes.map(p => p.matchedCheat || p.name));
-        }
-        const detectedReason = detectedItems.slice(0, 3).join(', ') || 'logiciel/périphérique suspect';
-        
-        // Set ban for 24 hours with generic reason for the user
-        const banEndDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        
-        await User.findByIdAndUpdate(user._id, {
-          isBanned: true,
-          banReason: 'Contacter le staff pour plus de renseignement',
-          banStartDate: new Date(),
-          banEndDate: banEndDate
-        });
-        
-        console.warn(`[Iris Heartbeat] AUTO SHADOW BAN applied to ${user.username} for: ${detectedReason}`);
-        
-        // Send Discord notification to shadow ban channel (1468867097504251914)
-        await sendIrisShadowBan(
-          {
-            username: user.username,
-            discordUsername: user.discordUsername,
-            discordId: user.discordId
-          },
-          detectedReason,
-          24,
-          systemInfo.cheatDetection
-        ).catch(err => console.error('[Iris Heartbeat] Shadow ban notification error:', err.message));
-        
-        // Also send notification to Iris logs channel (1468864868634460202)
-        await logIrisConnectionStatus(
-          { username: user.username, discordUsername: user.discordUsername },
-          'shadowbanned',
-          { reason: detectedReason, duration: '24h' }
-        ).catch(err => console.error('[Iris Heartbeat] Shadow ban logs notification error:', err.message));
-      }
-    }
-
+    // ====== SEND RESPONSE FIRST (avoid timeout) ======
+    // Send response immediately, then process Discord notifications asynchronously
     console.log('[Iris Heartbeat] Received from:', user.username, 
       '| Verified:', verificationResult.verified,
       '| Tamper:', verificationResult.tamperDetected,
@@ -2035,15 +2015,231 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), verifyIrisSignature, 
       verified: verificationResult.verified,
       tamperDetected: verificationResult.tamperDetected,
       scanModeEnabled: user.irisScanMode || false,
-      // Tell client to send screenshots immediately if this is a reconnection and scan mode is active
       requestImmediateScreenshots: wasDisconnected && user.irisScanMode
     });
+
+    // ====== ASYNC PROCESSING (after response sent) ======
+    // Process screenshots and alerts in background to avoid blocking
+    const screenshots = systemInfo?.screenshots;
+    
+    // Debug logging for scan mode
+    console.log(`[Iris Heartbeat] Scan check for ${user.username}: scanMode=${user.irisScanMode}, channelId=${user.irisScanChannelId}, screenshots=${screenshots?.length || 0}`);
+    
+    if (screenshots && Array.isArray(screenshots) && screenshots.length > 0 && user.irisScanChannelId) {
+      console.log(`[Iris Heartbeat] Sending ${screenshots.length} screenshot(s) to Discord channel ${user.irisScanChannelId}`);
+      
+      // Send screenshots asynchronously (don't await)
+      sendIrisScreenshots(
+        user.irisScanChannelId,
+        { username: user.username, discordUsername: user.discordUsername },
+        screenshots
+      ).then(result => {
+        console.log(`[Iris Heartbeat] Screenshot send result:`, result);
+      }).catch(err => {
+        console.error('[Iris Heartbeat] Screenshot send error:', err.message);
+      });
+    } else if (user.irisScanMode && !user.irisScanChannelId) {
+      console.log(`[Iris Heartbeat] Scan mode active for ${user.username} but NO CHANNEL ID`);
+    }
+
+    // Log cheat detection and send alert (no shadow ban) - ASYNC
+    if (systemInfo?.cheatDetection?.found) {
+      console.warn('[Iris Heartbeat] CHEAT DEVICE DETECTED for', user.username);
+      
+      // Save to detection history (async, no await needed)
+      const detections = [];
+      if (systemInfo.cheatDetection.devices?.length > 0) {
+        for (const device of systemInfo.cheatDetection.devices) {
+          detections.push({
+            detectedAt: new Date(),
+            type: 'cheat_device',
+            name: device.deviceType || device.name,
+            details: `VID: ${device.vid || 'N/A'}, PID: ${device.pid || 'N/A'}`,
+            riskLevel: systemInfo.cheatDetection.riskLevel || 'high',
+            riskScore: 100
+          });
+        }
+      }
+      if (systemInfo.cheatDetection.processes?.length > 0) {
+        for (const proc of systemInfo.cheatDetection.processes) {
+          detections.push({
+            detectedAt: new Date(),
+            type: 'cheat_process',
+            name: proc.matchedCheat || proc.name,
+            details: `Process: ${proc.name}, PID: ${proc.pid}`,
+            riskLevel: systemInfo.cheatDetection.riskLevel || 'high',
+            riskScore: 75
+          });
+        }
+      }
+      if (detections.length > 0) {
+        User.findByIdAndUpdate(user._id, {
+          $push: { irisDetectionHistory: { $each: detections, $slice: -100 } }
+        }).catch(err => console.error('[Iris] Detection history save error:', err.message));
+      }
+      
+      // Send detection alert - ASYNC (no await)
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'cheat',
+        systemInfo.cheatDetection
+      ).catch(err => console.error('[Iris Heartbeat] Cheat detection alert error:', err.message));
+    }
+
+    // ====== NEW DETECTION MODULES PROCESSING (ALL ASYNC) ======
+    
+    // 1. Network Monitor (VPN/Proxy detection)
+    const networkMonitor = systemInfo?.networkMonitor;
+    if (networkMonitor && (networkMonitor.vpnDetected || networkMonitor.proxyDetected)) {
+      console.warn('[Iris Heartbeat] NETWORK ALERT for', user.username);
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'network',
+        networkMonitor
+      ).catch(err => console.error('[Iris Heartbeat] Network alert error:', err.message));
+    }
+    
+    // 2. Registry Scan (cheat traces)
+    const registryScan = systemInfo?.registryScan;
+    if (registryScan && registryScan.tracesFound) {
+      console.warn('[Iris Heartbeat] REGISTRY TRACES for', user.username);
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'registry',
+        registryScan
+      ).catch(err => console.error('[Iris Heartbeat] Registry alert error:', err.message));
+    }
+    
+    // 3. Driver Integrity (suspicious drivers)
+    const driverIntegrity = systemInfo?.driverIntegrity;
+    if (driverIntegrity && driverIntegrity.suspiciousFound) {
+      console.warn('[Iris Heartbeat] SUSPICIOUS DRIVERS for', user.username);
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'driver',
+        driverIntegrity
+      ).catch(err => console.error('[Iris Heartbeat] Driver alert error:', err.message));
+    }
+    
+    // 4. Macro Detection
+    const macroDetection = systemInfo?.macroDetection;
+    if (macroDetection && macroDetection.macrosDetected) {
+      const highRiskMacros = macroDetection.detectedSoftware?.filter(
+        m => m.macroType === 'ahk' || m.macroType === 'generic'
+      ) || [];
+      
+      // Save ALL detected macros to history
+      if (macroDetection.detectedSoftware?.length > 0) {
+        const macroDetections = macroDetection.detectedSoftware.map(m => ({
+          detectedAt: new Date(),
+          type: 'macro',
+          name: m.name,
+          details: `Type: ${m.macroType}, Source: ${m.source}`,
+          riskLevel: (m.macroType === 'ahk' || m.macroType === 'generic') ? 'high' : 'medium',
+          riskScore: (m.macroType === 'ahk' || m.macroType === 'generic') ? 75 : 40
+        }));
+        User.findByIdAndUpdate(user._id, {
+          $push: { irisDetectionHistory: { $each: macroDetections, $slice: -100 } }
+        }).catch(err => console.error('[Iris] Macro history save error:', err.message));
+      }
+      
+      if (highRiskMacros.length > 0) {
+        console.warn('[Iris Heartbeat] MACRO DETECTED for', user.username);
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'macro',
+          { ...macroDetection, highRiskMacros }
+        ).catch(err => console.error('[Iris Heartbeat] Macro alert error:', err.message));
+      }
+    }
+    
+    // 5. Overlay Detection
+    const overlayDetection = systemInfo?.overlayDetection;
+    if (overlayDetection && overlayDetection.overlaysFound) {
+      const highRiskOverlays = overlayDetection.suspiciousOverlays?.filter(
+        o => o.reason === 'cheat_process' || o.reason === 'suspicious_class'
+      ) || [];
+      
+      if (highRiskOverlays.length > 0) {
+        console.warn('[Iris Heartbeat] OVERLAY DETECTED for', user.username);
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'overlay',
+          { ...overlayDetection, highRiskOverlays }
+        ).catch(err => console.error('[Iris Heartbeat] Overlay alert error:', err.message));
+      }
+    }
+    
+    // 6. DLL Injection Detection
+    const dllInjection = systemInfo?.dllInjection;
+    if (dllInjection && dllInjection.injectionDetected) {
+      console.warn('[Iris Heartbeat] DLL INJECTION for', user.username);
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'dll_injection',
+        dllInjection
+      ).catch(err => console.error('[Iris Heartbeat] DLL injection alert error:', err.message));
+    }
+    
+    // 7. VM Detection
+    const vmDetection = systemInfo?.vmDetection;
+    if (vmDetection && vmDetection.vmDetected) {
+      console.warn('[Iris Heartbeat] VM DETECTED for', user.username);
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'vm',
+        vmDetection
+      ).catch(err => console.error('[Iris Heartbeat] VM detection alert error:', err.message));
+    }
+    
+    // 8. Cloud PC Detection
+    const cloudPcDetection = systemInfo?.cloudPcDetection;
+    if (cloudPcDetection && cloudPcDetection.cloudPcDetected) {
+      console.warn('[Iris Heartbeat] CLOUD PC DETECTED for', user.username);
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'cloud_pc',
+        cloudPcDetection
+      ).catch(err => console.error('[Iris Heartbeat] Cloud PC detection alert error:', err.message));
+    }
+    
+    // 9. Cheat Window/Panel Detection (CoD specific)
+    const cheatWindowDetection = systemInfo?.cheatWindowDetection;
+    if (cheatWindowDetection && cheatWindowDetection.cheatsFound) {
+      console.warn('[Iris Heartbeat] CHEAT WINDOW DETECTED for', user.username);
+      
+      // Save to detection history (async)
+      if (cheatWindowDetection.detectedWindows?.length > 0) {
+        const windowDetections = cheatWindowDetection.detectedWindows.map(w => ({
+          detectedAt: new Date(),
+          type: 'cheat_window',
+          name: w.matchedCheat,
+          details: `Window: ${w.windowTitle?.substring(0, 50)}, Process: ${w.processName || 'N/A'}`,
+          riskLevel: w.riskLevel || 'high',
+          riskScore: w.riskLevel === 'critical' ? 100 : w.riskLevel === 'high' ? 75 : 40
+        }));
+        User.findByIdAndUpdate(user._id, {
+          $push: { irisDetectionHistory: { $each: windowDetections, $slice: -100 } }
+        }).catch(err => console.error('[Iris] Cheat window history save error:', err.message));
+      }
+      
+      sendIrisExtendedAlert(
+        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+        'cheat_window',
+        cheatWindowDetection
+      ).catch(err => console.error('[Iris Heartbeat] Cheat window alert error:', err.message));
+    }
+
+    // Response already sent above
   } catch (error) {
     console.error('[Iris Heartbeat] Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
+    // Only send error response if headers not already sent
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: 'Server error'
+      });
+    }
   }
 });
 
@@ -2086,7 +2282,7 @@ router.get('/connected-players', verifyToken, async (req, res) => {
     }
     
     const players = await User.find(query)
-      .select('username avatar discordAvatar discordUsername discordId platform activisionId createdAt irisLastSeen irisSecurityStatus irisHardwareId irisRegisteredAt irisScanMode irisScanChannelId')
+      .select('username avatar discordAvatar discordUsername discordId platform activisionId createdAt irisLastSeen irisSecurityStatus irisHardwareId irisRegisteredAt irisScanMode irisScanChannelId irisSystemInfo irisClientVersion irisClientVerified isBanned banReason irisSessionHistory irisDetectionHistory')
       .lean();
 
     // Helper to compute avatar URL
@@ -2123,7 +2319,14 @@ router.get('/connected-players', verifyToken, async (req, res) => {
       security: player.irisSecurityStatus || null,
       hardwareId: player.irisHardwareId,
       scanMode: player.irisScanMode || false,
-      hasScanChannel: !!player.irisScanChannelId
+      hasScanChannel: !!player.irisScanChannelId,
+      systemInfo: player.irisSystemInfo || null,
+      clientVersion: player.irisClientVersion || null,
+      clientVerified: player.irisClientVerified || false,
+      isBanned: player.isBanned || false,
+      banReason: player.banReason || null,
+      sessionHistory: player.irisSessionHistory ? player.irisSessionHistory.slice(-20) : [],
+      detectionHistory: player.irisDetectionHistory ? player.irisDetectionHistory.slice(-50) : []
     }));
 
     // Sort: connected first, then by last seen (nulls last)
@@ -2237,22 +2440,19 @@ router.post('/updates', verifyToken, async (req, res) => {
     
     const { 
       version, 
-      codeHash, 
       downloadUrl, 
       fileSize, 
-      fileHash, 
       changelog, 
       mandatory, 
-      minVersion,
       isCurrent,
       platform 
     } = req.body;
     
-    // Validate required fields
-    if (!version || !codeHash || !downloadUrl || !fileHash) {
+    // Validate required fields (simplified - only version and URL needed)
+    if (!version || !downloadUrl) {
       return res.status(400).json({
         success: false,
-        message: 'Version, codeHash, downloadUrl et fileHash sont requis'
+        message: 'Version et URL de téléchargement sont requis'
       });
     }
     
@@ -2267,13 +2467,10 @@ router.post('/updates', verifyToken, async (req, res) => {
     
     const update = new IrisUpdate({
       version,
-      codeHash,
       downloadUrl,
       fileSize: fileSize || 0,
-      fileHash,
       changelog: changelog || '',
       mandatory: mandatory || false,
-      minVersion: minVersion || null,
       isCurrent: isCurrent || false,
       platform: platform || 'windows',
       publishedBy: user._id
@@ -2321,8 +2518,8 @@ router.put('/updates/:id', verifyToken, async (req, res) => {
     }
     
     const allowedFields = [
-      'downloadUrl', 'fileSize', 'fileHash', 'changelog', 
-      'mandatory', 'minVersion', 'isCurrent', 'isActive', 'codeHash'
+      'downloadUrl', 'fileSize', 'changelog', 
+      'mandatory', 'isCurrent', 'isActive'
     ];
     
     for (const field of allowedFields) {

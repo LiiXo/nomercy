@@ -848,8 +848,9 @@ router.get('/by-id/:id', async (req, res) => {
       if (!player) continue;
 
       // match.result.winner est un nombre (1 ou 2) représentant l'équipe gagnante
-      const winningTeam = match.result.winner;
-      if (player.team === winningTeam) {
+      // IMPORTANT: Use Number() for type-safe comparison
+      const winningTeam = Number(match.result.winner);
+      if (Number(player.team) === winningTeam) {
         totalWins++;
       } else {
         totalLosses++;

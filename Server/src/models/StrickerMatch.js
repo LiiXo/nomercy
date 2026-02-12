@@ -28,6 +28,10 @@ const strickerPlayerSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isHelper: {
+    type: Boolean,
+    default: false
+  },
   kills: { type: Number, default: 0 },
   deaths: { type: Number, default: 0 },
   score: { type: Number, default: 0 },
@@ -122,12 +126,6 @@ const strickerMatchSchema = new mongoose.Schema({
     image: String,
     votes: { type: Number, default: 0 }
   },
-  // Maps sélectionnées aléatoirement après les bans (3 maps)
-  selectedMaps: [{
-    name: String,
-    image: String,
-    order: { type: Number, default: 1 }
-  }],
   // Maps proposées pour le vote (3 maps)
   mapVoteOptions: [{
     name: String,
@@ -268,6 +266,21 @@ const strickerMatchSchema = new mongoose.Schema({
     team2BannedAt: { type: Date, default: null },
     currentTurn: { type: Number, enum: [1, 2], default: 1 } // Which referent's turn to ban
   },
+  // Free map choice after bans (no pre-selected maps)
+  freeMapChoice: {
+    type: Boolean,
+    default: false
+  },
+  // Random map generated for tie-breaker (3rd map if goal average is tied) - DEPRECATED
+  randomMap: {
+    name: { type: String, default: null },
+    image: { type: String, default: null }
+  },
+  // Random maps for tiebreaker (3 maps in case some have already been played)
+  randomMaps: [{
+    name: { type: String },
+    image: { type: String }
+  }],
   // Match de test
   isTestMatch: {
     type: Boolean,

@@ -17,7 +17,8 @@ import {
   FileText, Calendar, Clock, Wrench, RotateCcw, Gamepad2, Swords, Skull, UserPlus,
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
-  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart, Cpu
+  ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart, Cpu,
+  Monitor, Cloud, Syringe
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -68,6 +69,7 @@ const AdminPanel = () => {
   const [loadingIrisPlayers, setLoadingIrisPlayers] = useState(false);
   const [irisSearchTerm, setIrisSearchTerm] = useState('');
   const [scanningPlayerId, setScanningPlayerId] = useState(null);
+  const [irisDetailsPlayer, setIrisDetailsPlayer] = useState(null);
   
   // Iris updates state (admin only)
   const [irisSubTab, setIrisSubTab] = useState('players'); // 'players' or 'updates'
@@ -77,13 +79,9 @@ const AdminPanel = () => {
   const [editingIrisUpdate, setEditingIrisUpdate] = useState(null);
   const [irisUpdateFormData, setIrisUpdateFormData] = useState({
     version: '',
-    codeHash: '',
     downloadUrl: '',
-    fileSize: 0,
-    fileHash: '',
     changelog: '',
     mandatory: false,
-    minVersion: '',
     isCurrent: false
   });
   const [savingIrisUpdate, setSavingIrisUpdate] = useState(false);
@@ -372,7 +370,7 @@ const AdminPanel = () => {
         { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false, arbitreAccess: true },
         { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false, arbitreAccess: true },
         { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false, arbitreAccess: true },
-        { id: 'iris', label: 'Iris', icon: Cpu, adminOnly: false, arbitreAccess: true },
+        { id: 'iris', label: 'Iris', icon: Cpu, adminOnly: false, arbitreAccess: false },
         { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false, arbitreAccess: true },
         { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false, arbitreAccess: false },
       ]
@@ -953,26 +951,18 @@ const AdminPanel = () => {
       setEditingIrisUpdate(update);
       setIrisUpdateFormData({
         version: update.version,
-        codeHash: update.codeHash,
         downloadUrl: update.downloadUrl,
-        fileSize: update.fileSize || 0,
-        fileHash: update.fileHash,
         changelog: update.changelog || '',
         mandatory: update.mandatory || false,
-        minVersion: update.minVersion || '',
         isCurrent: update.isCurrent || false
       });
     } else {
       setEditingIrisUpdate(null);
       setIrisUpdateFormData({
         version: '',
-        codeHash: '',
         downloadUrl: '',
-        fileSize: 0,
-        fileHash: '',
         changelog: '',
         mandatory: false,
-        minVersion: '',
         isCurrent: false
       });
     }
@@ -2853,25 +2843,35 @@ const AdminPanel = () => {
                       </td>
                       {userIsAdmin && (
                         <td className="px-4 py-4">
-                          <button
-                            onClick={() => handleIrisScan(player._id)}
-                            disabled={scanningPlayerId === player._id}
-                            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${
-                              player.scanMode 
-                                ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30' 
-                                : 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400'
-                            }`}
-                            title={player.scanMode ? 'Désactiver la surveillance' : 'Activer la surveillance'}
-                          >
-                            {scanningPlayerId === player._id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : player.scanMode ? (
-                              <Eye className="w-4 h-4" />
-                            ) : (
-                              <Search className="w-4 h-4" />
-                            )}
-                            {player.scanMode ? 'Surveillance' : 'Scan'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setIrisDetailsPlayer(player)}
+                              className="px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400"
+                              title="Voir les détails"
+                            >
+                              <FileText className="w-4 h-4" />
+                              Détails
+                            </button>
+                            <button
+                              onClick={() => handleIrisScan(player._id)}
+                              disabled={scanningPlayerId === player._id}
+                              className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 ${
+                                player.scanMode 
+                                  ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/30' 
+                                  : 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-400'
+                              }`}
+                              title={player.scanMode ? 'Désactiver la surveillance' : 'Activer la surveillance'}
+                            >
+                              {scanningPlayerId === player._id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : player.scanMode ? (
+                                <Eye className="w-4 h-4" />
+                              ) : (
+                                <Search className="w-4 h-4" />
+                              )}
+                              {player.scanMode ? 'Surveillance' : 'Scan'}
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -2895,6 +2895,675 @@ const AdminPanel = () => {
             </div>
           </div>
         </div>
+
+        {/* Iris Details Modal */}
+        {irisDetailsPlayer && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setIrisDetailsPlayer(null)}>
+            <div className="bg-dark-800 border border-white/10 rounded-2xl w-full max-w-6xl max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="sticky top-0 bg-dark-800 border-b border-white/10 p-5 flex items-center justify-between z-10">
+                <div className="flex items-center gap-3">
+                  <img src={getAvatarUrl(irisDetailsPlayer.avatarUrl || irisDetailsPlayer.avatar) || '/avatar.jpg'} alt="" className="w-10 h-10 rounded-full" />
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{irisDetailsPlayer.username || irisDetailsPlayer.discordUsername}</h3>
+                    <p className="text-sm text-gray-400">{irisDetailsPlayer.discordUsername} &middot; {irisDetailsPlayer.platform}</p>
+                  </div>
+                  <span className={`ml-3 px-3 py-1 text-xs font-medium rounded-full border ${irisDetailsPlayer.isConnected ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30'}`}>
+                    {irisDetailsPlayer.isConnected ? 'Connecté' : 'Déconnecté'}
+                  </span>
+                  {irisDetailsPlayer.isBanned && (
+                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-red-500/20 text-red-400 border border-red-500/30">Banni</span>
+                  )}
+                </div>
+                <button onClick={() => setIrisDetailsPlayer(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-5">
+                {/* General Info */}
+                <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2"><Cpu className="w-4 h-4 text-purple-400" /> Informations générales</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                    <div><span className="text-gray-500">HWID:</span> <span className="text-white font-mono text-xs">{irisDetailsPlayer.hardwareId || 'N/A'}</span></div>
+                    <div><span className="text-gray-500">Activision:</span> <span className="text-white">{irisDetailsPlayer.activisionId || 'N/A'}</span></div>
+                    <div><span className="text-gray-500">Client:</span> <span className="text-white">v{irisDetailsPlayer.clientVersion || '?'} {irisDetailsPlayer.clientVerified ? '(vérifié)' : ''}</span></div>
+                    <div><span className="text-gray-500">Dernière MAJ:</span> <span className="text-white">{irisDetailsPlayer.lastSeen ? formatLastSeen(irisDetailsPlayer.lastSeen) : 'Jamais'}</span></div>
+                    <div><span className="text-gray-500">Scan mode:</span> <span className={irisDetailsPlayer.scanMode ? 'text-green-400' : 'text-gray-400'}>{irisDetailsPlayer.scanMode ? 'Actif' : 'Inactif'}</span></div>
+                    <div><span className="text-gray-500">Inscrit:</span> <span className="text-white">{irisDetailsPlayer.registeredAt ? new Date(irisDetailsPlayer.registeredAt).toLocaleDateString('fr-FR') : irisDetailsPlayer.createdAt ? new Date(irisDetailsPlayer.createdAt).toLocaleDateString('fr-FR') : 'N/A'}</span></div>
+                  </div>
+                </div>
+
+                {/* Session History */}
+                <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-cyan-400" />
+                    Historique des sessions ({irisDetailsPlayer.sessionHistory?.length || 0})
+                  </h4>
+                  {irisDetailsPlayer.sessionHistory && irisDetailsPlayer.sessionHistory.length > 0 ? (
+                    <div className="max-h-80 overflow-y-auto space-y-2">
+                      {[...irisDetailsPlayer.sessionHistory].reverse().map((session, i) => {
+                        const connectedAt = new Date(session.connectedAt);
+                        const disconnectedAt = session.disconnectedAt ? new Date(session.disconnectedAt) : null;
+                        const isOngoing = !disconnectedAt;
+                        
+                        // Format duration
+                        const formatDuration = (seconds) => {
+                          if (!seconds) return '-';
+                          if (seconds < 60) return `${seconds}s`;
+                          if (seconds < 3600) return `${Math.floor(seconds / 60)}min`;
+                          const hours = Math.floor(seconds / 3600);
+                          const mins = Math.floor((seconds % 3600) / 60);
+                          return `${hours}h${mins > 0 ? `${mins}min` : ''}`;
+                        };
+                        
+                        return (
+                          <div 
+                            key={session._id || i} 
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
+                              isOngoing ? 'bg-green-500/10 border border-green-500/20' : 'bg-dark-800/50'
+                            }`}
+                          >
+                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isOngoing ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} />
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white font-medium">
+                                  {connectedAt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                                </span>
+                                <span className="text-gray-400">
+                                  {connectedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                                <span className="text-gray-500">→</span>
+                                {isOngoing ? (
+                                  <span className="text-green-400 font-medium">En cours</span>
+                                ) : (
+                                  <span className="text-gray-400">
+                                    {disconnectedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                              {session.clientVersion && (
+                                <span className="text-xs text-gray-600">v{session.clientVersion}</span>
+                              )}
+                            </div>
+                            
+                            <div className={`text-xs px-2 py-1 rounded ${isOngoing ? 'bg-green-500/20 text-green-400' : 'bg-dark-700 text-gray-400'}`}>
+                              {isOngoing ? 'Connecté' : formatDuration(session.duration)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">Aucune session enregistrée</p>
+                  )}
+                </div>
+
+                {/* Detection History */}
+                <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.detectionHistory?.length > 0 ? 'border-orange-500/30' : 'border-white/10'}`}>
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <History className={`w-4 h-4 ${irisDetailsPlayer.detectionHistory?.length > 0 ? 'text-orange-400' : 'text-gray-400'}`} />
+                    Historique des détections ({irisDetailsPlayer.detectionHistory?.length || 0})
+                  </h4>
+                  {irisDetailsPlayer.detectionHistory && irisDetailsPlayer.detectionHistory.length > 0 ? (
+                    <div className="max-h-80 overflow-y-auto space-y-2">
+                      {[...irisDetailsPlayer.detectionHistory].reverse().map((detection, i) => {
+                        const detectedAt = new Date(detection.detectedAt);
+                        const riskColors = {
+                          critical: 'bg-red-500/10 border-red-500/30 text-red-400',
+                          high: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
+                          medium: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
+                          low: 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                        };
+                        const riskColor = riskColors[detection.riskLevel] || riskColors.medium;
+                        
+                        return (
+                          <div 
+                            key={detection._id || i} 
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm border ${riskColor}`}
+                          >
+                            <AlertTriangle className={`w-4 h-4 flex-shrink-0 ${detection.riskLevel === 'critical' ? 'text-red-400' : detection.riskLevel === 'high' ? 'text-orange-400' : detection.riskLevel === 'medium' ? 'text-yellow-400' : 'text-blue-400'}`} />
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-white">{detection.name}</span>
+                                <span className={`px-1.5 py-0.5 text-xs rounded ${detection.type === 'cheat' ? 'bg-red-500/20 text-red-400' : detection.type === 'macro' ? 'bg-yellow-500/20 text-yellow-400' : detection.type === 'cheat_window' ? 'bg-purple-500/20 text-purple-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                  {detection.type === 'cheat' ? 'Triche' : detection.type === 'macro' ? 'Macro' : detection.type === 'cheat_window' ? 'Panel' : detection.type}
+                                </span>
+                                {detection.riskScore > 0 && (
+                                  <span className="text-xs text-gray-500">Score: {detection.riskScore}</span>
+                                )}
+                              </div>
+                              {detection.details && (
+                                <p className="text-xs text-gray-500 mt-0.5 truncate" title={detection.details}>{detection.details}</p>
+                              )}
+                            </div>
+                            
+                            <div className="text-xs text-gray-500 text-right flex-shrink-0">
+                              <div>{detectedAt.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' })}</div>
+                              <div>{detectedAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">Aucune détection enregistrée.</p>
+                  )}
+                </div>
+
+                {/* Trust Score Section */}
+                {irisDetailsPlayer.security && (() => {
+                  const securityModules = [
+                    { key: 'tpm', label: 'TPM 2.0', enabled: irisDetailsPlayer.security.tpm?.enabled, tip: 'Activer TPM 2.0 dans le BIOS (Security > Trusted Platform Module)' },
+                    { key: 'secureBoot', label: 'Secure Boot', enabled: irisDetailsPlayer.security.secureBoot, tip: 'Activer Secure Boot dans le BIOS (Boot > Secure Boot > Enabled)' },
+                    { key: 'virtualization', label: 'VT-x/AMD-V', enabled: irisDetailsPlayer.security.virtualization, tip: 'Activer la virtualisation dans le BIOS (CPU Configuration > Intel VT-x ou AMD-V)' },
+                    { key: 'iommu', label: 'VT-d/IOMMU', enabled: irisDetailsPlayer.security.iommu, tip: 'Activer VT-d/IOMMU dans le BIOS (CPU Configuration > Intel VT-d ou AMD IOMMU)' },
+                    { key: 'hvci', label: 'HVCI', enabled: irisDetailsPlayer.security.hvci, tip: 'Activer dans Windows: Paramètres > Confidentialité et sécurité > Sécurité Windows > Sécurité de l\'appareil > Isolation du noyau > Intégrité de la mémoire' },
+                    { key: 'vbs', label: 'VBS', enabled: irisDetailsPlayer.security.vbs, tip: 'Activer Virtualization Based Security: Paramètres > Confidentialité et sécurité > Sécurité Windows > Sécurité de l\'appareil' },
+                    { key: 'defender', label: 'Defender', enabled: irisDetailsPlayer.security.defender, tip: 'Activer Windows Defender: Paramètres > Confidentialité et sécurité > Sécurité Windows > Protection contre les virus et menaces' },
+                    { key: 'defenderRealtime', label: 'Protection temps réel', enabled: irisDetailsPlayer.security.defenderRealtime, tip: 'Activer la protection en temps réel dans Windows Defender: Paramètres des virus et menaces > Paramètres de protection > Protection en temps réel' },
+                  ];
+                  const enabledCount = securityModules.filter(m => m.enabled).length;
+                  const trustScore = Math.round((enabledCount / securityModules.length) * 100);
+                  const disabledModules = securityModules.filter(m => !m.enabled);
+                  
+                  return (
+                    <div className={`bg-dark-900/50 border rounded-xl p-4 ${trustScore >= 75 ? 'border-green-500/30' : trustScore >= 50 ? 'border-yellow-500/30' : 'border-red-500/30'}`}>
+                      <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                        <Shield className={`w-4 h-4 ${trustScore >= 75 ? 'text-green-400' : trustScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`} />
+                        Score de Confiance
+                      </h4>
+                      
+                      {/* Score Display */}
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className={`text-4xl font-bold ${trustScore >= 75 ? 'text-green-400' : trustScore >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                          {trustScore}%
+                        </div>
+                        <div className="flex-1">
+                          <div className="w-full h-3 bg-dark-700 rounded-full overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-500 ${trustScore >= 75 ? 'bg-green-500' : trustScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                              style={{ width: `${trustScore}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">{enabledCount}/{securityModules.length} modules actifs</p>
+                        </div>
+                      </div>
+                      
+                      {/* Recommendations */}
+                      {disabledModules.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs text-gray-400 uppercase font-medium flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Pour améliorer le score ({disabledModules.length} recommandation{disabledModules.length > 1 ? 's' : ''}):
+                          </p>
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {disabledModules.map((mod, i) => (
+                              <div key={i} className="bg-dark-800/50 border border-white/5 rounded-lg p-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <X className="w-4 h-4 text-red-400" />
+                                  <span className="text-red-300 font-medium">{mod.label}</span>
+                                  <span className="text-xs text-gray-500">désactivé</span>
+                                </div>
+                                <p className="text-xs text-gray-400 pl-6">{mod.tip}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {trustScore === 100 && (
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                          <CheckCircle className="w-4 h-4 text-green-400" />
+                          <span className="text-green-300 text-sm">Score parfait ! Toutes les protections sont activées.</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* System Info */}
+                {irisDetailsPlayer.systemInfo && (
+                  <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2"><Settings className="w-4 h-4 text-blue-400" /> Configuration PC</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 text-sm">
+                      <div><span className="text-gray-500">CPU:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.cpu?.brand || 'N/A'}</span></div>
+                      <div><span className="text-gray-500">Coeurs:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.cpu?.physicalCores || '?'}C / {irisDetailsPlayer.systemInfo.cpu?.cores || '?'}T</span></div>
+                      <div><span className="text-gray-500">GPU:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.gpu?.model || 'N/A'}</span></div>
+                      <div><span className="text-gray-500">VRAM:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.gpu?.vram ? `${irisDetailsPlayer.systemInfo.gpu.vram} MB` : 'N/A'}</span></div>
+                      <div><span className="text-gray-500">RAM:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.memory?.total ? `${(irisDetailsPlayer.systemInfo.memory.total / (1024 * 1024 * 1024)).toFixed(0)} GB` : 'N/A'}</span></div>
+                      <div><span className="text-gray-500">OS:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.os?.distro || 'N/A'}</span></div>
+                      <div><span className="text-gray-500">Carte mère:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.baseboard?.manufacturer} {irisDetailsPlayer.systemInfo.baseboard?.model || 'N/A'}</span></div>
+                      <div><span className="text-gray-500">Système:</span> <span className="text-white">{irisDetailsPlayer.systemInfo.system?.manufacturer} {irisDetailsPlayer.systemInfo.system?.model || 'N/A'}</span></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Security Modules */}
+                {irisDetailsPlayer.security && (
+                  <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-green-400" /> Modules de sécurité</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: 'TPM 2.0', value: irisDetailsPlayer.security.tpm?.enabled, extra: irisDetailsPlayer.security.tpm?.version },
+                        { label: 'Secure Boot', value: irisDetailsPlayer.security.secureBoot },
+                        { label: 'VT-x/AMD-V', value: irisDetailsPlayer.security.virtualization },
+                        { label: 'VT-d/IOMMU', value: irisDetailsPlayer.security.iommu },
+                        { label: 'HVCI', value: irisDetailsPlayer.security.hvci },
+                        { label: 'VBS', value: irisDetailsPlayer.security.vbs },
+                        { label: 'Defender', value: irisDetailsPlayer.security.defender },
+                        { label: 'Temps réel', value: irisDetailsPlayer.security.defenderRealtime },
+                      ].map(mod => (
+                        <div key={mod.label} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${mod.value ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
+                          {mod.value ? <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" /> : <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                          <span className={`text-sm ${mod.value ? 'text-green-300' : 'text-red-300'}`}>{mod.label}</span>
+                          {mod.extra && <span className="text-xs text-gray-500 ml-auto">{mod.extra}</span>}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Integrity */}
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                      <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${irisDetailsPlayer.security.verified ? 'bg-green-500/10 text-green-400' : 'bg-gray-500/10 text-gray-400'}`}>
+                        <Shield className="w-3.5 h-3.5" />
+                        Intégrité: {irisDetailsPlayer.security.verified ? 'Vérifiée' : 'Non vérifiée'}
+                      </div>
+                      {irisDetailsPlayer.security.tamperDetected && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 text-orange-400">
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          Falsification détectée
+                        </div>
+                      )}
+                      {irisDetailsPlayer.security.verificationIssues?.length > 0 && (
+                        <div className="text-xs text-orange-400">
+                          Problèmes: {irisDetailsPlayer.security.verificationIssues.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Cheat Detection */}
+                {irisDetailsPlayer.security?.cheatDetection && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.cheatDetection.found ? 'border-red-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <AlertTriangle className={`w-4 h-4 ${irisDetailsPlayer.security.cheatDetection.found ? 'text-red-400' : 'text-gray-400'}`} />
+                      Détection de triche
+                      {irisDetailsPlayer.security.cheatDetection.found && (
+                        <span className={`ml-2 px-2 py-0.5 text-xs rounded font-medium ${
+                          irisDetailsPlayer.security.cheatDetection.riskLevel === 'critical' ? 'bg-red-500/20 text-red-400' :
+                          irisDetailsPlayer.security.cheatDetection.riskLevel === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                          'bg-yellow-500/20 text-yellow-400'
+                        }`}>
+                          {irisDetailsPlayer.security.cheatDetection.riskLevel?.toUpperCase()} - Score: {irisDetailsPlayer.security.cheatDetection.riskScore}
+                        </span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.cheatDetection.found ? (
+                      <p className="text-gray-400 text-sm">Aucune triche détectée.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {irisDetailsPlayer.security.cheatDetection.devices?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase mb-1">Périphériques suspects</p>
+                            <div className="space-y-1">
+                              {irisDetailsPlayer.security.cheatDetection.devices.map((d, i) => (
+                                <div key={i} className="flex items-center gap-2 text-sm bg-red-500/5 px-3 py-1.5 rounded-lg">
+                                  <span className="text-red-400 font-medium">{d.type}</span>
+                                  <span className="text-gray-400">-</span>
+                                  <span className="text-white">{d.name}</span>
+                                  {d.vid && <span className="text-gray-500 text-xs ml-auto">VID:{d.vid} PID:{d.pid}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {irisDetailsPlayer.security.cheatDetection.processes?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase mb-1">Logiciels suspects</p>
+                            <div className="space-y-1">
+                              {irisDetailsPlayer.security.cheatDetection.processes.map((p, i) => (
+                                <div key={i} className="flex items-center gap-2 text-sm bg-red-500/5 px-3 py-1.5 rounded-lg">
+                                  <span className="text-red-400 font-medium">{p.name}</span>
+                                  {p.matchedCheat && <span className="text-xs text-gray-500">({p.matchedCheat})</span>}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {irisDetailsPlayer.security.cheatDetection.suspiciousUsb?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase mb-1">USB suspects</p>
+                            <div className="space-y-1">
+                              {irisDetailsPlayer.security.cheatDetection.suspiciousUsb.map((u, i) => (
+                                <div key={i} className="flex items-center gap-2 text-sm bg-orange-500/5 px-3 py-1.5 rounded-lg">
+                                  <span className="text-orange-400">{u.name}</span>
+                                  <span className="text-gray-500 text-xs">{u.reason}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {irisDetailsPlayer.security.cheatDetection.gamesRunning?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase mb-1">Jeux en cours</p>
+                            <div className="flex flex-wrap gap-2">
+                              {irisDetailsPlayer.security.cheatDetection.gamesRunning.map((g, i) => (
+                                <span key={i} className="px-2 py-1 text-xs bg-blue-500/10 text-blue-400 rounded">{g.display}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {irisDetailsPlayer.security.cheatDetection.warnings?.length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase mb-1">Avertissements</p>
+                            <ul className="text-sm text-yellow-400 space-y-1">
+                              {irisDetailsPlayer.security.cheatDetection.warnings.map((w, i) => (
+                                <li key={i} className="flex items-start gap-2"><AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />{w}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Network Monitor */}
+                {irisDetailsPlayer.security?.networkMonitor && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${(irisDetailsPlayer.security.networkMonitor.vpnDetected || irisDetailsPlayer.security.networkMonitor.proxyDetected) ? 'border-blue-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Activity className={`w-4 h-4 ${(irisDetailsPlayer.security.networkMonitor.vpnDetected || irisDetailsPlayer.security.networkMonitor.proxyDetected) ? 'text-blue-400' : 'text-gray-400'}`} />
+                      Réseau
+                      {irisDetailsPlayer.security.networkMonitor.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.networkMonitor.riskScore}</span>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${irisDetailsPlayer.security.networkMonitor.vpnDetected ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300' : 'bg-green-500/10 border border-green-500/20 text-green-300'}`}>
+                        {irisDetailsPlayer.security.networkMonitor.vpnDetected ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                        VPN: {irisDetailsPlayer.security.networkMonitor.vpnDetected ? 'Détecté' : 'Non détecté'}
+                      </div>
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${irisDetailsPlayer.security.networkMonitor.proxyDetected ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300' : 'bg-green-500/10 border border-green-500/20 text-green-300'}`}>
+                        {irisDetailsPlayer.security.networkMonitor.proxyDetected ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                        Proxy: {irisDetailsPlayer.security.networkMonitor.proxyDetected ? 'Détecté' : 'Non détecté'}
+                      </div>
+                    </div>
+                    {irisDetailsPlayer.security.networkMonitor.vpnAdapters?.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Adaptateurs VPN</p>
+                        <div className="space-y-1">
+                          {irisDetailsPlayer.security.networkMonitor.vpnAdapters.map((a, i) => (
+                            <div key={i} className="text-sm text-blue-300 bg-blue-500/5 px-3 py-1 rounded">{a}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {irisDetailsPlayer.security.networkMonitor.vpnProcesses?.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Processus VPN</p>
+                        <div className="space-y-1">
+                          {irisDetailsPlayer.security.networkMonitor.vpnProcesses.map((p, i) => (
+                            <div key={i} className="text-sm text-blue-300 bg-blue-500/5 px-3 py-1 rounded">{p}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Registry Scan */}
+                {irisDetailsPlayer.security?.registryScan && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.registryScan.tracesFound ? 'border-red-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Database className={`w-4 h-4 ${irisDetailsPlayer.security.registryScan.tracesFound ? 'text-red-400' : 'text-gray-400'}`} />
+                      Registre Windows
+                      {irisDetailsPlayer.security.registryScan.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.registryScan.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.registryScan.tracesFound ? (
+                      <p className="text-gray-400 text-sm">Aucune trace de triche trouvée dans le registre.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {irisDetailsPlayer.security.registryScan.traces?.map((t, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm bg-red-500/5 px-3 py-1.5 rounded-lg">
+                            <span className="text-red-400 font-medium">{t.cheatName}</span>
+                            <span className="text-xs text-gray-500">({t.traceType})</span>
+                            <span className="text-gray-500 text-xs ml-auto truncate max-w-[200px]" title={t.path}>{t.path}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Driver Integrity */}
+                {irisDetailsPlayer.security?.driverIntegrity && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.driverIntegrity.suspiciousFound ? 'border-red-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Lock className={`w-4 h-4 ${irisDetailsPlayer.security.driverIntegrity.suspiciousFound ? 'text-red-400' : 'text-gray-400'}`} />
+                      Drivers Kernel
+                      {irisDetailsPlayer.security.driverIntegrity.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.driverIntegrity.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.driverIntegrity.suspiciousFound ? (
+                      <p className="text-gray-400 text-sm">Aucun driver suspect détecté.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {irisDetailsPlayer.security.driverIntegrity.suspiciousDrivers?.map((d, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm bg-red-500/5 px-3 py-1.5 rounded-lg">
+                            <span className="text-red-400 font-medium">{d.displayName || d.name}</span>
+                            <span className="text-xs text-gray-500">{d.reason}</span>
+                            {d.path && <span className="text-gray-600 text-xs ml-auto truncate max-w-[180px]" title={d.path}>{d.path}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Macro Detection */}
+                {irisDetailsPlayer.security?.macroDetection && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.macroDetection.macrosDetected ? 'border-yellow-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Gamepad2 className={`w-4 h-4 ${irisDetailsPlayer.security.macroDetection.macrosDetected ? 'text-yellow-400' : 'text-gray-400'}`} />
+                      Détection de macros
+                      {irisDetailsPlayer.security.macroDetection.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.macroDetection.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.macroDetection.macrosDetected ? (
+                      <p className="text-gray-400 text-sm">Aucun logiciel de macro détecté.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {irisDetailsPlayer.security.macroDetection.detectedSoftware?.map((m, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm bg-yellow-500/5 px-3 py-1.5 rounded-lg">
+                            <span className="text-yellow-400 font-medium">{m.name}</span>
+                            <span className={`px-1.5 py-0.5 text-xs rounded ${m.macroType === 'ahk' || m.macroType === 'generic' ? 'bg-red-500/20 text-red-400' : 'bg-gray-500/20 text-gray-400'}`}>{m.macroType}</span>
+                            <span className="text-xs text-gray-500">via {m.source}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Overlay Detection */}
+                {irisDetailsPlayer.security?.overlayDetection && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.overlayDetection.overlaysFound ? 'border-pink-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Layers className={`w-4 h-4 ${irisDetailsPlayer.security.overlayDetection.overlaysFound ? 'text-pink-400' : 'text-gray-400'}`} />
+                      Détection d'overlays
+                      {irisDetailsPlayer.security.overlayDetection.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.overlayDetection.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.overlayDetection.overlaysFound ? (
+                      <p className="text-gray-400 text-sm">Aucun overlay suspect détecté.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {irisDetailsPlayer.security.overlayDetection.suspiciousOverlays?.map((o, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm bg-pink-500/5 px-3 py-1.5 rounded-lg">
+                            <span className="text-pink-400 font-medium">{o.processName || o.windowTitle || 'Inconnu'}</span>
+                            <span className={`px-1.5 py-0.5 text-xs rounded ${o.reason === 'cheat_process' || o.reason === 'suspicious_class' ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400'}`}>{o.reason}</span>
+                            {o.className && <span className="text-xs text-gray-500">Class: {o.className}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* DLL Injection Detection */}
+                {irisDetailsPlayer.security?.dllInjection && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.dllInjection.injectionDetected ? 'border-red-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Syringe className={`w-4 h-4 ${irisDetailsPlayer.security.dllInjection.injectionDetected ? 'text-red-400' : 'text-gray-400'}`} />
+                      Détection d'injection DLL
+                      {irisDetailsPlayer.security.dllInjection.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.dllInjection.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.dllInjection.injectionDetected ? (
+                      <p className="text-gray-400 text-sm">Aucune injection DLL suspecte détectée.</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {irisDetailsPlayer.security.dllInjection.suspiciousDlls?.map((d, i) => (
+                          <div key={i} className="flex flex-col gap-1 text-sm bg-red-500/5 px-3 py-2 rounded-lg">
+                            <div className="flex items-center gap-2">
+                              <span className="text-red-400 font-medium">{d.name}</span>
+                              <span className="text-xs text-gray-500">{d.reason}</span>
+                            </div>
+                            {d.path && <span className="text-gray-600 text-xs truncate" title={d.path}>{d.path}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* VM Detection */}
+                {irisDetailsPlayer.security?.vmDetection && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.vmDetection.vmDetected ? 'border-indigo-500/30' : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Monitor className={`w-4 h-4 ${irisDetailsPlayer.security.vmDetection.vmDetected ? 'text-indigo-400' : 'text-gray-400'}`} />
+                      Détection Machine Virtuelle
+                      {irisDetailsPlayer.security.vmDetection.vmDetected && irisDetailsPlayer.security.vmDetection.vmType && (
+                        <span className="px-2 py-0.5 text-xs bg-indigo-500/20 text-indigo-400 rounded">{irisDetailsPlayer.security.vmDetection.vmType}</span>
+                      )}
+                      {irisDetailsPlayer.security.vmDetection.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.vmDetection.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.vmDetection.vmDetected ? (
+                      <p className="text-gray-400 text-sm">Aucune machine virtuelle détectée - PC physique.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                          <AlertTriangle className="w-4 h-4 text-indigo-400" />
+                          <span className="text-indigo-300">Machine virtuelle détectée: <strong>{irisDetailsPlayer.security.vmDetection.vmType || 'Inconnue'}</strong></span>
+                        </div>
+                        {irisDetailsPlayer.security.vmDetection.vmIndicators?.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-gray-500 uppercase">Indicateurs de détection</p>
+                            {irisDetailsPlayer.security.vmDetection.vmIndicators.map((indicator, i) => (
+                              <div key={i} className="text-sm text-indigo-300 bg-indigo-500/5 px-3 py-1 rounded">{indicator}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Cloud PC Detection */}
+                {irisDetailsPlayer.security?.cloudPcDetection && (
+                  <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.security.cloudPcDetection.cloudPcDetected ? (irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? 'border-emerald-500/30' : 'border-amber-500/30') : 'border-white/10'}`}>
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Cloud className={`w-4 h-4 ${irisDetailsPlayer.security.cloudPcDetection.cloudPcDetected ? (irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? 'text-emerald-400' : 'text-amber-400') : 'text-gray-400'}`} />
+                      Détection Cloud PC
+                      {irisDetailsPlayer.security.cloudPcDetection.cloudPcDetected && irisDetailsPlayer.security.cloudPcDetection.cloudProvider && (
+                        <span className={`px-2 py-0.5 text-xs rounded ${irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                          {irisDetailsPlayer.security.cloudPcDetection.cloudProvider}
+                        </span>
+                      )}
+                      {irisDetailsPlayer.security.cloudPcDetection.isGamingCloud && (
+                        <span className="px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded">Cloud Gaming</span>
+                      )}
+                      {irisDetailsPlayer.security.cloudPcDetection.riskScore > 0 && (
+                        <span className="text-xs text-gray-500 ml-auto">Score: {irisDetailsPlayer.security.cloudPcDetection.riskScore}</span>
+                      )}
+                    </h4>
+                    {!irisDetailsPlayer.security.cloudPcDetection.cloudPcDetected ? (
+                      <p className="text-gray-400 text-sm">Aucun Cloud PC détecté - PC local.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-amber-500/10 border border-amber-500/20'}`}>
+                          {irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? (
+                            <Gamepad2 className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-4 h-4 text-amber-400" />
+                          )}
+                          <span className={irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? 'text-emerald-300' : 'text-amber-300'}>
+                            {irisDetailsPlayer.security.cloudPcDetection.isGamingCloud 
+                              ? `Cloud Gaming détecté: ${irisDetailsPlayer.security.cloudPcDetection.cloudProvider || 'Inconnu'}`
+                              : `Cloud PC détecté: ${irisDetailsPlayer.security.cloudPcDetection.cloudProvider || 'Inconnu'}`
+                            }
+                          </span>
+                        </div>
+                        {irisDetailsPlayer.security.cloudPcDetection.cloudIndicators?.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs text-gray-500 uppercase">Indicateurs de détection</p>
+                            {irisDetailsPlayer.security.cloudPcDetection.cloudIndicators.map((indicator, i) => (
+                              <div key={i} className={`text-sm px-3 py-1 rounded ${irisDetailsPlayer.security.cloudPcDetection.isGamingCloud ? 'text-emerald-300 bg-emerald-500/5' : 'text-amber-300 bg-amber-500/5'}`}>{indicator}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* USB Devices & Running Processes - Side by Side */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  {/* USB Devices */}
+                  {irisDetailsPlayer.security?.usbDevices?.length > 0 && (
+                    <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
+                      <h4 className="text-white font-semibold mb-3 flex items-center gap-2"><Link className="w-4 h-4 text-gray-400" /> Périphériques USB ({irisDetailsPlayer.security.usbDevices.length})</h4>
+                      <div className="max-h-60 overflow-y-auto space-y-1">
+                        {irisDetailsPlayer.security.usbDevices.map((u, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-dark-800/50">
+                            <span className="text-white">{u.name || 'Périphérique inconnu'}</span>
+                            {u.manufacturer && <span className="text-gray-500 text-xs">({u.manufacturer})</span>}
+                            {u.device_id && <span className="text-gray-600 text-xs ml-auto truncate max-w-[200px]" title={u.device_id}>{u.device_id}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Running Processes */}
+                  {irisDetailsPlayer.security?.processes?.length > 0 && (
+                    <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
+                      <h4 className="text-white font-semibold mb-3 flex items-center gap-2"><List className="w-4 h-4 text-gray-400" /> Processus ({irisDetailsPlayer.security.processes.length})</h4>
+                      <div className="max-h-60 overflow-y-auto space-y-1">
+                        {irisDetailsPlayer.security.processes.map((p, i) => (
+                          <div key={i} className="flex items-center gap-2 text-sm px-3 py-1.5 rounded bg-dark-800/50">
+                            <span className="text-white font-mono text-xs">{p.name}</span>
+                            {p.pid && <span className="text-gray-600 text-xs">PID:{p.pid}</span>}
+                            {p.path && <span className="text-gray-600 text-xs ml-auto truncate max-w-[250px]" title={p.path}>{p.path}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </>
     );
 
@@ -3120,7 +3789,7 @@ const AdminPanel = () => {
                 <div className="space-y-4">
                   {/* Version */}
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">Version (ex: 1.0.0)</label>
+                    <label className="block text-sm text-gray-400 mb-1">Version (ex: 1.0.0) *</label>
                     <input
                       type="text"
                       value={irisUpdateFormData.version}
@@ -3133,7 +3802,7 @@ const AdminPanel = () => {
 
                   {/* Download URL */}
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">URL de téléchargement</label>
+                    <label className="block text-sm text-gray-400 mb-1">URL de téléchargement *</label>
                     <input
                       type="text"
                       value={irisUpdateFormData.downloadUrl}
@@ -3141,41 +3810,7 @@ const AdminPanel = () => {
                       className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white"
                       placeholder="https://..."
                     />
-                  </div>
-
-                  {/* File Hash */}
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Hash SHA256 du fichier</label>
-                    <input
-                      type="text"
-                      value={irisUpdateFormData.fileHash}
-                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, fileHash: e.target.value })}
-                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white font-mono text-sm"
-                      placeholder="abc123..."
-                    />
-                  </div>
-
-                  {/* Code Hash */}
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Hash du code client</label>
-                    <input
-                      type="text"
-                      value={irisUpdateFormData.codeHash}
-                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, codeHash: e.target.value })}
-                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white font-mono text-sm"
-                      placeholder="abc123..."
-                    />
-                  </div>
-
-                  {/* File Size */}
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-1">Taille du fichier (octets)</label>
-                    <input
-                      type="number"
-                      value={irisUpdateFormData.fileSize}
-                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, fileSize: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white"
-                    />
+                    <p className="text-xs text-gray-500 mt-1">Lien direct vers le fichier .exe ou .msi</p>
                   </div>
 
                   {/* Changelog */}
@@ -3186,7 +3821,7 @@ const AdminPanel = () => {
                       onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, changelog: e.target.value })}
                       className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white resize-none"
                       rows={4}
-                      placeholder="- Amélioration..."
+                      placeholder="- Amélioration...\n- Correction..."
                     />
                   </div>
 
@@ -3222,7 +3857,7 @@ const AdminPanel = () => {
                   </button>
                   <button
                     onClick={handleSaveIrisUpdate}
-                    disabled={savingIrisUpdate || !irisUpdateFormData.version || !irisUpdateFormData.downloadUrl || !irisUpdateFormData.fileHash || !irisUpdateFormData.codeHash}
+                    disabled={savingIrisUpdate || !irisUpdateFormData.version || !irisUpdateFormData.downloadUrl}
                     className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50"
                   >
                     {savingIrisUpdate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

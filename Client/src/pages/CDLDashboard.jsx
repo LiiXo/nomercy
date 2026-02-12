@@ -1901,8 +1901,8 @@ const CDLDashboard = () => {
                         </div>
                       </>
                     ) : (
-                      <span className="text-lime-400 text-xs font-semibold">
-                        {language === 'fr' ? 'Mode S&D en 5v5 avec votre escouade' : 'S&D mode 5v5 with your squad'}
+                      <span className="text-gray-500 text-xs">
+                        {language === 'fr' ? 'Aucun match en cours actuellement' : 'No active matches currently'}
                       </span>
                     )}
                   </div>
