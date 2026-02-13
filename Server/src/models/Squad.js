@@ -108,12 +108,28 @@ const squadSchema = new mongoose.Schema({
     totalPoints: { type: Number, default: 0 }
   },
   
-  // Stats per mode (Stricker)
+  // Stats per mode (Stricker) - Legacy (kept for backward compatibility)
   statsStricker: {
     points: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
     losses: { type: Number, default: 0 },
     rank: { type: String, default: 'Recrues' } // Default rank for Stricker mode
+  },
+  
+  // Stats per format (Stricker 3v3)
+  statsStricker3v3: {
+    points: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: String, default: 'Recrues' }
+  },
+  
+  // Stats per format (Stricker 5v5)
+  statsStricker5v5: {
+    points: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: String, default: 'Recrues' }
   },
   
   // Munitions - Squad currency for Stricker mode
@@ -223,8 +239,12 @@ squadSchema.index({ leader: 1 });
 // Performance indexes for leaderboard queries
 squadSchema.index({ 'statsHardcore.totalPoints': -1 }); // Top squad hardcore
 squadSchema.index({ 'statsCdl.totalPoints': -1 }); // Top squad CDL
-squadSchema.index({ 'statsStricker.points': -1 }); // Stricker squad leaderboard
+squadSchema.index({ 'statsStricker.points': -1 }); // Stricker squad leaderboard (legacy)
+squadSchema.index({ 'statsStricker3v3.points': -1 }); // Stricker 3v3 leaderboard
+squadSchema.index({ 'statsStricker5v5.points': -1 }); // Stricker 5v5 leaderboard
 squadSchema.index({ isDeleted: 1, 'statsStricker.points': -1 }); // Stricker leaderboard filtered
+squadSchema.index({ isDeleted: 1, 'statsStricker3v3.points': -1 }); // Stricker 3v3 leaderboard filtered
+squadSchema.index({ isDeleted: 1, 'statsStricker5v5.points': -1 }); // Stricker 5v5 leaderboard filtered
 squadSchema.index({ 'registeredLadders.ladderId': 1 }); // Ladder queries
 
 // Virtual for member count

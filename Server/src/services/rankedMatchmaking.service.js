@@ -486,17 +486,7 @@ export const joinQueue = async (userId, gameMode, mode) => {
       }
     }
     
-    // Vérifier GGSecure pour les joueurs PC
-    if (user.platform === 'PC') {
-      const ggsecure = await checkGGSecureStatus(userId);
-      if (ggsecure.required && !ggsecure.connected) {
-        return { 
-          success: false, 
-          message: 'Vous devez être connecté à GGSecure pour jouer en classé.',
-          ggsecureRequired: true
-        };
-      }
-    }
+    // GGSecure verification removed - Iris status shown on match sheet instead
     
     // Récupérer ou créer le ranking (avec la saison courante)
     const currentSeason = new Date().getMonth() + 1;
@@ -772,81 +762,7 @@ const createMatchFromQueue = async (gameMode, mode) => {
   // Créer le match
   try {
     
-    // Re-vérifier GGSecure pour tous les joueurs PC AVANT de créer le match
-    // Un joueur pourrait avoir désactivé GGSecure pendant qu'il attendait dans la file
-    const playersToRemove = [];
-    for (const player of playersForMatch) {
-      if (player.platform === 'PC' && !player.isFake && !player.userId.toString().startsWith('fake-')) {
-        const ggsecure = await checkGGSecureStatus(player.userId);
-        if (ggsecure.required && !ggsecure.connected) {
-          playersToRemove.push(player);
-          
-          // Notifier le joueur
-          if (io) {
-            io.to(`user-${player.userId}`).emit('rankedQueueUpdate', {
-              type: 'ggsecure_error',
-              message: 'Vous avez été retiré du match car vous n\'êtes plus connecté à GGSecure.',
-              queueSize: 0,
-              position: null
-            });
-          }
-        }
-      }
-    }
-    
-    // Si des joueurs ont été retirés, vérifier si on a encore assez de joueurs
-    if (playersToRemove.length > 0) {
-      let remainingPlayers = playersForMatch.filter(p => 
-        !playersToRemove.some(removed => removed.userId.toString() === p.userId.toString())
-      );
-      
-      if (remainingPlayers.length < 4) {
-        
-        // Remettre les joueurs valides dans la file
-        const queue = getQueue(gameMode, mode);
-        for (const player of remainingPlayers) {
-          if (!queue.some(p => p.userId.toString() === player.userId.toString())) {
-            queue.push(player);
-          }
-        }
-        
-        // Notifier les joueurs restants
-        broadcastQueueUpdate(gameMode, mode);
-        return;
-      }
-      
-      // Si nombre impair après retrait GGSecure, éjecter le dernier arrivé
-      if (remainingPlayers.length % 2 !== 0) {
-        // Trier par date d'arrivée pour éjecter le dernier
-        remainingPlayers.sort((a, b) => new Date(a.joinedAt) - new Date(b.joinedAt));
-        const ejectedAfterGGSecure = remainingPlayers.pop();
-        
-        // Remettre le joueur éjecté dans la file d'attente
-        const queue = getQueue(gameMode, mode);
-        if (!queue.some(p => p.userId.toString() === ejectedAfterGGSecure.userId.toString())) {
-          queue.push(ejectedAfterGGSecure);
-        }
-        
-        // Notifier le joueur éjecté
-        if (io) {
-          io.to(`user-${ejectedAfterGGSecure.userId}`).emit('rankedQueueUpdate', {
-            type: 'ejected',
-            message: 'Match lancé sans vous (nombre impair après vérification). Vous êtes toujours dans la file.',
-            queueSize: queue.length,
-            position: queue.findIndex(p => p.userId.toString() === ejectedAfterGGSecure.userId.toString()) + 1
-          });
-        }
-      }
-      
-      // Continuer avec les joueurs restants (recalculer les équipes)
-      playersForMatch.length = 0;
-      playersForMatch.push(...remainingPlayers);
-      playerCount = remainingPlayers.length;
-      
-      // IMPORTANT: Recalculer teamSize après retrait de joueurs
-      teamSize = playerCount / 2;
-      
-    }
+    // GGSecure verification removed - Iris status shown on match sheet instead
     
     // VALIDATION: Vérifier qu'il n'y a pas de doublons dans playersForMatch avant de générer les équipes
     const playerIdsSet = new Set();

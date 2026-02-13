@@ -53,27 +53,24 @@ export const getAvatarUrl = (avatar) => {
 
 /**
  * Get the avatar URL for a user, falling back to default if none is set
+ * Uses site avatar only (no Discord fallback)
  * @param {object} user - User object with avatar property
  * @returns {string} - The avatar URL
  */
 export const getUserAvatar = (user) => {
   if (!user) return getDefaultAvatar(null);
   
-  // Check for avatar (can be custom upload or Discord URL)
-  if (user.avatar) {
+  // Check for avatar (custom upload - not Discord)
+  if (user.avatar && !user.avatar.includes('cdn.discordapp.com')) {
     return getAvatarUrl(user.avatar);
   }
   
-  // Check for avatarUrl (virtual from backend)
-  if (user.avatarUrl) {
+  // Check for avatarUrl (virtual from backend - already excludes Discord)
+  if (user.avatarUrl && !user.avatarUrl.includes('cdn.discordapp.com')) {
     return getAvatarUrl(user.avatarUrl);
   }
   
-  // Check for Discord avatar (construct URL from discordId + discordAvatar)
-  if (user.discordAvatar && user.discordId) {
-    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png?size=128`;
-  }
-  
+  // No Discord fallback - use default avatar with initials
   return getDefaultAvatar(user.username || user.discordUsername);
 };
 

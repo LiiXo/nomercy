@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
@@ -170,7 +170,9 @@ const CooldownButton = ({ cooldownEndsAt, onCooldownEnd, onChallenge, isDisabled
 const translations = {
   fr: {
     title: 'Mode Stricker',
-    subtitle: 'Recherche et Destruction 5v5',
+    subtitle: 'Recherche et Destruction',
+    subtitle3v3: '3v3 • Recherche et Destruction',
+    subtitle5v5: '5v5 • Recherche et Destruction',
     restricted: 'Accès réservé aux administrateurs, staff et arbitres',
     myRank: 'Mon Escouade',
     points: 'Points',
@@ -185,6 +187,9 @@ const translations = {
     playersInQueue: 'joueurs dans la file',
     matchFound: 'Match trouvé !',
     format: 'Format',
+    format3v3: '3v3',
+    format5v5: '5v5',
+    selectFormat: 'Sélectionner le format',
     gameMode: 'Mode de jeu',
     searchDestroy: 'Recherche et Destruction',
     loading: 'Chargement...',
@@ -196,6 +201,8 @@ const translations = {
     squadName: 'Escouade',
     squadPoints: 'Points escouade',
     needSquad: 'Vous devez être dans une escouade pour jouer',
+    needMoreMembers3v3: 'Votre escouade doit avoir au moins 3 membres',
+    needMoreMembers5v5: 'Votre escouade doit avoir au moins 5 membres',
     needMoreMembers: 'Votre escouade doit avoir au moins 5 membres',
     currentMembers: 'membres actuels',
     ranksTitle: 'Progression des Rangs',
@@ -232,7 +239,9 @@ const translations = {
   },
   en: {
     title: 'Stricker Mode',
-    subtitle: 'Search and Destroy 5v5',
+    subtitle: 'Search and Destroy',
+    subtitle3v3: '3v3 • Search and Destroy',
+    subtitle5v5: '5v5 • Search and Destroy',
     restricted: 'Access restricted to administrators, staff and referees',
     myRank: 'My Squad',
     points: 'Points',
@@ -247,6 +256,9 @@ const translations = {
     playersInQueue: 'players in queue',
     matchFound: 'Match found!',
     format: 'Format',
+    format3v3: '3v3',
+    format5v5: '5v5',
+    selectFormat: 'Select format',
     gameMode: 'Game Mode',
     searchDestroy: 'Search and Destroy',
     loading: 'Loading...',
@@ -258,6 +270,8 @@ const translations = {
     squadName: 'Squad',
     squadPoints: 'Squad points',
     needSquad: 'You must be in a squad to play',
+    needMoreMembers3v3: 'Your squad must have at least 3 members',
+    needMoreMembers5v5: 'Your squad must have at least 5 members',
     needMoreMembers: 'Your squad must have at least 5 members',
     currentMembers: 'current members',
     ranksTitle: 'Rank Progression',
@@ -338,20 +352,28 @@ const StrickerMode = () => {
   const [recentMatches, setRecentMatches] = useState([]);
   const [resettingCooldowns, setResettingCooldowns] = useState(false);
   const [cooldownResetSuccess, setCooldownResetSuccess] = useState(null);
+  const [selectedFormat, setSelectedFormat] = useState(() => {
+    // Initialize from localStorage to persist user's preferred format
+    return localStorage.getItem('stricker-preferred-format') || '5v5';
+  });
+  const [formatSwitching, setFormatSwitching] = useState(false); // Prevent race conditions when switching formats
+  const expectedFormatRef = useRef(selectedFormat); // Track expected format to ignore stale API responses
   
   // Check access - allow everyone if Stricker mode is enabled, otherwise only admin/staff/arbitre
   const hasAccess = isAuthenticated && (isStrickerModeEnabled || hasAdminAccess());
   
   // Fetch my ranking
-  const fetchMyRanking = useCallback(async () => {
+  const fetchMyRanking = useCallback(async (formatToFetch) => {
     if (!hasAccess) return;
+    const targetFormat = formatToFetch || selectedFormat;
     
     try {
-      const response = await fetch(`${API_URL}/stricker/my-ranking`, {
+      const response = await fetch(`${API_URL}/stricker/my-ranking?format=${targetFormat}`, {
         credentials: 'include'
       });
       const data = await response.json();
-      if (data.success) {
+      // Only update if this is still the expected format
+      if (data.success && expectedFormatRef.current === targetFormat) {
         setMyRanking(data.ranking);
       }
     } catch (err) {
@@ -359,28 +381,32 @@ const StrickerMode = () => {
     } finally {
       setLoading(false);
     }
-  }, [hasAccess]);
+  }, [hasAccess, selectedFormat]);
   
   // Fetch squad leaderboard
-  const fetchSquadLeaderboard = useCallback(async () => {
+  const fetchSquadLeaderboard = useCallback(async (formatToFetch) => {
     if (!hasAccess) return;
+    const targetFormat = formatToFetch || selectedFormat;
     
     try {
       setLoadingLeaderboard(true);
-      const response = await fetch(`${API_URL}/stricker/leaderboard/squads`, {
+      const response = await fetch(`${API_URL}/stricker/leaderboard/squads?format=${targetFormat}`, {
         credentials: 'include'
       });
       const data = await response.json();
-      if (data.success) {
+      // Only update if this is still the expected format
+      if (data.success && expectedFormatRef.current === targetFormat) {
         setSquadLeaderboard(data.top15 || []);
         setUserSquadPosition(data.userSquad || null);
       }
     } catch (err) {
       console.error('Error fetching stricker leaderboard:', err);
     } finally {
-      setLoadingLeaderboard(false);
+      if (expectedFormatRef.current === targetFormat) {
+        setLoadingLeaderboard(false);
+      }
     }
-  }, [hasAccess]);
+  }, [hasAccess, selectedFormat]);
   
   // Fetch top 100 squads
   const fetchTop100 = useCallback(async () => {
@@ -388,7 +414,7 @@ const StrickerMode = () => {
     
     try {
       setLoadingTop100(true);
-      const response = await fetch(`${API_URL}/stricker/leaderboard/squads/top100`, {
+      const response = await fetch(`${API_URL}/stricker/leaderboard/squads/top100?format=${selectedFormat}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -400,7 +426,7 @@ const StrickerMode = () => {
     } finally {
       setLoadingTop100(false);
     }
-  }, [hasAccess]);
+  }, [hasAccess, selectedFormat]);
   
   // Open top 100 modal
   const handleOpenTop100 = () => {
@@ -409,15 +435,17 @@ const StrickerMode = () => {
   };
   
   // Fetch matchmaking status
-  const fetchMatchmakingStatus = useCallback(async () => {
+  const fetchMatchmakingStatus = useCallback(async (formatToFetch) => {
     if (!hasAccess) return;
+    const targetFormat = formatToFetch || selectedFormat;
     
     try {
-      const response = await fetch(`${API_URL}/stricker/matchmaking/status?mode=${mode || 'hardcore'}`, {
+      const response = await fetch(`${API_URL}/stricker/matchmaking/status?mode=${mode || 'hardcore'}&format=${targetFormat}`, {
         credentials: 'include'
       });
       const data = await response.json();
-      if (data.success) {
+      // Only update if this is still the expected format
+      if (data.success && expectedFormatRef.current === targetFormat) {
         setInQueue(data.inQueue || false);
         setQueueSize(data.queueSize || 0);
         setActiveMatch(data.match || null);
@@ -428,7 +456,7 @@ const StrickerMode = () => {
     } catch (err) {
       console.error('Error fetching matchmaking status:', err);
     }
-  }, [hasAccess, mode]);
+  }, [hasAccess, mode, selectedFormat]);
   
   // Fetch config
   const fetchConfig = useCallback(async () => {
@@ -538,22 +566,14 @@ const StrickerMode = () => {
     setJoiningQueue(true);
     setError(null);
     
-    // Check GGSecure for PC players
-    if (user?.platform === 'PC') {
-      const connected = await checkGGSecure();
-      if (!connected) {
-        setError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
-        setJoiningQueue(false);
-        return;
-      }
-    }
+    // GGSecure verification removed - Iris status shown on match sheet instead
     
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ mode: mode || 'hardcore' })
+        body: JSON.stringify({ mode: mode || 'hardcore', format: selectedFormat })
       });
       const data = await response.json();
       
@@ -581,7 +601,7 @@ const StrickerMode = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ mode: mode || 'hardcore' })
+        body: JSON.stringify({ mode: mode || 'hardcore', format: selectedFormat })
       });
       const data = await response.json();
         
@@ -631,22 +651,14 @@ const StrickerMode = () => {
     setChallengingSquad(targetSquadId);
     setError(null);
       
-    // Check GGSecure for PC players
-    if (user?.platform === 'PC') {
-      const connected = await checkGGSecure();
-      if (!connected) {
-        setError(language === 'fr' ? 'Connectez-vous \u00e0 GGSecure pour jouer.' : 'Connect to GGSecure to play.');
-        setChallengingSquad(null);
-        return;
-      }
-    }
+    // GGSecure verification removed - Iris status shown on match sheet instead
       
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/challenge`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ targetSquadId, mode: mode || 'hardcore' })
+        body: JSON.stringify({ targetSquadId, mode: mode || 'hardcore', format: selectedFormat })
       });
       const data = await response.json();
         
@@ -665,7 +677,7 @@ const StrickerMode = () => {
     }
   };
   
-  // Initial load - all fetches run in parallel, no dependency on callback refs
+  // Initial load - fetch data that doesn't depend on format
   useEffect(() => {
     // Fetch season info regardless of access
     fetchCurrentSeason();
@@ -673,11 +685,8 @@ const StrickerMode = () => {
     fetchActiveMatchesStats();
     
     if (hasAccess) {
-      // Run all fetches in parallel for maximum speed
+      // Run format-independent fetches in parallel
       Promise.all([
-        fetchMyRanking(),
-        fetchSquadLeaderboard(),
-        fetchMatchmakingStatus(),
         fetchConfig(),
         fetchMySquad(),
         fetchRecentMatches()
@@ -691,6 +700,40 @@ const StrickerMode = () => {
     return () => clearInterval(statsInterval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasAccess, mode]);
+  
+  // Format-dependent data - refetch when format changes
+  useEffect(() => {
+    if (!hasAccess) return;
+    
+    // Update expected format ref
+    expectedFormatRef.current = selectedFormat;
+    
+    // Clear stale data and show loading state when switching formats
+    setSquadLeaderboard([]);
+    setMyRanking(null);
+    setFormatSwitching(true);
+    
+    // Fetch format-specific data with a small delay to prevent rapid switching issues
+    const fetchData = async () => {
+      await Promise.all([
+        fetchMyRanking(selectedFormat),
+        fetchSquadLeaderboard(selectedFormat),
+        fetchMatchmakingStatus(selectedFormat)
+      ]);
+      // Only remove loading if still on this format
+      if (expectedFormatRef.current === selectedFormat) {
+        setFormatSwitching(false);
+      }
+    };
+    
+    fetchData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAccess, mode, selectedFormat]);
+  
+  // Persist preferred format to localStorage
+  useEffect(() => {
+    localStorage.setItem('stricker-preferred-format', selectedFormat);
+  }, [selectedFormat]);
   
   // No more aggressive polling - socket events (strickerQueueUpdate, strickerMatchCreated) 
   // handle real-time updates. Only refetch on visibility change as a fallback.
@@ -718,10 +761,11 @@ const StrickerMode = () => {
     const unsubMatchCreated = on('strickerMatchCreated', (data) => {
       console.log('[StrickerMode] Match created event received:', data);
       
-      // Check if this match involves my squad and matches current mode
+      // Check if this match involves my squad and matches current mode and format
       const mySquadId = mySquad?._id;
       const matchMode = data.mode || 'hardcore';
-      if (mySquadId && matchMode === (mode || 'hardcore') && 
+      const matchFormat = data.format || '5v5';
+      if (mySquadId && matchMode === (mode || 'hardcore') && matchFormat === selectedFormat && 
           (data.team1Squad === mySquadId || data.team2Squad === mySquadId || 
           data.team1Squad?.toString() === mySquadId || data.team2Squad?.toString() === mySquadId)) {
         console.log('[StrickerMode] My squad is in this match, redirecting...');
@@ -733,8 +777,9 @@ const StrickerMode = () => {
     const unsubQueueUpdate = on('strickerQueueUpdate', (data) => {
       console.log('[StrickerMode] Queue update received:', data);
       
-      // Only process updates for the current mode
+      // Only process updates for the current mode and format
       if (data.mode !== (mode || 'hardcore')) return;
+      if (data.format && data.format !== selectedFormat) return;
       
       setQueueSize(data.queueSize);
       setSquadsSearching(data.queueSize);
@@ -765,7 +810,7 @@ const StrickerMode = () => {
       unsubMatchCreated();
       unsubQueueUpdate();
     };
-  }, [hasAccess, isConnected, mySquad, joinStrickerMode, leaveStrickerMode, on, navigate, mode]);
+  }, [hasAccess, isConnected, mySquad, joinStrickerMode, leaveStrickerMode, on, navigate, mode, selectedFormat]);
   
   // Calculate countdown to next season using seasonEndDate from API
   useEffect(() => {
@@ -841,14 +886,50 @@ const StrickerMode = () => {
   });
   const isLeaderOrOfficer = mySquad && user && (isLeader || isOfficer);
   
-  // Can start match: has squad, 5+ members, is leader/officer
-  const canStartMatch = mySquad && (mySquad.members?.length || 0) >= 5 && isLeaderOrOfficer;
+  // Required team size based on format
+  const requiredTeamSize = selectedFormat === '3v3' ? 3 : 5;
+  
+  // Dynamic colors based on format - 3v3 uses yellow/amber, 5v5 uses lime/green
+  const formatColors = selectedFormat === '3v3' ? {
+    primary: 'yellow',
+    secondary: 'amber',
+    gradient: 'from-yellow-600/20 via-amber-600/10 to-dark-950',
+    borderPrimary: 'border-yellow-500/20',
+    borderSecondary: 'border-yellow-500/30',
+    bgPrimary: 'bg-yellow-500',
+    bgPrimaryHover: 'hover:bg-yellow-600',
+    bgGradient: 'bg-gradient-to-r from-yellow-500 to-amber-500',
+    bgGradientHover: 'hover:from-yellow-600 hover:to-amber-600',
+    textPrimary: 'text-yellow-400',
+    textSecondary: 'text-amber-400',
+    bgAccent: 'bg-yellow-500/10',
+    bgAccentHover: 'hover:bg-yellow-500/20',
+    shadowPrimary: 'shadow-yellow-500/20'
+  } : {
+    primary: 'lime',
+    secondary: 'green',
+    gradient: 'from-lime-600/20 via-green-600/10 to-dark-950',
+    borderPrimary: 'border-lime-500/20',
+    borderSecondary: 'border-lime-500/30',
+    bgPrimary: 'bg-lime-500',
+    bgPrimaryHover: 'hover:bg-lime-600',
+    bgGradient: 'bg-gradient-to-r from-lime-500 to-green-500',
+    bgGradientHover: 'hover:from-lime-600 hover:to-green-600',
+    textPrimary: 'text-lime-400',
+    textSecondary: 'text-green-400',
+    bgAccent: 'bg-lime-500/10',
+    bgAccentHover: 'hover:bg-lime-500/20',
+    shadowPrimary: 'shadow-lime-500/20'
+  };
+  
+  // Can start match: has squad, enough members for format, is leader/officer
+  const canStartMatch = mySquad && (mySquad.members?.length || 0) >= requiredTeamSize && isLeaderOrOfficer;
   
   // Fetch maps
   const fetchMaps = async () => {
     setLoadingMaps(true);
     try {
-      const response = await fetch(`${API_URL}/stricker/maps`, {
+      const response = await fetch(`${API_URL}/stricker/maps?format=${selectedFormat}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -862,11 +943,12 @@ const StrickerMode = () => {
     }
   };
   
-  // Fetch rules - uses generic stricker-snd rules (Stricker is always S&D mode)
+  // Fetch rules - uses format-specific subType (stricker-snd-3v3 or stricker-snd-5v5)
   const fetchRules = async () => {
     setLoadingRules(true);
     try {
-      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/stricker-snd`, {
+      const subType = selectedFormat === '3v3' ? 'stricker-snd-3v3' : 'stricker-snd-5v5';
+      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/${subType}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -881,9 +963,8 @@ const StrickerMode = () => {
   };
   
   const handleShowMaps = () => {
-    if (availableMaps.length === 0) {
-      fetchMaps();
-    }
+    // Always fetch maps to ensure correct format-specific maps are shown
+    fetchMaps();
     setShowMapsModal(true);
   };
   
@@ -895,19 +976,19 @@ const StrickerMode = () => {
   return (
     <div className="min-h-screen bg-dark-950 pb-20">
       {/* Header */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-lime-600/20 via-green-600/10 to-dark-950 border-b border-lime-500/20">
+      <div className={`relative overflow-hidden bg-gradient-to-br ${formatColors.gradient} border-b ${formatColors.borderPrimary} transition-colors duration-300`}>
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-5" />
         <div className="relative max-w-7xl mx-auto px-4 py-6 sm:py-8">
           {/* Row 1: Title + Actions */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <div className="p-2 bg-lime-500/20 rounded-lg">
-                  <Swords className="w-8 h-8 text-lime-400" />
+                <div className={`p-2 ${formatColors.bgAccent} rounded-lg transition-colors duration-300`}>
+                  <Swords className={`w-8 h-8 ${formatColors.textPrimary} transition-colors duration-300`} />
                 </div>
                 <h1 className="text-3xl sm:text-4xl font-black text-white">{t.title}</h1>
               </div>
-              <p className="text-lime-400/80 text-lg">{t.subtitle}</p>
+              <p className={`${formatColors.textPrimary} opacity-80 text-lg transition-colors duration-300`}>{selectedFormat === '3v3' ? t.subtitle3v3 : t.subtitle5v5}</p>
             </div>
             
             <div className="flex flex-wrap items-center gap-3">
@@ -915,7 +996,7 @@ const StrickerMode = () => {
               {mySquad && (
                 <div 
                   onClick={() => navigate(`/squad/${mySquad._id}`)}
-                  className="px-4 py-2 bg-lime-500/10 border border-lime-500/30 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-lime-500/20 transition-colors"
+                  className={`px-4 py-2 ${formatColors.bgAccent} border ${formatColors.borderSecondary} rounded-lg flex items-center gap-3 cursor-pointer ${formatColors.bgAccentHover} transition-colors`}
                 >
                   <div className="w-10 h-10 flex items-center justify-center overflow-hidden">
                     {mySquad.logo ? (
@@ -925,22 +1006,49 @@ const StrickerMode = () => {
                         className="w-full h-full object-contain"
                       />
                     ) : (
-                      <Users className="w-5 h-5 text-lime-400" />
+                      <Users className={`w-5 h-5 ${formatColors.textPrimary}`} />
                     )}
                   </div>
                   <div>
                     <p className="text-white font-bold text-sm">{mySquad.name}</p>
-                    <p className="text-lime-400 text-xs">[{mySquad.tag}]</p>
+                    <p className={`${formatColors.textPrimary} text-xs`}>[{mySquad.tag}]</p>
                   </div>
                 </div>
               )}
               
-              <div className="px-4 py-2 bg-lime-500/10 border border-lime-500/30 rounded-lg">
-                <span className="text-lime-400 font-bold">5v5</span>
+              {/* Format Selector */}
+              <div className={`flex items-center gap-1 bg-dark-800/50 border ${formatColors.borderSecondary} rounded-lg p-1 relative`}>
+                {formatSwitching && (
+                  <div className="absolute inset-0 bg-dark-800/80 rounded-lg flex items-center justify-center z-10">
+                    <Loader2 className={`w-4 h-4 ${formatColors.textPrimary} animate-spin`} />
+                  </div>
+                )}
+                <button
+                  onClick={() => !formatSwitching && setSelectedFormat('3v3')}
+                  disabled={formatSwitching}
+                  className={`px-4 py-2 rounded-lg font-bold transition-all ${
+                    selectedFormat === '3v3'
+                      ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white shadow-lg'
+                      : 'text-gray-400 hover:text-white hover:bg-dark-700'
+                  } ${formatSwitching ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {t.format3v3}
+                </button>
+                <button
+                  onClick={() => !formatSwitching && setSelectedFormat('5v5')}
+                  disabled={formatSwitching}
+                  className={`px-4 py-2 rounded-lg font-bold transition-all ${
+                    selectedFormat === '5v5'
+                      ? 'bg-gradient-to-r from-lime-500 to-green-500 text-white shadow-lg'
+                      : 'text-gray-400 hover:text-white hover:bg-dark-700'
+                  } ${formatSwitching ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {t.format5v5}
+                </button>
               </div>
-              <div className="px-4 py-2 bg-lime-500/10 border border-lime-500/30 rounded-lg flex items-center gap-2">
-                <Target className="w-4 h-4 text-lime-400" />
-                <span className="text-lime-400 font-medium">{t.searchDestroy}</span>
+              <div className={`px-4 py-2 ${formatColors.bgAccent} border ${formatColors.borderSecondary} rounded-lg flex items-center gap-2`}>
+                <Target className={`w-4 h-4 ${formatColors.textPrimary}`} />
+                <span className={`${formatColors.textPrimary} font-medium`}>{t.searchDestroy}</span>
               </div>
               
               {/* Maps Button */}
@@ -965,15 +1073,15 @@ const StrickerMode = () => {
           
           {/* Row 2: Season Banner - Full Width */}
           {currentSeason && (
-            <div className="bg-gradient-to-r from-lime-500/10 via-lime-500/20 to-lime-500/10 border border-lime-500/30 rounded-2xl p-3 sm:p-5">
+            <div className={`bg-gradient-to-r ${selectedFormat === '3v3' ? 'from-yellow-500/10 via-yellow-500/20 to-yellow-500/10 border-yellow-500/30' : 'from-lime-500/10 via-lime-500/20 to-lime-500/10 border-lime-500/30'} border rounded-2xl p-3 sm:p-5 transition-colors duration-300`}>
               <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-12">
                 {/* Season Info */}
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="p-2 sm:p-3 bg-lime-500/20 rounded-xl">
-                    <Trophy className="w-6 h-6 sm:w-8 sm:h-8 text-lime-400" />
+                  <div className={`p-2 sm:p-3 ${formatColors.bgAccent} rounded-xl transition-colors duration-300`}>
+                    <Trophy className={`w-6 h-6 sm:w-8 sm:h-8 ${formatColors.textPrimary} transition-colors duration-300`} />
                   </div>
                   <div className="text-center md:text-left">
-                    <p className="text-[10px] sm:text-xs text-lime-400/60 uppercase tracking-widest font-semibold">
+                    <p className={`text-[10px] sm:text-xs ${formatColors.textPrimary} opacity-60 uppercase tracking-widest font-semibold`}>
                       {language === 'fr' ? 'Saison Actuelle' : 'Current Season'}
                     </p>
                     <p className="text-xl sm:text-3xl font-black text-white">
@@ -983,38 +1091,38 @@ const StrickerMode = () => {
                 </div>
                 
                 {/* Divider */}
-                <div className="hidden md:block w-px h-16 bg-lime-500/30" />
-                <div className="md:hidden w-32 h-px bg-lime-500/30" />
+                <div className={`hidden md:block w-px h-16 ${selectedFormat === '3v3' ? 'bg-yellow-500/30' : 'bg-lime-500/30'}`} />
+                <div className={`md:hidden w-32 h-px ${selectedFormat === '3v3' ? 'bg-yellow-500/30' : 'bg-lime-500/30'}`} />
                 
                 {/* Countdown */}
                 <div className="text-center">
-                  <p className="text-[10px] sm:text-xs text-lime-400/60 uppercase tracking-widest font-semibold mb-2 sm:mb-3">
+                  <p className={`text-[10px] sm:text-xs ${formatColors.textPrimary} opacity-60 uppercase tracking-widest font-semibold mb-2 sm:mb-3`}>
                     {language === 'fr' ? 'Prochaine saison dans' : 'Next season in'}
                   </p>
                   <div className="flex items-center justify-center gap-1.5 sm:gap-3">
                     <div className="text-center">
-                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
+                      <div className={`text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border ${formatColors.borderPrimary} min-w-[40px] sm:min-w-[60px]`}>
                         {String(seasonCountdown.days).padStart(2, '0')}
                       </div>
                       <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'JOURS' : 'DAYS'}</p>
                     </div>
-                    <span className="text-base sm:text-2xl text-lime-500 font-bold">:</span>
+                    <span className={`text-base sm:text-2xl ${selectedFormat === '3v3' ? 'text-yellow-500' : 'text-lime-500'} font-bold`}>:</span>
                     <div className="text-center">
-                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
+                      <div className={`text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border ${formatColors.borderPrimary} min-w-[40px] sm:min-w-[60px]`}>
                         {String(seasonCountdown.hours).padStart(2, '0')}
                       </div>
                       <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'HEURES' : 'HOURS'}</p>
                     </div>
-                    <span className="text-base sm:text-2xl text-lime-500 font-bold">:</span>
+                    <span className={`text-base sm:text-2xl ${selectedFormat === '3v3' ? 'text-yellow-500' : 'text-lime-500'} font-bold`}>:</span>
                     <div className="text-center">
-                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
+                      <div className={`text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border ${formatColors.borderPrimary} min-w-[40px] sm:min-w-[60px]`}>
                         {String(seasonCountdown.minutes).padStart(2, '0')}
                       </div>
                       <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'MIN' : 'MIN'}</p>
                     </div>
-                    <span className="text-base sm:text-2xl text-lime-500 font-bold">:</span>
+                    <span className={`text-base sm:text-2xl ${selectedFormat === '3v3' ? 'text-yellow-500' : 'text-lime-500'} font-bold`}>:</span>
                     <div className="text-center">
-                      <div className="text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-lime-500/20 min-w-[40px] sm:min-w-[60px]">
+                      <div className={`text-lg sm:text-3xl font-black text-white bg-dark-900/80 px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border ${formatColors.borderPrimary} min-w-[40px] sm:min-w-[60px]`}>
                         {String(seasonCountdown.seconds).padStart(2, '0')}
                       </div>
                       <p className="text-[9px] sm:text-xs text-gray-500 mt-1">{language === 'fr' ? 'SEC' : 'SEC'}</p>
@@ -1030,20 +1138,33 @@ const StrickerMode = () => {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Recent Matches Ticker */}
         {recentMatches.length > 0 && (
-          <div className="mb-6 bg-dark-900/80 border border-lime-500/20 rounded-xl overflow-hidden">
+          <div className={`mb-6 bg-dark-900/80 border ${formatColors.borderPrimary} rounded-xl overflow-hidden transition-colors duration-300`}>
             <div className="flex items-center">
-              <div className="px-4 py-3 bg-lime-500/10 border-r border-lime-500/20 flex-shrink-0">
-                <span className="text-lime-400 font-bold text-sm whitespace-nowrap">{t.recentMatches}</span>
+              <div className={`px-4 py-3 ${formatColors.bgAccent} border-r ${formatColors.borderPrimary} flex-shrink-0`}>
+                <span className={`${formatColors.textPrimary} font-bold text-sm whitespace-nowrap`}>{t.recentMatches}</span>
               </div>
               <div className="flex-1 overflow-hidden">
                 <div className="flex animate-scroll-left">
                   {[...recentMatches, ...recentMatches, ...recentMatches, ...recentMatches].map((match, index) => {
                     const team1Won = match.winner === 1 || match.winner === 'team1';
+                    const matchFormat = match.format || '5v5';
+                    const is3v3 = matchFormat === '3v3';
+                    // Format-specific colors for each match
+                    const matchBorderColor = is3v3 ? 'border-yellow-500/20' : 'border-lime-500/10';
+                    const formatBadgeClasses = is3v3 
+                      ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/40' 
+                      : 'bg-lime-500/20 text-lime-400 border-lime-500/40';
+                    
                     return (
                       <div 
                         key={`${match._id}-${index}`}
-                        className="flex items-center gap-3 px-6 py-3 border-r border-lime-500/10 flex-shrink-0"
+                        className={`flex items-center gap-3 px-6 py-3 border-r ${matchBorderColor} flex-shrink-0`}
                       >
+                        {/* Format badge */}
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${formatBadgeClasses}`}>
+                          {matchFormat}
+                        </span>
+                        
                         {/* Team 1 */}
                         <div className="flex items-center gap-2">
                           {match.team1Squad?.logo && (
@@ -1097,13 +1218,13 @@ const StrickerMode = () => {
             <div className={`bg-gradient-to-br ${currentRank.gradient} p-[1px] rounded-2xl`}>
               <div className="bg-dark-900 rounded-2xl p-6">
                 <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-lime-400" />
+                  <Trophy className={`w-5 h-5 ${formatColors.textPrimary}`} />
                   {t.myRank}
                 </h2>
                 
                 <div className="flex items-center gap-4 mb-6">
                   <div className="relative w-48 h-48 group">
-                    <div className="absolute inset-0 rounded-full bg-lime-500/30 blur-2xl animate-pulse" />
+                    <div className={`absolute inset-0 rounded-full ${selectedFormat === '3v3' ? 'bg-yellow-500/30' : 'bg-lime-500/30'} blur-2xl animate-pulse`} />
                     <img 
                       src={currentRank.image} 
                       alt={currentRank.name}
@@ -1115,7 +1236,7 @@ const StrickerMode = () => {
                   </div>
                   <div>
                     <p className="text-2xl font-black text-white">{currentRank.name}</p>
-                    <p className="text-lime-400 font-bold text-xl">{myRanking?.points || 0} pts</p>
+                    <p className={`${formatColors.textPrimary} font-bold text-xl`}>{myRanking?.points || 0} pts</p>
                   </div>
                 </div>
                 
@@ -1129,7 +1250,7 @@ const StrickerMode = () => {
                     <p className="text-xs text-gray-400">{t.losses}</p>
                   </div>
                   <div className="text-center p-3 bg-dark-800/50 rounded-lg">
-                    <p className="text-2xl font-bold text-lime-400">{winRate}%</p>
+                    <p className={`text-2xl font-bold ${formatColors.textPrimary}`}>{winRate}%</p>
                     <p className="text-xs text-gray-400">{t.winRate}</p>
                   </div>
                 </div>
@@ -1139,11 +1260,11 @@ const StrickerMode = () => {
                   <div className="mb-6">
                     <div className="flex justify-between text-sm mb-2">
                       <span className="text-gray-400">{t.nextRank}</span>
-                      <span className="text-lime-400">{currentRank.max - (myRanking?.points || 0) + 1} {t.pointsToNext}</span>
+                      <span className={formatColors.textPrimary}>{currentRank.max - (myRanking?.points || 0) + 1} {t.pointsToNext}</span>
                     </div>
                     <div className="h-2 bg-dark-800 rounded-full overflow-hidden">
                       <div 
-                        className="h-full bg-gradient-to-r from-lime-500 to-green-400 rounded-full transition-all"
+                        className={`h-full ${selectedFormat === '3v3' ? 'bg-gradient-to-r from-yellow-500 to-amber-400' : 'bg-gradient-to-r from-lime-500 to-green-400'} rounded-full transition-all`}
                         style={{ 
                           width: `${Math.min(100, (((myRanking?.points || 0) - currentRank.min) / (currentRank.max - currentRank.min)) * 100)}%` 
                         }}
@@ -1154,7 +1275,7 @@ const StrickerMode = () => {
                 
                 {/* Squad Info */}
                 {mySquad && (
-                  <div className="p-4 bg-dark-800/50 rounded-xl border border-lime-500/20 mb-4">
+                  <div className={`p-4 bg-dark-800/50 rounded-xl border ${formatColors.borderPrimary} mb-4 transition-colors duration-300`}>
                     <div className="flex items-center gap-3 mb-3">
                       {mySquad.logo && (
                         <img 
@@ -1166,13 +1287,13 @@ const StrickerMode = () => {
                       <div className="flex-1">
                         <p className="font-bold text-white">[{mySquad.tag}] {mySquad.name}</p>
                         {myRanking?.squad && (
-                          <p className="text-lime-400 text-sm">#{myRanking.squad.position} - {myRanking.squad.points} pts</p>
+                          <p className={`${formatColors.textPrimary} text-sm`}>#{myRanking.squad.position} - {myRanking.squad.points} pts</p>
                         )}
                       </div>
                     </div>
                     {/* Squad Stricker Stats */}
                     {myRanking?.squad && (
-                      <div className="grid grid-cols-2 gap-3 pt-3 border-t border-lime-500/20">
+                      <div className={`grid grid-cols-2 gap-3 pt-3 border-t ${formatColors.borderPrimary}`}>
                         <div className="text-center p-2 bg-dark-900/50 rounded-lg">
                           <p className="text-lg font-bold text-green-400">{myRanking.squad.wins || 0}</p>
                           <p className="text-xs text-gray-400">{t.wins}</p>
@@ -1187,20 +1308,20 @@ const StrickerMode = () => {
                 )}
                 
                 {/* Munitions & Shop - Always visible */}
-                <div className="p-4 bg-gradient-to-r from-lime-500/10 to-green-500/10 rounded-xl border border-lime-500/30">
+                <div className={`p-4 bg-gradient-to-r ${selectedFormat === '3v3' ? 'from-yellow-500/10 to-amber-500/10' : 'from-lime-500/10 to-green-500/10'} rounded-xl border ${formatColors.borderSecondary} transition-colors duration-300`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-lime-500/20 flex items-center justify-center">
-                        <Crosshair className="w-5 h-5 text-lime-400" />
+                      <div className={`w-10 h-10 rounded-full ${formatColors.bgAccent} flex items-center justify-center`}>
+                        <Crosshair className={`w-5 h-5 ${formatColors.textPrimary}`} />
                       </div>
                       <div>
                         <p className="text-sm text-gray-400">{t.cranes}</p>
-                        <p className="text-2xl font-bold text-lime-400">{mySquad?.cranes || 0}</p>
+                        <p className={`text-2xl font-bold ${formatColors.textPrimary}`}>{mySquad?.cranes || 0}</p>
                       </div>
                     </div>
                     <button
                       onClick={() => navigate(`/${mySquad?.mode === 'cdl' ? 'cdl' : 'hardcore'}/shop`)}
-                      className="px-4 py-2 bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600 text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg shadow-lime-500/20"
+                      className={`px-4 py-2 ${formatColors.bgGradient} ${formatColors.bgGradientHover} text-white font-bold rounded-xl transition-all flex items-center gap-2 shadow-lg ${formatColors.shadowPrimary}`}
                     >
                       <ShoppingCart className="w-4 h-4" />
                       {t.shop}
@@ -1214,19 +1335,19 @@ const StrickerMode = () => {
           {/* Matchmaking & Leaderboard */}
           <div className="lg:col-span-2 space-y-6">
             {/* Matchmaking Section */}
-            <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-6">
+            <div className={`bg-dark-900 border ${formatColors.borderPrimary} rounded-2xl p-6 transition-colors duration-300`}>
               <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <Crosshair className="w-5 h-5 text-lime-400" />
+                <Crosshair className={`w-5 h-5 ${formatColors.textPrimary}`} />
                 Matchmaking
               </h2>
               
               {/* Active Matches Stats */}
               {activeMatchesStats.totalMatches > 0 && (
-                <div className="mb-4 p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
+                <div className={`mb-4 p-4 rounded-2xl ${selectedFormat === '3v3' ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-green-500/10 border-green-500/20'} border transition-colors duration-300`}>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-lime-500/20 border border-lime-500/30">
-                      <Swords className="w-3 h-3 text-lime-400" />
-                      <span className="text-lime-400 text-xs font-semibold">
+                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg ${selectedFormat === '3v3' ? 'bg-yellow-500/20 border-yellow-500/30' : 'bg-lime-500/20 border-lime-500/30'} border`}>
+                      <Swords className={`w-3 h-3 ${formatColors.textPrimary}`} />
+                      <span className={`${formatColors.textPrimary} text-xs font-semibold`}>
                         {activeMatchesStats.totalMatches} {t.activeMatches}
                       </span>
                     </div>
@@ -1271,18 +1392,18 @@ const StrickerMode = () => {
               )}
               
               {/* Squad Requirement Warning */}
-              {(!mySquad || (mySquad.members?.length || 0) < 5 || (mySquad && (mySquad.members?.length || 0) >= 5 && !isLeaderOrOfficer)) && (
+              {(!mySquad || (mySquad.members?.length || 0) < requiredTeamSize || (mySquad && (mySquad.members?.length || 0) >= requiredTeamSize && !isLeaderOrOfficer)) && (
                 <div className="mb-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
                     <div>
                       {!mySquad ? (
                         <p className="text-amber-400 font-medium">{t.needSquad}</p>
-                      ) : (mySquad.members?.length || 0) < 5 ? (
+                      ) : (mySquad.members?.length || 0) < requiredTeamSize ? (
                         <>
-                          <p className="text-amber-400 font-medium">{t.needMoreMembers}</p>
+                          <p className="text-amber-400 font-medium">{selectedFormat === '3v3' ? t.needMoreMembers3v3 : t.needMoreMembers5v5}</p>
                           <p className="text-amber-400/70 text-sm mt-1">
-                            {mySquad.members?.length || 0}/5 {t.currentMembers}
+                            {mySquad.members?.length || 0}/{requiredTeamSize} {t.currentMembers}
                           </p>
                         </>
                       ) : !isLeaderOrOfficer ? (
@@ -1297,19 +1418,19 @@ const StrickerMode = () => {
                 <div className="flex-1 p-4 bg-dark-800/50 rounded-xl">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-gray-400">{t.format}</span>
-                    <span className="text-lime-400 font-bold">5v5</span>
+                    <span className={`${formatColors.textPrimary} font-bold`}>{selectedFormat}</span>
                   </div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-gray-400">{t.gameMode}</span>
-                    <span className="text-lime-400 font-medium">{t.searchDestroy}</span>
+                    <span className={`${formatColors.textPrimary} font-medium`}>{t.searchDestroy}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-gray-400 flex items-center gap-1.5">
-                      <Crosshair className="w-4 h-4 text-lime-400" />
+                      <Crosshair className={`w-4 h-4 ${formatColors.textPrimary}`} />
                       {t.cranes}
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-lime-400 font-bold">+50</span>
+                      <span className={`${formatColors.textPrimary} font-bold`}>+50</span>
                       <span className="text-gray-500">/</span>
                       <span className="text-red-400 font-bold">+25</span>
                     </div>
@@ -1320,8 +1441,8 @@ const StrickerMode = () => {
                   {inQueue ? (
                     <div className="text-center">
                       <div className="flex items-center justify-center gap-2 mb-4">
-                        <Loader2 className="w-5 h-5 text-lime-400 animate-spin" />
-                        <span className="text-lime-400 font-bold">{t.inQueue}</span>
+                        <Loader2 className={`w-5 h-5 ${formatColors.textPrimary} animate-spin`} />
+                        <span className={`${formatColors.textPrimary} font-bold`}>{t.inQueue}</span>
                       </div>
                       <button
                         onClick={handleLeaveQueue}
@@ -1363,7 +1484,7 @@ const StrickerMode = () => {
                       disabled={joiningQueue || !matchmakingEnabled || !canStartMatch}
                       className={`w-full px-6 py-4 font-bold rounded-xl transition-all flex items-center justify-center gap-2 ${
                         matchmakingEnabled && canStartMatch
-                          ? 'bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600 text-white shadow-lg shadow-lime-500/30' 
+                          ? `${formatColors.bgGradient} ${formatColors.bgGradientHover} text-white shadow-lg ${formatColors.shadowPrimary}` 
                           : 'bg-dark-800 text-gray-500 cursor-not-allowed'
                       }`}
                     >
@@ -1519,15 +1640,15 @@ const StrickerMode = () => {
             </div>
             
             {/* Squad Leaderboard */}
-            <div className="bg-dark-900 border border-lime-500/20 rounded-2xl p-6">
+            <div className={`bg-dark-900 border ${formatColors.borderPrimary} rounded-2xl p-6 transition-colors duration-300`}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Medal className="w-5 h-5 text-lime-400" />
-                  {t.squadLeaderboard}
+                  <Medal className={`w-5 h-5 ${formatColors.textPrimary}`} />
+                  {t.squadLeaderboard} ({selectedFormat})
                 </h2>
                 <button
                   onClick={handleOpenTop100}
-                  className="px-4 py-2 bg-gradient-to-r from-lime-500 to-green-500 hover:from-lime-600 hover:to-green-600 text-white font-bold rounded-xl transition-all flex items-center gap-2 text-sm"
+                  className={`px-4 py-2 ${formatColors.bgGradient} ${formatColors.bgGradientHover} text-white font-bold rounded-xl transition-all flex items-center gap-2 text-sm`}
                 >
                   <Trophy className="w-4 h-4" />
                   Top 100
@@ -2007,7 +2128,7 @@ const StrickerMode = () => {
               <div className="flex items-center justify-between">
                 <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                   <Trophy className="w-7 h-7 text-lime-400" />
-                  Top 100 {t.squadLeaderboard}
+                  Top 100 {t.squadLeaderboard} ({selectedFormat})
                 </h2>
                 <button
                   onClick={() => setShowTop100Modal(false)}

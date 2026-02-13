@@ -7,7 +7,7 @@ import { useSocket } from '../SocketContext';
 import { 
   ArrowLeft, Trophy, Users, Clock, Send, Loader2, Shield, 
   Swords, MessageCircle, AlertTriangle, Crown, Shuffle, Map,
-  Medal, Star, Flame, Zap, BookOpen, X, Coins, Target
+  Medal, Star, Flame, Zap, BookOpen, X, Coins, Target, Eye
 } from 'lucide-react';
 import RankedMatchReport from '../components/RankedMatchReport';
 import LadderMatchReport from '../components/LadderMatchReport';
@@ -127,6 +127,16 @@ const getRankFromPointsWithThresholds = (points, thresholds, language = 'en') =>
     ...rank,
     name: RANK_NAMES[rank.key]?.[language] || RANK_NAMES[rank.key]?.en || rank.key
   };
+};
+
+// Helper to check if a PC player is connected to Iris (heartbeat within last 3 minutes)
+const isPlayerConnectedToIris = (player) => {
+  if (!player || player.platform !== 'PC') return null; // Not a PC player
+  if (!player.irisLastSeen) return false; // Never connected
+  
+  const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+  const lastSeen = new Date(player.irisLastSeen);
+  return lastSeen > threeMinutesAgo;
 };
 
 const MatchSheet = () => {
@@ -1418,52 +1428,7 @@ const MatchSheet = () => {
     };
   }, [socket, matchId, isRankedMatch, navigate]);
 
-  // Listen for GGSecure connection status changes
-  useEffect(() => {
-    if (!socket || !matchId) return;
-
-    const handleGGSecureDisconnect = (data) => {
-      if (data.matchId === matchId || data.matchId === parseInt(matchId)) {
-        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
-        
-        const systemMessage = {
-          _id: `ggsecure-disconnect-${Date.now()}`,
-          isSystem: true,
-          messageType: 'ggsecure_disconnect',
-          username: data.username, // Stocker le nom du joueur pour l'affichage traduit
-          createdAt: timestamp,
-          user: { username: 'SYSTEM' }
-        };
-        setMessages(prev => [...prev, systemMessage]);
-        setTimeout(scrollChatToBottom, 50);
-      }
-    };
-
-    const handleGGSecureReconnect = (data) => {
-      if (data.matchId === matchId || data.matchId === parseInt(matchId)) {
-        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
-        
-        const systemMessage = {
-          _id: `ggsecure-reconnect-${Date.now()}`,
-          isSystem: true,
-          messageType: 'ggsecure_reconnect',
-          username: data.username, // Stocker le nom du joueur pour l'affichage traduit
-          createdAt: timestamp,
-          user: { username: 'SYSTEM' }
-        };
-        setMessages(prev => [...prev, systemMessage]);
-        setTimeout(scrollChatToBottom, 50);
-      }
-    };
-
-    socket.on('playerGGSecureDisconnect', handleGGSecureDisconnect);
-    socket.on('playerGGSecureReconnect', handleGGSecureReconnect);
-
-    return () => {
-      socket.off('playerGGSecureDisconnect', handleGGSecureDisconnect);
-      socket.off('playerGGSecureReconnect', handleGGSecureReconnect);
-    };
-  }, [socket, matchId, t.playerDisconnected, t.playerReconnected]);
+  // GGSecure listeners removed - no longer relevant (Iris is used instead)
 
   // Chat container ref
   const chatContainerRef = useRef(null);
@@ -3141,6 +3106,8 @@ const MatchSheet = () => {
                     
                     {messages.filter(msg => {
                       // Filtrer les messages vides (sauf messages système avec messageType)
+                      // Exclure les messages GGSecure - plus utilisé (remplacé par Iris)
+                      if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') return false;
                       if (msg.isSystem && msg.messageType) return true;
                       if (msg.isSystem && msg.message && msg.message.trim()) return true;
                       if (!msg.isSystem && msg.message && msg.message.trim()) return true;
@@ -3150,25 +3117,6 @@ const MatchSheet = () => {
                       if (msg.isSystem) {
                         let displayMessage = msg.message || '';
                         let messageStyle = 'default'; // default, disconnect, reconnect, cancellation
-                        
-                        // Si c'est un message GGSecure avec messageType, traduire
-                        if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') {
-                          const timestamp = new Date(msg.createdAt);
-                          const timeString = timestamp.toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit',
-                            second: '2-digit'
-                          });
-                          const username = msg.username || msg.user?.username || 'Joueur';
-                          
-                          if (msg.messageType === 'ggsecure_disconnect') {
-                            displayMessage = `${username} ${t.playerDisconnected} (${timeString})`;
-                            messageStyle = 'disconnect';
-                          } else {
-                            displayMessage = `${username} ${t.playerReconnected} (${timeString})`;
-                            messageStyle = 'reconnect';
-                          }
-                        }
                         
                         // Si c'est une demande d'annulation
                         if (msg.messageType === 'cancellation_request') {
@@ -3330,6 +3278,18 @@ const MatchSheet = () => {
                                     {player.platform}
                                   </span>
                                 )}
+                                {/* Iris connection status for PC players */}
+                                {player.platform === 'PC' && !p.isFake && (() => {
+                                  const irisConnected = isPlayerConnectedToIris(player);
+                                  return (
+                                    <div 
+                                      className={`p-1 rounded ${irisConnected ? 'bg-green-500/20' : 'bg-red-500/20'}`}
+                                      title={irisConnected ? 'Iris connecté' : 'Iris déconnecté'}
+                                    >
+                                      <Eye className={`w-3 h-3 ${irisConnected ? 'text-green-400' : 'text-red-400'}`} />
+                                    </div>
+                                  );
+                                })()}
                                 {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
                                 {alreadyRefunded && (
                                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
@@ -3430,6 +3390,18 @@ const MatchSheet = () => {
                                     {player.platform}
                                   </span>
                                 )}
+                                {/* Iris connection status for PC players */}
+                                {player.platform === 'PC' && !p.isFake && (() => {
+                                  const irisConnected = isPlayerConnectedToIris(player);
+                                  return (
+                                    <div 
+                                      className={`p-1 rounded ${irisConnected ? 'bg-green-500/20' : 'bg-red-500/20'}`}
+                                      title={irisConnected ? 'Iris connecté' : 'Iris déconnecté'}
+                                    >
+                                      <Eye className={`w-3 h-3 ${irisConnected ? 'text-green-400' : 'text-red-400'}`} />
+                                    </div>
+                                  );
+                                })()}
                                 {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
                                 {alreadyRefunded && (
                                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">

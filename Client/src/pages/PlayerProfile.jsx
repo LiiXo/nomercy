@@ -1812,7 +1812,7 @@ const PlayerProfile = () => {
                 </span>
                 <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
                   <Users className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-                  <span>5v5</span>
+                  <span>{selectedStrickerMatch.teamSize || 5}v{selectedStrickerMatch.teamSize || 5}</span>
                 </div>
                 <div className="flex items-center gap-1.5 sm:gap-2 text-white/80 text-xs sm:text-sm">
                   <Clock className="w-3.5 sm:w-4 h-3.5 sm:h-4" />

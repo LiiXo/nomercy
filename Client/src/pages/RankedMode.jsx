@@ -1116,13 +1116,7 @@ const RankedMode = () => {
     setJoiningQueue(true); // Disable button IMMEDIATELY before any async work
     
     try {
-      if (user?.platform === 'PC') {
-        const connected = await checkGGSecure();
-        if (!connected) {
-          setMatchmakingError(language === 'fr' ? 'Connectez-vous à GGSecure pour jouer.' : 'Connect to GGSecure to play.');
-          return;
-        }
-      }
+      // GGSecure verification removed - Iris status shown on match sheet instead
       const response = await fetch(`${API_URL}/ranked-matches/matchmaking/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2998,13 +2992,7 @@ const RankedMode = () => {
                     );
                   })()}
 
-                  {/* GGSecure Warning */}
-                  {user?.platform === 'PC' && ggsecureConnected === false && (
-                    <div className="mb-4 p-4 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center gap-3">
-                      <ShieldCheck className="w-5 h-5 text-red-400" />
-                      <span className="text-red-300">{t.ggsecureRequired}</span>
-                    </div>
-                  )}
+
 
                   {/* Error */}
                   {matchmakingError && (
@@ -3421,7 +3409,7 @@ const RankedMode = () => {
                       {(!isAdmin || !staffQueueMode) && (
                         <button
                           onClick={joinQueue}
-                          disabled={joiningQueue || joinCooldown || (activeMatch && !activeMatch.isTestMatch) || (user?.platform === 'PC' && ggsecureConnected === false) || (!matchmakingEnabled && !isStaffOrAdmin)}
+                          disabled={joiningQueue || joinCooldown || (activeMatch && !activeMatch.isTestMatch) || (!matchmakingEnabled && !isStaffOrAdmin)}
                           className={`w-full py-5 rounded-2xl bg-gradient-to-r ${
                             isHardcore ? 'from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700' : 'from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700'
                           } text-white font-bold text-lg shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3 group`}

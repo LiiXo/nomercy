@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, TrendingDown, X, Trophy, Shield, Crown, 
-  Star, ChevronRight, ArrowRight, Users, Check, Loader2, Crosshair, Coins
+  Star, ChevronRight, ArrowRight, Users, Check, Loader2, Crosshair, Coins, Ban, Map
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
@@ -61,7 +61,12 @@ const StrickerMatchReport = ({
   xpEarned = 0,
   topSquadPointsChange = 0,
   // Match mode for navigation
-  matchMode = null
+  matchMode = null,
+  // Match format (3v3 or 5v5)
+  matchFormat = '5v5',
+  // Map bans info
+  mapBans = null,
+  selectedMap = null
 }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -269,7 +274,7 @@ const StrickerMatchReport = ({
           
           {squadName && (
             <p className="text-gray-300 text-sm">
-              {squadName}
+              {squadName} • {matchFormat}
             </p>
           )}
           
@@ -282,6 +287,55 @@ const StrickerMatchReport = ({
         
         {/* Content */}
         <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+          {/* Map Bans Section - Show if any map was banned OR if we have a selected map */}
+          {((mapBans && (mapBans.team1BannedMap || mapBans.team2BannedMap)) || selectedMap) && (
+            <div 
+              className="bg-dark-800/50 rounded-xl p-4 border border-white/10"
+              style={{
+                animation: animationStep >= 2 ? 'fadeIn 0.5s ease-out forwards' : 'none',
+                opacity: animationStep >= 2 ? 1 : 0
+              }}
+            >
+              {/* Banned Maps Header - only show if there are bans */}
+              {mapBans && (mapBans.team1BannedMap || mapBans.team2BannedMap) && (
+                <>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <Ban className="w-4 h-4 text-red-400" />
+                    <h4 className="text-gray-400 text-sm">
+                      {language === 'fr' ? 'Maps Bannies' : 'Banned Maps'}
+                    </h4>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
+                    {mapBans.team1BannedMap && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                        <span className="text-gray-400 text-xs">{mapBans.team1Name || 'Équipe 1'}:</span>
+                        <span className="text-red-400 font-medium text-sm">{mapBans.team1BannedMap}</span>
+                        <Ban className="w-3 h-3 text-red-400" />
+                      </div>
+                    )}
+                    {mapBans.team2BannedMap && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                        <span className="text-gray-400 text-xs">{mapBans.team2Name || 'Équipe 2'}:</span>
+                        <span className="text-red-400 font-medium text-sm">{mapBans.team2BannedMap}</span>
+                        <Ban className="w-3 h-3 text-red-400" />
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              
+              {/* Selected Map */}
+              {selectedMap && (
+                <div className={`${mapBans && (mapBans.team1BannedMap || mapBans.team2BannedMap) ? 'mt-3' : ''} flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-lime-500/10 border border-lime-500/30`}>
+                  <Map className="w-4 h-4 text-lime-400" />
+                  <span className="text-gray-400 text-xs">{language === 'fr' ? 'Map jouée:' : 'Played map:'}</span>
+                  <span className="text-lime-400 font-medium text-sm">{selectedMap}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Points Change */}
           <div 
             className="text-center"

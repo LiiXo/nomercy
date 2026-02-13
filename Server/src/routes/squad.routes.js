@@ -109,6 +109,45 @@ const getSquadFieldForMode = (mode) => {
   return 'squad'; // fallback to legacy field
 };
 
+// Helper function to check and clean up orphaned squad references
+// Returns true if user has a valid squad for the given mode, false otherwise
+const checkAndCleanOrphanedSquadRef = async (user, squadMode) => {
+  const fieldsToCheck = [];
+  
+  if (squadMode === 'hardcore') {
+    if (user.squadHardcore) fieldsToCheck.push({ field: 'squadHardcore', id: user.squadHardcore });
+  } else if (squadMode === 'cdl') {
+    if (user.squadCdl) fieldsToCheck.push({ field: 'squadCdl', id: user.squadCdl });
+  } else {
+    // For 'both' mode, check all fields
+    if (user.squadHardcore) fieldsToCheck.push({ field: 'squadHardcore', id: user.squadHardcore });
+    if (user.squadCdl) fieldsToCheck.push({ field: 'squadCdl', id: user.squadCdl });
+    if (user.squad) fieldsToCheck.push({ field: 'squad', id: user.squad });
+  }
+  
+  if (fieldsToCheck.length === 0) return false;
+  
+  // Check if any of the referenced squads actually exist
+  const orphanedFields = [];
+  for (const check of fieldsToCheck) {
+    const squadExists = await Squad.exists({ _id: check.id, isDeleted: { $ne: true } });
+    if (!squadExists) {
+      orphanedFields.push(check.field);
+    }
+  }
+  
+  // Clean up orphaned references
+  if (orphanedFields.length > 0) {
+    const unsetFields = {};
+    orphanedFields.forEach(f => unsetFields[f] = 1);
+    await User.findByIdAndUpdate(user._id, { $unset: unsetFields });
+    console.log(`[Squad] Cleaned orphaned squad refs for user ${user._id}: ${orphanedFields.join(', ')}`);
+  }
+  
+  // Return true if there's still at least one valid squad reference for this mode
+  return fieldsToCheck.length > orphanedFields.length;
+};
+
 // Get user's current squad for a specific mode
 router.get('/my-squad', verifyToken, async (req, res) => {
   try {
@@ -403,22 +442,25 @@ router.post('/:squadId/join-request', verifyToken, async (req, res) => {
     const user = await User.findById(userId);
     const squadMode = squad.mode; // 'hardcore', 'cdl', or 'both'
     
-    // Determine which field to check based on squad's mode
-    if (squadMode === 'hardcore' && user.squadHardcore) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade en mode Hardcore.' 
-      });
-    } else if (squadMode === 'cdl' && user.squadCdl) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade en mode CDL.' 
-      });
-    } else if (squadMode === 'both' && (user.squadHardcore || user.squadCdl || user.squad)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade.' 
-      });
+    // Check and clean up any orphaned squad references, then verify if user has valid squad
+    const hasValidSquad = await checkAndCleanOrphanedSquadRef(user, squadMode);
+    if (hasValidSquad) {
+      if (squadMode === 'hardcore') {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous êtes déjà dans une escouade en mode Hardcore.' 
+        });
+      } else if (squadMode === 'cdl') {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous êtes déjà dans une escouade en mode CDL.' 
+        });
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous êtes déjà dans une escouade.' 
+        });
+      }
     }
     
     if (!squad.isPublic) {
@@ -1258,21 +1300,25 @@ router.post('/join/:inviteCode', verifyToken, async (req, res) => {
     const squadMode = squad.mode;
     const squadField = getSquadFieldForMode(squadMode);
     
-    if (squadMode === 'hardcore' && user.squadHardcore) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade en mode Hardcore.' 
-      });
-    } else if (squadMode === 'cdl' && user.squadCdl) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade en mode CDL.' 
-      });
-    } else if (squadMode === 'both' && (user.squadHardcore || user.squadCdl || user.squad)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vous êtes déjà dans une escouade.' 
-      });
+    // Check and clean up any orphaned squad references, then verify if user has valid squad
+    const hasValidSquad = await checkAndCleanOrphanedSquadRef(user, squadMode);
+    if (hasValidSquad) {
+      if (squadMode === 'hardcore') {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous êtes déjà dans une escouade en mode Hardcore.' 
+        });
+      } else if (squadMode === 'cdl') {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous êtes déjà dans une escouade en mode CDL.' 
+        });
+      } else {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous êtes déjà dans une escouade.' 
+        });
+      }
     }
     
     // Check if code has expired
@@ -2020,9 +2066,13 @@ router.put('/admin/:squadId/ladder-points', verifyToken, requireAdmin, async (re
 });
 
 // Update squad Stricker stats (admin only)
+// Supports format parameter: '3v3' uses statsStricker3v3, '5v5' uses statsStricker (legacy)
 router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (req, res) => {
   try {
-    const { statsStricker, cranes } = req.body;
+    const { statsStricker, cranes, format = '5v5' } = req.body;
+    
+    // Determine stats field based on format (5v5 uses legacy 'statsStricker')
+    const statsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
     
     const squad = await Squad.findById(req.params.squadId);
     if (!squad) {
@@ -2032,17 +2082,17 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
       });
     }
 
-    // Update Stricker stats
+    // Update Stricker stats for the specified format
     if (statsStricker && typeof statsStricker === 'object') {
-      if (!squad.statsStricker) squad.statsStricker = {};
-      squad.statsStricker.points = parseInt(statsStricker.points) || 0;
-      squad.statsStricker.wins = parseInt(statsStricker.wins) || 0;
-      squad.statsStricker.losses = parseInt(statsStricker.losses) || 0;
+      if (!squad[statsField]) squad[statsField] = {};
+      squad[statsField].points = parseInt(statsStricker.points) || 0;
+      squad[statsField].wins = parseInt(statsStricker.wins) || 0;
+      squad[statsField].losses = parseInt(statsStricker.losses) || 0;
       // Mark nested object as modified to ensure Mongoose saves it
-      squad.markModified('statsStricker');
+      squad.markModified(statsField);
     }
 
-    // Update Munitions (cranes)
+    // Update Munitions (cranes) - shared between formats
     if (cranes !== undefined) {
       squad.cranes = parseInt(cranes) || 0;
     }
@@ -2050,19 +2100,21 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
     await squad.save();
 
     // Log to Discord (non-blocking - don't fail the request if logging fails)
-    logAdminAction(req.user, 'Update Stricker Stats', squad.name, {
+    logAdminAction(req.user, `Update Stricker Stats (${format})`, squad.name, {
       fields: [
-        { name: 'Points', value: `${squad.statsStricker.points} pts` },
-        { name: 'Victoires', value: squad.statsStricker.wins.toString() },
-        { name: 'Défaites', value: squad.statsStricker.losses.toString() },
+        { name: 'Format', value: format },
+        { name: 'Points', value: `${squad[statsField].points} pts` },
+        { name: 'Victoires', value: squad[statsField].wins.toString() },
+        { name: 'Défaites', value: squad[statsField].losses.toString() },
         { name: 'Munitions', value: squad.cranes.toString() }
       ]
     }).catch(err => console.error('Discord logging error:', err));
 
     res.json({
       success: true,
-      message: 'Stats Stricker mises à jour',
-      squad
+      message: `Stats Stricker ${format} mises à jour`,
+      squad,
+      format
     });
   } catch (error) {
     console.error('Update squad stricker stats error:', error);
@@ -2074,10 +2126,16 @@ router.put('/admin/:squadId/stricker-stats', verifyToken, requireAdmin, async (r
 });
 
 // Reset squad Stricker stats (admin only)
+// Supports format parameter: '3v3' uses statsStricker3v3, '5v5' uses statsStricker (legacy)
 router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (req, res) => {
   try {
+    const { format = '5v5' } = req.body;
+    
+    // Determine stats field based on format (5v5 uses legacy 'statsStricker')
+    const statsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+    
     // First check if squad exists and populate members
-    const existingSquad = await Squad.findById(req.params.squadId).populate('members.user', '_id username statsStricker');
+    const existingSquad = await Squad.findById(req.params.squadId).populate('members.user', `_id username ${statsField}`);
     if (!existingSquad) {
       return res.status(404).json({
         success: false,
@@ -2085,8 +2143,8 @@ router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (
       });
     }
 
-    console.log(`[ADMIN] BEFORE reset - Squad [${existingSquad.tag}] ${existingSquad.name}:`);
-    console.log(`[ADMIN] BEFORE squad.statsStricker:`, JSON.stringify(existingSquad.statsStricker));
+    console.log(`[ADMIN] BEFORE reset (${format}) - Squad [${existingSquad.tag}] ${existingSquad.name}:`);
+    console.log(`[ADMIN] BEFORE squad.${statsField}:`, JSON.stringify(existingSquad[statsField]));
     console.log(`[ADMIN] BEFORE cranes:`, existingSquad.cranes);
     console.log(`[ADMIN] Squad has ${existingSquad.members?.length || 0} members`);
 
@@ -2095,37 +2153,37 @@ router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (
       ?.filter(m => m.user)
       .map(m => m.user._id || m.user) || [];
     
-    console.log(`[ADMIN] Will reset individual statsStricker for ${memberIds.length} members`);
+    console.log(`[ADMIN] Will reset individual ${statsField} for ${memberIds.length} members`);
 
     // Use native MongoDB driver for direct updates (bypass Mongoose completely)
     const mongoose = (await import('mongoose')).default;
     
-    // 1. Reset squad stats
+    // 1. Reset squad stats for the specified format
     const squadResult = await mongoose.connection.db.collection('squads').updateOne(
       { _id: existingSquad._id },
       {
         $set: {
-          'statsStricker.points': 0,
-          'statsStricker.wins': 0,
-          'statsStricker.losses': 0,
-          'statsStricker.rank': 'Recrues',
+          [`${statsField}.points`]: 0,
+          [`${statsField}.wins`]: 0,
+          [`${statsField}.losses`]: 0,
+          [`${statsField}.rank`]: 'Recrues',
           'cranes': 0
         }
       }
     );
     console.log(`[ADMIN] Squad update result:`, JSON.stringify(squadResult));
 
-    // 2. Reset all members' individual statsStricker
+    // 2. Reset all members' individual stats for the specified format
     let usersResult = { modifiedCount: 0 };
     if (memberIds.length > 0) {
       usersResult = await mongoose.connection.db.collection('users').updateMany(
         { _id: { $in: memberIds } },
         {
           $set: {
-            'statsStricker.points': 0,
-            'statsStricker.wins': 0,
-            'statsStricker.losses': 0,
-            'statsStricker.xp': 0
+            [`${statsField}.points`]: 0,
+            [`${statsField}.wins`]: 0,
+            [`${statsField}.losses`]: 0,
+            [`${statsField}.xp`]: 0
           }
         }
       );
@@ -2135,23 +2193,25 @@ router.post('/admin/:squadId/reset-stricker', verifyToken, requireAdmin, async (
     // Fetch the updated squad
     const squad = await Squad.findById(req.params.squadId);
     
-    console.log(`[ADMIN] AFTER reset - Squad [${squad.tag}] ${squad.name}:`);
-    console.log(`[ADMIN] AFTER squad.statsStricker:`, JSON.stringify(squad.statsStricker));
+    console.log(`[ADMIN] AFTER reset (${format}) - Squad [${squad.tag}] ${squad.name}:`);
+    console.log(`[ADMIN] AFTER squad.${statsField}:`, JSON.stringify(squad[statsField]));
     console.log(`[ADMIN] AFTER cranes:`, squad.cranes);
 
     // Log to Discord (non-blocking - don't fail the request if logging fails)
-    logAdminAction(req.user, 'Reset Squad Stricker Stats', squad.name, {
+    logAdminAction(req.user, `Reset Squad Stricker Stats (${format})`, squad.name, {
       fields: [
         { name: 'Tag', value: squad.tag },
-        { name: 'Action', value: 'RAZ complète des stats Stricker (escouade + membres)' },
+        { name: 'Format', value: format },
+        { name: 'Action', value: `RAZ complète des stats Stricker ${format} (escouade + membres)` },
         { name: 'Membres réinitialisés', value: usersResult.modifiedCount.toString() }
       ]
     }).catch(err => console.error('Discord logging error:', err));
 
     res.json({
       success: true,
-      message: `Stats Stricker de [${squad.tag}] ${squad.name} réinitialisées avec succès (${usersResult.modifiedCount} membres)`,
+      message: `Stats Stricker ${format} de [${squad.tag}] ${squad.name} réinitialisées avec succès (${usersResult.modifiedCount} membres)`,
       squad,
+      format,
       squadUpdateResult: squadResult,
       membersReset: usersResult.modifiedCount
     });
@@ -2191,10 +2251,32 @@ router.delete('/admin/:squadId', verifyToken, requireStaff, async (req, res) => 
       });
     }
 
-    // Remove squad reference from all members
+    // Remove squad reference from all members - clear ALL mode-specific fields
+    // based on squad's mode to ensure no orphaned references
+    const squadMode = squad.mode;
+    const unsetFields = { squad: 1 }; // Always clear legacy field
+    
+    if (squadMode === 'hardcore') {
+      unsetFields.squadHardcore = 1;
+    } else if (squadMode === 'cdl') {
+      unsetFields.squadCdl = 1;
+    } else {
+      // For 'both' mode, clear all fields
+      unsetFields.squadHardcore = 1;
+      unsetFields.squadCdl = 1;
+    }
+    
+    // Clear squad reference from all members who have this squad in ANY field
     await User.updateMany(
-      { squad: squad._id },
-      { $unset: { squad: 1 } }
+      { 
+        $or: [
+          { squad: squad._id },
+          { squadHardcore: squad._id },
+          { squadCdl: squad._id },
+          { squadStricker: squad._id }
+        ]
+      },
+      { $unset: { squad: 1, squadHardcore: 1, squadCdl: 1, squadStricker: 1 } }
     );
 
     await Squad.findByIdAndDelete(req.params.squadId);
@@ -2318,10 +2400,23 @@ router.post('/admin/:squadId/kick/:memberId', verifyToken, requireStaff, async (
     squad.members.splice(memberIndex, 1);
     await squad.save();
 
-    // Update user's squad reference
+    // Update user's squad reference - clear the correct mode-specific field
+    const squadMode = squad.mode;
+    const unsetFields = { squad: 1 }; // Always clear legacy field
+    
+    if (squadMode === 'hardcore') {
+      unsetFields.squadHardcore = 1;
+    } else if (squadMode === 'cdl') {
+      unsetFields.squadCdl = 1;
+    } else {
+      // For 'both' mode, clear all fields
+      unsetFields.squadHardcore = 1;
+      unsetFields.squadCdl = 1;
+    }
+    
     await User.findByIdAndUpdate(
       userIdToUpdate,
-      { $unset: { squad: 1 } }
+      { $unset: unsetFields }
     );
 
     // Get kicked user info for logging

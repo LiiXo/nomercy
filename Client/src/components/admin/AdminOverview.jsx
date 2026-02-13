@@ -124,6 +124,20 @@ const AdminOverview = ({ stats }) => {
         </div>
       </div>
 
+      {/* Matchs Stricker (Completed) */}
+      <div className="bg-dark-800/50 border border-pink-500/20 rounded-xl p-4 sm:p-6">
+        <h3 className="text-base sm:text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <Swords className="w-4 sm:w-5 h-4 sm:h-5 text-pink-400" />
+          Matchs Stricker (Completed)
+        </h3>
+        <div className="grid grid-cols-1 gap-3 sm:gap-4">
+          <div className="bg-dark-900/50 rounded-lg p-3 sm:p-4 border border-pink-500/20">
+            <p className="text-gray-400 text-xs sm:text-sm mb-1">⚡ Total Matchs Stricker</p>
+            <p className="text-xl sm:text-2xl font-bold text-pink-400">{stats.matchesByLadder?.stricker || 0}</p>
+          </div>
+        </div>
+      </div>
+
       {/* Ranked Matches Last 10 Days Table */}
       {stats.rankedMatchesLast10Days && stats.rankedMatchesLast10Days.length > 0 && (
         <div className="bg-dark-800/50 border border-purple-500/20 rounded-xl p-4 sm:p-6">

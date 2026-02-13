@@ -110,8 +110,31 @@ const JOIN_RATE_LIMIT_MS = 3000; // 3 seconds between join attempts
 const MATCH_CREATION_LOCK_TIMEOUT = 10000; // 10 seconds max lock time
 
 // Simple object storage (like ranked mode uses)
-const strickerQueue = [];  // Array of { odId, odUsername, odPoints, odRank, odSquadId, odSquadName, joinedAt }
+// Format-specific queues for 3v3 and 5v5
+const strickerQueue = [];  // Legacy/combined queue - Array of { odId, odUsername, odPoints, odRank, odSquadId, odSquadName, joinedAt, format }
+const strickerQueue3v3 = [];  // 3v3 format queue
+const strickerQueue5v5 = [];  // 5v5 format queue
 const strickerOnlineUsers = {};  // { odId: timestamp }
+
+// Helper to get queue by format
+function getQueueByFormat(format) {
+  if (format === '3v3') return strickerQueue3v3;
+  if (format === '5v5') return strickerQueue5v5;
+  return strickerQueue5v5; // Default to 5v5
+}
+
+// Helper to get stats field by format
+// 5v5 uses legacy 'statsStricker' for backward compatibility with existing data
+// 3v3 uses new 'statsStricker3v3' field
+function getStatsFieldByFormat(format) {
+  if (format === '3v3') return 'statsStricker3v3';
+  return 'statsStricker'; // 5v5 uses legacy field for backward compatibility
+}
+
+// Helper to get team size by format
+function getTeamSizeByFormat(format) {
+  return format === '3v3' ? 3 : 5;
+}
 
 // Rate limiting and locking
 const recentJoinAttempts = new Map(); // { odId/squadId: timestamp }
@@ -142,6 +165,7 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
   try {
     const odId = req.user._id.toString();
     const mode = req.query.mode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
+    const format = req.query.format || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
     
     // Update online status
     strickerOnlineUsers[odId] = Date.now();
@@ -150,10 +174,13 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
     const userSquad = req.user?.squadStricker || req.user?.squadHardcore || req.user?.squadCdl || req.user?.squad;
     const userSquadId = userSquad?._id?.toString() || userSquad?.toString();
     
-    // Filter queue by mode
-    const modeQueue = strickerQueue.filter(p => p.mode === mode);
+    // Get the format-specific queue
+    const formatQueue = getQueueByFormat(format);
     
-    // Check if user's squad is in queue (for this mode)
+    // Filter queue by mode and format
+    const modeQueue = formatQueue.filter(p => p.mode === mode);
+    
+    // Check if user's squad is in queue (for this mode and format)
     const inQueue = modeQueue.some(p => p.squadId === userSquadId);
     const queueSize = modeQueue.length;
     
@@ -169,6 +196,7 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
           { team1Squad: userSquadId },
           { team2Squad: userSquadId }
         ],
+        format: format,
         status: 'completed',
         completedAt: { $gte: cooldownCutoff }
       }).select('team1Squad team2Squad completedAt').lean();
@@ -189,6 +217,9 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
         }
       }
     });
+    
+    // Get stats field based on format
+    const statsField = getStatsFieldByFormat(format);
     
     // Get list of squads searching (including user's own squad, marked as isOwnSquad)
     const searchingSquads = [];
@@ -221,15 +252,16 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
       }
     });
     
-    // Check for active match (mode-specific)
+    // Check for active match (mode and format specific)
     let activeMatch = null;
     try {
       activeMatch = await StrickerMatch.findOne({
         'players.user': req.user._id,
         mode: mode,
+        format: format,
         status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
       })
-      .populate('players.user', 'username avatarUrl discordAvatar discordId')
+      .populate('players.user', 'username avatar avatarUrl discordAvatar discordId platform irisLastSeen')
       .populate('team1Squad', 'name tag logo')
       .populate('team2Squad', 'name tag logo')
       .lean();
@@ -247,7 +279,8 @@ router.get('/matchmaking/status', verifyToken, checkStrickerAccess, async (req, 
       searchingSquads, // List of squads to challenge
       inMatch: !!activeMatch,
       match: activeMatch || null,
-      format: '5v5',
+      format: format,
+      teamSize: getTeamSizeByFormat(format),
       gameMode: 'Search & Destroy',
       mode: mode
     });
@@ -304,18 +337,21 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
     const odId = req.user._id.toString();
     const now = Date.now();
     const mode = req.body.mode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
+    const format = req.body.format || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
+    const teamSize = getTeamSizeByFormat(format);
+    const statsField = getStatsFieldByFormat(format);
     
     // Rate limiting: Prevent rapid join attempts (anti race condition)
-    const lastUserAttempt = recentJoinAttempts.get(`user:${odId}:${mode}`);
+    const lastUserAttempt = recentJoinAttempts.get(`user:${odId}:${mode}:${format}`);
     if (lastUserAttempt && (now - lastUserAttempt) < JOIN_RATE_LIMIT_MS) {
       const timeRemaining = JOIN_RATE_LIMIT_MS - (now - lastUserAttempt);
-      console.warn(`[STRICKER] Rate limit hit | user: ${odId} | mode: ${mode} | retry in: ${timeRemaining}ms`);
+      console.warn(`[STRICKER] Rate limit hit | user: ${odId} | mode: ${mode} | format: ${format} | retry in: ${timeRemaining}ms`);
       return res.status(429).json({ 
         success: false, 
         message: 'Veuillez patienter quelques secondes avant de réessayer.' 
       });
     }
-    recentJoinAttempts.set(`user:${odId}:${mode}`, now);
+    recentJoinAttempts.set(`user:${odId}:${mode}:${format}`, now);
     
     // Cleanup old rate limit entries periodically
     if (recentJoinAttempts.size > 500) {
@@ -356,21 +392,21 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
     
     // Squad rate limiting: Prevent same squad from multiple rapid join attempts
     const squadId = squad._id.toString();
-    const lastSquadAttempt = recentJoinAttempts.get(`squad:${squadId}`);
+    const lastSquadAttempt = recentJoinAttempts.get(`squad:${squadId}:${format}`);
     if (lastSquadAttempt && (Date.now() - lastSquadAttempt) < JOIN_RATE_LIMIT_MS) {
-      console.warn(`[STRICKER] Squad rate limit hit | squad: ${squadId}`);
+      console.warn(`[STRICKER] Squad rate limit hit | squad: ${squadId} | format: ${format}`);
       return res.status(429).json({ 
         success: false, 
         message: 'Votre escouade a déjà lancé une recherche. Veuillez patienter.' 
       });
     }
-    recentJoinAttempts.set(`squad:${squadId}`, Date.now());
+    recentJoinAttempts.set(`squad:${squadId}:${format}`, Date.now());
     
-    // Check if squad has at least 5 members
-    if (!squad.members || squad.members.length < 5) {
+    // Check if squad has at least the required number of members for the format
+    if (!squad.members || squad.members.length < teamSize) {
       return res.status(400).json({ 
         success: false, 
-        message: `Votre escouade doit avoir au moins 5 membres (actuellement ${squad.members?.length || 0})` 
+        message: `Votre escouade doit avoir au moins ${teamSize} membres pour le format ${format} (actuellement ${squad.members?.length || 0})` 
       });
     }
     
@@ -411,23 +447,27 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       }
     }
     
-    // Check if already in queue (for this mode)
-    if (strickerQueue.some(p => p.odId === odId && p.mode === mode)) {
+    // Get the format-specific queue
+    const formatQueue = getQueueByFormat(format);
+    
+    // Check if already in queue (for this mode and format)
+    if (formatQueue.some(p => p.odId === odId && p.mode === mode)) {
       return res.status(400).json({ success: false, message: 'Vous êtes déjà dans la file d\'attente' });
     }
     
-    // Check if squad is already in queue for this mode (another member searching)
-    if (strickerQueue.some(p => p.squadId === squad._id.toString() && p.mode === mode)) {
+    // Check if squad is already in queue for this mode and format (another member searching)
+    if (formatQueue.some(p => p.squadId === squad._id.toString() && p.mode === mode)) {
       return res.status(400).json({ 
         success: false, 
         message: 'Votre escouade est déjà dans la file d\'attente' 
       });
     }
     
-    // Check for active match for user (mode-specific) - includes disputed matches
+    // Check for active match for user (mode and format specific) - includes disputed matches
     const activeMatch = await StrickerMatch.findOne({
       'players.user': req.user._id,
       mode: mode,
+      format: format,
       status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
     });
     
@@ -441,13 +481,14 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       });
     }
     
-    // Check if squad already has an active match (mode-specific) - includes disputed matches
+    // Check if squad already has an active match (mode and format specific) - includes disputed matches
     const squadActiveMatch = await StrickerMatch.findOne({
       $or: [
         { team1Squad: squad._id },
         { team2Squad: squad._id }
       ],
       mode: mode,
+      format: format,
       status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
     });
     
@@ -461,25 +502,29 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       });
     }
     
-    // Add to queue with mode
-    strickerQueue.push({
+    // Get format-specific stats
+    const userStats = user[statsField] || { points: 0 };
+    
+    // Add to format-specific queue
+    formatQueue.push({
       odId: odId,
       odUser: req.user._id,
       username: user.username,
-      points: user.statsStricker?.points || 0,
+      points: userStats.points || 0,
       squad: squad,
       squadId: squad._id.toString(),
       squadName: squad.name,
       squadTag: squad.tag,
       squadMembers: squad.members.length,
       joinedAt: new Date(),
-      mode: mode
+      mode: mode,
+      format: format
     });
     
     // Filter queue by mode for display
-    const modeQueue = strickerQueue.filter(p => p.mode === mode);
+    const modeQueue = formatQueue.filter(p => p.mode === mode);
     
-    // Get updated list of searching squads (excluding own squad) - mode specific
+    // Get updated list of searching squads (excluding own squad) - mode and format specific
     const searchingSquads = [];
     const seenSquads = new Set();
     modeQueue.forEach((entry) => {
@@ -503,13 +548,14 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
     if (io) {
       io.to('stricker-mode').emit('strickerQueueUpdate', {
         mode: mode,
+        format: format,
         action: 'join',
         squad: {
           squadId: squadId,
           squadName: squad.name,
           squadTag: squad.tag,
           squadLogo: squad.logo || null,
-          points: user.statsStricker?.points || 0,
+          points: userStats.points || 0,
           joinedAt: new Date()
         },
         queueSize: modeQueue.length
@@ -522,7 +568,9 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       queueSize: modeQueue.length,
       position: modeQueue.length,
       searchingSquads,
-      mode: mode
+      mode: mode,
+      format: format,
+      teamSize: teamSize
     });
   } catch (error) {
     console.error('Stricker join queue error:', error);
@@ -533,8 +581,11 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
 // Challenge a squad - Create match directly
 router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
-    const { targetSquadId, mode: requestMode } = req.body;
+    const { targetSquadId, mode: requestMode, format: requestFormat } = req.body;
     const mode = requestMode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
+    const format = requestFormat || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
+    const teamSize = getTeamSizeByFormat(format);
+    const statsField = getStatsFieldByFormat(format);
     const odId = req.user._id.toString();
     const now = Date.now();
     
@@ -543,14 +594,14 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
     }
     
     // Rate limiting
-    const lastAttempt = recentJoinAttempts.get(`challenge:${odId}`);
+    const lastAttempt = recentJoinAttempts.get(`challenge:${odId}:${format}`);
     if (lastAttempt && (now - lastAttempt) < JOIN_RATE_LIMIT_MS) {
       return res.status(429).json({ 
         success: false, 
         message: 'Veuillez patienter quelques secondes avant de réessayer.' 
       });
     }
-    recentJoinAttempts.set(`challenge:${odId}`, now);
+    recentJoinAttempts.set(`challenge:${odId}:${format}`, now);
     
     // Get challenger's info
     const user = await User.findById(req.user._id)
@@ -614,8 +665,11 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       }
     }
     
-    // Check if target squad is in queue (for this mode)
-    const targetEntry = strickerQueue.find(p => p.squadId === targetSquadId && p.mode === mode);
+    // Get the format-specific queue
+    const formatQueue = getQueueByFormat(format);
+    
+    // Check if target squad is in queue (for this mode and format)
+    const targetEntry = formatQueue.find(p => p.squadId === targetSquadId && p.mode === mode);
     if (!targetEntry) {
       return res.status(400).json({ 
         success: false, 
@@ -628,7 +682,7 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       return res.status(400).json({ success: false, message: 'Vous ne pouvez pas vous défier vous-même' });
     }
         
-    // Check for active matches (mode-specific) - includes disputed matches
+    // Check for active matches (mode and format specific) - includes disputed matches
     const activeMatch = await StrickerMatch.findOne({
       $or: [
         { 'players.user': req.user._id },
@@ -636,6 +690,7 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         { team2Squad: challengerSquad._id }
       ],
       mode: mode,
+      format: format,
       status: { $in: ['pending', 'ready', 'roster_selection', 'map_vote', 'in_progress', 'disputed'] }
     });
     
@@ -649,7 +704,7 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       });
     }
     
-    // 2-hour cooldown check - can't challenge same team twice within 2 hours
+    // 2-hour cooldown check - can't challenge same team twice within 2 hours (per format)
     const REMATCH_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
     const cooldownCutoff = new Date(Date.now() - REMATCH_COOLDOWN_MS);
     
@@ -658,6 +713,7 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         { team1Squad: challengerSquadId, team2Squad: targetSquadId },
         { team1Squad: targetSquadId, team2Squad: challengerSquadId }
       ],
+      format: format,
       status: 'completed',
       completedAt: { $gte: cooldownCutoff }
     }).select('completedAt').lean();
@@ -694,8 +750,8 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
     matchCreationLockTime = lockAcquiredAt;
     
     try {
-      // Double-check target is still in queue (mode-specific)
-      const targetStillInQueue = strickerQueue.find(p => p.squadId === targetSquadId && p.mode === mode);
+      // Double-check target is still in queue (mode and format specific)
+      const targetStillInQueue = formatQueue.find(p => p.squadId === targetSquadId && p.mode === mode);
       if (!targetStillInQueue) {
         return res.status(400).json({ 
           success: false, 
@@ -704,30 +760,50 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       }
       
       
-      // Get ALL stricker maps for ban phase (each team bans 1, then random from remaining)
+      // Get ALL stricker maps for ban phase (filtered by format)
       let maps = await Map.find({
         isActive: true,
-        'strickerConfig.ranked.enabled': true
+        'strickerConfig.ranked.enabled': true,
+        'strickerConfig.ranked.formats': format
       });
       
-      if (maps.length === 0) {
+      // For 5v5 only: Fallback to legacy maps without formats array
+      if (maps.length === 0 && format === '5v5') {
+        maps = await Map.find({
+          isActive: true,
+          'strickerConfig.ranked.enabled': true,
+          $or: [
+            { 'strickerConfig.ranked.formats': { $exists: false } },
+            { 'strickerConfig.ranked.formats': { $size: 0 } }
+          ]
+        });
+      }
+      
+      // Final fallback for 5v5: regular S&D maps (legacy support)
+      if (maps.length === 0 && format === '5v5') {
         maps = await Map.find({
           isActive: true,
           'rankedConfig.searchAndDestroy.enabled': true
         });
       }
       
+      // Note: For 3v3, no fallback - maps must be explicitly configured
+      
+      // Get format-specific stats for players
+      const userStats = user[statsField] || { points: 0 };
+      
       // Create the match
       const match = new StrickerMatch({
         gameMode: 'Search & Destroy',
         mode: mode, // hardcore or cdl
-        teamSize: 5,
+        format: format, // 3v3 or 5v5
+        teamSize: teamSize,
         players: [
           {
             user: req.user._id,
             username: user.username,
-            rank: getStrickerRank(user.statsStricker?.points || 0),
-            points: user.statsStricker?.points || 0,
+            rank: getStrickerRank(userStats.points || 0),
+            points: userStats.points || 0,
             team: 1,
             squad: challengerSquad._id,
             isReferent: true
@@ -767,10 +843,10 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       await match.save();
       
       
-      // Remove both squads from queue
-      for (let i = strickerQueue.length - 1; i >= 0; i--) {
-        if (strickerQueue[i].squadId === challengerSquadId || strickerQueue[i].squadId === targetSquadId) {
-          strickerQueue.splice(i, 1);
+      // Remove both squads from format-specific queue
+      for (let i = formatQueue.length - 1; i >= 0; i--) {
+        if (formatQueue[i].squadId === challengerSquadId || formatQueue[i].squadId === targetSquadId) {
+          formatQueue.splice(i, 1);
         }
       }
       
@@ -781,7 +857,8 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
           matchId: match._id,
           team1Squad: challengerSquad._id,
           team2Squad: targetEntry.squad?._id || targetSquadId,
-          mode: mode
+          mode: mode,
+          format: format
         });
       }
       
@@ -796,7 +873,9 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
         match: {
           _id: match._id,
           team1Squad: { name: challengerSquad.name, tag: challengerSquad.tag },
-          team2Squad: { name: targetEntry.squadName, tag: targetEntry.squadTag }
+          team2Squad: { name: targetEntry.squadName, tag: targetEntry.squadTag },
+          format: format,
+          teamSize: teamSize
         }
       });
     } finally {
@@ -814,24 +893,29 @@ router.post('/matchmaking/leave', verifyToken, checkStrickerAccess, async (req, 
   try {
     const odId = req.user._id.toString();
     const mode = req.body.mode || 'hardcore'; // Default to hardcore (valid enum: 'hardcore' or 'cdl')
+    const format = req.body.format || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
     
-    const playerIndex = strickerQueue.findIndex(p => p.odId === odId && p.mode === mode);
+    // Get the format-specific queue
+    const formatQueue = getQueueByFormat(format);
+    
+    const playerIndex = formatQueue.findIndex(p => p.odId === odId && p.mode === mode);
     if (playerIndex === -1) {
       return res.status(400).json({ success: false, message: 'Vous n\'êtes pas dans la file d\'attente' });
     }
     
     // Get squad info before removing
-    const leavingEntry = strickerQueue[playerIndex];
+    const leavingEntry = formatQueue[playerIndex];
     const squadId = leavingEntry?.squadId;
     
-    strickerQueue.splice(playerIndex, 1);
-    const modeQueue = strickerQueue.filter(p => p.mode === mode);
+    formatQueue.splice(playerIndex, 1);
+    const modeQueue = formatQueue.filter(p => p.mode === mode);
     
     // Broadcast queue update to all users in stricker-mode room
     const io = req.app.get('io');
     if (io && squadId) {
       io.to('stricker-mode').emit('strickerQueueUpdate', {
         mode: mode,
+        format: format,
         action: 'leave',
         squadId: squadId,
         queueSize: modeQueue.length
@@ -841,7 +925,8 @@ router.post('/matchmaking/leave', verifyToken, checkStrickerAccess, async (req, 
     res.json({
       success: true,
       message: 'Vous avez quitté la file d\'attente',
-      queueSize: modeQueue.length
+      queueSize: modeQueue.length,
+      format: format
     });
   } catch (error) {
     console.error('Stricker leave queue error:', error);
@@ -974,11 +1059,14 @@ async function createStrickerMatch() {
 // Get squad leaderboard for stricker mode
 router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
+    const format = req.query.format || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
+    const statsField = getStatsFieldByFormat(format);
+    
     // Get user's squad
     const userSquadId = req.user?.squadStricker?.toString();
     
-    // Check cache first (keyed by existence of userSquadId to handle position lookup)
-    const cacheKey = 'stricker-leaderboard-squads';
+    // Check cache first (keyed by format and existence of userSquadId to handle position lookup)
+    const cacheKey = `stricker-leaderboard-squads-${format}`;
     const cached = getStrickerCached(cacheKey);
     
     if (cached) {
@@ -994,27 +1082,43 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
         success: true,
         top15: cached.allSquads.slice(0, 15),
         userSquad,
-        totalSquads: cached.allSquads.length
+        totalSquads: cached.allSquads.length,
+        format: format
       });
     }
     
-    // Get all squads with stricker stats sorted by points
+    // Build dynamic match and project stages based on format
+    // For 3v3, we need to ensure only squads with ACTUAL 3v3 activity are shown
+    // (not squads that just have default 0 values from schema)
+    const matchCondition = {
+      isDeleted: { $ne: true }
+    };
+    
+    // Get all squads and filter by actual format-specific activity
     const allSquads = await Squad.aggregate([
       {
-        $match: {
-          isDeleted: { $ne: true },
-          $or: [
-            { 'statsStricker.points': { $gt: 0 } },
-            { 'statsStricker.wins': { $gt: 0 } },
-            { 'statsStricker.losses': { $gt: 0 } }
-          ]
-        }
+        $match: matchCondition
       },
       {
         $addFields: {
-          strickerPoints: { $ifNull: ['$statsStricker.points', 0] },
-          strickerWins: { $ifNull: ['$statsStricker.wins', 0] },
-          strickerLosses: { $ifNull: ['$statsStricker.losses', 0] }
+          strickerPoints: { $ifNull: [`$${statsField}.points`, 0] },
+          strickerWins: { $ifNull: [`$${statsField}.wins`, 0] },
+          strickerLosses: { $ifNull: [`$${statsField}.losses`, 0] },
+          // Calculate total activity to filter out squads with no activity
+          totalActivity: {
+            $add: [
+              { $ifNull: [`$${statsField}.points`, 0] },
+              { $ifNull: [`$${statsField}.wins`, 0] },
+              { $ifNull: [`$${statsField}.losses`, 0] }
+            ]
+          }
+        }
+      },
+      // CRITICAL: Only include squads with actual activity in this format
+      // This filters out squads that have never played in this format
+      {
+        $match: {
+          totalActivity: { $gt: 0 }
         }
       },
       {
@@ -1034,7 +1138,7 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
           name: 1,
           tag: 1,
           logo: 1,
-          stats: '$statsStricker',
+          stats: `$${statsField}`,
           strickerPoints: 1,
           strickerWins: 1,
           strickerLosses: 1,
@@ -1072,7 +1176,8 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
       success: true,
       top15,
       userSquad,
-      totalSquads: allSquads.length
+      totalSquads: allSquads.length,
+      format: format
     });
   } catch (error) {
     console.error('Stricker squad leaderboard error:', error);
@@ -1083,28 +1188,44 @@ router.get('/leaderboard/squads', verifyToken, checkStrickerAccess, async (req, 
 // Get top 100 squad leaderboard for stricker mode
 router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
+    const format = req.query.format || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
+    const statsField = getStatsFieldByFormat(format);
+    
     // Check cache first
-    const cacheKey = 'stricker-top100-squads';
+    const cacheKey = `stricker-top100-squads-${format}`;
     const cached = getStrickerCached(cacheKey);
     if (cached) return res.json(cached);
     
-    // Get all squads with stricker stats sorted by points
+    // Build dynamic match condition based on format
+    // For 3v3, we need to ensure only squads with ACTUAL 3v3 activity are shown
+    const matchCondition = {
+      isDeleted: { $ne: true }
+    };
+    
+    // Get all squads with format-specific stricker stats sorted by points
     const top100Squads = await Squad.aggregate([
       {
-        $match: {
-          isDeleted: { $ne: true },
-          $or: [
-            { 'statsStricker.points': { $gt: 0 } },
-            { 'statsStricker.wins': { $gt: 0 } },
-            { 'statsStricker.losses': { $gt: 0 } }
-          ]
-        }
+        $match: matchCondition
       },
       {
         $addFields: {
-          strickerPoints: { $ifNull: ['$statsStricker.points', 0] },
-          strickerWins: { $ifNull: ['$statsStricker.wins', 0] },
-          strickerLosses: { $ifNull: ['$statsStricker.losses', 0] }
+          strickerPoints: { $ifNull: [`$${statsField}.points`, 0] },
+          strickerWins: { $ifNull: [`$${statsField}.wins`, 0] },
+          strickerLosses: { $ifNull: [`$${statsField}.losses`, 0] },
+          // Calculate total activity to filter out squads with no activity
+          totalActivity: {
+            $add: [
+              { $ifNull: [`$${statsField}.points`, 0] },
+              { $ifNull: [`$${statsField}.wins`, 0] },
+              { $ifNull: [`$${statsField}.losses`, 0] }
+            ]
+          }
+        }
+      },
+      // CRITICAL: Only include squads with actual activity in this format
+      {
+        $match: {
+          totalActivity: { $gt: 0 }
         }
       },
       {
@@ -1127,7 +1248,7 @@ router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async
           name: 1,
           tag: 1,
           logo: 1,
-          stats: '$statsStricker',
+          stats: `$${statsField}`,
           strickerPoints: 1,
           strickerWins: 1,
           strickerLosses: 1,
@@ -1149,7 +1270,8 @@ router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async
     const result = {
       success: true,
       squads: top100WithPosition,
-      total: top100Squads.length
+      total: top100Squads.length,
+      format: format
     };
     setStrickerCache(cacheKey, result);
     res.json(result);
@@ -1164,23 +1286,35 @@ router.get('/leaderboard/squads/top100', verifyToken, checkStrickerAccess, async
 // Get current user's stricker ranking
 router.get('/my-ranking', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
+    const { format = '5v5' } = req.query;
+    
+    // Populate both stats fields for format-specific data
     const user = await User.findById(req.user._id)
-      .populate('squadStricker', 'name tag logo statsStricker cranes');
+      .populate('squadStricker', 'name tag logo statsStricker statsStricker3v3 cranes');
     
     if (!user) {
       return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
     }
     
-    const stats = user.statsStricker || { points: 0, wins: 0, losses: 0, xp: 0 };
+    // Get format-specific user stats
+    // 3v3 uses statsStricker3v3, 5v5 uses legacy statsStricker for backward compatibility
+    const userStatsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+    const stats = user[userStatsField] || { points: 0, wins: 0, losses: 0, xp: 0 };
     const rank = getStrickerRank(stats.points);
     const rankInfo = STRICKER_RANKS[rank];
     
-    // Get user's position in squad leaderboard
+    // Get format-specific squad stats
+    // 5v5 uses legacy 'statsStricker' for backward compatibility
+    const squadStatsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+    const squadStats = user.squadStricker?.[squadStatsField] || { points: 0, wins: 0, losses: 0 };
+    
+    // Get user's position in squad leaderboard (format-specific)
     let squadPosition = null;
     if (user.squadStricker) {
+      const pointsField = format === '3v3' ? 'statsStricker3v3.points' : 'statsStricker.points';
       const higherSquads = await Squad.countDocuments({
         isDeleted: { $ne: true },
-        'statsStricker.points': { $gt: user.squadStricker.statsStricker?.points || 0 }
+        [pointsField]: { $gt: squadStats.points || 0 }
       });
       squadPosition = higherSquads + 1;
     }
@@ -1190,23 +1324,23 @@ router.get('/my-ranking', verifyToken, checkStrickerAccess, async (req, res) => 
       ranking: {
         odId: user._id,
         username: user.username,
-        points: stats.points,
-        wins: stats.wins,
-        losses: stats.losses,
-        xp: stats.xp,
+        points: stats.points || 0,
+        wins: stats.wins || 0,
+        losses: stats.losses || 0,
+        xp: stats.xp || 0,
         rank: rank,
         rankName: rankInfo.name,
         rankImage: rankInfo.image,
         nextRank: rank !== 'immortel' ? Object.keys(STRICKER_RANKS)[Object.keys(STRICKER_RANKS).indexOf(rank) + 1] : null,
-        pointsToNextRank: rankInfo.max ? rankInfo.max - stats.points + 1 : null,
+        pointsToNextRank: rankInfo.max ? rankInfo.max - (stats.points || 0) + 1 : null,
         squad: user.squadStricker ? {
           _id: user.squadStricker._id,
           name: user.squadStricker.name,
           tag: user.squadStricker.tag,
           logo: user.squadStricker.logo,
-          points: user.squadStricker.statsStricker?.points || 0,
-          wins: user.squadStricker.statsStricker?.wins || 0,
-          losses: user.squadStricker.statsStricker?.losses || 0,
+          points: squadStats.points || 0,
+          wins: squadStats.wins || 0,
+          losses: squadStats.losses || 0,
           position: squadPosition,
           cranes: user.squadStricker.cranes || 0
         } : null
@@ -1228,7 +1362,7 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
     const match = await StrickerMatch.findById(matchId)
       .populate({
         path: 'players.user',
-        select: 'username avatarUrl discordAvatar discordId activisionId platform equippedTitle',
+        select: 'username avatar avatarUrl discordAvatar discordId activisionId platform equippedTitle irisLastSeen',
         populate: {
           path: 'equippedTitle',
           select: 'name nameTranslations color rarity'
@@ -1237,12 +1371,12 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
       .populate('players.squad', 'name tag logo')
       .populate('team1Squad', 'name tag logo members statsStricker')
       .populate('team2Squad', 'name tag logo members statsStricker')
-      .populate('team1Referent', 'username avatarUrl')
-      .populate('team2Referent', 'username avatarUrl')
+      .populate('team1Referent', 'username avatar avatarUrl')
+      .populate('team2Referent', 'username avatar avatarUrl')
       .populate('chat.user', 'username roles')
-      .populate('mvp.player', 'username avatarUrl discordAvatar discordId')
+      .populate('mvp.player', 'username avatar avatarUrl discordAvatar discordId')
       .populate('mvp.votes.voter', 'username')
-      .populate('mvp.votes.votedFor', 'username avatarUrl discordAvatar discordId');
+      .populate('mvp.votes.votedFor', 'username avatar avatarUrl discordAvatar discordId');
     
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
@@ -1269,7 +1403,7 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
         mySquad = await Squad.findById(userSquadId)
           .populate({
             path: 'members.user',
-            select: 'username avatarUrl discordAvatar discordId statsStricker equippedTitle platform',
+            select: 'username avatar avatarUrl discordAvatar discordId statsStricker equippedTitle platform',
             populate: {
               path: 'equippedTitle',
               select: 'name nameTranslations color rarity'
@@ -1362,7 +1496,7 @@ router.get('/match/active/me', verifyToken, checkStrickerAccess, async (req, res
       'players.user': req.user._id,
       status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
     })
-    .populate('players.user', 'username avatarUrl discordAvatar discordId')
+    .populate('players.user', 'username avatar avatarUrl discordAvatar discordId platform irisLastSeen')
     .populate('team1Squad', 'name tag logo')
     .populate('team2Squad', 'name tag logo');
     
@@ -1486,9 +1620,10 @@ router.post('/match/:matchId/roster/select', verifyToken, checkStrickerAccess, a
     const team1Count = match.players.filter(p => p.team === 1).length;
     const team2Count = match.players.filter(p => p.team === 2).length;
     
-    // Switch turns or complete roster selection
-    if (team1Count >= 5 && team2Count >= 5) {
-      // Both teams have 5 players, roster selection complete
+    // Switch turns or complete roster selection (based on match format)
+    const requiredSize = match.teamSize || 5; // 3 for 3v3, 5 for 5v5
+    if (team1Count >= requiredSize && team2Count >= requiredSize) {
+      // Both teams have required players, roster selection complete
       match.rosterSelection.isActive = false;
       
       // Emit socket event for roster complete
@@ -1816,8 +1951,9 @@ router.post('/match/:matchId/roster/select-helper', verifyToken, checkStrickerAc
     const team1Count = match.players.filter(p => p.team === 1).length;
     const team2Count = match.players.filter(p => p.team === 2).length;
     
-    // Switch turns or complete roster selection
-    if (team1Count >= 5 && team2Count >= 5) {
+    // Switch turns or complete roster selection (based on match format)
+    const requiredSize = match.teamSize || 5; // 3 for 3v3, 5 for 5v5
+    if (team1Count >= requiredSize && team2Count >= requiredSize) {
       match.rosterSelection.isActive = false;
       
       const io = req.app.get('io');
@@ -2470,6 +2606,10 @@ async function distributeStrickerRewards(match) {
     const rewardsConfig = config.strickerMatchRewards?.['Search & Destroy'] || {};
     const pointsLossConfig = config.strickerPointsLossPerRank || {};
     
+    // Get format-specific stats field from match
+    const format = match.format || '5v5';
+    const statsField = getStatsFieldByFormat(format);
+    
     // IMPORTANT: Ensure winningTeam is a Number to avoid type comparison issues
     const winningTeam = Number(match.result.winner);
     
@@ -2515,16 +2655,16 @@ async function distributeStrickerRewards(match) {
       // IMPORTANT: Use Number() for comparison to avoid type mismatch
       const isWinner = Number(player.team) === winningTeam;
       
-      // Initialize stats if not exists
-      if (!user.statsStricker) user.statsStricker = { points: 0, wins: 0, losses: 0, xp: 0 };
+      // Initialize format-specific stats if not exists
+      if (!user[statsField]) user[statsField] = { points: 0, wins: 0, losses: 0, xp: 0 };
       
-      const oldPoints = user.statsStricker.points || 0;
+      const oldPoints = user[statsField].points || 0;
       
       // Calculate points change based on rank
       // Winners get +30 pts, losers lose based on their current rank
       const pointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldPoints, pointsLossConfig);
       
-      user.statsStricker.points = Math.max(0, oldPoints + pointsChange);
+      user[statsField].points = Math.max(0, oldPoints + pointsChange);
       
       // NO gold rewards in Stricker mode
       const goldEarned = 0;
@@ -2533,9 +2673,9 @@ async function distributeStrickerRewards(match) {
       const xpEarned = 0;
       
       if (isWinner) {
-        user.statsStricker.wins = (user.statsStricker.wins || 0) + 1;
+        user[statsField].wins = (user[statsField].wins || 0) + 1;
       } else {
-        user.statsStricker.losses = (user.statsStricker.losses || 0) + 1;
+        user[statsField].losses = (user[statsField].losses || 0) + 1;
       }
       
       await user.save();
@@ -2554,17 +2694,18 @@ async function distributeStrickerRewards(match) {
           // First player from this squad - process squad stats
           const squad = await Squad.findById(player.squad);
           if (squad) {
-            if (!squad.statsStricker) squad.statsStricker = { points: 0, wins: 0, losses: 0 };
+            // Initialize format-specific stats if not exists
+            if (!squad[statsField]) squad[statsField] = { points: 0, wins: 0, losses: 0 };
             
-            const oldSquadPoints = squad.statsStricker.points || 0;
+            const oldSquadPoints = squad[statsField].points || 0;
             const squadPointsChange = isWinner ? POINTS_WIN : getPointsLossForRank(oldSquadPoints, pointsLossConfig);
             
-            squad.statsStricker.points = Math.max(0, oldSquadPoints + squadPointsChange);
+            squad[statsField].points = Math.max(0, oldSquadPoints + squadPointsChange);
             
             if (isWinner) {
-              squad.statsStricker.wins = (squad.statsStricker.wins || 0) + 1;
+              squad[statsField].wins = (squad[statsField].wins || 0) + 1;
             } else {
-              squad.statsStricker.losses = (squad.statsStricker.losses || 0) + 1;
+              squad[statsField].losses = (squad[statsField].losses || 0) + 1;
             }
             
             // Award munitions
@@ -2600,11 +2741,12 @@ async function distributeStrickerRewards(match) {
       player.rewards = {
         pointsChange,
         oldPoints,
-        newPoints: user.statsStricker.points,
+        newPoints: user[statsField].points,
         goldEarned: 0,
         xpEarned: 0,
         cranesEarned: cranesAwarded,
-        topSquadPointsChange: topSquadPtsChange
+        topSquadPointsChange: topSquadPtsChange,
+        format: format
       };
       
     }
@@ -2691,15 +2833,42 @@ router.get('/config', verifyToken, checkStrickerAccess, async (req, res) => {
 // Get available maps for stricker
 router.get('/maps', verifyToken, checkStrickerAccess, async (req, res) => {
   try {
-    const maps = await Map.find({
+    const format = req.query.format || '5v5'; // Default to 5v5 (valid: '3v3' or '5v5')
+    
+    // Find maps with format-specific filter
+    // Maps must have the format in their strickerConfig.ranked.formats array
+    let maps = await Map.find({
       isActive: true,
-      'strickerConfig.ranked.enabled': true
+      'strickerConfig.ranked.enabled': true,
+      'strickerConfig.ranked.formats': format
     }).select('name image strickerConfig');
+    
+    // If no format-specific maps found AND looking for 5v5, try legacy maps without formats array
+    // (for backward compatibility with maps that don't have formats configured yet)
+    if (maps.length === 0 && format === '5v5') {
+      maps = await Map.find({
+        isActive: true,
+        'strickerConfig.ranked.enabled': true,
+        'strickerConfig.ranked.formats': { $exists: false }
+      }).select('name image strickerConfig');
+      
+      // If still no maps, try maps that have empty formats array
+      if (maps.length === 0) {
+        maps = await Map.find({
+          isActive: true,
+          'strickerConfig.ranked.enabled': true,
+          'strickerConfig.ranked.formats': { $size: 0 }
+        }).select('name image strickerConfig');
+      }
+    }
+    
+    // Note: For 3v3, NO fallback - maps must be explicitly configured for 3v3
     
     res.json({
       success: true,
       maps,
-      format: '5v5',
+      format: format,
+      teamSize: getTeamSizeByFormat(format),
       gameMode: 'Search & Destroy'
     });
   } catch (error) {
@@ -2755,7 +2924,7 @@ router.get('/history/player/:userId', verifyToken, async (req, res) => {
     })
     .populate('team1Squad', 'name tag logo')
     .populate('team2Squad', 'name tag logo')
-    .populate('players.user', 'username avatarUrl')
+    .populate('players.user', 'username avatar avatarUrl')
     .sort({ completedAt: -1 })
     .limit(parseInt(limit))
     .lean();
@@ -2809,7 +2978,7 @@ router.get('/history/squad/:squadId', async (req, res) => {
     const matches = await StrickerMatch.find(query)
       .populate('team1Squad', 'name tag logo')
       .populate('team2Squad', 'name tag logo')
-      .populate('players.user', 'username avatarUrl discordAvatar discordId')
+      .populate('players.user', 'username avatar avatarUrl discordAvatar discordId')
       .sort({ completedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -2864,7 +3033,7 @@ router.get('/admin/matches', verifyToken, checkStrickerAccess, async (req, res) 
     const matches = await StrickerMatch.find(query)
       .populate('team1Squad', 'name tag logo')
       .populate('team2Squad', 'name tag logo')
-      .populate('players.user', 'username avatarUrl')
+      .populate('players.user', 'username avatar avatarUrl')
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .skip(skip);

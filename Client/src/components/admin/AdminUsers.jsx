@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe, History, Gift, ChevronDown, Users, Gavel, X, Star, Trophy, Minus, Loader2, Megaphone, Calendar, Clock, Send, FileText 
+  Search, Coins, Shield, Edit2, RotateCcw, Ban, Trash2, ShieldAlert, AlertTriangle, Gamepad2, Globe, History, Gift, ChevronDown, Users, Gavel, X, Star, Trophy, Minus, Loader2, Megaphone, Calendar, Clock, Send, FileText, UserX 
 } from 'lucide-react';
 import { getAvatarUrl } from '../../utils/avatar';
 
@@ -53,6 +53,7 @@ const AdminUsers = ({
   const [historyUser, setHistoryUser] = useState(null);
   const [historyData, setHistoryData] = useState({ warns: [], bans: [] });
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [clearingSquad, setClearingSquad] = useState(null);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -244,6 +245,33 @@ const AdminUsers = ({
     }
   };
 
+  // Clear orphaned squad references for a user
+  const handleClearSquadRefs = async (user) => {
+    if (!window.confirm(`Nettoyer les références d'escouade orphelines pour ${user.username || user.discordUsername} ?`)) {
+      return;
+    }
+    
+    setClearingSquad(user._id);
+    try {
+      const response = await fetch(`${API_URL}/users/admin/${user._id}/clear-squad`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(data.message);
+        // Refresh would be nice here but we don't have access to refetch
+      } else {
+        alert(data.message || 'Erreur');
+      }
+    } catch (err) {
+      console.error('Error clearing squad refs:', err);
+      alert('Erreur lors du nettoyage');
+    } finally {
+      setClearingSquad(null);
+    }
+  };
+
   const handleSendSummon = async () => {
     if (!summonUser || !summonData.date || !summonData.timeStart || !summonData.timeEnd || !summonData.reason.trim()) return;
     setSummonLoading(true);
@@ -392,7 +420,23 @@ const AdminUsers = ({
                     <span className="text-white truncate max-w-[120px]">{user.squad.name}</span>
                   </div>
                 ) : (
-                  <span className="text-gray-500 text-xs">Sans escouade</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 text-xs">Sans escouade</span>
+                    {userIsAdmin && (
+                      <button
+                        onClick={() => handleClearSquadRefs(user)}
+                        disabled={clearingSquad === user._id}
+                        className="p-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-orange-400 transition-colors disabled:opacity-50"
+                        title="Nettoyer références orphelines"
+                      >
+                        {clearingSquad === user._id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <UserX className="w-3 h-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 )}
                 <div className="relative ml-auto">
                   <button
@@ -461,7 +505,23 @@ const AdminUsers = ({
                           <span className="text-white text-sm truncate">{user.squad.name}</span>
                         </div>
                       ) : (
-                        <span className="text-gray-500 text-sm">-</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500 text-sm">-</span>
+                          {userIsAdmin && (
+                            <button
+                              onClick={() => handleClearSquadRefs(user)}
+                              disabled={clearingSquad === user._id}
+                              className="p-1 bg-orange-500/20 hover:bg-orange-500/30 rounded text-orange-400 transition-colors disabled:opacity-50"
+                              title="Nettoyer références orphelines"
+                            >
+                              {clearingSquad === user._id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <UserX className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-3">

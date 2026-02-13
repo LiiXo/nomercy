@@ -804,10 +804,14 @@ fn check_iommu_registry() -> bool {
 /// Check ACPI firmware tables for DMAR/IVRS signatures (most reliable method)
 #[cfg(target_os = "windows")]
 fn check_acpi_firmware_tables() -> bool {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
     // Method 1: Use PowerShell to query ACPI tables directly (most reliable)
     if let Ok(output) = std::process::Command::new("powershell")
         .args(["-NoProfile", "-Command", 
                "Get-WmiObject -Namespace root\\WMI -Class MSAcpi_Table -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'DMAR' -or $_.Name -eq 'IVRS' } | Select-Object -First 1 | ForEach-Object { $_.Name }"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()
     {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();

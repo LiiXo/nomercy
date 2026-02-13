@@ -49,7 +49,7 @@ const strickerPlayerSchema = new mongoose.Schema({
 }, { _id: false });
 
 const strickerMatchSchema = new mongoose.Schema({
-  // Mode de jeu - Stricker uniquement avec Search & Destroy 5v5
+  // Mode de jeu - Stricker avec Search & Destroy 3v3 ou 5v5
   gameMode: {
     type: String,
     required: true,
@@ -63,10 +63,17 @@ const strickerMatchSchema = new mongoose.Schema({
     enum: ['hardcore', 'cdl'],
     default: 'hardcore'
   },
-  // Taille des équipes - 5v5 uniquement
+  // Format du match (3v3 ou 5v5)
+  format: {
+    type: String,
+    enum: ['3v3', '5v5'],
+    default: '5v5',
+    required: true
+  },
+  // Taille des équipes - 3v3 ou 5v5
   teamSize: {
     type: Number,
-    enum: [5],
+    enum: [3, 5],
     default: 5,
     required: true
   },
@@ -342,6 +349,7 @@ const strickerMatchSchema = new mongoose.Schema({
 
 // Index pour les requêtes
 strickerMatchSchema.index({ status: 1, gameMode: 1, mode: 1 });
+strickerMatchSchema.index({ status: 1, format: 1, mode: 1 });
 strickerMatchSchema.index({ 'players.user': 1, status: 1 });
 strickerMatchSchema.index({ 'players.squad': 1, status: 1 });
 strickerMatchSchema.index({ team1Squad: 1, status: 1 });
@@ -350,6 +358,7 @@ strickerMatchSchema.index({ rankBracket: 1, status: 1 });
 strickerMatchSchema.index({ createdAt: -1 });
 strickerMatchSchema.index({ team1Referent: 1 });
 strickerMatchSchema.index({ team2Referent: 1 });
+strickerMatchSchema.index({ format: 1, status: 1 });
 
 // Méthode pour vérifier si un joueur est référent
 strickerMatchSchema.methods.isPlayerReferent = function(userId) {

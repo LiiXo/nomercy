@@ -1489,25 +1489,80 @@ export const sendIrisShadowBan = async (player, reason, durationHours = 24, dete
 };
 
 /**
- * Send warning notification when a player has missing security modules
- * DISABLED - No longer sending notifications for disabled modules
+ * Send warning notification when a player has missing security modules on connection
  * @param {Object} player - Player data
  * @param {Array} missingModules - List of missing/disabled security modules
  */
 export const sendIrisSecurityWarning = async (player, missingModules) => {
-  // Disabled - do not send notifications for disabled modules
-  return;
+  if (!client || !isReady) return;
+  if (!missingModules || missingModules.length === 0) return;
+
+  try {
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerInfo = player.discordId ? `<@${player.discordId}>` : player.username;
+
+    const modulesList = missingModules.map(m => `• **${m.name}**: ${m.status}`).join('\n');
+
+    const embed = new EmbedBuilder()
+      .setColor(0xF59E0B) // Orange - warning
+      .setTitle('⚠️ MODULES DE SÉCURITÉ MANQUANTS')
+      .setDescription(`Le joueur **${player.username}** s'est connecté avec des modules de sécurité désactivés.`)
+      .addFields(
+        { name: '👤 Joueur', value: playerInfo, inline: true },
+        { name: '⏰ Heure', value: timestamp, inline: true },
+        { name: '🛡️ Modules manquants', value: modulesList, inline: false }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Connexion' });
+
+    await sendToChannel(IRIS_DETECTION_ALERTS_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Security warning sent for ${player.username}: ${missingModules.map(m => m.name).join(', ')}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending security warning:', error.message);
+  }
 };
 
 /**
  * Send notification when a player's security status changes between heartbeats
- * DISABLED - No longer sending notifications for security module changes
  * @param {Object} player - Player data
- * @param {Array} changes - List of security changes detected
+ * @param {Array} changes - List of security changes detected (e.g., "HVCI: true → false")
  */
 export const sendIrisSecurityChange = async (player, changes) => {
-  // Disabled - do not send notifications for security module changes
-  return;
+  if (!client || !isReady) return;
+  if (!changes || changes.length === 0) return;
+
+  try {
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerInfo = player.discordId ? `<@${player.discordId}>` : player.username;
+
+    const changesList = changes.map(c => `• ${c}`).join('\n');
+
+    // Check if any change is a disable (→ false, → ❌, or "Désactivé")
+    const hasDisable = changes.some(c => 
+      c.includes('→ false') || 
+      c.includes('→ ❌') || 
+      (c.includes('true →') && c.includes('false'))
+    );
+
+    const embed = new EmbedBuilder()
+      .setColor(hasDisable ? 0xEF4444 : 0x10B981) // Red if disabled, green if enabled
+      .setTitle(hasDisable ? '🚨 CHANGEMENT DE SÉCURITÉ DÉTECTÉ' : '✅ MODULE DE SÉCURITÉ RÉACTIVÉ')
+      .setDescription(hasDisable 
+        ? `Le joueur **${player.username}** a **désactivé** un module de sécurité pendant sa session !`
+        : `Le joueur **${player.username}** a réactivé un module de sécurité.`)
+      .addFields(
+        { name: '👤 Joueur', value: playerInfo, inline: true },
+        { name: '⏰ Heure', value: timestamp, inline: true },
+        { name: '🔄 Changements', value: changesList, inline: false }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Surveillance en session' });
+
+    await sendToChannel(IRIS_DETECTION_ALERTS_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Security change alert sent for ${player.username}: ${changes.join(', ')}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending security change alert:', error.message);
+  }
 };
 
 /**

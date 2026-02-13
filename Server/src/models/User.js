@@ -90,8 +90,26 @@ const userSchema = new mongoose.Schema({
     rank: { type: Number, default: 0 }
   },
   
-  // Game Stats per mode (Stricker)
+  // Game Stats per mode (Stricker) - Legacy (kept for backward compatibility)
   statsStricker: {
+    points: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: Number, default: 0 }
+  },
+  
+  // Game Stats per format (Stricker 3v3)
+  statsStricker3v3: {
+    points: { type: Number, default: 0 },
+    xp: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    rank: { type: Number, default: 0 }
+  },
+  
+  // Game Stats per format (Stricker 5v5)
+  statsStricker5v5: {
     points: { type: Number, default: 0 },
     xp: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
@@ -522,18 +540,17 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Virtual for full avatar URL
+// Virtual for full avatar URL (site avatar only, no Discord fallback)
 userSchema.virtual('avatarUrl').get(function() {
   // If custom avatar is set (uploaded), return full URL
   if (this.avatar && this.avatar.startsWith('/uploads/avatars/')) {
     return `https://api-nomercy.ggsecure.io${this.avatar}`;
   }
-  // If avatar is already a full URL, return it
-  if (this.avatar) return this.avatar;
-  // Fallback to Discord avatar
-  if (this.discordAvatar && this.discordId) {
-    return `https://cdn.discordapp.com/avatars/${this.discordId}/${this.discordAvatar}.png`;
+  // If avatar is already a full URL (but not Discord), return it
+  if (this.avatar && !this.avatar.includes('cdn.discordapp.com')) {
+    return this.avatar;
   }
+  // No fallback to Discord - return null so frontend uses default avatar
   return null;
 });
 
@@ -560,7 +577,9 @@ userSchema.methods.hasAdminAccess = function() {
 // Performance indexes for leaderboard and ranking queries
 userSchema.index({ 'statsHardcore.xp': -1 }); // Top players hardcore
 userSchema.index({ 'statsCdl.xp': -1 }); // Top players CDL
-userSchema.index({ 'statsStricker.points': -1 }); // Stricker leaderboard
+userSchema.index({ 'statsStricker.points': -1 }); // Stricker leaderboard (legacy)
+userSchema.index({ 'statsStricker3v3.points': -1 }); // Stricker 3v3 leaderboard
+userSchema.index({ 'statsStricker5v5.points': -1 }); // Stricker 5v5 leaderboard
 userSchema.index({ mvpCountHardcore: -1 }); // MVP leader hardcore
 userSchema.index({ mvpCountCdl: -1 }); // MVP leader CDL
 userSchema.index({ isBanned: 1, username: 1 }); // Filtered user queries

@@ -268,7 +268,7 @@ const Anticheat = () => {
                   <button
                     onClick={handleDownloadClick}
                     disabled={downloading || !downloadInfo}
-                    className={`w-full max-w-md flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-bold rounded-xl hover:opacity-90 transition-all disabled:opacity-50 text-lg shadow-lg`}
+                    className={`w-full max-w-md mx-auto flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-bold rounded-xl hover:opacity-90 transition-all disabled:opacity-50 text-lg shadow-lg`}
                   >
                     {downloading ? (
                       <>

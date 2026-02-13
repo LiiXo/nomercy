@@ -1809,8 +1809,8 @@ const CDLDashboard = () => {
                     </div>
                     <p className="text-gray-400 text-sm sm:text-base">
                       {language === 'fr' 
-                        ? 'Affronte les meilleurs joueurs et grimpe les échelons !' 
-                        : 'Face the best players and climb the ranks!'}
+                        ? 'Solo 4v4 & 5v5 - Affronte les meilleurs joueurs !' 
+                        : 'Solo 4v4 & 5v5 - Face the best players!'}
                     </p>
                   </div>
                 </div>
@@ -1850,21 +1850,21 @@ const CDLDashboard = () => {
             {/* Mode Stricker Banner - Conditional: Active or Coming Soon */}
             {isStrickerModeEnabled ? (
               <Link to="/cdl/stricker" className="group relative block overflow-hidden rounded-2xl h-full">
-                {/* Animated background gradient - Yellow-Green (Apple) */}
-                <div className="absolute inset-0 bg-gradient-to-r from-lime-500/30 via-yellow-500/20 to-lime-500/30" />
+                {/* Split gradient showing both 3v3 (Yellow) and 5v5 (Lime/Green) */}
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/30 via-lime-500/20 to-green-500/30" />
                 <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJIMjR2LTJoMTJ6bTAtNHYySDI0di0yaDEyem0wLTR2Mkg0djJIMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-20" />
-                <div className="absolute inset-0 bg-gradient-to-r from-lime-500/0 via-green-500/30 to-lime-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/0 via-lime-500/30 to-green-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 
-                {/* Border animation */}
-                <div className="absolute inset-0 rounded-2xl border-2 border-lime-500/30 group-hover:border-lime-500/60 transition-colors duration-300" />
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-lime-400 to-transparent opacity-50 group-hover:opacity-100 transition-opacity" style={{ animation: 'shimmer 2s linear infinite' }} />
+                {/* Border animation with split gradient */}
+                <div className="absolute inset-0 rounded-2xl border-2 border-transparent bg-gradient-to-r from-yellow-500/30 via-lime-500/40 to-green-500/30 bg-clip-padding group-hover:from-yellow-500/60 group-hover:via-lime-500/60 group-hover:to-green-500/60 transition-colors duration-300" style={{ WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', WebkitMaskComposite: 'xor', maskComposite: 'exclude', padding: '2px' }} />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 via-lime-400 to-green-400 opacity-50 group-hover:opacity-100 transition-opacity" style={{ animation: 'shimmer 2s linear infinite' }} />
                 
                 <div className="relative flex flex-col p-4 sm:p-6">
                   <div className="flex items-center gap-4 mb-4">
-                    {/* Animated icon */}
+                    {/* Split gradient icon */}
                     <div className="relative">
-                      <div className="absolute inset-0 bg-lime-500/30 rounded-xl blur-xl animate-pulse" />
-                      <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-lime-400 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-lime-500/30">
+                      <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/30 to-lime-500/30 rounded-xl blur-xl animate-pulse" />
+                      <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-yellow-400 via-lime-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-lime-500/30">
                         <Target className="w-6 h-6 sm:w-8 sm:h-8 text-white" style={{ animation: 'bounce 2s ease-in-out infinite' }} />
                       </div>
                     </div>
@@ -1874,11 +1874,14 @@ const CDLDashboard = () => {
                         <h3 className="text-lg sm:text-xl font-bold text-white group-hover:text-lime-400 transition-colors">
                           Mode Stricker
                         </h3>
+                        {/* 3v3 / 5v5 badges */}
+                        <span className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full text-yellow-400 text-xs font-bold">3v3</span>
+                        <span className="px-2 py-0.5 bg-lime-500/20 border border-lime-500/40 rounded-full text-lime-400 text-xs font-bold">5v5</span>
                       </div>
                       <p className="text-gray-400 text-sm sm:text-base">
                         {language === 'fr' 
-                          ? "L'élite contre l'élite - Ranked 5v5 en équipe !" 
-                          : 'Elite vs Elite - Ranked 5v5 Team Mode!'}
+                          ? "L'élite contre l'élite - Ranked 3v3 & 5v5 en équipe !" 
+                          : 'Elite vs Elite - Ranked 3v3 & 5v5 Team Mode!'}
                       </p>
                     </div>
                   </div>
@@ -1907,8 +1910,8 @@ const CDLDashboard = () => {
                     )}
                   </div>
                   
-                  {/* CTA Button */}
-                  <div className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-lime-500 to-green-600 rounded-xl text-white font-semibold group-hover:scale-105 transition-transform shadow-lg shadow-lime-500/30">
+                  {/* CTA Button with split gradient */}
+                  <div className="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-yellow-500 via-lime-500 to-green-600 rounded-xl text-white font-semibold group-hover:scale-105 transition-transform shadow-lg shadow-lime-500/30">
                     <span>{language === 'fr' ? 'Jouer' : 'Play'}</span>
                     <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </div>
@@ -1916,20 +1919,20 @@ const CDLDashboard = () => {
               </Link>
             ) : (
               <div className="group relative block overflow-hidden rounded-2xl cursor-not-allowed h-full">
-                {/* Animated background gradient - Yellow-Green (Apple) */}
-                <div className="absolute inset-0 bg-gradient-to-r from-lime-500/30 via-yellow-500/20 to-lime-500/30 animate-pulse" />
+                {/* Split gradient showing both 3v3 (Yellow) and 5v5 (Lime/Green) */}
+                <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/30 via-lime-500/20 to-green-500/30 animate-pulse" />
                 <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wMyI+PHBhdGggZD0iTTM2IDM0djJIMjR2LTJoMTJ6bTAtNHYySDI0di0yaDEyem0wLTR2Mkg0djJIMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ2MmgydjJoMnYtMmgydi0yaDJ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-20" />
                 
-                {/* Border animation */}
-                <div className="absolute inset-0 rounded-2xl border-2 border-lime-500/30 transition-colors duration-300" />
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-lime-400 to-transparent opacity-50" style={{ animation: 'shimmer 2s linear infinite' }} />
+                {/* Border with split gradient */}
+                <div className="absolute inset-0 rounded-2xl border-2 border-transparent bg-gradient-to-r from-yellow-500/30 via-lime-500/30 to-green-500/30 transition-colors duration-300" style={{ WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', WebkitMaskComposite: 'xor', maskComposite: 'exclude', padding: '2px' }} />
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 via-lime-400 to-green-400 opacity-50" style={{ animation: 'shimmer 2s linear infinite' }} />
                 
                 <div className="relative flex flex-col p-4 sm:p-6">
                   <div className="flex items-center gap-4 mb-4">
-                    {/* Animated icon */}
+                    {/* Split gradient icon */}
                     <div className="relative">
-                      <div className="absolute inset-0 bg-lime-500/30 rounded-xl blur-xl animate-pulse" />
-                      <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-lime-400 to-yellow-500 rounded-xl flex items-center justify-center shadow-lg shadow-lime-500/30">
+                      <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/30 to-lime-500/30 rounded-xl blur-xl animate-pulse" />
+                      <div className="relative w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-br from-yellow-400 via-lime-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-lime-500/30">
                         <Users className="w-6 h-6 sm:w-8 sm:h-8 text-white" style={{ animation: 'bounce 2s ease-in-out infinite' }} />
                       </div>
                     </div>
@@ -1939,14 +1942,16 @@ const CDLDashboard = () => {
                         <h3 className="text-lg sm:text-xl font-bold text-white">
                           Mode Stricker
                         </h3>
+                        <span className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/40 rounded-full text-yellow-400 text-xs font-bold">3v3</span>
+                        <span className="px-2 py-0.5 bg-lime-500/20 border border-lime-500/40 rounded-full text-lime-400 text-xs font-bold">5v5</span>
                         <span className="px-2 py-0.5 bg-lime-500/20 border border-lime-500/40 rounded-full text-lime-400 text-xs font-semibold animate-pulse">
                           {language === 'fr' ? 'TRÈS BIENTÔT' : 'VERY SOON'}
                         </span>
                       </div>
                       <p className="text-gray-400 text-sm sm:text-base">
                         {language === 'fr' 
-                          ? "L'élite contre l'élite - Ranked 5v5 en équipe !" 
-                          : 'Elite vs Elite - Ranked 5v5 Team Mode!'}
+                          ? "L'élite contre l'élite - Ranked 3v3 & 5v5 en équipe !" 
+                          : 'Elite vs Elite - Ranked 3v3 & 5v5 Team Mode!'}
                       </p>
                     </div>
                   </div>

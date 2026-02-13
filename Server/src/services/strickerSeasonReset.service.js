@@ -44,21 +44,28 @@ const getRankFromPoints = (points) => {
 };
 
 /**
- * Reset Stricker season
+ * Reset Stricker season for a specific format
  * - Creates trophies for ALL squads from Vétérans rank and above
  * - Gold rewards only for top 3
  * - Resets all stricker stats (points, wins, losses)
  * - Increments season number
+ * @param {string} adminUserId - Admin user ID performing the reset
+ * @param {string} format - Format to reset ('3v3' or '5v5'), defaults to '5v5'
  */
-export const resetStrickerSeason = async (adminUserId) => {
+export const resetStrickerSeason = async (adminUserId, format = '5v5') => {
+  // 5v5 uses legacy 'statsStricker' for backward compatibility with existing data
+  const statsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+  const seasonKey = format === '3v3' ? 'strickerSettings3v3' : 'strickerSettings';
   
   // Get current settings
   const settings = await AppSettings.getSettings();
-  const endingSeason = settings?.strickerSettings?.currentSeason || 1;
+  const formatSettings = settings?.[seasonKey] || settings?.strickerSettings || {};
+  const endingSeason = formatSettings.currentSeason || 1;
   
   
   const results = {
     seasonNumber: endingSeason,
+    format: format,
     trophiesDistributed: 0,
     goldDistributed: 0,
     cranesDistributed: 0,
@@ -73,12 +80,12 @@ export const resetStrickerSeason = async (adminUserId) => {
     squadsReset: 0
   };
   
-  // Get ALL squads with points >= 500 (Vétérans and above)
+  // Get ALL squads with points >= 500 (Vétérans and above) for this format
   const eligibleSquads = await Squad.find({
-    'statsStricker.points': { $gte: 500 },
+    [`${statsField}.points`]: { $gte: 500 },
     isDeleted: { $ne: true }
   })
-    .sort({ 'statsStricker.points': -1 })
+    .sort({ [`${statsField}.points`]: -1 })
     .populate('leader', 'username');
   
   
@@ -91,7 +98,7 @@ export const resetStrickerSeason = async (adminUserId) => {
   // Process each eligible squad
   for (let i = 0; i < eligibleSquads.length; i++) {
     const squad = eligibleSquads[i];
-    const points = squad.statsStricker?.points || 0;
+    const points = squad[statsField]?.points || 0;
     const rankKey = getRankFromPoints(points);
     const rankInfo = STRICKER_RANKS[rankKey];
     const position = i + 1; // Overall position
@@ -99,13 +106,13 @@ export const resetStrickerSeason = async (adminUserId) => {
     // Create or get cached trophy for this rank
     if (!trophyCache[rankKey]) {
       const trophy = new Trophy({
-        name: `Saison ${endingSeason} Stricker - ${rankInfo.name}`,
-        description: `Trophée de fin de saison ${endingSeason} du mode Stricker - Rang ${rankInfo.name}`,
+        name: `Saison ${endingSeason} Stricker ${format} - ${rankInfo.name}`,
+        description: `Trophée de fin de saison ${endingSeason} du mode Stricker ${format} - Rang ${rankInfo.name}`,
         image: rankInfo.image,
         rarity: rankInfo.rarity,
         type: 'season',
         mode: 'stricker',
-        category: 'stricker_season',
+        category: `stricker_season_${format}`,
         isUnique: true,
         createdBy: adminUserId
       });
@@ -119,7 +126,7 @@ export const resetStrickerSeason = async (adminUserId) => {
     squad.trophies.push({
       trophy: trophy._id,
       earnedAt: new Date(),
-      reason: `${rankInfo.name} - Saison ${endingSeason} Stricker (${points} pts)`
+      reason: `${rankInfo.name} - Saison ${endingSeason} Stricker ${format} (${points} pts)`
     });
     
     // Gold rewards only for top 3
@@ -139,8 +146,8 @@ export const resetStrickerSeason = async (adminUserId) => {
         squadName: squad.name,
         squadTag: squad.tag,
         points: points,
-        wins: squad.statsStricker.wins,
-        losses: squad.statsStricker.losses,
+        wins: squad[statsField].wins,
+        losses: squad[statsField].losses,
         rank: rankInfo.name,
         goldReward,
         membersCount: squad.members.length
@@ -172,29 +179,29 @@ export const resetStrickerSeason = async (adminUserId) => {
     
   }
   
-  // Reset all squad stricker stats
+  // Reset all squad stricker stats for this format
   const resetResult = await Squad.updateMany(
-    { 'statsStricker.points': { $gt: 0 } },
+    { [`${statsField}.points`]: { $gt: 0 } },
     {
       $set: {
-        'statsStricker.points': 0,
-        'statsStricker.wins': 0,
-        'statsStricker.losses': 0,
-        'statsStricker.rank': 'Recrues'
+        [`${statsField}.points`]: 0,
+        [`${statsField}.wins`]: 0,
+        [`${statsField}.losses`]: 0,
+        [`${statsField}.rank`]: 'Recrues'
       }
     }
   );
   
   results.squadsReset = resetResult.modifiedCount;
   
-  // Increment season number and update start date
+  // Increment season number and update start date for this format
   const newSeasonNumber = endingSeason + 1;
   await AppSettings.findOneAndUpdate(
     {},
     {
       $set: {
-        'strickerSettings.currentSeason': newSeasonNumber,
-        'strickerSettings.seasonStartDate': new Date()
+        [`${seasonKey}.currentSeason`]: newSeasonNumber,
+        [`${seasonKey}.seasonStartDate`]: new Date()
       }
     },
     { upsert: true }
@@ -206,32 +213,37 @@ export const resetStrickerSeason = async (adminUserId) => {
 
 /**
  * Get Stricker season info for admin display
+ * @param {string} format - Format to get info for ('3v3' or '5v5'), defaults to '5v5'
  */
-export const getStrickerSeasonInfo = async () => {
-  const settings = await AppSettings.getSettings();
-  const strickerSettings = settings?.strickerSettings || {};
+export const getStrickerSeasonInfo = async (format = '5v5') => {
+  // 5v5 uses legacy 'statsStricker' for backward compatibility with existing data
+  const statsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+  const seasonKey = format === '3v3' ? 'strickerSettings3v3' : 'strickerSettings';
   
-  const currentSeason = strickerSettings.currentSeason || 1;
-  const seasonDurationMonths = strickerSettings.seasonDurationMonths || 2;
-  const seasonStartDate = strickerSettings.seasonStartDate || new Date();
+  const settings = await AppSettings.getSettings();
+  const formatSettings = settings?.[seasonKey] || settings?.strickerSettings || {};
+  
+  const currentSeason = formatSettings.currentSeason || 1;
+  const seasonDurationMonths = formatSettings.seasonDurationMonths || 2;
+  const seasonStartDate = formatSettings.seasonStartDate || new Date();
   
   // Calculate season end date
   const seasonEndDate = new Date(seasonStartDate);
   seasonEndDate.setMonth(seasonEndDate.getMonth() + seasonDurationMonths);
   
-  // Get top squads
+  // Get top squads for this format
   const topSquads = await Squad.find({
-    'statsStricker.points': { $gt: 0 },
+    [`${statsField}.points`]: { $gt: 0 },
     isDeleted: { $ne: true }
   })
-    .sort({ 'statsStricker.points': -1 })
+    .sort({ [`${statsField}.points`]: -1 })
     .limit(10)
-    .select('name tag logo statsStricker members')
+    .select(`name tag logo ${statsField} members`)
     .populate('leader', 'username');
   
-  // Get total active squads
+  // Get total active squads for this format
   const totalSquads = await Squad.countDocuments({
-    'statsStricker.points': { $gt: 0 },
+    [`${statsField}.points`]: { $gt: 0 },
     isDeleted: { $ne: true }
   });
   
@@ -240,16 +252,17 @@ export const getStrickerSeasonInfo = async () => {
     seasonDurationMonths,
     seasonStartDate,
     seasonEndDate,
+    format,
     topSquads: topSquads.map((s, i) => ({
       position: i + 1,
       id: s._id,
       name: s.name,
       tag: s.tag,
       logo: s.logo,
-      points: s.statsStricker?.points || 0,
-      wins: s.statsStricker?.wins || 0,
-      losses: s.statsStricker?.losses || 0,
-      rank: s.statsStricker?.rank || 'Recrues',
+      points: s[statsField]?.points || 0,
+      wins: s[statsField]?.wins || 0,
+      losses: s[statsField]?.losses || 0,
+      rank: s[statsField]?.rank || 'Recrues',
       membersCount: s.members?.length || 0
     })),
     totalSquads

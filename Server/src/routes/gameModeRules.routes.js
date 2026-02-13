@@ -7,7 +7,7 @@ const router = express.Router();
 // Valid subTypes for each location
 const VALID_SUBTYPES = {
   rankings: ['duo-trio', 'squad-team'],
-  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd']
+  ranked: ['duel', 'tdm', 'domination', 'snd', 'hardpoint', 'stricker-snd', 'stricker-snd-3v3', 'stricker-snd-5v5']
 };
 
 // Valid modes
@@ -52,7 +52,12 @@ router.get('/:mode/:location/:subType', async (req, res) => {
       });
     }
     
-    const rules = await GameModeRules.findOne({ mode, location, subType, isActive: true });
+    let rules = await GameModeRules.findOne({ mode, location, subType, isActive: true });
+    
+    // Fallback: If looking for stricker-snd-5v5 and not found, try legacy stricker-snd
+    if (!rules && subType === 'stricker-snd-5v5') {
+      rules = await GameModeRules.findOne({ mode, location, subType: 'stricker-snd', isActive: true });
+    }
     
     if (!rules) {
       return res.json({

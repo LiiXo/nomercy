@@ -99,50 +99,15 @@ const checkGGSecureStatus = async (userId) => {
 
 /**
  * Vérifie un joueur PC dans un match et envoie des notifications si le statut change
+ * Note: GGSecure verification disabled for ranked/stricker - Iris status shown on match sheet instead
  */
 const checkPlayerInMatch = async (player, match, matchType) => {
   try {
-    // Vérifier GGSecure
-    const status = await checkGGSecureStatus(player.userId);
+    // GGSecure verification removed for ranked and stricker modes
+    // No longer sending chat notifications for GGSecure disconnect/reconnect
+    // Iris status will be shown on match sheet instead
     
-    if (status.required) {
-      const statusKey = `${match._id}-${player.userId}`;
-      const previousStatus = playerConnectionStatus.get(statusKey);
-      const currentlyConnected = status.connected;
-
-      // Si le statut a changé OU si c'est la première vérification
-      if (!previousStatus) {
-        // Première vérification - initialiser sans envoyer de message
-        playerConnectionStatus.set(statusKey, {
-          isConnected: currentlyConnected,
-          lastCheck: new Date(),
-          matchType
-        });
-        
-        // Si déconnecté dès le début, envoyer un message
-        if (!currentlyConnected) {
-          await sendConnectionMessage(player, match, matchType, false);
-        }
-      } else if (previousStatus.isConnected !== currentlyConnected) {
-        // Le statut a changé - envoyer un message
-        playerConnectionStatus.set(statusKey, {
-          isConnected: currentlyConnected,
-          lastCheck: new Date(),
-          matchType
-        });
-
-        await sendConnectionMessage(player, match, matchType, currentlyConnected);
-      } else {
-        // Pas de changement - juste mettre à jour la date de vérification
-        playerConnectionStatus.set(statusKey, {
-          isConnected: currentlyConnected,
-          lastCheck: new Date(),
-          matchType
-        });
-      }
-    }
-    
-    // Vérifier Iris (indépendamment de GGSecure)
+    // Keep Iris monitoring (for Discord alerts only)
     await checkPlayerIrisInMatch(player, match, matchType);
     
   } catch (error) {
@@ -544,93 +509,15 @@ export const startGGSecureMonitoring = () => {
 /**
  * Vérifie le statut GGSecure d'un joueur spécifique quand il rejoint la room du match
  * Appelé depuis le handler socket 'joinRankedMatch'
+ * Note: GGSecure verification disabled - Iris status shown on match sheet instead
  * @param {string} matchId - L'ID du match
  * @param {string} userId - L'ID du joueur
  */
 export const checkPlayerGGSecureOnJoin = async (matchId, userId, matchType = 'ranked') => {
-  if (!io) {
-    console.warn('[GGSecure Monitoring] Cannot check - Socket.io not initialized');
-    return;
-  }
-  
-  try {
-    let match;
-    let MatchModel;
-    
-    // Select the appropriate model based on matchType
-    if (matchType === 'stricker') {
-      MatchModel = StrickerMatch;
-    } else if (matchType === 'ranked') {
-      MatchModel = RankedMatch;
-    } else {
-      // Default to ranked for backward compatibility
-      MatchModel = RankedMatch;
-    }
-    
-    // Récupérer le match pour avoir les infos du joueur
-    match = await MatchModel.findById(matchId)
-      .populate('players.user', 'username platform _id')
-      .lean();
-    
-    if (!match || !['pending', 'ready', 'in_progress'].includes(match.status)) {
-      return;
-    }
-    
-    // Trouver le joueur dans le match
-    const playerInfo = match.players?.find(p => {
-      const playerId = (p.user?._id || p.user)?.toString();
-      return playerId === userId.toString();
-    });
-    
-    if (!playerInfo || playerInfo.isFake) {
-      return; // Joueur non trouvé ou fake player
-    }
-    
-    const userObj = playerInfo.user;
-    const username = playerInfo.username || userObj?.username;
-    const team = playerInfo.team;
-    
-    // Vérifier le statut GGSecure (cette fonction vérifie déjà si c'est un joueur PC)
-    const status = await checkGGSecureStatus(userId);
-    
-    if (!status.required) {
-      return; // Pas un joueur PC, pas besoin de vérifier
-    }
-    
-    const statusKey = `${matchId}-${userId}`;
-    const previousStatus = playerConnectionStatus.get(statusKey);
-    
-    // Si déconnecté et pas encore notifié (ou première vérification)
-    if (!status.connected) {
-      // Initialiser ou mettre à jour le statut
-      playerConnectionStatus.set(statusKey, {
-        isConnected: false,
-        lastCheck: new Date(),
-        matchType: matchType
-      });
-      
-      // Envoyer le message seulement si c'est un changement ou première détection
-      if (!previousStatus || previousStatus.isConnected !== false) {
-        const player = {
-          userId: userId.toString(),
-          username: username,
-          team: team
-        };
-        
-        await sendConnectionMessage(player, match, matchType, false);
-        console.log(`[GGSecure Monitoring] Player ${username} joined ${matchType} match ${matchId} without GGSecure - notified`);
-      }
-    } else {
-      // Joueur connecté, initialiser le statut
-      playerConnectionStatus.set(statusKey, {
-        isConnected: true,
-        lastCheck: new Date(),
-        matchType: matchType
-      });
-    }
-  } catch (error) {
-    console.error('[GGSecure Monitoring] Error checking player on join:', error);
-  }
+  // GGSecure verification removed for ranked and stricker modes
+  // No longer sending chat notifications for GGSecure disconnect/reconnect
+  // Iris status will be shown on match sheet instead
+  return;
 };
 
 export default {

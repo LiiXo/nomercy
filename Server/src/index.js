@@ -352,6 +352,9 @@ const startServer = async () => {
   
   // Serve static files from public directory (sounds, etc.)
   app.use('/public', express.static(path.join(__dirname, '../public')));
+  
+  // Serve Iris installer downloads
+  app.use('/iris-downloads', express.static(path.join(__dirname, '../iris-downloads')));
 
   // Routes
   app.use('/api/auth', authRoutes);

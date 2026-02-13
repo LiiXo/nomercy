@@ -42,9 +42,10 @@ const RULE_DESTINATIONS = [
     color: 'lime',
     mode: 'stricker',
     location: 'ranked',
-    description: { fr: 'Mode Stricker 5v5 S&D', en: 'Stricker 5v5 S&D mode' },
+    description: { fr: 'Mode Stricker S&D', en: 'Stricker S&D mode' },
     subTypes: [
-      { value: 'stricker-snd', label: { fr: '💣 S&D 5v5', en: '💣 S&D 5v5' } }
+      { value: 'stricker-snd-3v3', label: { fr: '💣 S&D 3v3', en: '💣 S&D 3v3' } },
+      { value: 'stricker-snd-5v5', label: { fr: '💣 S&D 5v5', en: '💣 S&D 5v5' } }
     ]
   }
 ];

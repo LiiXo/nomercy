@@ -4,7 +4,7 @@ use crate::{api, hardware, store};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, Window};
+use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 static HEARTBEAT_RUNNING: AtomicBool = AtomicBool::new(false);
 static SCAN_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -55,7 +55,7 @@ pub struct SessionResult {
 
 /// Start Discord OAuth authentication
 #[tauri::command]
-pub async fn start_discord_auth(window: Window) -> Result<AuthResult, String> {
+pub async fn start_discord_auth(window: WebviewWindow) -> Result<AuthResult, String> {
     println!("[Iris] Starting Discord authentication...");
     
     // Check TPM first
@@ -738,7 +738,7 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                     
                     if cheat_detection.found {
                         println!("[Iris Heartbeat] CHEAT DETECTED: {:?}", cheat_detection);
-                        if let Some(window) = app.get_window("main") {
+                        if let Some(window) = app.get_webview_window("main") {
                             let _ = window.emit("cheat-detected", &cheat_detection);
                         }
                     }
@@ -843,7 +843,7 @@ pub async fn stop_heartbeat() -> Result<(), String> {
 
 /// Minimize window
 #[tauri::command]
-pub async fn window_minimize(window: Window) -> Result<(), String> {
+pub async fn window_minimize(window: WebviewWindow) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
 }
 

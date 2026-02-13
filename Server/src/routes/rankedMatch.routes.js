@@ -742,7 +742,7 @@ router.get('/:matchId', verifyToken, async (req, res) => {
     const user = await User.findById(req.user._id);
 
     const match = await RankedMatch.findById(matchId)
-      .populate('players.user', 'username avatarUrl discordAvatar discordId activisionId platform')
+      .populate('players.user', 'username avatarUrl discordAvatar discordId activisionId platform irisLastSeen')
       .populate('team1Referent', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('team2Referent', 'username avatarUrl discordAvatar discordId activisionId platform')
       .populate('chat.user', 'username roles')
@@ -842,7 +842,7 @@ router.get('/active/me', verifyToken, async (req, res) => {
       status: { $in: ['pending', 'ready', 'in_progress'] },
       isTestMatch: { $ne: true }
     })
-      .populate('players.user', 'username avatarUrl discordAvatar discordId activisionId platform')
+      .populate('players.user', 'username avatarUrl discordAvatar discordId activisionId platform irisLastSeen')
       .populate('team1Referent', 'username avatarUrl discordAvatar discordId')
       .populate('team2Referent', 'username avatarUrl discordAvatar discordId');
 

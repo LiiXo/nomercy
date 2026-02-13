@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowLeft, Users, Trophy, Shield, Crown, MessageCircle, 
   Send, Loader2, CheckCircle, XCircle, Phone, AlertTriangle,
-  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Crosshair, BookOpen
+  Map, Check, Play, Clock, User, Shuffle, X, ChevronRight, Mic, Ban, Crosshair, BookOpen, Eye
 } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useLanguage } from '../LanguageContext';
@@ -69,6 +69,16 @@ const getTitleStyles = (rarity) => {
   };
 };
 
+// Helper to check if a PC player is connected to Iris (heartbeat within last 3 minutes)
+const isPlayerConnectedToIris = (player) => {
+  if (!player || player.platform !== 'PC') return null; // Not a PC player
+  if (!player.irisLastSeen) return false; // Never connected
+  
+  const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+  const lastSeen = new Date(player.irisLastSeen);
+  return lastSeen > threeMinutesAgo;
+};
+
 const translations = {
   fr: {
     loading: 'Chargement...',
@@ -127,6 +137,7 @@ const translations = {
     voteForMap: 'Voter',
     votes: 'votes',
     searchAndDestroy: 'Recherche et Destruction',
+    format3v3: '3v3',
     format5v5: '5v5',
     squadVsSquad: 'Escouade vs Escouade',
     readyToStart: 'Prêt à démarrer',
@@ -153,7 +164,7 @@ const translations = {
     doYouWantToCancel: 'Souhaitez-vous annuler ?',
     // Map ban
     mapBan: 'Bannissement de Maps',
-    mapBanDesc: 'Chaque référent bannit 1 map, puis 3 maps seront tirées au sort parmi les restantes',
+    mapBanDesc: 'Chaque référent bannit 1 map à tour de rôle',
     banMap: 'Bannir',
     banned: 'Bannie',
     yourTurnToBan: 'C\'est votre tour de bannir une map',
@@ -270,6 +281,7 @@ const translations = {
     voteForMap: 'Vote',
     votes: 'votes',
     searchAndDestroy: 'Search and Destroy',
+    format3v3: '3v3',
     format5v5: '5v5',
     squadVsSquad: 'Squad vs Squad',
     readyToStart: 'Ready to start',
@@ -296,7 +308,7 @@ const translations = {
     doYouWantToCancel: 'Do you want to cancel?',
     // Map ban
     mapBan: 'Map Ban',
-    mapBanDesc: 'Each referent bans 1 map, then 3 maps will be randomly selected from the remaining',
+    mapBanDesc: 'Each referent bans 1 map in turn',
     banMap: 'Ban',
     banned: 'Banned',
     yourTurnToBan: 'Your turn to ban a map',
@@ -614,43 +626,7 @@ const StrickerMatchSheet = () => {
       }
     });
 
-    // Listen for GGSecure disconnect events (real-time, like ranked mode)
-    const unsubGGSecureDisconnect = on('playerGGSecureDisconnect', (data) => {
-      if (data.matchId === matchId || data.matchId?.toString() === matchId) {
-        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
-        const systemMessage = {
-          _id: `ggsecure-disconnect-${Date.now()}`,
-          isSystem: true,
-          messageType: 'ggsecure_disconnect',
-          username: data.username,
-          createdAt: timestamp,
-          user: { username: 'SYSTEM' }
-        };
-        setMessages(prev => [...prev, systemMessage]);
-        if (chatRef.current) {
-          setTimeout(() => { chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 50);
-        }
-      }
-    });
-
-    // Listen for GGSecure reconnect events (real-time, like ranked mode)
-    const unsubGGSecureReconnect = on('playerGGSecureReconnect', (data) => {
-      if (data.matchId === matchId || data.matchId?.toString() === matchId) {
-        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
-        const systemMessage = {
-          _id: `ggsecure-reconnect-${Date.now()}`,
-          isSystem: true,
-          messageType: 'ggsecure_reconnect',
-          username: data.username,
-          createdAt: timestamp,
-          user: { username: 'SYSTEM' }
-        };
-        setMessages(prev => [...prev, systemMessage]);
-        if (chatRef.current) {
-          setTimeout(() => { chatRef.current.scrollTop = chatRef.current.scrollHeight; }, 50);
-        }
-      }
-    });
+    // GGSecure listeners removed - no longer relevant (Iris is used instead)
 
     return () => {
       unsubRosterUpdate();
@@ -661,8 +637,6 @@ const StrickerMatchSheet = () => {
       unsubMatchUpdate();
       unsubCancelVote();
       unsubMatchCancelled();
-      unsubGGSecureDisconnect();
-      unsubGGSecureReconnect();
     };
   }, [socket, matchId, on, fetchMatch]);
 
@@ -1265,8 +1239,9 @@ const StrickerMatchSheet = () => {
     
     setLoadingRules(true);
     try {
-      // Stricker mode uses: /game-mode-rules/stricker/ranked/stricker-snd
-      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/stricker-snd`, {
+      // Stricker mode uses format-specific rules: stricker-snd-3v3 or stricker-snd-5v5
+      const subType = match?.format === '3v3' ? 'stricker-snd-3v3' : 'stricker-snd-5v5';
+      const response = await fetch(`${API_URL}/game-mode-rules/stricker/ranked/${subType}`, {
         credentials: 'include'
       });
       const data = await response.json();
@@ -1357,11 +1332,12 @@ const StrickerMatchSheet = () => {
     const team1Logo = match.team1Squad?.logo;
     const team2Logo = match.team2Squad?.logo;
     
-    // Check if my team is full (5 players)
+    // Check if my team is full (based on match format - 3 for 3v3, 5 for 5v5)
+    const requiredTeamSize = match?.teamSize || 5;
     const myTeamCount = myTeam === 1 
       ? rosterSelection.team1Selected.length 
       : rosterSelection.team2Selected.length;
-    const myTeamFull = myTeamCount >= 5;
+    const myTeamFull = myTeamCount >= requiredTeamSize;
     const canSelectPlayers = isReferent && !myTeamFull;
     
     return (
@@ -1535,8 +1511,8 @@ const StrickerMatchSheet = () => {
                   <h3 className="text-white font-bold">{team1Name}</h3>
                   {myTeam === 1 && <span className="text-lime-400 text-xs">{t.yourTeam}</span>}
                 </div>
-                <span className={`text-sm font-bold ${rosterSelection.team1Selected.length >= 5 ? 'text-green-400' : 'text-gray-400'}`}>
-                  {rosterSelection.team1Selected.length}/5
+                <span className={`text-sm font-bold ${rosterSelection.team1Selected.length >= requiredTeamSize ? 'text-green-400' : 'text-gray-400'}`}>
+                  {rosterSelection.team1Selected.length}/{requiredTeamSize}
                 </span>
               </div>
               <div className="space-y-2">
@@ -1597,7 +1573,7 @@ const StrickerMatchSheet = () => {
                     </div>
                   );
                 })}
-                {Array(5 - rosterSelection.team1Selected.length).fill(null).map((_, idx) => (
+                {Array(Math.max(0, requiredTeamSize - rosterSelection.team1Selected.length)).fill(null).map((_, idx) => (
                   <div key={`empty-${idx}`} className="flex items-center gap-3 p-3 bg-dark-800/50 border border-dashed border-gray-700 rounded-xl">
                     <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
                       <User className="w-5 h-5 text-gray-600" />
@@ -1825,8 +1801,8 @@ const StrickerMatchSheet = () => {
                   <h3 className="text-white font-bold">{team2Name}</h3>
                   {myTeam === 2 && <span className="text-blue-400 text-xs">{t.yourTeam}</span>}
                 </div>
-                <span className={`text-sm font-bold ${rosterSelection.team2Selected.length >= 5 ? 'text-green-400' : 'text-gray-400'}`}>
-                  {rosterSelection.team2Selected.length}/5
+                <span className={`text-sm font-bold ${rosterSelection.team2Selected.length >= requiredTeamSize ? 'text-green-400' : 'text-gray-400'}`}>
+                  {rosterSelection.team2Selected.length}/{requiredTeamSize}
                 </span>
               </div>
               <div className="space-y-2">
@@ -1887,7 +1863,7 @@ const StrickerMatchSheet = () => {
                     </div>
                   );
                 })}
-                {Array(5 - rosterSelection.team2Selected.length).fill(null).map((_, idx) => (
+                {Array(Math.max(0, requiredTeamSize - rosterSelection.team2Selected.length)).fill(null).map((_, idx) => (
                   <div key={`empty-${idx}`} className="flex items-center gap-3 p-3 bg-dark-800/50 border border-dashed border-gray-700 rounded-xl">
                     <div className="w-10 h-10 rounded-full bg-dark-700 flex items-center justify-center">
                       <User className="w-5 h-5 text-gray-600" />
@@ -2252,7 +2228,7 @@ const StrickerMatchSheet = () => {
               <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-dark-800 border-2 border-lime-500/30 flex items-center justify-center">
                 <span className="text-lime-400 font-black text-lg sm:text-xl">{t.vs}</span>
               </div>
-              <p className="text-lime-400/60 text-xs mt-2">5v5</p>
+              <p className="text-lime-400/60 text-xs mt-2">{match.format || '5v5'}</p>
             </div>
             
             {/* Team 2 */}
@@ -2314,7 +2290,7 @@ const StrickerMatchSheet = () => {
                 
                 <div className="flex justify-between items-center py-1.5 border-b border-white/5">
                   <span className="text-gray-500 text-sm">{language === 'fr' ? 'Format' : 'Format'}</span>
-                  <span className="text-white font-semibold text-sm">5v5</span>
+                  <span className="text-white font-semibold text-sm">{match.format || '5v5'}</span>
                 </div>
                 
                 {/* 10-minute countdown warning - before match completion */}
@@ -2410,6 +2386,43 @@ const StrickerMatchSheet = () => {
               </button>
             </div>
 
+            {/* Banned Maps Section */}
+            {(match.mapBans?.team1BannedMap || match.mapBans?.team2BannedMap || mapBans.team1BannedMap || mapBans.team2BannedMap) && (
+              <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-red-500/20 p-4 sm:p-5">
+                <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                  <Ban className="w-4 h-4 text-red-400" />
+                  {language === 'fr' ? 'Maps Bannies' : 'Banned Maps'}
+                </h2>
+                
+                <div className="space-y-2">
+                  {(match.mapBans?.team1BannedMap || mapBans.team1BannedMap) && (
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-6 rounded-full bg-lime-500"></div>
+                        <span className="text-gray-400 text-sm">{team1Name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400 font-medium text-sm">{match.mapBans?.team1BannedMap || mapBans.team1BannedMap}</span>
+                        <Ban className="w-3.5 h-3.5 text-red-400" />
+                      </div>
+                    </div>
+                  )}
+                  {(match.mapBans?.team2BannedMap || mapBans.team2BannedMap) && (
+                    <div className="flex items-center justify-between p-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                      <div className="flex items-center gap-2">
+                        <div className="w-1 h-6 rounded-full bg-blue-500"></div>
+                        <span className="text-gray-400 text-sm">{team2Name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-400 font-medium text-sm">{match.mapBans?.team2BannedMap || mapBans.team2BannedMap}</span>
+                        <Ban className="w-3.5 h-3.5 text-red-400" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Drawn Maps (3 maps) or Free Map Choice */}
             {(match.maps?.length > 0 || match.selectedMap?.name || match.freeMapChoice) && (
               <div className="bg-dark-900/80 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-lime-500/20 p-4 sm:p-5">
@@ -2423,36 +2436,70 @@ const StrickerMatchSheet = () => {
                 
                 {/* Free Map Choice */}
                 {match.freeMapChoice ? (
-                  <div className="text-center py-4 px-4">
-                    <p className="text-lg font-bold text-lime-400 mb-3">
-                      {language === 'fr' ? 'Choix map libre' : 'Free map choice'}
-                    </p>
-                    <p className="text-gray-400 text-xs mb-4">
-                      {language === 'fr' 
-                        ? 'Chaque équipe choisit sa map, la 3ème est déterminée par le goal average (si égalité, map aléatoire)'
-                        : 'Each team picks their map, 3rd by goal average (if tied, random map)'
-                      }
-                    </p>
+                  <div className="py-2">
+                    {/* BO3 Format Explanation */}
+                    <div className="mb-4 p-3 bg-dark-800/50 rounded-xl border border-lime-500/20">
+                      <p className="text-lime-400 font-bold text-sm mb-2 text-center">
+                        {language === 'fr' ? 'Format BO3 - Choix de maps' : 'BO3 Format - Map Selection'}
+                      </p>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex items-start gap-2">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-lime-500 flex items-center justify-center text-xs font-bold text-black">1</span>
+                          <p className="text-gray-300">
+                            <span className="text-lime-400 font-medium">{team1Name}</span>
+                            {language === 'fr' ? ' choisit sa map' : ' picks their map'}
+                          </p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-xs font-bold text-white">2</span>
+                          <p className="text-gray-300">
+                            <span className="text-blue-400 font-medium">{team2Name}</span>
+                            {language === 'fr' ? ' choisit sa map' : ' picks their map'}
+                          </p>
+                        </div>
+                        <div className="flex items-start gap-2">
+                          <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center text-xs font-bold text-black">3</span>
+                          <p className="text-gray-300">
+                            {language === 'fr' 
+                              ? 'En cas d\'égalité (1-1), la map 3 est déterminée par le goal average. Si égalité parfaite, utiliser les maps tiebreaker ci-dessous (dans l\'ordre)'
+                              : 'If tied (1-1), map 3 is determined by goal average. If perfect tie, use tiebreaker maps below (in order)'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                     
-                    {/* Random Maps Display (3 maps for tiebreaker) */}
+                    {/* Tiebreaker Maps - Vertical List */}
                     {match.randomMaps?.length > 0 && (
-                      <div className="mt-4 p-3 bg-dark-800/50 rounded-xl border border-lime-500/30">
+                      <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/30">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Shuffle className="w-4 h-4 text-amber-400" />
+                          <p className="text-amber-400 font-bold text-sm">
+                            {language === 'fr' ? 'Maps Tiebreaker (en cas d\'égalité parfaite)' : 'Tiebreaker Maps (if perfect tie)'}
+                          </p>
+                        </div>
                         <p className="text-gray-400 text-xs mb-3">
-                          {language === 'fr' ? 'Maps aléatoires (prendre une map non jouée)' : 'Random maps (pick one not yet played)'}
+                          {language === 'fr' 
+                            ? 'Prendre la première map non jouée dans l\'ordre. Si une map a déjà été jouée, passer à la suivante.'
+                            : 'Pick the first unplayed map in order. If a map was already played, skip to the next one.'
+                          }
                         </p>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-2">
                           {match.randomMaps.map((map, index) => (
-                            <div key={index} className="text-center">
+                            <div key={index} className="flex items-center gap-3 p-2 bg-dark-800/50 rounded-lg border border-amber-500/20">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-xs font-bold text-amber-400">
+                                {index + 1}
+                              </span>
                               {map.image && (
-                                <div className="rounded-lg overflow-hidden border border-white/10 mb-1">
+                                <div className="w-16 h-10 rounded overflow-hidden border border-white/10 flex-shrink-0">
                                   <img 
                                     src={map.image} 
                                     alt={map.name}
-                                    className="w-full h-14 object-cover"
+                                    className="w-full h-full object-cover"
                                   />
                                 </div>
                               )}
-                              <p className="text-lime-400 text-xs font-medium truncate">{map.name}</p>
+                              <p className="text-white font-medium text-sm">{map.name}</p>
                             </div>
                           ))}
                         </div>
@@ -2894,7 +2941,9 @@ const StrickerMatchSheet = () => {
                 ) : (
                   <div className="space-y-2">
                     {messages.filter(msg => {
-                      // Filter out empty messages (including GGSecure messages without content)
+                      // Filter out empty messages
+                      // Exclure les messages GGSecure - plus utilisé (remplacé par Iris)
+                      if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') return false;
                       if (msg.isSystem && msg.messageType) return true; // Keep typed system messages
                       if (msg.isSystem && msg.message && msg.message.trim()) return true;
                       if (!msg.isSystem && msg.message && msg.message.trim()) return true;
@@ -2904,25 +2953,6 @@ const StrickerMatchSheet = () => {
                       if (msg.isSystem) {
                         let displayMessage = msg.message || '';
                         let messageStyle = 'default';
-                        
-                        // Handle GGSecure messages with messageType
-                        if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') {
-                          const timestamp = new Date(msg.createdAt);
-                          const timeString = timestamp.toLocaleTimeString([], { 
-                            hour: '2-digit', 
-                            minute: '2-digit',
-                            second: '2-digit'
-                          });
-                          const username = msg.username || msg.user?.username || 'Joueur';
-                          
-                          if (msg.messageType === 'ggsecure_disconnect') {
-                            displayMessage = `${username} ${language === 'fr' ? 's\'est déconnecté' : 'disconnected'} (${timeString})`;
-                            messageStyle = 'disconnect';
-                          } else {
-                            displayMessage = `${username} ${language === 'fr' ? 's\'est reconnecté' : 'reconnected'} (${timeString})`;
-                            messageStyle = 'reconnect';
-                          }
-                        }
                         
                         // Skip empty system messages
                         if (!displayMessage.trim()) return null;
@@ -3060,6 +3090,24 @@ const StrickerMatchSheet = () => {
                             <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
                             <span className="text-lime-400 text-[10px] font-bold">{playerRank.name}</span>
                           </div>
+                          {/* Platform badge */}
+                          {player.user?.platform && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.user.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                              {player.user.platform}
+                            </span>
+                          )}
+                          {/* Iris connection status for PC players */}
+                          {player.user?.platform === 'PC' && !player.isFake && (() => {
+                            const irisConnected = isPlayerConnectedToIris(player.user);
+                            return (
+                              <div 
+                                className={`p-1 rounded ${irisConnected ? 'bg-green-500/20' : 'bg-red-500/20'}`}
+                                title={irisConnected ? 'Iris connecté' : 'Iris déconnecté'}
+                              >
+                                <Eye className={`w-3 h-3 ${irisConnected ? 'text-green-400' : 'text-red-400'}`} />
+                              </div>
+                            );
+                          })()}
                           {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
                         </div>
                       </div>
@@ -3117,6 +3165,24 @@ const StrickerMatchSheet = () => {
                             <img src={playerRank.image} alt={playerRank.name} className="w-4 h-4 object-contain" />
                             <span className="text-blue-400 text-[10px] font-bold">{playerRank.name}</span>
                           </div>
+                          {/* Platform badge */}
+                          {player.user?.platform && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${player.user.platform === 'PC' ? 'bg-blue-500/20 text-blue-400' : 'bg-green-500/20 text-green-400'}`}>
+                              {player.user.platform}
+                            </span>
+                          )}
+                          {/* Iris connection status for PC players */}
+                          {player.user?.platform === 'PC' && !player.isFake && (() => {
+                            const irisConnected = isPlayerConnectedToIris(player.user);
+                            return (
+                              <div 
+                                className={`p-1 rounded ${irisConnected ? 'bg-green-500/20' : 'bg-red-500/20'}`}
+                                title={irisConnected ? 'Iris connecté' : 'Iris déconnecté'}
+                              >
+                                <Eye className={`w-3 h-3 ${irisConnected ? 'text-green-400' : 'text-red-400'}`} />
+                              </div>
+                            );
+                          })()}
                           {isRef && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
                         </div>
                       </div>
@@ -3209,6 +3275,14 @@ const StrickerMatchSheet = () => {
           xpEarned={matchReportData.xpEarned}
           topSquadPointsChange={matchReportData.topSquadPointsChange}
           matchMode={match?.mode}
+          matchFormat={match?.format || '5v5'}
+          mapBans={{
+            team1BannedMap: match?.mapBans?.team1BannedMap || mapBans.team1BannedMap,
+            team2BannedMap: match?.mapBans?.team2BannedMap || mapBans.team2BannedMap,
+            team1Name: match?.team1Squad?.name || t.team1,
+            team2Name: match?.team2Squad?.name || t.team2
+          }}
+          selectedMap={typeof match?.selectedMap === 'string' ? match.selectedMap : match?.selectedMap?.name}
         />
       )}
     </div>

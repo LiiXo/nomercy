@@ -20,10 +20,10 @@ const rankedConfigSchema = new mongoose.Schema({
   gameModes: [{
     type: String
   }],
-  // Formats disponibles pour le mode ranked (4v4, 5v5)
+  // Formats disponibles pour le mode ranked (3v3, 4v4, 5v5)
   formats: [{
     type: String,
-    enum: ['4v4', '5v5']
+    enum: ['3v3', '4v4', '5v5']
   }]
 }, { _id: false });
 
@@ -76,12 +76,12 @@ const mapSchema = new mongoose.Schema({
     })
   },
   // Configuration Stricker
-  // Ranked uniquement: Search & Destroy en 5v5
+  // Ranked uniquement: Search & Destroy en 3v3 ou 5v5
   strickerConfig: {
     type: modeConfigSchema,
     default: () => ({
       ladder: { enabled: false, gameModes: [] },
-      ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['5v5'] }
+      ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['3v3', '5v5'] }
     })
   },
   // Legacy fields - kept for backward compatibility during migration

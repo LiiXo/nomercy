@@ -1,6 +1,7 @@
 //! API client module for NoMercy server communication
 
 use hmac::{Hmac, Mac};
+use obfstr::obfstr;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
@@ -8,13 +9,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 type HmacSha256 = Hmac<Sha256>;
 
-const CLIENT_VERSION: &str = "1.0.0";
+fn client_version() -> String {
+    obfstr!("1.0.0").to_string()
+}
 
 #[derive(Clone)]
 pub struct IrisApiClient {
     client: Client,
     base_url: String,
     hmac_secret: String,
+    is_dev: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -65,25 +69,29 @@ pub struct HeartbeatRequest {
 impl IrisApiClient {
     pub fn new(is_dev: bool) -> Self {
         let base_url = if is_dev {
-            "http://localhost:5000/api".to_string()
+            obfstr!("http://localhost:5000/api").to_string()
         } else {
-            "https://nomercy.ggsecure.io/api".to_string()
+            obfstr!("https://nomercy.ggsecure.io/api").to_string()
         };
 
-        // HMAC secret (same as server default)
-        let hmac_secret = "NM_IRIS_SEC_K3Y_2024_!@#$%^&*()_SECURE".to_string();
+        // HMAC secret (obfuscated)
+        let hmac_secret = obfstr!("NM_IRIS_SEC_K3Y_2024_!@#$%^&*()_SECURE").to_string();
+
+        // Build client
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .pool_idle_timeout(std::time::Duration::from_secs(90))
+            .pool_max_idle_per_host(1)
+            .tcp_keepalive(std::time::Duration::from_secs(30))
+            .tcp_nodelay(true)
+            .build()
+            .expect("Failed to create HTTP client");
 
         Self {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(60)) // 60s timeout for large payloads
-                .pool_idle_timeout(std::time::Duration::from_secs(90)) // Longer idle timeout (> heartbeat interval)
-                .pool_max_idle_per_host(1) // Only 1 idle connection per host
-                .tcp_keepalive(std::time::Duration::from_secs(30)) // More aggressive keepalive
-                .tcp_nodelay(true) // Disable Nagle's algorithm for faster small packets
-                .build()
-                .expect("Failed to create HTTP client"),
+            client,
             base_url,
             hmac_secret,
+            is_dev,
         }
     }
 
@@ -134,17 +142,17 @@ impl IrisApiClient {
             _ => return Err("Invalid method".to_string()),
         };
 
-        // Add headers
+        // Add headers (obfuscated)
         request = request
-            .header("Content-Type", "application/json")
-            .header("X-Iris-Client", "desktop")
-            .header("X-Iris-Version", CLIENT_VERSION)
-            .header("X-Iris-Timestamp", timestamp.to_string())
-            .header("X-Iris-Nonce", &nonce)
-            .header("X-Iris-Signature", &signature);
+            .header(obfstr!("Content-Type"), obfstr!("application/json"))
+            .header(obfstr!("X-Iris-Client"), obfstr!("desktop"))
+            .header(obfstr!("X-Iris-Version"), client_version())
+            .header(obfstr!("X-Iris-Timestamp"), timestamp.to_string())
+            .header(obfstr!("X-Iris-Nonce"), &nonce)
+            .header(obfstr!("X-Iris-Signature"), &signature);
 
         if let Some(t) = token {
-            request = request.header("Authorization", format!("Bearer {}", t));
+            request = request.header(obfstr!("Authorization"), format!("Bearer {}", t));
         }
 
         if let Some(b) = body {
@@ -168,7 +176,7 @@ impl IrisApiClient {
 
     /// Verify Iris token
     pub async fn verify_token(&self, token: &str) -> Result<VerifyResponse, String> {
-        self.request("GET", "/iris/verify", Some(token), None).await
+        self.request("GET", obfstr!("/iris/verify"), Some(token), None).await
     }
 
     /// Register hardware
@@ -182,7 +190,7 @@ impl IrisApiClient {
             "hardwareId": hardware_id,
             "systemInfo": system_info
         });
-        self.request("POST", "/iris/register-hardware", Some(token), Some(body)).await
+        self.request("POST", obfstr!("/iris/register-hardware"), Some(token), Some(body)).await
     }
 
     /// Send heartbeat
@@ -198,12 +206,12 @@ impl IrisApiClient {
             "security": security,
             "systemInfo": system_info
         });
-        self.request("POST", "/iris/heartbeat", Some(token), Some(body)).await
+        self.request("POST", obfstr!("/iris/heartbeat"), Some(token), Some(body)).await
     }
 
     /// Test basic connectivity (no auth required)
     pub async fn health_check(&self) -> Result<bool, String> {
-        let url = format!("{}/iris/health", self.base_url);
+        let url = format!("{}{}", self.base_url, obfstr!("/iris/health"));
         let response = self.client.get(&url)
             .timeout(std::time::Duration::from_secs(10))
             .send()
@@ -215,17 +223,17 @@ impl IrisApiClient {
 
     /// Send simple ping (alive signal)
     pub async fn send_ping(&self, token: &str) -> Result<ApiResponse<serde_json::Value>, String> {
-        self.request("POST", "/iris/ping", Some(token), Some(serde_json::json!({}))).await
+        self.request("POST", obfstr!("/iris/ping"), Some(token), Some(serde_json::json!({}))).await
     }
 
     /// Create auth session for desktop OAuth flow
     pub async fn create_auth_session(&self) -> Result<AuthSessionResponse, String> {
-        self.request("POST", "/iris/auth/create-session", None, Some(serde_json::json!({}))).await
+        self.request("POST", obfstr!("/iris/auth/create-session"), None, Some(serde_json::json!({}))).await
     }
 
     /// Check auth session status (polling)
     pub async fn check_auth_status(&self, session_id: &str) -> Result<AuthStatusResponse, String> {
-        self.request("GET", &format!("/iris/auth/status/{}", session_id), None, None).await
+        self.request("GET", &format!("{}/{}", obfstr!("/iris/auth/status"), session_id), None, None).await
     }
 }
 
@@ -260,16 +268,17 @@ pub struct AuthUser {
 
 /// Get Discord OAuth URL
 pub fn get_discord_auth_url(is_dev: bool) -> String {
-    let client_id = "1447607594351853618";
+    let client_id = obfstr!("1447607594351853618").to_string();
     let redirect_uri = if is_dev {
-        "http://localhost:5000/api/iris/discord-callback"
+        obfstr!("http://localhost:5000/api/iris/discord-callback").to_string()
     } else {
-        "https://nomercy.ggsecure.io/api/iris/discord-callback"
+        obfstr!("https://nomercy.ggsecure.io/api/iris/discord-callback").to_string()
     };
 
     format!(
-        "https://discord.com/api/oauth2/authorize?client_id={}&redirect_uri={}&response_type=code&scope=identify%20email",
+        "{}?client_id={}&redirect_uri={}&response_type=code&scope=identify%20email",
+        obfstr!("https://discord.com/api/oauth2/authorize"),
         client_id,
-        urlencoding::encode(redirect_uri)
+        urlencoding::encode(&redirect_uri)
     )
 }

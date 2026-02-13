@@ -2,7 +2,14 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import User from '../models/User.js';
+
+// ES Module dirname equivalent
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import IrisUpdate from '../models/IrisUpdate.js';
 import { verifyToken } from '../middleware/auth.middleware.js';
 import { verifyIrisSignature, decryptIrisPayload } from '../middleware/iris.security.middleware.js';
@@ -106,9 +113,10 @@ setInterval(async () => {
 // Discord OAuth config
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1447607594351853618';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const DISCORD_REDIRECT_URI = process.env.NODE_ENV === 'production' 
-  ? 'https://nomercy.ggsecure.io/api/iris/discord-callback'
-  : 'http://localhost:5000/api/iris/discord-callback';
+// Default to production URL, only use localhost if explicitly in development
+const DISCORD_REDIRECT_URI = process.env.IRIS_DEV_MODE === 'true'
+  ? 'http://localhost:5000/api/iris/discord-callback'
+  : 'https://nomercy.ggsecure.io/api/iris/discord-callback';
 
 console.log('[Iris] Discord Redirect URI:', DISCORD_REDIRECT_URI);
 console.log('[Iris] Security middleware enabled');
@@ -1439,12 +1447,98 @@ router.get('/download', verifyToken, async (req, res) => {
 
     res.json({
       success: true,
-      downloadUrl: `/api/iris/installer?token=${downloadToken}`,
+      downloadUrl: `/iris/installer?token=${downloadToken}`,
       version: '1.0.0',
-      fileName: 'IrisSetup.exe'
+      fileName: 'Iris_1.0.0_x64-setup.exe'
     });
   } catch (error) {
     console.error('[Iris] Download info error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+/**
+ * Download the Iris installer
+ * GET /api/iris/installer
+ * Protected by: download token OR valid Iris auth token (for Tauri updates)
+ */
+router.get('/installer', async (req, res) => {
+  try {
+    const { token } = req.query;
+    const authHeader = req.headers.authorization;
+    
+    // Method 1: Download token from /download endpoint
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, IRIS_JWT_SECRET);
+        if (decoded.purpose !== 'iris_download') {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid token purpose'
+          });
+        }
+      } catch (err) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid or expired download token'
+        });
+      }
+    }
+    // Method 2: Iris auth token (for Tauri updater)
+    else if (authHeader && authHeader.startsWith('Bearer ')) {
+      const irisToken = authHeader.split(' ')[1];
+      try {
+        const decoded = jwt.verify(irisToken, IRIS_JWT_SECRET);
+        if (decoded.type !== 'iris') {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid token type'
+          });
+        }
+      } catch (err) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid auth token'
+        });
+      }
+    }
+    // Method 3: Allow public access for Tauri updater (User-Agent check)
+    else {
+      // Allow public access - installer is not sensitive, just like website download
+      console.log('[Iris] Public download request');
+    }
+
+    // Get latest version from update config
+    const latestUpdate = await IrisUpdate.findOne({ isCurrent: true }).sort({ createdAt: -1 });
+    const version = latestUpdate?.version || '1.0.1';
+    const fileName = `Iris_${version}_x64-setup.exe`;
+    const installerPath = path.join(__dirname, '../../iris-downloads', fileName);
+    
+    // Check if file exists
+    if (!fs.existsSync(installerPath)) {
+      console.error('[Iris] Installer not found:', installerPath);
+      return res.status(404).json({
+        success: false,
+        message: 'Installer not found'
+      });
+    }
+    
+    res.download(installerPath, fileName, (err) => {
+      if (err) {
+        console.error('[Iris] Download error:', err);
+        if (!res.headersSent) {
+          res.status(500).json({
+            success: false,
+            message: 'Failed to download installer'
+          });
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[Iris] Installer download error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -2445,7 +2539,8 @@ router.post('/updates', verifyToken, async (req, res) => {
       changelog, 
       mandatory, 
       isCurrent,
-      platform 
+      platform,
+      signature
     } = req.body;
     
     // Validate required fields (simplified - only version and URL needed)
@@ -2473,6 +2568,7 @@ router.post('/updates', verifyToken, async (req, res) => {
       mandatory: mandatory || false,
       isCurrent: isCurrent || false,
       platform: platform || 'windows',
+      signature: signature || '',
       publishedBy: user._id
     });
     
@@ -2519,7 +2615,7 @@ router.put('/updates/:id', verifyToken, async (req, res) => {
     
     const allowedFields = [
       'downloadUrl', 'fileSize', 'changelog', 
-      'mandatory', 'isCurrent', 'isActive'
+      'mandatory', 'isCurrent', 'isActive', 'signature'
     ];
     
     for (const field of allowedFields) {
@@ -2792,6 +2888,90 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erreur serveur'
+    });
+  }
+});
+
+// ====== TAURI UPDATER ENDPOINT ======
+
+/**
+ * Tauri Updater endpoint
+ * GET /api/iris/tauri-update
+ * Returns update info in Tauri's expected format
+ * Called directly by Tauri updater - no auth required
+ * 
+ * Tauri expects this format:
+ * {
+ *   "version": "1.0.0",
+ *   "notes": "Changelog here",
+ *   "pub_date": "2024-01-01T00:00:00Z",
+ *   "platforms": {
+ *     "windows-x86_64": {
+ *       "signature": "base64-signature",
+ *       "url": "https://..."
+ *     }
+ *   }
+ * }
+ */
+router.get('/tauri-update', async (req, res) => {
+  try {
+    // Get current version query param (sent by Tauri)
+    const { current_version, target } = req.query;
+    const platform = target || 'windows-x86_64';
+    
+    console.log(`[Iris Tauri Update] Check request - current: ${current_version}, platform: ${platform}`);
+    
+    // Find the current (latest) active update
+    const currentUpdate = await IrisUpdate.findOne({ 
+      isCurrent: true, 
+      isActive: true 
+    });
+    
+    if (!currentUpdate) {
+      console.log('[Iris Tauri Update] No current update found');
+      // Return 204 No Content when no update available
+      return res.status(204).send();
+    }
+    
+    // Compare versions - only send update if newer
+    if (current_version) {
+      const currentParts = current_version.split('.').map(Number);
+      const latestParts = currentUpdate.version.split('.').map(Number);
+      
+      const isNewer = latestParts[0] > currentParts[0] ||
+        (latestParts[0] === currentParts[0] && latestParts[1] > currentParts[1]) ||
+        (latestParts[0] === currentParts[0] && latestParts[1] === currentParts[1] && latestParts[2] > currentParts[2]);
+      
+      if (!isNewer) {
+        console.log(`[Iris Tauri Update] Already on latest version (${current_version} >= ${currentUpdate.version})`);
+        return res.status(204).send();
+      }
+    }
+    
+    console.log(`[Iris Tauri Update] Update available: ${currentUpdate.version}`);
+    
+    // Build Tauri-compatible response
+    const response = {
+      version: currentUpdate.version,
+      notes: currentUpdate.changelog || `Iris v${currentUpdate.version}`,
+      pub_date: currentUpdate.releasedAt?.toISOString() || new Date().toISOString(),
+      platforms: {
+        'windows-x86_64': {
+          signature: currentUpdate.signature || '', // Signature from admin panel
+          url: currentUpdate.downloadUrl
+        }
+      }
+    };
+    
+    // Increment download count
+    currentUpdate.downloadCount = (currentUpdate.downloadCount || 0) + 1;
+    await currentUpdate.save();
+    
+    res.json(response);
+  } catch (error) {
+    console.error('[Iris Tauri Update] Error:', error);
+    res.status(500).json({
+      error: 'Server error'
     });
   }
 });

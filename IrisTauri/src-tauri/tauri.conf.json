@@ -1,70 +1,15 @@
 {
-  "$schema": "https://schema.tauri.app/config/1",
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Iris",
+  "version": "1.0.1",
+  "identifier": "com.nomercy.iris",
   "build": {
+    "frontendDist": "../ui",
     "beforeBuildCommand": "",
-    "beforeDevCommand": "",
-    "devPath": "../ui",
-    "distDir": "../ui",
-    "withGlobalTauri": true
+    "beforeDevCommand": ""
   },
-  "package": {
-    "productName": "Iris",
-    "version": "1.0.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "window": {
-        "all": false,
-        "startDragging": true,
-        "minimize": true,
-        "close": true,
-        "hide": true,
-        "show": true,
-        "setFocus": true
-      },
-      "shell": {
-        "open": true
-      },
-      "protocol": {
-        "asset": true,
-        "assetScope": ["**"]
-      }
-    },
-    "bundle": {
-      "active": true,
-      "category": "Utility",
-      "copyright": "NoMercy 2024",
-      "externalBin": [],
-      "icon": [
-        "icons/icon.ico"
-      ],
-      "identifier": "com.nomercy.iris",
-      "longDescription": "Iris Anticheat - NoMercy Security System",
-      "resources": [],
-      "shortDescription": "Iris Anticheat",
-      "targets": ["nsis"],
-      "windows": {
-        "certificateThumbprint": "8B4F91D4C5BE3A937DF683ED118304D2E797F71D",
-        "digestAlgorithm": "sha256",
-        "timestampUrl": "http://timestamp.sectigo.com",
-        "wix": null,
-        "nsis": {
-          "installerIcon": "icons/icon.ico",
-          "headerImage": null,
-          "sidebarImage": null,
-          "installMode": "currentUser",
-          "languages": ["French", "English"],
-          "displayLanguageSelector": false
-        }
-      }
-    },
-    "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://cdn.discordapp.com https://nomercy.ggsecure.io data: asset: https://asset.localhost; connect-src 'self' https://nomercy.ggsecure.io http://localhost:5000"
-    },
-    "updater": {
-      "active": false
-    },
+  "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Iris - NoMercy Anticheat",
@@ -82,9 +27,37 @@
         "center": true
       }
     ],
-    "systemTray": {
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://cdn.discordapp.com https://nomercy.ggsecure.io data: asset: https://asset.localhost; connect-src 'self' https://nomercy.ggsecure.io http://localhost:5000"
+    },
+    "trayIcon": {
       "iconPath": "icons/icon.ico",
       "iconAsTemplate": true
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Utility",
+    "copyright": "NoMercy 2026",
+    "icon": ["icons/icon.ico"],
+    "longDescription": "Iris Anticheat - NoMercy Security System",
+    "shortDescription": "Iris Anticheat",
+    "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "languages": ["French", "English"],
+        "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY1NEQ3NEE2Q0VFM0ZFODIKUldTQy91UE9wblJOOVlVa3NXcTI1WDlqdGU2MnczcjAzN2dmYjk1VlpCWjYzckFjYzJheFhENk8K",
+      "endpoints": [
+        "https://nomercy.ggsecure.io/api/iris/tauri-update"
+      ]
     }
   }
 }

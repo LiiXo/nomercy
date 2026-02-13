@@ -32,7 +32,7 @@
     }
     .app-wrapper {
       background: var(--dark-950);
-      border-radius: 16px;
+      border-radius: 12px;
       border: 1px solid rgba(255, 45, 85, 0.3);
       height: 100vh;
       overflow: hidden;
@@ -45,7 +45,7 @@
       height: 36px;
       background: linear-gradient(to right, rgba(255, 45, 85, 0.1), transparent);
       border-bottom: 1px solid rgba(255, 45, 85, 0.2);
-      border-radius: 16px 16px 0 0;
+      border-radius: 12px 12px 0 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -297,6 +297,104 @@
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     .slide-up { animation: slideUp 0.5s ease-out; }
     @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    
+    /* Update Dialog Styles */
+    .update-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .update-overlay.visible { display: flex; }
+    .update-dialog {
+      background: var(--dark-900);
+      border: 1px solid rgba(255, 45, 85, 0.3);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 320px;
+      text-align: center;
+      animation: slideUp 0.3s ease-out;
+    }
+    .update-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      background: linear-gradient(135deg, var(--neon-red), var(--neon-orange));
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .update-icon svg { width: 28px; height: 28px; color: white; }
+    .update-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    .update-version { 
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 24px;
+      color: var(--neon-red);
+      margin-bottom: 12px;
+    }
+    .update-changelog {
+      font-size: 13px;
+      color: var(--dark-400);
+      text-align: left;
+      background: var(--dark-950);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      max-height: 120px;
+      overflow-y: auto;
+      white-space: pre-line;
+    }
+    .update-btn {
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, var(--neon-red), var(--neon-orange));
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.3s ease;
+      margin-bottom: 10px;
+    }
+    .update-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(255, 45, 85, 0.4); }
+    .update-btn:disabled { opacity: 0.7; cursor: not-allowed; transform: none; }
+    .update-btn svg { width: 20px; height: 20px; }
+    .update-later {
+      background: transparent;
+      border: 1px solid var(--dark-600);
+      color: var(--dark-400);
+    }
+    .update-later:hover { border-color: var(--dark-400); color: white; box-shadow: none; }
+    .update-progress {
+      width: 100%;
+      height: 6px;
+      background: var(--dark-800);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .update-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--neon-red), var(--neon-orange));
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      animation: progress-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes progress-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .update-status { font-size: 13px; color: var(--dark-400); }
   </style>
 </head>
 <body>
@@ -384,17 +482,68 @@
           En utilisant Iris, vous acceptez les 
           <a class="footer-link" id="terms-link">conditions d'utilisation</a>
         </p>
-        <p class="version">v1.0.0</p>
+        <p class="version" id="app-version">v1.0.0</p>
       </div>
     </div>
   </div>
   </div><!-- end app-wrapper -->
 
+  <!-- Update Dialog -->
+  <div class="update-overlay" id="update-overlay">
+    <div class="update-dialog">
+      <div class="update-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </div>
+      <h3 class="update-title">Mise à jour disponible</h3>
+      <div class="update-version" id="update-version">v2.0.0</div>
+      <div class="update-changelog" id="update-changelog">
+        Chargement des notes de version...
+      </div>
+      
+      <!-- Normal state -->
+      <div id="update-actions">
+        <button class="update-btn" id="update-install-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>Mettre à jour</span>
+        </button>
+        <button class="update-btn update-later" id="update-later-btn">
+          Plus tard
+        </button>
+      </div>
+      
+      <!-- Installing state -->
+      <div id="update-installing" style="display: none;">
+        <div class="update-progress">
+          <div class="update-progress-bar" id="update-progress-bar" style="width: 0%"></div>
+        </div>
+        <p class="update-status" id="update-status">Téléchargement en cours...</p>
+      </div>
+    </div>
+  </div>
+
   <script>
-    const invoke = window.__TAURI__?.invoke || window.__TAURI__?.tauri?.invoke;
+    // Tauri v2 API - different structure than v1
+    const invoke = window.__TAURI__?.core?.invoke;
+
+    // Detect dev mode: in Tauri dev, we're on localhost:1420
+    // In production Tauri build, we're on tauri.localhost
+    const IS_DEV = window.location.hostname === 'localhost' && window.location.port !== '';
+    const BASE_URL = IS_DEV ? 'http://localhost:5173' : 'https://nomercy.ggsecure.io';
+    const TERMS_URL = `${BASE_URL}/iris-terms`;
+    
+    console.log('[Iris] Mode:', IS_DEV ? 'DEV' : 'PROD', '| Host:', window.location.hostname, '| Port:', window.location.port, '| Terms URL:', TERMS_URL);
 
     if (!invoke) {
-      console.error('[Iris] Tauri API not available. Make sure to run with: npm run dev');
+      console.error('[Iris] Tauri API not available. Make sure withGlobalTauri is enabled.');
+      console.log('[Iris] Available TAURI:', window.__TAURI__);
     }
     const loginView = document.getElementById('login-view');
     const loadingView = document.getElementById('loading-view');
@@ -422,7 +571,7 @@
       logout();
     });
     document.getElementById('terms-link').addEventListener('click', function() {
-      openExternal('https://nomercy.gg/terms');
+      openExternal(TERMS_URL);
     });
 
     // Logo fallback
@@ -493,8 +642,15 @@
     }
 
     function updateConnectedView(user) {
-      document.getElementById('user-avatar').src = user.avatarUrl || 
-        `https://cdn.discordapp.com/embed/avatars/0.png`;
+      const avatarEl = document.getElementById('user-avatar');
+      const avatarUrl = user.avatarUrl || `https://cdn.discordapp.com/embed/avatars/0.png`;
+      
+      // Set avatar with fallback
+      avatarEl.src = avatarUrl;
+      avatarEl.onerror = function() {
+        this.src = 'https://cdn.discordapp.com/embed/avatars/0.png';
+      };
+      
       document.getElementById('user-name').textContent = user.username;
       showView(connectedView);
       
@@ -615,7 +771,7 @@
       }
     }
 
-    // Listen for auth events from Tauri
+    // Listen for auth events from Tauri (v2 API)
     const listen = window.__TAURI__?.event?.listen;
     if (listen) {
       listen('auth-success', (event) => {
@@ -630,8 +786,109 @@
         console.warn('Cheat detected:', event.payload);
         // Could show a warning to the user
       });
+
+      // Listen for update available event
+      listen('update-available', (event) => {
+        console.log('[UI] Update available:', event.payload);
+        showUpdateDialog(event.payload);
+      });
     }
 
+    // --- Update Dialog Functions ---
+    const updateOverlay = document.getElementById('update-overlay');
+    const updateVersion = document.getElementById('update-version');
+    const updateChangelog = document.getElementById('update-changelog');
+    const updateActions = document.getElementById('update-actions');
+    const updateInstalling = document.getElementById('update-installing');
+    const updateProgressBar = document.getElementById('update-progress-bar');
+    const updateStatus = document.getElementById('update-status');
+    let pendingUpdate = null;
+
+    function showUpdateDialog(updateInfo) {
+      pendingUpdate = updateInfo;
+      updateVersion.textContent = 'v' + (updateInfo.version || '?');
+      updateChangelog.textContent = updateInfo.changelog || 'Améliorations et corrections de bugs.';
+      updateActions.style.display = 'block';
+      updateInstalling.style.display = 'none';
+      
+      // All updates are mandatory - hide the "Later" button
+      const laterBtn = document.getElementById('update-later-btn');
+      laterBtn.style.display = 'none';
+      
+      updateOverlay.classList.add('visible');
+    }
+
+    function hideUpdateDialog() {
+      // Cannot hide for mandatory updates - do nothing
+      // updateOverlay.classList.remove('visible');
+      // pendingUpdate = null;
+    }
+
+    async function installUpdate() {
+      if (!pendingUpdate) return;
+      
+      console.log('[UI] Starting update installation...');
+      
+      // Switch to installing state
+      updateActions.style.display = 'none';
+      updateInstalling.style.display = 'block';
+      updateStatus.textContent = 'Téléchargement en cours...';
+      
+      // Animate progress bar (indeterminate)
+      let progress = 0;
+      const progressInterval = setInterval(() => {
+        progress = Math.min(progress + Math.random() * 15, 90);
+        updateProgressBar.style.width = progress + '%';
+      }, 500);
+      
+      try {
+        updateStatus.textContent = 'Installation...';
+        await invoke('install_update');
+        
+        // If we get here, update was successful and app will restart
+        clearInterval(progressInterval);
+        updateProgressBar.style.width = '100%';
+        updateStatus.textContent = 'Redémarrage...';
+      } catch (e) {
+        console.error('[UI] Update error:', e);
+        clearInterval(progressInterval);
+        updateStatus.textContent = 'Erreur: ' + e;
+        
+        // Show retry button after 3 seconds
+        setTimeout(() => {
+          updateActions.style.display = 'block';
+          updateInstalling.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    // Update dialog event listeners
+    document.getElementById('update-install-btn').addEventListener('click', installUpdate);
+    document.getElementById('update-later-btn').addEventListener('click', hideUpdateDialog);
+
+    // Check for updates manually (can be called from connected view)
+    async function checkForUpdates() {
+      try {
+        const updateInfo = await invoke('check_for_updates');
+        if (updateInfo.available) {
+          showUpdateDialog(updateInfo);
+        }
+      } catch (e) {
+        console.error('[UI] Update check error:', e);
+      }
+    }
+
+    // Fetch and display current version
+    async function displayVersion() {
+      try {
+        const version = await invoke('get_version');
+        document.getElementById('app-version').textContent = 'v' + version;
+      } catch (e) {
+        console.log('[UI] Could not get version:', e);
+      }
+    }
+
+    displayVersion();
     init();
   </script>
 </body>

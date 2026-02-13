@@ -733,18 +733,30 @@ const SquadProfile = () => {
 
 
           {/* Stricker Rank Display */}
-          {squad.statsStricker?.rank && (() => {
-            const rankName = squad.statsStricker.rank;
-            const rankKey = rankName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-            const rankImages = {
-              'recrues': '/stricker1.png',
-              'operateurs': '/stricker2.png',
-              'veterans': '/stricker3.png',
-              'commandants': '/stricker4.png',
-              'seigneurs de guerre': '/stricker5.png',
-              'immortel': '/stricker6.png'
+          {squad.statsStricker && (squad.statsStricker.points > 0 || squad.statsStricker.wins > 0 || squad.statsStricker.losses > 0) && (() => {
+            // Calculate rank from points dynamically
+            const points = squad.statsStricker?.points || 0;
+            const STRICKER_RANK_DATA = {
+              recrues: { name: 'Recrues', min: 0, image: '/stricker1.png' },
+              operateurs: { name: 'Opérateurs', min: 250, image: '/stricker2.png' },
+              veterans: { name: 'Vétérans', min: 500, image: '/stricker3.png' },
+              commandants: { name: 'Commandants', min: 750, image: '/stricker4.png' },
+              seigneurs: { name: 'Seigneurs de Guerre', min: 1000, image: '/stricker5.png' },
+              immortel: { name: 'Immortel', min: 1500, image: '/stricker6.png' }
             };
-            const rankImage = rankImages[rankKey] || '/stricker1.png';
+            
+            const getStrickerRank = (pts) => {
+              if (pts >= 1500) return STRICKER_RANK_DATA.immortel;
+              if (pts >= 1000) return STRICKER_RANK_DATA.seigneurs;
+              if (pts >= 750) return STRICKER_RANK_DATA.commandants;
+              if (pts >= 500) return STRICKER_RANK_DATA.veterans;
+              if (pts >= 250) return STRICKER_RANK_DATA.operateurs;
+              return STRICKER_RANK_DATA.recrues;
+            };
+            
+            const currentRank = getStrickerRank(points);
+            const rankName = currentRank.name;
+            const rankImage = currentRank.image;
             
             return (
               <div className="bg-gradient-to-r from-lime-500/10 via-green-500/10 to-emerald-500/10 backdrop-blur-xl rounded-2xl border border-lime-500/30 overflow-hidden mb-4 sm:mb-6">
@@ -758,11 +770,11 @@ const SquadProfile = () => {
                     <div className="flex items-center gap-4">
                       <div className="relative group">
                         <div className="absolute inset-0 bg-lime-400/20 blur-2xl rounded-full group-hover:bg-lime-400/30 transition-all"></div>
-                        <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-xl bg-gradient-to-br from-lime-900/50 to-green-900/50 border-2 border-lime-500/30 flex items-center justify-center overflow-hidden shadow-lg">
+                        <div className="relative w-[160px] h-[160px] sm:w-[200px] sm:h-[200px] rounded-xl bg-gradient-to-br from-lime-900/50 to-green-900/50 border-2 border-lime-500/30 flex items-center justify-center overflow-hidden shadow-lg">
                           <img 
                             src={rankImage} 
                             alt={rankName}
-                            className="w-20 h-20 sm:w-28 sm:h-28 object-contain drop-shadow-[0_0_12px_rgba(126,211,33,0.6)]"
+                            className="w-[150px] h-[150px] sm:w-[190px] sm:h-[190px] object-contain drop-shadow-[0_0_12px_rgba(126,211,33,0.6)]"
                             onError={(e) => {
                               e.target.style.display = 'none';
                               e.target.parentElement.innerHTML = '<svg className="w-8 h-8 text-lime-400" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/></svg>';
@@ -902,7 +914,7 @@ const SquadProfile = () => {
                           {/* Format */}
                           <div className="flex items-center gap-1 text-gray-400 text-xs sm:text-sm">
                             <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                            <span>5v5</span>
+                            <span>{match.teamSize || 5}v{match.teamSize || 5}</span>
                           </div>
                         </div>
                         

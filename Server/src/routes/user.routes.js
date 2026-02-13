@@ -7,6 +7,7 @@ import User from '../models/User.js';
 import Squad from '../models/Squad.js';
 import Match from '../models/Match.js';
 import RankedMatch from '../models/RankedMatch.js';
+import StrickerMatch from '../models/StrickerMatch.js';
 import ShopItem from '../models/ShopItem.js';
 import Trophy from '../models/Trophy.js';
 import Announcement from '../models/Announcement.js';
@@ -1347,8 +1348,13 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
       status: 'completed' 
     });
     
+    // Compter les matchs stricker "completed"
+    const completedStrickerMatches = await StrickerMatch.countDocuments({ 
+      status: 'completed' 
+    });
+    
     // Total des matchs completed
-    const totalMatches = completedMatchesDuoTrio + completedMatchesSquadTeam + completedRankedMatches;
+    const totalMatches = completedMatchesDuoTrio + completedMatchesSquadTeam + completedRankedMatches + completedStrickerMatches;
     
     const totalShopItems = await ShopItem.countDocuments();
     const totalTrophies = await Trophy.countDocuments();
@@ -1427,7 +1433,8 @@ router.get('/admin/stats', verifyToken, requireStaff, async (req, res) => {
         matchesByLadder: {
           duoTrio: completedMatchesDuoTrio,
           squadTeam: completedMatchesSquadTeam,
-          ranked: completedRankedMatches
+          ranked: completedRankedMatches,
+          stricker: completedStrickerMatches
         },
         totalShopItems,
         totalTrophies,
@@ -1877,6 +1884,73 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la r\u00e9initialisation.'
+    });
+  }
+});
+
+// Admin: Clear orphaned squad references (when squad was deleted but user still has reference)
+router.post('/admin/:userId/clear-squad', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé.'
+      });
+    }
+
+    // Check which squad fields have values
+    const squadFields = ['squad', 'squadHardcore', 'squadCdl', 'squadStricker'];
+    const fieldsWithValue = squadFields.filter(f => user[f]);
+    
+    if (fieldsWithValue.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cet utilisateur n\'a aucune référence d\'escouade.'
+      });
+    }
+
+    // Check which ones are orphaned (squad doesn't exist)
+    const Squad = (await import('../models/Squad.js')).default;
+    const orphanedFields = [];
+    
+    for (const field of fieldsWithValue) {
+      const squadExists = await Squad.exists({ _id: user[field], isDeleted: { $ne: true } });
+      if (!squadExists) {
+        orphanedFields.push(field);
+      }
+    }
+
+    if (orphanedFields.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Toutes les escouades référencées existent. Aucune référence orpheline à nettoyer.'
+      });
+    }
+
+    // Clear the orphaned references
+    const unsetFields = {};
+    orphanedFields.forEach(f => unsetFields[f] = 1);
+    
+    await User.findByIdAndUpdate(userId, { $unset: unsetFields });
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Clear Squad Refs', user.username, {
+      description: `Références escouade nettoyées: ${orphanedFields.join(', ')}`
+    });
+
+    res.json({
+      success: true,
+      message: `Références d'escouade nettoyées: ${orphanedFields.join(', ')}`,
+      clearedFields: orphanedFields
+    });
+  } catch (error) {
+    console.error('Clear squad refs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du nettoyage.'
     });
   }
 });

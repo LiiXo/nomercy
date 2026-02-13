@@ -82,6 +82,13 @@ const irisUpdateSchema = new mongoose.Schema({
     type: String,
     enum: ['windows', 'macos', 'linux'],
     default: 'windows'
+  },
+  
+  // Tauri signature for code signing verification
+  // Generated with: tauri signer sign -k path/to/private.key target/release/bundle/nsis/Iris_x.x.x_x64-setup.nsis.zip
+  signature: {
+    type: String,
+    default: ''
   }
   
 }, {

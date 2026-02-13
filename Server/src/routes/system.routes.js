@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import Squad from '../models/Squad.js';
 import Match from '../models/Match.js';
 import RankedMatch from '../models/RankedMatch.js';
+import StrickerMatch from '../models/StrickerMatch.js';
 import Ranking from '../models/Ranking.js';
 import HubPost from '../models/HubPost.js';
 import Announcement from '../models/Announcement.js';
@@ -125,16 +126,18 @@ router.get('/stats', async (req, res) => {
     tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
     tenDaysAgo.setHours(0, 0, 0, 0);
 
-    const [totalUsers, totalSquads, totalLadderMatches, totalRankedMatches, rankedLast10] = await Promise.all([
+    const [totalUsers, totalSquads, totalLadderMatches, totalRankedMatches, totalStrickerMatches, rankedLast10, strickerLast10] = await Promise.all([
       User.countDocuments({ isBanned: { $ne: true }, isDeleted: { $ne: true } }),
       Squad.countDocuments({ isDeleted: { $ne: true } }),
       Match.countDocuments({ status: 'completed' }),
       RankedMatch.countDocuments({ status: 'completed' }),
-      RankedMatch.countDocuments({ status: 'completed', createdAt: { $gte: tenDaysAgo } })
+      StrickerMatch.countDocuments({ status: 'completed' }),
+      RankedMatch.countDocuments({ status: 'completed', createdAt: { $gte: tenDaysAgo } }),
+      StrickerMatch.countDocuments({ status: 'completed', createdAt: { $gte: tenDaysAgo } })
     ]);
 
-    const totalMatches = totalLadderMatches + totalRankedMatches;
-    const avgMatchesPerDay = Math.round(rankedLast10 / 10 * 10) / 10;
+    const totalMatches = totalLadderMatches + totalRankedMatches + totalStrickerMatches;
+    const avgMatchesPerDay = Math.round((rankedLast10 + strickerLast10) / 10 * 10) / 10;
 
     cachedStats = { totalUsers, totalSquads, totalMatches, avgMatchesPerDay };
     lastStatsRefresh = now;

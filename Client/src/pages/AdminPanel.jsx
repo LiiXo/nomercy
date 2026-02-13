@@ -82,7 +82,8 @@ const AdminPanel = () => {
     downloadUrl: '',
     changelog: '',
     mandatory: false,
-    isCurrent: false
+    isCurrent: false,
+    signature: ''
   });
   const [savingIrisUpdate, setSavingIrisUpdate] = useState(false);
   
@@ -469,6 +470,7 @@ const AdminPanel = () => {
   // Squad Stricker stats modal state
   const [showStrickerStatsModal, setShowStrickerStatsModal] = useState(false);
   const [squadForStrickerStats, setSquadForStrickerStats] = useState(null);
+  const [strickerStatsFormat, setStrickerStatsFormat] = useState('5v5'); // '3v3' or '5v5'
   const [strickerStatsEdit, setStrickerStatsEdit] = useState({
     points: 0,
     wins: 0,
@@ -502,7 +504,8 @@ const AdminPanel = () => {
 
   const openStrickerStatsModal = (squad) => {
     setSquadForStrickerStats(squad);
-    // Initialize Stricker stats edit state with current values
+    setStrickerStatsFormat('5v5'); // Default to 5v5
+    // Initialize Stricker stats edit state with 5v5 values (legacy statsStricker)
     setStrickerStatsEdit({
       points: squad.statsStricker?.points || 0,
       wins: squad.statsStricker?.wins || 0,
@@ -510,6 +513,21 @@ const AdminPanel = () => {
       cranes: squad.cranes || 0
     });
     setShowStrickerStatsModal(true);
+  };
+  
+  // Update stats edit when format changes
+  const handleStrickerFormatChange = (format) => {
+    if (!squadForStrickerStats) return;
+    setStrickerStatsFormat(format);
+    // Load the corresponding format stats (5v5 uses legacy statsStricker)
+    const statsField = format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+    const stats = squadForStrickerStats[statsField] || {};
+    setStrickerStatsEdit({
+      points: stats.points || 0,
+      wins: stats.wins || 0,
+      losses: stats.losses || 0,
+      cranes: squadForStrickerStats.cranes || 0 // Cranes are shared
+    });
   };
 
   const handleUpdateLadderPoints = async () => {
@@ -550,12 +568,13 @@ const AdminPanel = () => {
             wins: parseInt(strickerStatsEdit.wins) || 0,
             losses: parseInt(strickerStatsEdit.losses) || 0
           },
-          cranes: parseInt(strickerStatsEdit.cranes) || 0
+          cranes: parseInt(strickerStatsEdit.cranes) || 0,
+          format: strickerStatsFormat
         })
       });
       const data = await response.json();
       if (data.success) {
-        setSuccess('Stats Stricker mises à jour avec succès');
+        setSuccess(`Stats Stricker ${strickerStatsFormat} mises à jour avec succès`);
         setShowStrickerStatsModal(false);
         fetchSquads();
       } else {
@@ -954,7 +973,8 @@ const AdminPanel = () => {
         downloadUrl: update.downloadUrl,
         changelog: update.changelog || '',
         mandatory: update.mandatory || false,
-        isCurrent: update.isCurrent || false
+        isCurrent: update.isCurrent || false,
+        signature: update.signature || ''
       });
     } else {
       setEditingIrisUpdate(null);
@@ -963,7 +983,8 @@ const AdminPanel = () => {
         downloadUrl: '',
         changelog: '',
         mandatory: false,
-        isCurrent: false
+        isCurrent: false,
+        signature: ''
       });
     }
     setShowIrisUpdateModal(true);
@@ -1429,21 +1450,36 @@ const AdminPanel = () => {
     }
   };
 
-  const handleResetSquadStricker = async (squad) => {
-    if (!window.confirm(`Voulez-vous vraiment réinitialiser les stats Stricker de l'escouade [${squad.tag}] ${squad.name} ?\n\nCela va remettre à 0:\n- Points Stricker\n- Victoires\n- Défaites\n- Munitions`)) {
+  const handleResetSquadStricker = async (squad, format = null) => {
+    // If no format provided, ask user to choose
+    const selectedFormat = format || window.prompt(
+      `Quel format voulez-vous réinitialiser pour [${squad.tag}] ${squad.name} ?\n\nEntrez "3v3" ou "5v5":`,
+      '5v5'
+    );
+    
+    if (!selectedFormat || !['3v3', '5v5'].includes(selectedFormat)) {
+      if (selectedFormat !== null) {
+        setError('Format invalide. Utilisez "3v3" ou "5v5".');
+      }
+      return;
+    }
+    
+    if (!window.confirm(`Voulez-vous vraiment réinitialiser les stats Stricker ${selectedFormat} de l'escouade [${squad.tag}] ${squad.name} ?\n\nCela va remettre à 0:\n- Points Stricker ${selectedFormat}\n- Victoires ${selectedFormat}\n- Défaites ${selectedFormat}\n- Munitions`)) {
       return;
     }
 
     try {
       const response = await fetch(`${API_URL}/squads/admin/${squad._id}/reset-stricker`, {
         method: 'POST',
-        credentials: 'include'
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ format: selectedFormat })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(`Stats Stricker de [${squad.tag}] ${squad.name} réinitialisées avec succès`);
+        setSuccess(`Stats Stricker ${selectedFormat} de [${squad.tag}] ${squad.name} réinitialisées avec succès`);
         fetchSquads();
       } else {
         setError(data.message || 'Erreur lors de la réinitialisation');
@@ -2333,7 +2369,7 @@ const AdminPanel = () => {
               <Swords className="w-5 h-5 text-green-400" />
               Matchs Completed par Ladder
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-dark-900/50 rounded-lg p-4 border border-white/5">
                 <p className="text-gray-400 text-sm mb-1">Chill</p>
                 <p className="text-2xl font-bold text-green-400">{stats.matchesByLadder.duoTrio || 0}</p>
@@ -2345,6 +2381,10 @@ const AdminPanel = () => {
               <div className="bg-dark-900/50 rounded-lg p-4 border border-white/5">
                 <p className="text-gray-400 text-sm mb-1">Ranked</p>
                 <p className="text-2xl font-bold text-yellow-400">{stats.matchesByLadder.ranked || 0}</p>
+              </div>
+              <div className="bg-dark-900/50 rounded-lg p-4 border border-pink-500/20">
+                <p className="text-gray-400 text-sm mb-1">Stricker</p>
+                <p className="text-2xl font-bold text-pink-400">{stats.matchesByLadder.stricker || 0}</p>
               </div>
             </div>
           </div>
@@ -3823,6 +3863,19 @@ const AdminPanel = () => {
                       rows={4}
                       placeholder="- Amélioration...\n- Correction..."
                     />
+                  </div>
+
+                  {/* Signature (Tauri) */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Signature Tauri (optionnel)</label>
+                    <textarea
+                      value={irisUpdateFormData.signature || ''}
+                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, signature: e.target.value })}
+                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white font-mono text-xs resize-none"
+                      rows={2}
+                      placeholder="dW50cnVzdGVkIGNvbW1lbnQ6..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Générée avec: tauri signer sign -k private.key bundle.zip</p>
                   </div>
 
                   {/* Options */}
@@ -10446,8 +10499,19 @@ Cette action est irréversible!`)) {
                     </div>
                   </div>
                   <div>
-                    <span className="text-xs text-gray-500 mb-2 block">Format (5v5 uniquement)</span>
+                    <span className="text-xs text-gray-500 mb-2 block">Format</span>
                     <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleRankedFormat('strickerConfig', '3v3')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                          isFormatSelected('strickerConfig', '3v3')
+                            ? 'bg-lime-600 text-white border-lime-600'
+                            : 'bg-dark-900 text-gray-400 border-white/10 hover:border-lime-500/50'
+                        }`}
+                      >
+                        3v3
+                      </button>
                       <button
                         type="button"
                         onClick={() => toggleRankedFormat('strickerConfig', '5v5')}
@@ -11824,7 +11888,7 @@ Cette action est irréversible!`)) {
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowStrickerStatsModal(false)}></div>
           <div className="relative bg-dark-900 border border-lime-500/20 rounded-2xl p-6 max-w-lg w-full">
-            <div className="flex items-center gap-3 mb-6">
+            <div className="flex items-center gap-3 mb-4">
               <div className="p-3 bg-lime-500/20 rounded-xl">
                 <Target className="w-6 h-6 text-lime-400" />
               </div>
@@ -11834,12 +11898,39 @@ Cette action est irréversible!`)) {
               </div>
             </div>
 
+            {/* Format Selector */}
+            <div className="flex items-center gap-2 mb-6 p-3 bg-dark-800/50 rounded-lg border border-lime-500/20">
+              <span className="text-gray-400 text-sm">Format:</span>
+              <div className="flex gap-2 flex-1">
+                <button
+                  onClick={() => handleStrickerFormatChange('3v3')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-bold transition-all ${
+                    strickerStatsFormat === '3v3'
+                      ? 'bg-gradient-to-r from-lime-500 to-green-500 text-white shadow-lg'
+                      : 'bg-dark-700 text-gray-400 hover:text-white hover:bg-dark-600'
+                  }`}
+                >
+                  3v3
+                </button>
+                <button
+                  onClick={() => handleStrickerFormatChange('5v5')}
+                  className={`flex-1 py-2 px-4 rounded-lg font-bold transition-all ${
+                    strickerStatsFormat === '5v5'
+                      ? 'bg-gradient-to-r from-lime-500 to-green-500 text-white shadow-lg'
+                      : 'bg-dark-700 text-gray-400 hover:text-white hover:bg-dark-600'
+                  }`}
+                >
+                  5v5
+                </button>
+              </div>
+            </div>
+
             {/* Stricker Stats Fields */}
             <div className="space-y-4">
               {/* Points */}
               <div className="flex items-center justify-between p-4 bg-dark-800/50 rounded-lg border border-lime-500/20">
                 <div>
-                  <p className="text-white font-medium">Points Stricker</p>
+                  <p className="text-white font-medium">Points Stricker ({strickerStatsFormat})</p>
                   <p className="text-gray-500 text-xs">Points de classement</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -11939,7 +12030,7 @@ Cette action est irréversible!`)) {
                 {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <>
                     <Save className="w-5 h-5" />
-                    Sauvegarder
+                    Sauvegarder ({strickerStatsFormat})
                   </>
                 )}
               </button>
