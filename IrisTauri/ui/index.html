@@ -190,12 +190,24 @@
       border-radius: 10px;
       margin-bottom: 12px;
     }
-    .user-avatar {
-      width: 40px;
-      height: 40px;
+    .avatar-container {
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       border: 2px solid var(--neon-red);
       box-shadow: 0 0 15px rgba(255, 45, 85, 0.3);
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--neon-red) 0%, var(--neon-orange) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .user-avatar {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
     .user-info { flex: 1; }
     .user-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
@@ -644,24 +656,46 @@
     }
 
     function updateConnectedView(user) {
-      const avatarEl = document.getElementById('user-avatar');
       const avatarContainer = document.getElementById('avatar-container');
       
-      // Reset avatar container to original state
-      avatarContainer.innerHTML = '<img id="user-avatar" class="user-avatar" src="" alt="Avatar">';
-      const newAvatarEl = document.getElementById('user-avatar');
+      console.log('[UI] User avatar URL:', user.avatarUrl);
       
-      // Use site avatar if available, otherwise show Iris logo
+      // Fallback SVG for Iris logo
+      const irisFallback = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+      
+      // Show avatar if available
       if (user.avatarUrl) {
-        newAvatarEl.src = user.avatarUrl;
-        newAvatarEl.style.display = 'block';
-        newAvatarEl.onerror = function() {
-          // Fallback to Iris logo on error
-          avatarContainer.innerHTML = `<div class="iris-avatar-fallback" style="width: 48px; height: 48px; background: linear-gradient(135deg, #ff2d55 0%, #ff6b2c 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+        const img = document.createElement('img');
+        img.className = 'user-avatar';
+        img.alt = 'Avatar';
+        
+        img.onload = function() {
+          console.log('[UI] Avatar loaded successfully');
+          avatarContainer.innerHTML = '';
+          avatarContainer.appendChild(img);
         };
+        
+        img.onerror = function() {
+          console.log('[UI] Avatar failed to load, using fallback');
+          avatarContainer.innerHTML = irisFallback;
+        };
+        
+        // Start loading (use crossorigin for external URLs)
+        if (user.avatarUrl.includes('cdn.discordapp.com')) {
+          img.crossOrigin = 'anonymous';
+        }
+        img.src = user.avatarUrl;
+        
+        // Set timeout fallback in case image hangs
+        setTimeout(() => {
+          if (!img.complete || img.naturalWidth === 0) {
+            console.log('[UI] Avatar load timeout, using fallback');
+            avatarContainer.innerHTML = irisFallback;
+          }
+        }, 5000);
       } else {
-        // No site avatar - show Iris logo
-        avatarContainer.innerHTML = `<div class="iris-avatar-fallback" style="width: 48px; height: 48px; background: linear-gradient(135deg, #ff2d55 0%, #ff6b2c 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+        // No avatar - show Iris logo
+        avatarContainer.innerHTML = irisFallback;
       }
       
       document.getElementById('user-name').textContent = user.username;

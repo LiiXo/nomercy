@@ -235,6 +235,25 @@ impl IrisApiClient {
     pub async fn check_auth_status(&self, session_id: &str) -> Result<AuthStatusResponse, String> {
         self.request("GET", &format!("{}/{}", obfstr!("/iris/auth/status"), session_id), None, None).await
     }
+
+    /// Send behavioral metrics to server
+    pub async fn send_behavioral_data(
+        &self,
+        token: &str,
+        metrics: serde_json::Value,
+        match_id: Option<&str>,
+    ) -> Result<ApiResponse<BehavioralAnalysisResponse>, String> {
+        let body = serde_json::json!({
+            "metrics": metrics,
+            "matchId": match_id
+        });
+        self.request("POST", obfstr!("/iris/behavioral"), Some(token), Some(body)).await
+    }
+
+    /// Get player's behavioral profile baseline
+    pub async fn get_behavioral_baseline(&self, token: &str) -> Result<ApiResponse<BehavioralBaseline>, String> {
+        self.request("GET", obfstr!("/iris/behavioral/baseline"), Some(token), None).await
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -281,4 +300,34 @@ pub fn get_discord_auth_url(is_dev: bool) -> String {
         client_id,
         urlencoding::encode(&redirect_uri)
     )
+}
+
+/// Behavioral analysis response from server
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BehavioralAnalysisResponse {
+    pub is_anomalous: bool,
+    pub anomaly_score: u32,
+    pub risk_level: String,
+    pub baseline_deviation: f64,
+    pub flags: Vec<BehavioralFlag>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BehavioralFlag {
+    pub flag_type: String,
+    pub description: String,
+    pub severity: String,
+}
+
+/// Player's behavioral baseline
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BehavioralBaseline {
+    pub has_baseline: bool,
+    pub sample_count: u32,
+    pub avg_mouse_velocity: f64,
+    pub avg_reaction_time: f64,
+    pub consistency_profile: f64,
 }

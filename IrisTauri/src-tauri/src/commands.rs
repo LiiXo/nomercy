@@ -938,3 +938,48 @@ pub async fn check_tpm() -> Result<TpmResult, String> {
 pub async fn get_security_status() -> Result<hardware::SecurityStatus, String> {
     Ok(hardware::get_full_security_status())
 }
+
+// ====== BEHAVIORAL ANALYSIS COMMANDS ======
+
+use crate::behavioral;
+
+/// Start behavior tracking (call when match starts)
+#[tauri::command]
+pub async fn start_behavior_tracking() -> Result<(), String> {
+    behavioral::start_tracking();
+    
+    // Start sampling loop in background
+    tokio::spawn(async move {
+        println!("[Behavioral] Starting input sampling loop...");
+        while behavioral::is_tracking() {
+            behavioral::sample_inputs();
+            // Sample at ~60Hz (16ms)
+            tokio::time::sleep(tokio::time::Duration::from_millis(16)).await;
+        }
+        println!("[Behavioral] Input sampling loop stopped");
+    });
+    
+    Ok(())
+}
+
+/// Stop behavior tracking (call when match ends)
+#[tauri::command]
+pub async fn stop_behavior_tracking() -> Result<behavioral::BehaviorMetrics, String> {
+    behavioral::stop_tracking();
+    let metrics = behavioral::get_metrics();
+    
+    // Send metrics to server if we have enough data
+    if metrics.sample_count > 50 {
+        println!("[Behavioral] Collected {} samples, anomaly score: {}", 
+                 metrics.sample_count, metrics.overall_anomaly_score);
+    }
+    
+    Ok(metrics)
+}
+
+/// Get current behavior metrics without stopping
+#[tauri::command]
+pub async fn get_behavior_metrics() -> Result<behavioral::BehaviorMetrics, String> {
+    Ok(behavioral::get_metrics())
+}
+

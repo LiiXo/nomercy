@@ -1,6 +1,6 @@
 [package]
 name = "iris-anticheat"
-version = "1.0.3"
+version = "1.0.4"
 description = "Iris Anticheat - NoMercy Security System"
 authors = ["NoMercy"]
 edition = "2021"
@@ -45,7 +45,8 @@ windows = { version = "0.52", features = [
     "Win32_System_Ole",
     "Win32_System_Variant",
     "Win32_Graphics_Gdi",
-    "Win32_UI_WindowsAndMessaging"
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse"
 ] }
 wmi = "0.13"
 

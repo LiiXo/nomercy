@@ -18,7 +18,7 @@ import {
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
   ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart, Cpu,
-  Monitor, Cloud, Syringe
+  Monitor, Cloud, Syringe, Brain, BarChart2
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -74,7 +74,14 @@ const AdminPanel = () => {
   const [confirmIrisReset, setConfirmIrisReset] = useState(false);
   
   // Iris updates state (admin only)
-  const [irisSubTab, setIrisSubTab] = useState('players'); // 'players' or 'updates'
+  // Arbitre only has access to behavioral tab, so default to it for them
+  const [irisSubTab, setIrisSubTab] = useState(() => {
+    // If user is only arbitre (not admin or staff), default to behavioral
+    if (user?.roles?.includes('arbitre') && !user?.roles?.includes('admin') && !user?.roles?.includes('staff')) {
+      return 'behavioral';
+    }
+    return 'players';
+  });
   const [irisUpdates, setIrisUpdates] = useState([]);
   const [loadingIrisUpdates, setLoadingIrisUpdates] = useState(false);
   const [showIrisUpdateModal, setShowIrisUpdateModal] = useState(false);
@@ -88,6 +95,13 @@ const AdminPanel = () => {
     signature: ''
   });
   const [savingIrisUpdate, setSavingIrisUpdate] = useState(false);
+  
+  // Behavioral Analysis state (admin only)
+  const [behavioralPlayers, setBehavioralPlayers] = useState([]);
+  const [loadingBehavioral, setLoadingBehavioral] = useState(false);
+  const [selectedBehavioralPlayer, setSelectedBehavioralPlayer] = useState(null);
+  const [behavioralDetails, setBehavioralDetails] = useState(null);
+  const [loadingBehavioralDetails, setLoadingBehavioralDetails] = useState(false);
   
   // Filtres et recherche
   const [searchTerm, setSearchTerm] = useState('');
@@ -371,10 +385,10 @@ const AdminPanel = () => {
       name: 'Gestion',
       tabs: [
         { id: 'users', label: 'Utilisateurs', icon: Users, adminOnly: false, arbitreAccess: true },
-        { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false, arbitreAccess: true },
+        { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false, arbitreAccess: false },
         { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false, arbitreAccess: true },
-        { id: 'iris', label: 'Iris', icon: Cpu, adminOnly: false, arbitreAccess: false },
-        { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false, arbitreAccess: true },
+        { id: 'iris', label: 'Iris', icon: Cpu, adminOnly: false, arbitreAccess: true },
+        { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false, arbitreAccess: false },
         { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false, arbitreAccess: false },
       ]
     },
@@ -690,9 +704,14 @@ const AdminPanel = () => {
           await fetchSquads();
           break;
         case 'iris':
-          await fetchIrisPlayers();
-          if (userIsAdmin) {
-            await fetchIrisUpdates();
+          // For arbitre-only users, fetch behavioral anomalies directly
+          if (userIsArbitre && !userIsStaff && !userIsAdmin) {
+            await fetchBehavioralAnomalies();
+          } else {
+            await fetchIrisPlayers();
+            if (userIsAdmin) {
+              await fetchIrisUpdates();
+            }
           }
           break;
         case 'deleted-accounts':
@@ -990,6 +1009,68 @@ const AdminPanel = () => {
       });
     }
     setShowIrisUpdateModal(true);
+  };
+
+  // Fetch behavioral anomalies (admin only)
+  const fetchBehavioralAnomalies = async () => {
+    setLoadingBehavioral(true);
+    try {
+      const response = await fetch(`${API_URL}/iris/behavioral/anomalies`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setBehavioralPlayers(data.players || []);
+      }
+    } catch (err) {
+      console.error('Error fetching behavioral anomalies:', err);
+    } finally {
+      setLoadingBehavioral(false);
+    }
+  };
+
+  // Fetch behavioral details for a specific player
+  const fetchBehavioralDetails = async (userId) => {
+    setLoadingBehavioralDetails(true);
+    setSelectedBehavioralPlayer(userId);
+    try {
+      const response = await fetch(`${API_URL}/iris/behavioral/player/${userId}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success && data.hasProfile) {
+        setBehavioralDetails(data.profile);
+      } else {
+        setBehavioralDetails(null);
+      }
+    } catch (err) {
+      console.error('Error fetching behavioral details:', err);
+      setBehavioralDetails(null);
+    } finally {
+      setLoadingBehavioralDetails(false);
+    }
+  };
+
+  // Mark behavioral anomaly as reviewed
+  const handleReviewAnomaly = async (userId, anomalyId, falsePositive) => {
+    try {
+      const response = await fetch(`${API_URL}/iris/behavioral/review/${anomalyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ userId, falsePositive })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Anomalie marquée comme ' + (falsePositive ? 'faux positif' : 'revue'));
+        fetchBehavioralDetails(userId);
+        fetchBehavioralAnomalies();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la review');
+    }
   };
 
   const fetchShopItems = async () => {
@@ -3977,6 +4058,272 @@ const AdminPanel = () => {
       </>
     );
 
+    // Render Behavioral Analysis sub-tab (admin only)
+    const renderBehavioralTab = () => (
+      <>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Players List */}
+          <div className="lg:col-span-1 bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-white/10">
+              <h3 className="text-white font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-orange-400" />
+                Joueurs avec anomalies
+              </h3>
+            </div>
+            <div className="max-h-[600px] overflow-y-auto">
+              {loadingBehavioral ? (
+                <div className="p-8 text-center">
+                  <Loader2 className="w-6 h-6 text-purple-500 animate-spin mx-auto" />
+                </div>
+              ) : behavioralPlayers.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">
+                  <Brain className="w-12 h-12 mx-auto mb-3 text-gray-600" />
+                  <p>Aucune anomalie comportementale détectée</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-white/5">
+                  {behavioralPlayers.map((player) => (
+                    <button
+                      key={player.userId}
+                      onClick={() => fetchBehavioralDetails(player.userId)}
+                      className={`w-full p-4 text-left hover:bg-white/5 transition-colors ${
+                        selectedBehavioralPlayer === player.userId ? 'bg-purple-500/10 border-l-2 border-purple-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <img 
+                          src={getAvatarUrl(player.avatarUrl) || '/avatar.jpg'} 
+                          alt="Avatar" 
+                          className="w-10 h-10 rounded-full"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-medium truncate">{player.username}</span>
+                            {player.isBanned && (
+                              <span className="px-1.5 py-0.5 text-xs bg-red-500/20 text-red-400 rounded">BAN</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-orange-400">{player.totalAnomalies} anomalies</span>
+                            <span className="text-xs text-gray-500">({player.anomalyRate}%)</span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-sm font-medium ${
+                            player.trustScore < 30 ? 'text-red-400' : 
+                            player.trustScore < 60 ? 'text-orange-400' : 'text-green-400'
+                          }`}>
+                            {player.trustScore}
+                          </div>
+                          <div className="text-xs text-gray-500">Trust</div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Details Panel */}
+          <div className="lg:col-span-2 bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+            {loadingBehavioralDetails ? (
+              <div className="p-8 text-center">
+                <Loader2 className="w-8 h-8 text-purple-500 animate-spin mx-auto" />
+              </div>
+            ) : !behavioralDetails ? (
+              <div className="p-8 text-center text-gray-400">
+                <Activity className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+                <p>Sélectionnez un joueur pour voir les détails</p>
+              </div>
+            ) : (
+              <div className="p-4 space-y-4">
+                {/* Player Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <img 
+                      src={getAvatarUrl(behavioralDetails.user?.avatarUrl) || '/avatar.jpg'}
+                      alt="Avatar"
+                      className="w-12 h-12 rounded-full"
+                    />
+                    <div>
+                      <h3 className="text-white font-semibold">{behavioralDetails.user?.username}</h3>
+                      <p className="text-sm text-gray-400">{behavioralDetails.user?.discordUsername}</p>
+                    </div>
+                  </div>
+                  <div className={`px-4 py-2 rounded-xl ${
+                    behavioralDetails.trustScore?.score < 30 ? 'bg-red-500/20 text-red-400' :
+                    behavioralDetails.trustScore?.score < 60 ? 'bg-orange-500/20 text-orange-400' : 
+                    'bg-green-500/20 text-green-400'
+                  }`}>
+                    <div className="text-2xl font-bold">{behavioralDetails.trustScore?.score}</div>
+                    <div className="text-xs">Trust Score</div>
+                  </div>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="bg-dark-900/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-white">{behavioralDetails.totalSessions}</div>
+                    <div className="text-xs text-gray-400">Sessions</div>
+                  </div>
+                  <div className="bg-dark-900/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-orange-400">{behavioralDetails.totalAnomalies}</div>
+                    <div className="text-xs text-gray-400">Anomalies</div>
+                  </div>
+                  <div className="bg-dark-900/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-blue-400">
+                      {behavioralDetails.baseline?.avgMouseVelocity?.toFixed(1) || '-'}
+                    </div>
+                    <div className="text-xs text-gray-400">Vitesse moy.</div>
+                  </div>
+                  <div className="bg-dark-900/50 rounded-lg p-3 text-center">
+                    <div className="text-xl font-bold text-purple-400">
+                      {behavioralDetails.baseline?.avgReactionTime?.toFixed(0) || '-'}ms
+                    </div>
+                    <div className="text-xs text-gray-400">Réaction moy.</div>
+                  </div>
+                </div>
+
+                {/* Baseline Status */}
+                <div className={`p-3 rounded-lg ${behavioralDetails.baseline?.established ? 'bg-green-500/10 border border-green-500/20' : 'bg-yellow-500/10 border border-yellow-500/20'}`}>
+                  <div className="flex items-center gap-2">
+                    {behavioralDetails.baseline?.established ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <span className="text-green-400 text-sm">Baseline établie ({behavioralDetails.baseline.sessionCount} sessions, {behavioralDetails.baseline.confidence}% confiance)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="w-4 h-4 text-yellow-400" />
+                        <span className="text-yellow-400 text-sm">Baseline en construction (besoin de 10 sessions clean)</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recent Anomalies */}
+                <div className="bg-dark-900/50 rounded-xl p-4">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-orange-400" />
+                    Anomalies récentes
+                  </h4>
+                  {behavioralDetails.recentAnomalies?.length > 0 ? (
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {behavioralDetails.recentAnomalies.map((anomaly, i) => (
+                        <div 
+                          key={anomaly._id || i}
+                          className={`p-3 rounded-lg border ${
+                            anomaly.riskLevel === 'critical' ? 'bg-red-500/10 border-red-500/30' :
+                            anomaly.riskLevel === 'high' ? 'bg-orange-500/10 border-orange-500/30' :
+                            'bg-yellow-500/10 border-yellow-500/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`px-2 py-0.5 text-xs rounded ${
+                              anomaly.riskLevel === 'critical' ? 'bg-red-500/20 text-red-400' :
+                              anomaly.riskLevel === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                              'bg-yellow-500/20 text-yellow-400'
+                            }`}>
+                              {anomaly.riskLevel?.toUpperCase()}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {new Date(anomaly.detectedAt).toLocaleString('fr-FR')}
+                            </span>
+                          </div>
+                          <div className="space-y-1">
+                            {anomaly.flags?.map((flag, j) => (
+                              <div key={j} className="text-sm text-gray-300">
+                                • {flag.description}
+                              </div>
+                            ))}
+                          </div>
+                          {!anomaly.reviewed && (
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                onClick={() => handleReviewAnomaly(selectedBehavioralPlayer, anomaly._id, false)}
+                                className="px-3 py-1 text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded transition-colors"
+                              >
+                                Marquer comme revu
+                              </button>
+                              <button
+                                onClick={() => handleReviewAnomaly(selectedBehavioralPlayer, anomaly._id, true)}
+                                className="px-3 py-1 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded transition-colors"
+                              >
+                                Faux positif
+                              </button>
+                            </div>
+                          )}
+                          {anomaly.reviewed && (
+                            <div className="mt-2 text-xs text-gray-500">
+                              ✓ Revu {anomaly.falsePositive && '(faux positif)'}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 text-sm">Aucune anomalie récente</p>
+                  )}
+                </div>
+
+                {/* Recent Sessions */}
+                <div className="bg-dark-900/50 rounded-xl p-4">
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-blue-400" />
+                    Sessions récentes
+                  </h4>
+                  {behavioralDetails.recentSessions?.length > 0 ? (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {behavioralDetails.recentSessions.map((session, i) => (
+                        <div key={i} className="flex items-center justify-between p-2 bg-dark-800/50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-2 h-2 rounded-full ${
+                              session.overallAnomalyScore < 30 ? 'bg-green-500' :
+                              session.overallAnomalyScore < 60 ? 'bg-yellow-500' : 'bg-red-500'
+                            }`} />
+                            <span className="text-sm text-gray-300">
+                              {new Date(session.sessionEnd).toLocaleDateString('fr-FR')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs">
+                            <span className="text-gray-400">Vel: {session.avgMouseVelocity?.toFixed(1)}</span>
+                            <span className="text-gray-400">React: {session.avgReactionTime?.toFixed(0)}ms</span>
+                            <span className={`font-medium ${
+                              session.overallAnomalyScore < 30 ? 'text-green-400' :
+                              session.overallAnomalyScore < 60 ? 'text-yellow-400' : 'text-red-400'
+                            }`}>
+                              Score: {session.overallAnomalyScore}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 text-sm">Aucune session récente</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Info Card */}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <Brain className="w-5 h-5 text-blue-400 mt-0.5" />
+            <div>
+              <h4 className="text-blue-400 font-medium">Analyse Comportementale</h4>
+              <p className="text-gray-400 text-sm mt-1">
+                Le système collecte les mouvements souris et clavier pendant les matchs pour établir un profil comportemental unique.
+                Les anomalies sont détectées quand le comportement dévie significativement de la baseline du joueur (aim snaps, réactions inhumaines, etc.)
+              </p>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+
     return (
       <div className="space-y-4">
         {/* Header */}
@@ -4011,27 +4358,40 @@ const AdminPanel = () => {
                 Actualiser
               </button>
             )}
+            {irisSubTab === 'behavioral' && (
+              <button
+                onClick={fetchBehavioralAnomalies}
+                disabled={loadingBehavioral}
+                className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${loadingBehavioral ? 'animate-spin' : ''}`} />
+                Actualiser
+              </button>
+            )}
           </div>
         </div>
 
         {/* Sub-tabs */}
         <div className="flex gap-2 bg-dark-800/50 p-1 rounded-xl w-fit">
-          <button
-            onClick={() => setIrisSubTab('players')}
-            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
-              irisSubTab === 'players'
-                ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
-                : 'text-gray-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            Joueurs
-            {irisPlayers.filter(p => p.isConnected).length > 0 && (
-              <span className={`px-2 py-0.5 text-xs rounded-full ${irisSubTab === 'players' ? 'bg-white/20 text-white' : 'bg-green-500/20 text-green-400'}`}>
-                {irisPlayers.filter(p => p.isConnected).length} en ligne
-              </span>
-            )}
-          </button>
+          {/* Players tab - not available to arbitre */}
+          {(userIsAdmin || userIsStaff) && (
+            <button
+              onClick={() => setIrisSubTab('players')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                irisSubTab === 'players'
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Joueurs
+              {irisPlayers.filter(p => p.isConnected).length > 0 && (
+                <span className={`px-2 py-0.5 text-xs rounded-full ${irisSubTab === 'players' ? 'bg-white/20 text-white' : 'bg-green-500/20 text-green-400'}`}>
+                  {irisPlayers.filter(p => p.isConnected).length} en ligne
+                </span>
+              )}
+            </button>
+          )}
           {userIsAdmin && (
             <button
               onClick={() => setIrisSubTab('updates')}
@@ -4045,11 +4405,32 @@ const AdminPanel = () => {
               Mises à jour
             </button>
           )}
+          {/* Behavioral tab - available to admin, staff, and arbitre */}
+          <button
+            onClick={() => {
+              setIrisSubTab('behavioral');
+              fetchBehavioralAnomalies();
+            }}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              irisSubTab === 'behavioral'
+                ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            Comportemental
+            {behavioralPlayers.length > 0 && (
+              <span className={`px-2 py-0.5 text-xs rounded-full ${irisSubTab === 'behavioral' ? 'bg-white/20 text-white' : 'bg-orange-500/20 text-orange-400'}`}>
+                {behavioralPlayers.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Content based on sub-tab */}
-        {irisSubTab === 'players' && renderPlayersTab()}
+        {irisSubTab === 'players' && (userIsAdmin || userIsStaff) && renderPlayersTab()}
         {irisSubTab === 'updates' && userIsAdmin && renderUpdatesTab()}
+        {irisSubTab === 'behavioral' && renderBehavioralTab()}
 
         {/* Update Modal */}
         {showIrisUpdateModal && (

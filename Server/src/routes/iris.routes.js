@@ -20,6 +20,24 @@ import fetch from 'node-fetch';
 
 const router = express.Router();
 
+// Helper function to get avatar URL for Iris (with Discord fallback)
+const getIrisAvatarUrl = (user) => {
+  // Custom uploaded avatar
+  if (user.avatar && user.avatar.startsWith('/uploads/')) {
+    return `${process.env.API_URL || 'https://api-nomercy.ggsecure.io'}${user.avatar}`;
+  }
+  // Already a full URL (but not Discord)
+  if (user.avatar && !user.avatar.includes('cdn.discordapp.com')) {
+    return user.avatar;
+  }
+  // Fallback to Discord avatar
+  if (user.discordAvatar && user.discordId) {
+    return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png?size=128`;
+  }
+  // No avatar available
+  return null;
+};
+
 // Iris JWT secret (separate from main app)
 const IRIS_JWT_SECRET = process.env.IRIS_JWT_SECRET || process.env.JWT_SECRET;
 
@@ -754,7 +772,7 @@ router.get('/discord-callback', async (req, res) => {
           id: user._id,
           username: user.username || discordUser.username,
           discordId: user.discordId,
-          avatarUrl: user.avatarUrl || (discordUser.avatar 
+          avatarUrl: getIrisAvatarUrl(user) || (discordUser.avatar 
             ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
             : null)
         }
@@ -951,7 +969,7 @@ router.post('/register', async (req, res) => {
         id: user._id,
         username: user.username,
         discordUsername: user.discordUsername,
-        avatar: user.avatarUrl
+        avatarUrl: getIrisAvatarUrl(user)
       }
     });
   } catch (error) {
@@ -1026,7 +1044,7 @@ router.get('/verify', verifyIrisSignature, async (req, res) => {
         _id: user._id,
         discordId: user.discordId,
         username: user.username,
-        avatarUrl: user.avatarUrl,
+        avatarUrl: getIrisAvatarUrl(user),
         platform: user.platform
       }
     });
@@ -1270,7 +1288,7 @@ router.post('/verify', async (req, res) => {
         id: user._id,
         username: user.username,
         discordUsername: user.discordUsername,
-        avatar: user.avatarUrl
+        avatarUrl: getIrisAvatarUrl(user)
       }
     });
   } catch (error) {
@@ -3242,6 +3260,314 @@ router.get('/tauri-update', async (req, res) => {
     res.status(500).json({
       error: 'Server error'
     });
+  }
+});
+
+// ====== BEHAVIORAL ANALYSIS ENDPOINTS ======
+
+import BehavioralProfile from '../models/BehavioralProfile.js';
+
+/**
+ * Submit behavioral data from Iris client
+ * POST /api/iris/behavioral
+ * Protected by: HMAC signature verification
+ */
+router.post('/behavioral', verifyIrisSignature, async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, IRIS_JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+
+    if (decoded.type !== 'iris') {
+      return res.status(401).json({ success: false, message: 'Invalid token type' });
+    }
+
+    const { metrics, matchId } = req.body;
+
+    if (!metrics || typeof metrics !== 'object') {
+      return res.status(400).json({ success: false, message: 'Invalid metrics data' });
+    }
+
+    // Find or create behavioral profile
+    let profile = await BehavioralProfile.findOne({ user: decoded.userId });
+    
+    if (!profile) {
+      profile = new BehavioralProfile({ user: decoded.userId });
+    }
+
+    // Build session data from metrics
+    const sessionData = {
+      matchId: matchId ? mongoose.Types.ObjectId.createFromHexString(matchId) : null,
+      matchType: null, // Could be determined from match if matchId provided
+      sessionStart: new Date(metrics.collectedAt - metrics.sessionDurationMs),
+      sessionEnd: new Date(metrics.collectedAt),
+      sessionDurationMs: metrics.sessionDurationMs || 0,
+      
+      // Mouse metrics
+      avgMouseVelocity: metrics.avgMouseVelocity || 0,
+      maxMouseVelocity: metrics.maxMouseVelocity || 0,
+      velocityStdDev: metrics.velocityStdDev || 0,
+      avgAcceleration: metrics.avgAcceleration || 0,
+      maxAcceleration: metrics.maxAcceleration || 0,
+      directionChanges: metrics.directionChanges || 0,
+      microCorrections: metrics.microCorrections || 0,
+      straightLineRatio: metrics.straightLineRatio || 0,
+      clickAccuracyZone: metrics.clickAccuracyZone || 0,
+      
+      // Reaction metrics
+      avgReactionTime: metrics.avgReactionTime || 0,
+      minReactionTime: metrics.minReactionTime || 0,
+      reactionTimeStdDev: metrics.reactionTimeStdDev || 0,
+      
+      // Keyboard metrics
+      avgKeyHoldDuration: metrics.avgKeyHoldDuration || 0,
+      keysPerMinute: metrics.keysPerMinute || 0,
+      keyPatternConsistency: metrics.keyPatternConsistency || 0,
+      
+      // Anomaly scores from client
+      aimSnapScore: metrics.aimSnapScore || 0,
+      consistencyScore: metrics.consistencyScore || 0,
+      reactionScore: metrics.reactionScore || 0,
+      overallAnomalyScore: metrics.overallAnomalyScore || 0,
+      
+      sampleCount: metrics.sampleCount || 0
+    };
+
+    // Add session and get analysis result
+    const analysisResult = await profile.addSession(sessionData);
+    await profile.save();
+
+    console.log(`[Iris Behavioral] Session recorded for user ${decoded.userId}, anomaly: ${analysisResult.isAnomalous}, score: ${sessionData.overallAnomalyScore}`);
+
+    // If anomalous, could trigger Discord alert here
+    if (analysisResult.isAnomalous && analysisResult.riskLevel === 'critical') {
+      const user = await User.findById(decoded.userId).select('username irisScanChannelId');
+      if (user && user.irisScanChannelId) {
+        // Send alert to scan channel
+        sendIrisExtendedAlert(
+          user.irisScanChannelId,
+          user.username,
+          'behavioral_anomaly',
+          `Anomalie comportementale détectée (Score: ${sessionData.overallAnomalyScore})\n` +
+          analysisResult.flags.map(f => `• ${f.description}`).join('\n')
+        ).catch(err => console.error('[Iris Behavioral] Discord alert error:', err));
+      }
+    }
+
+    res.json({
+      success: true,
+      isAnomalous: analysisResult.isAnomalous,
+      anomalyScore: sessionData.overallAnomalyScore,
+      riskLevel: analysisResult.riskLevel,
+      baselineDeviation: analysisResult.baselineDeviation,
+      flags: analysisResult.flags.map(f => ({
+        flagType: f.flagType,
+        description: f.description,
+        severity: f.severity
+      })),
+      trustScore: profile.trustScore.score,
+      baselineEstablished: profile.baseline.established
+    });
+
+  } catch (error) {
+    console.error('[Iris Behavioral] Submit error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Get player's behavioral baseline
+ * GET /api/iris/behavioral/baseline
+ */
+router.get('/behavioral/baseline', verifyIrisSignature, async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ success: false, message: 'No token provided' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(token, IRIS_JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+
+    const profile = await BehavioralProfile.findOne({ user: decoded.userId });
+
+    if (!profile) {
+      return res.json({
+        success: true,
+        hasBaseline: false,
+        sampleCount: 0
+      });
+    }
+
+    res.json({
+      success: true,
+      hasBaseline: profile.baseline.established,
+      sampleCount: profile.totalSessionsRecorded,
+      avgMouseVelocity: profile.baseline.avgMouseVelocity,
+      avgReactionTime: profile.baseline.avgReactionTime,
+      consistencyProfile: profile.baseline.avgMouseVelocityStdDev,
+      trustScore: profile.trustScore.score,
+      confidence: profile.baseline.confidence
+    });
+
+  } catch (error) {
+    console.error('[Iris Behavioral] Get baseline error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Get behavioral analysis for a player (Admin only)
+ * GET /api/iris/behavioral/player/:userId
+ */
+router.get('/behavioral/player/:userId', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin') && !admin.roles.includes('staff')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const profile = await BehavioralProfile.findOne({ user: req.params.userId })
+      .populate('user', 'username discordUsername avatarUrl');
+
+    if (!profile) {
+      return res.json({
+        success: true,
+        hasProfile: false
+      });
+    }
+
+    res.json({
+      success: true,
+      hasProfile: true,
+      profile: {
+        user: profile.user,
+        baseline: profile.baseline,
+        trustScore: profile.trustScore,
+        totalSessions: profile.totalSessionsRecorded,
+        totalAnomalies: profile.totalAnomaliesDetected,
+        lastSessionAt: profile.lastSessionAt,
+        lastAnomalyAt: profile.lastAnomalyAt,
+        recentSessions: profile.sessions.slice(-10).reverse(),
+        recentAnomalies: profile.anomalyHistory.slice(-20).reverse()
+      }
+    });
+
+  } catch (error) {
+    console.error('[Iris Behavioral] Get player error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Get all players with behavioral anomalies (Admin only)
+ * GET /api/iris/behavioral/anomalies
+ */
+router.get('/behavioral/anomalies', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin') && !admin.roles.includes('staff')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { limit = 50, minScore = 50 } = req.query;
+
+    // Find profiles with recent anomalies
+    const profiles = await BehavioralProfile.find({
+      totalAnomaliesDetected: { $gt: 0 }
+    })
+      .populate('user', 'username discordUsername avatarUrl isBanned')
+      .sort({ lastAnomalyAt: -1 })
+      .limit(parseInt(limit));
+
+    const results = profiles.map(p => ({
+      userId: p.user._id,
+      username: p.user.username,
+      discordUsername: p.user.discordUsername,
+      avatarUrl: p.user.avatarUrl,
+      isBanned: p.user.isBanned,
+      trustScore: p.trustScore.score,
+      totalAnomalies: p.totalAnomaliesDetected,
+      totalSessions: p.totalSessionsRecorded,
+      anomalyRate: p.totalSessionsRecorded > 0 
+        ? (p.totalAnomaliesDetected / p.totalSessionsRecorded * 100).toFixed(1) 
+        : 0,
+      lastAnomalyAt: p.lastAnomalyAt,
+      recentFlags: p.anomalyHistory.slice(-3).flatMap(a => a.flags.map(f => f.flagType))
+    }));
+
+    res.json({
+      success: true,
+      players: results,
+      total: results.length
+    });
+
+  } catch (error) {
+    console.error('[Iris Behavioral] Get anomalies error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Mark anomaly as reviewed (Admin only)
+ * POST /api/iris/behavioral/review/:anomalyId
+ */
+router.post('/behavioral/review/:anomalyId', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { userId, falsePositive, notes } = req.body;
+
+    const profile = await BehavioralProfile.findOne({ user: userId });
+    if (!profile) {
+      return res.status(404).json({ success: false, message: 'Profile not found' });
+    }
+
+    // Find the anomaly in history
+    const anomaly = profile.anomalyHistory.id(req.params.anomalyId);
+    if (!anomaly) {
+      return res.status(404).json({ success: false, message: 'Anomaly not found' });
+    }
+
+    anomaly.reviewed = true;
+    anomaly.reviewedBy = admin._id;
+    anomaly.reviewedAt = new Date();
+    anomaly.reviewNotes = notes || '';
+    anomaly.falsePositive = falsePositive || false;
+
+    // Adjust trust score if false positive
+    if (falsePositive) {
+      profile.trustScore.score = Math.min(100, profile.trustScore.score + 10);
+      profile.trustScore.flaggedSessions = Math.max(0, profile.trustScore.flaggedSessions - 1);
+    }
+
+    await profile.save();
+
+    console.log(`[Iris Behavioral] Anomaly reviewed by ${admin.username}, falsePositive: ${falsePositive}`);
+
+    res.json({
+      success: true,
+      message: 'Anomaly reviewed'
+    });
+
+  } catch (error) {
+    console.error('[Iris Behavioral] Review error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 

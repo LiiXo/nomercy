@@ -8,6 +8,7 @@ mod api;
 mod store;
 mod commands;
 mod updater;
+mod behavioral;
 
 use tauri::{Manager, Emitter};
 
@@ -63,6 +64,9 @@ fn main() {
             commands::open_external,
             commands::check_tpm,
             commands::get_security_status,
+            commands::start_behavior_tracking,
+            commands::stop_behavior_tracking,
+            commands::get_behavior_metrics,
             updater::check_for_updates,
             updater::install_update,
             updater::get_version,

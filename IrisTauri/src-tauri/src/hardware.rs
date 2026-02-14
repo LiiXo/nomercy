@@ -2530,6 +2530,15 @@ pub fn detect_dll_injection() -> DllInjectionResult {
     let mut result = DllInjectionResult::default();
     let mut seen_dlls: Vec<String> = Vec::new();
     
+    // Whitelist for our own Iris anticheat files - never flag these
+    const IRIS_DLL_WHITELIST: &[&str] = &[
+        "iris-anticheat",
+        "iris_anticheat",
+        "iris.exe",
+        "\\appdata\\local\\iris\\",
+        "\\.tauri\\",
+    ];
+    
     // Check loaded modules in current process
     unsafe {
         let process = GetCurrentProcess();
@@ -2560,6 +2569,14 @@ pub fn detect_dll_injection() -> DllInjectionResult {
                     }
                     seen_dlls.push(name_lower.clone());
                     
+                    // Skip our own Iris anticheat files - never flag ourselves!
+                    let is_iris = IRIS_DLL_WHITELIST.iter().any(|w| 
+                        name_lower.contains(w) || path_lower.contains(w)
+                    );
+                    if is_iris {
+                        continue;
+                    }
+                    
                     // Check against suspicious DLL list
                     for (pattern, reason) in SUSPICIOUS_DLL_NAMES {
                         if name_lower.contains(pattern) {
@@ -2580,7 +2597,8 @@ pub fn detect_dll_injection() -> DllInjectionResult {
                                           path_lower.contains("\\windows\\syswow64") ||
                                           path_lower.contains("\\program files") ||
                                           path_lower.contains("\\programdata") ||
-                                          path_lower.contains(".tauri");
+                                          path_lower.contains(".tauri") ||
+                                          path_lower.contains("\\appdata\\local\\iris");
                     
                     if !is_system_path && !name_lower.ends_with(".exe") {
                         // Check if it's from Temp or AppData\Local\Temp
@@ -2616,6 +2634,13 @@ pub fn detect_dll_injection() -> DllInjectionResult {
                 for proc in processes {
                     let proc_name = proc.Name.clone();
                     let name = proc_name.clone().unwrap_or_default().to_lowercase();
+                    let path = proc.ExecutablePath.clone().unwrap_or_default().to_lowercase();
+                    
+                    // Skip our own Iris anticheat process
+                    if name.contains("iris-anticheat") || name.contains("iris_anticheat") || 
+                       path.contains("\\appdata\\local\\iris\\") {
+                        continue;
+                    }
                     
                     // Check for known injection tools running
                     let injection_tools = [
