@@ -733,9 +733,20 @@ const SquadProfile = () => {
 
 
           {/* Stricker Rank Display */}
-          {squad.statsStricker && (squad.statsStricker.points > 0 || squad.statsStricker.wins > 0 || squad.statsStricker.losses > 0) && (() => {
-            // Calculate rank from points dynamically
-            const points = squad.statsStricker?.points || 0;
+          {(() => {
+            // Combine stats from all Stricker formats (legacy, 3v3, 5v5)
+            const stats5v5 = squad.statsStricker || {};
+            const stats3v3 = squad.statsStricker3v3 || {};
+            const statsLegacy5v5 = squad.statsStricker5v5 || {};
+            
+            // Aggregate all points, wins, and losses
+            const totalPoints = (stats5v5.points || 0) + (stats3v3.points || 0) + (statsLegacy5v5.points || 0);
+            const totalWins = (stats5v5.wins || 0) + (stats3v3.wins || 0) + (statsLegacy5v5.wins || 0);
+            const totalLosses = (stats5v5.losses || 0) + (stats3v3.losses || 0) + (statsLegacy5v5.losses || 0);
+            
+            // Only show if there are any stats
+            if (totalPoints === 0 && totalWins === 0 && totalLosses === 0) return null;
+            
             const STRICKER_RANK_DATA = {
               recrues: { name: 'Recrues', min: 0, image: '/stricker1.png' },
               operateurs: { name: 'Opérateurs', min: 250, image: '/stricker2.png' },
@@ -754,7 +765,7 @@ const SquadProfile = () => {
               return STRICKER_RANK_DATA.recrues;
             };
             
-            const currentRank = getStrickerRank(points);
+            const currentRank = getStrickerRank(totalPoints);
             const rankName = currentRank.name;
             const rankImage = currentRank.image;
             
@@ -797,19 +808,19 @@ const SquadProfile = () => {
                     {/* Right: Stricker Stats */}
                     <div className="flex items-center gap-3 sm:gap-6">
                       <div className="text-center">
-                        <p className="text-lg sm:text-xl font-bold text-lime-400">{squad.statsStricker?.points || 0}</p>
+                        <p className="text-lg sm:text-xl font-bold text-lime-400">{totalPoints}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Points' : 'Points'}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg sm:text-xl font-bold text-green-400">{squad.statsStricker?.wins || 0}</p>
+                        <p className="text-lg sm:text-xl font-bold text-green-400">{totalWins}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Victoires' : 'Wins'}</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg sm:text-xl font-bold text-red-400">{squad.statsStricker?.losses || 0}</p>
+                        <p className="text-lg sm:text-xl font-bold text-red-400">{totalLosses}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{language === 'fr' ? 'Défaites' : 'Losses'}</p>
                       </div>
                       <div className="text-center pl-3 sm:pl-6 border-l border-lime-500/20">
-                        <p className="text-lg sm:text-xl font-bold text-yellow-400">{(() => { const w = squad.statsStricker?.wins || 0; const l = squad.statsStricker?.losses || 0; const total = w + l; return total === 0 ? '0%' : `${Math.round((w / total) * 100)}%`; })()}</p>
+                        <p className="text-lg sm:text-xl font-bold text-yellow-400">{(() => { const total = totalWins + totalLosses; return total === 0 ? '0%' : `${Math.round((totalWins / total) * 100)}%`; })()}</p>
                         <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide">{t.winRate}</p>
                       </div>
                     </div>

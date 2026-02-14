@@ -22,18 +22,23 @@ const router = express.Router();
 
 // Helper function to get avatar URL for Iris (with Discord fallback)
 const getIrisAvatarUrl = (user) => {
-  // Custom uploaded avatar
+  // Custom uploaded avatar (path starting with /uploads/)
   if (user.avatar && user.avatar.startsWith('/uploads/')) {
     return `${process.env.API_URL || 'https://api-nomercy.ggsecure.io'}${user.avatar}`;
   }
-  // Already a full URL (but not Discord)
-  if (user.avatar && !user.avatar.includes('cdn.discordapp.com')) {
+  
+  // Already a full URL (http/https) - but not Discord CDN
+  if (user.avatar && 
+      (user.avatar.startsWith('http://') || user.avatar.startsWith('https://')) && 
+      !user.avatar.includes('cdn.discordapp.com')) {
     return user.avatar;
   }
-  // Fallback to Discord avatar
+  
+  // Fallback to Discord avatar (priority fallback for Iris)
   if (user.discordAvatar && user.discordId) {
     return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.discordAvatar}.png?size=128`;
   }
+  
   // No avatar available
   return null;
 };

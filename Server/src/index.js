@@ -38,6 +38,7 @@ const startServer = async () => {
   const { default: strickerMatchRoutes } = await import('./routes/strickerMatch.routes.js');
   const { default: teamRoutes } = await import('./routes/team.routes.js');
   const { default: irisRoutes } = await import('./routes/iris.routes.js');
+  const { default: tournamentRoutes } = await import('./routes/tournament.routes.js');
   await import('./config/passport.js');
   
   // Import Match model for cleanup job
@@ -284,6 +285,15 @@ const startServer = async () => {
       socket.leave(`match-${matchId}`);
     });
 
+    // Tournament rooms
+    socket.on('joinTournament', (tournamentId) => {
+      socket.join(`tournament-${tournamentId}`);
+    });
+
+    socket.on('leaveTournament', (tournamentId) => {
+      socket.leave(`tournament-${tournamentId}`);
+    });
+
     socket.on('disconnect', () => {
       // Decrement viewer count for all pages this socket was in
       const pages = socketPages.get(socket.id);
@@ -381,6 +391,7 @@ const startServer = async () => {
   app.use('/api/stricker', strickerMatchRoutes);
   app.use('/api/team', teamRoutes);
   app.use('/api/iris', irisRoutes);
+  app.use('/api/tournaments', tournamentRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

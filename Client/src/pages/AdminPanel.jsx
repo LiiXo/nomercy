@@ -18,7 +18,7 @@ import {
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
   ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart, Cpu,
-  Monitor, Cloud, Syringe, Brain, BarChart2
+  Monitor, Cloud, Syringe, Brain, BarChart2, Play
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -186,6 +186,47 @@ const AdminPanel = () => {
     startsAt: '',
     expiresAt: ''
   });
+  
+  // Tournament states
+  const [tournaments, setTournaments] = useState([]);
+  const [loadingTournaments, setLoadingTournaments] = useState(false);
+  const [showTournamentModal, setShowTournamentModal] = useState(false);
+  const [editingTournament, setEditingTournament] = useState(null);
+  const [tournamentFormData, setTournamentFormData] = useState({
+    name: '',
+    description: '',
+    type: 'team',
+    mode: 'cdl',
+    format: 'bo1',
+    mapSelection: 'random',
+    maxParticipants: 12,
+    teamSize: 4,
+    groupSize: 4,
+    scheduledAt: '',
+    registrationDeadline: '',
+    streaming: {
+      enabled: false,
+      twitchUrl: ''
+    },
+    prizes: {
+      gold: {
+        enabled: false,
+        first: 0,
+        second: 0,
+        third: 0
+      },
+      cashprize: {
+        enabled: false,
+        total: 0,
+        currency: 'EUR',
+        first: 0,
+        second: 0,
+        third: 0
+      }
+    }
+  });
+  const [savingTournament, setSavingTournament] = useState(false);
+  const [fillingBots, setFillingBots] = useState(false);
   
   // Update editedConfig when config changes
   // Ensure all expected game modes are present for ranked rewards
@@ -396,6 +437,7 @@ const AdminPanel = () => {
       name: 'Contenu',
       tabs: [
         { id: 'shop', label: 'Boutique', icon: ShoppingBag, adminOnly: true, arbitreAccess: false },
+        { id: 'tournaments', label: 'Tournois', icon: Trophy, adminOnly: false, arbitreAccess: true },
         { id: 'trophies', label: 'Trophées', icon: Trophy, adminOnly: true, arbitreAccess: false },
         { id: 'announcements', label: 'Annonces', icon: Megaphone, adminOnly: false, arbitreAccess: false },
         { id: 'maps', label: 'Cartes', icon: MapPin, adminOnly: false, arbitreAccess: false },
@@ -737,6 +779,9 @@ const AdminPanel = () => {
           break;
         case 'gamerules':
           await fetchGameRules();
+          break;
+        case 'tournaments':
+          await fetchTournaments();
           break;
         case 'matches':
           // Charger les matchs selon le sous-onglet actif
@@ -1259,6 +1304,271 @@ const AdminPanel = () => {
     } catch (err) {
       console.error('Error fetching game rules:', err);
     }
+  };
+
+  // Fetch tournaments
+  const fetchTournaments = async () => {
+    setLoadingTournaments(true);
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/all`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTournaments(data.tournaments || []);
+      }
+    } catch (err) {
+      console.error('Error fetching tournaments:', err);
+    } finally {
+      setLoadingTournaments(false);
+    }
+  };
+
+  // Create or update tournament
+  const handleSaveTournament = async (e) => {
+    e.preventDefault();
+    setSavingTournament(true);
+    setError('');
+    
+    try {
+      const endpoint = editingTournament 
+        ? `${API_URL}/tournaments/admin/${editingTournament._id}`
+        : `${API_URL}/tournaments/admin/create`;
+      
+      const response = await fetch(endpoint, {
+        method: editingTournament ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(tournamentFormData)
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(editingTournament ? 'Tournoi mis à jour' : 'Tournoi créé');
+        setShowTournamentModal(false);
+        setEditingTournament(null);
+        resetTournamentForm();
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la sauvegarde');
+    } finally {
+      setSavingTournament(false);
+    }
+  };
+
+  // Delete tournament
+  const handleDeleteTournament = async (tournamentId) => {
+    if (!window.confirm('Supprimer ce tournoi ?')) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess('Tournoi supprimé');
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la suppression');
+    }
+  };
+
+  // Open registration
+  const handleOpenTournamentRegistration = async (tournamentId) => {
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}/open-registration`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess('Inscriptions ouvertes');
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur');
+    }
+  };
+
+  // Start tournament
+  const handleStartTournament = async (tournamentId) => {
+    if (!window.confirm('Démarrer ce tournoi ? Le bracket sera généré.')) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}/start`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess('Tournoi démarré');
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur');
+    }
+  };
+
+  // Cancel tournament
+  const handleCancelTournament = async (tournamentId) => {
+    if (!window.confirm('Annuler ce tournoi ?')) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}/cancel`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess('Tournoi annulé');
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur');
+    }
+  };
+
+  // Fill with bots (admin only)
+  const handleFillTournamentWithBots = async (tournamentId) => {
+    setFillingBots(true);
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}/fill-bots`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message);
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur');
+    } finally {
+      setFillingBots(false);
+    }
+  };
+
+  // Clear bots (admin only)
+  const handleClearTournamentBots = async (tournamentId) => {
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}/clear-bots`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message);
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur');
+    }
+  };
+
+  // Reset tournament form
+  const resetTournamentForm = () => {
+    setTournamentFormData({
+      name: '',
+      description: '',
+      type: 'team',
+      mode: 'cdl',
+      format: 'bo1',
+      mapSelection: 'random',
+      maxParticipants: 12,
+      teamSize: 4,
+      groupSize: 4,
+      scheduledAt: '',
+      registrationDeadline: '',
+      streaming: {
+        enabled: false,
+        twitchUrl: ''
+      },
+      prizes: {
+        gold: {
+          enabled: false,
+          first: 0,
+          second: 0,
+          third: 0
+        },
+        cashprize: {
+          enabled: false,
+          total: 0,
+          currency: 'EUR',
+          first: 0,
+          second: 0,
+          third: 0
+        }
+      }
+    });
+  };
+
+  // Open edit tournament modal
+  const openEditTournament = (tournament) => {
+    setEditingTournament(tournament);
+    setTournamentFormData({
+      name: tournament.name || '',
+      description: tournament.description || '',
+      type: tournament.type || 'team',
+      mode: tournament.mode || 'cdl',
+      format: tournament.format || 'bo1',
+      mapSelection: tournament.mapSelection || 'random',
+      maxParticipants: tournament.maxParticipants || 12,
+      teamSize: tournament.teamSize || 4,
+      groupSize: tournament.groupSize || 4,
+      scheduledAt: tournament.scheduledAt ? new Date(tournament.scheduledAt).toISOString().slice(0, 16) : '',
+      registrationDeadline: tournament.registrationDeadline ? new Date(tournament.registrationDeadline).toISOString().slice(0, 16) : '',
+      streaming: {
+        enabled: tournament.streaming?.enabled || false,
+        twitchUrl: tournament.streaming?.twitchUrl || ''
+      },
+      prizes: {
+        gold: {
+          enabled: tournament.prizes?.gold?.enabled || false,
+          first: tournament.prizes?.gold?.first || 0,
+          second: tournament.prizes?.gold?.second || 0,
+          third: tournament.prizes?.gold?.third || 0
+        },
+        cashprize: {
+          enabled: tournament.prizes?.cashprize?.enabled || false,
+          total: tournament.prizes?.cashprize?.total || 0,
+          currency: tournament.prizes?.cashprize?.currency || 'EUR',
+          first: tournament.prizes?.cashprize?.first || 0,
+          second: tournament.prizes?.cashprize?.second || 0,
+          third: tournament.prizes?.cashprize?.third || 0
+        }
+      }
+    });
+    setShowTournamentModal(true);
   };
 
   // ==================== CRUD OPERATIONS ====================
@@ -5882,6 +6192,659 @@ const AdminPanel = () => {
                 </div>
         )}
               </div>
+    );
+  };
+
+  const renderTournaments = () => {
+    const getStatusColor = (status) => {
+      switch (status) {
+        case 'draft': return 'bg-gray-500/20 text-gray-400';
+        case 'registration': return 'bg-green-500/20 text-green-400';
+        case 'in_progress': return 'bg-yellow-500/20 text-yellow-400';
+        case 'completed': return 'bg-blue-500/20 text-blue-400';
+        case 'cancelled': return 'bg-red-500/20 text-red-400';
+        default: return 'bg-gray-500/20 text-gray-400';
+      }
+    };
+
+    const getStatusLabel = (status) => {
+      switch (status) {
+        case 'draft': return 'Brouillon';
+        case 'registration': return 'Inscriptions';
+        case 'in_progress': return 'En cours';
+        case 'completed': return 'Terminé';
+        case 'cancelled': return 'Annulé';
+        default: return status;
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+            <Trophy className="w-7 h-7 text-yellow-500" />
+            Gestion des Tournois
+          </h2>
+          <button
+            onClick={() => {
+              setEditingTournament(null);
+              resetTournamentForm();
+              setShowTournamentModal(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg hover:opacity-90 transition-all"
+          >
+            <Plus className="w-5 h-5" />
+            Nouveau Tournoi
+          </button>
+        </div>
+
+        {/* Loading */}
+        {loadingTournaments ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
+          </div>
+        ) : tournaments.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p>Aucun tournoi créé</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {tournaments.map((tournament) => (
+              <div
+                key={tournament._id}
+                className="bg-dark-800/50 border border-white/10 rounded-xl p-6 hover:border-purple-500/30 transition-all"
+              >
+                {/* Header */}
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-white font-bold text-lg">{tournament.name}</h3>
+                    <p className="text-gray-400 text-sm">{tournament.description || 'Aucune description'}</p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(tournament.status)}`}>
+                    {getStatusLabel(tournament.status)}
+                  </span>
+                </div>
+
+                {/* Info Grid */}
+                <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Type:</span>
+                    <span className="text-white font-medium">{tournament.type === 'team' ? 'Équipe' : 'Solo'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Mode:</span>
+                    <span className={`font-medium ${tournament.mode === 'cdl' ? 'text-cyan-400' : 'text-orange-400'}`}>
+                      {tournament.mode.toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Format:</span>
+                    <span className="text-white font-medium">{tournament.format.toUpperCase()}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Maps:</span>
+                    <span className="text-white font-medium">{tournament.mapSelection === 'random' ? 'Aléatoire' : 'Libre'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Participants:</span>
+                    <span className="text-white font-medium">
+                      {tournament.participants?.length || 0}/{tournament.maxParticipants}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500">Taille équipe:</span>
+                    <span className="text-white font-medium">{tournament.teamSize}v{tournament.teamSize}</span>
+                  </div>
+                </div>
+
+                {/* Date */}
+                <div className="flex items-center gap-2 mb-4 text-sm">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  <span className="text-gray-400">
+                    {new Date(tournament.scheduledAt).toLocaleString('fr-FR', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </span>
+                </div>
+
+                {/* Streaming */}
+                {tournament.streaming?.enabled && (
+                  <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                    <span className="text-purple-400 text-sm font-medium">Stream:</span>
+                    <a 
+                      href={tournament.streaming.twitchUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-purple-300 text-sm hover:underline truncate"
+                    >
+                      {tournament.streaming.twitchUrl}
+                    </a>
+                  </div>
+                )}
+
+                {/* Progress bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Inscriptions</span>
+                    <span>{tournament.participants?.length || 0}/{tournament.maxParticipants}</span>
+                  </div>
+                  <div className="h-2 bg-dark-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
+                      style={{ width: `${((tournament.participants?.length || 0) / tournament.maxParticipants) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-wrap gap-2">
+                  {tournament.status === 'draft' && (
+                    <>
+                      <button
+                        onClick={() => handleOpenTournamentRegistration(tournament._id)}
+                        className="flex-1 py-2 px-3 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors text-sm font-medium"
+                      >
+                        Ouvrir inscriptions
+                      </button>
+                      <button
+                        onClick={() => openEditTournament(tournament)}
+                        className="py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTournament(tournament._id)}
+                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                  
+                  {tournament.status === 'registration' && (
+                    <>
+                      <button
+                        onClick={() => handleStartTournament(tournament._id)}
+                        className="flex-1 py-2 px-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-dark-950 rounded-lg hover:opacity-90 transition-all text-sm font-bold flex items-center justify-center gap-2"
+                        disabled={tournament.participants?.length < 2}
+                      >
+                        <Play className="w-4 h-4" fill="currentColor" />
+                        Lancer le tournoi
+                      </button>
+                      {userIsAdmin && (
+                        <button
+                          onClick={() => handleFillTournamentWithBots(tournament._id)}
+                          disabled={fillingBots || tournament.participants?.length >= tournament.maxParticipants}
+                          className="py-2 px-3 bg-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/30 transition-colors text-sm disabled:opacity-50"
+                        >
+                          {fillingBots ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Remplir Bots'}
+                        </button>
+                      )}
+                      {userIsAdmin && tournament.participants?.some(p => p.isBot) && (
+                        <button
+                          onClick={() => handleClearTournamentBots(tournament._id)}
+                          className="py-2 px-3 bg-gray-500/20 text-gray-400 rounded-lg hover:bg-gray-500/30 transition-colors text-sm"
+                        >
+                          Vider Bots
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleCancelTournament(tournament._id)}
+                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+                  
+                  {tournament.status === 'in_progress' && (
+                    <>
+                      <button
+                        onClick={() => handleCancelTournament(tournament._id)}
+                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors text-sm"
+                      >
+                        Annuler
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Create/Edit Tournament Modal */}
+        {showTournamentModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="p-6 border-b border-white/10">
+                <h3 className="text-xl font-bold text-white">
+                  {editingTournament ? 'Modifier le tournoi' : 'Créer un tournoi'}
+                </h3>
+              </div>
+              
+              <form onSubmit={handleSaveTournament} className="p-6 space-y-4">
+                {/* Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Nom du tournoi *</label>
+                  <input
+                    type="text"
+                    value={tournamentFormData.name}
+                    onChange={(e) => setTournamentFormData({...tournamentFormData, name: e.target.value})}
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    placeholder="Ex: Tournoi CDL Printemps 2026"
+                    required
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Description</label>
+                  <textarea
+                    value={tournamentFormData.description}
+                    onChange={(e) => setTournamentFormData({...tournamentFormData, description: e.target.value})}
+                    className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500 resize-none"
+                    rows={3}
+                    placeholder="Description du tournoi..."
+                  />
+                </div>
+
+                {/* Type & Mode */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Type de tournoi *</label>
+                    <select
+                      value={tournamentFormData.type}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, type: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="team">Équipe (Escouades)</option>
+                      <option value="solo">Solo (Tirage au sort)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Mode de jeu *</label>
+                    <select
+                      value={tournamentFormData.mode}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, mode: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="cdl">CDL</option>
+                      <option value="hardcore">Hardcore</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Format & Map Selection */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Format *</label>
+                    <select
+                      value={tournamentFormData.format}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, format: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="bo1">BO1 (Best of 1)</option>
+                      <option value="bo3">BO3 (Best of 3)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Sélection des maps *</label>
+                    <select
+                      value={tournamentFormData.mapSelection}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, mapSelection: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="random">Aléatoire</option>
+                      <option value="free">Libre</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Participants & Team Size */}
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      {tournamentFormData.type === 'team' ? 'Nombre d\'escouades *' : 'Nombre de joueurs *'}
+                    </label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="256"
+                      value={tournamentFormData.maxParticipants}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, maxParticipants: parseInt(e.target.value) || 2})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                      placeholder="Ex: 12, 24, 32..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Taille des équipes *</label>
+                    <select
+                      value={tournamentFormData.teamSize}
+                      onChange={(e) => {
+                        const newSize = parseInt(e.target.value);
+                        setTournamentFormData({
+                          ...tournamentFormData, 
+                          teamSize: newSize,
+                          groupSize: Math.min(Math.max(newSize, 3), 5)
+                        });
+                      }}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="2">2v2</option>
+                      <option value="3">3v3</option>
+                      <option value="4">4v4</option>
+                      <option value="5">5v5</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Taille des groupes</label>
+                    <select
+                      value={tournamentFormData.groupSize}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, groupSize: parseInt(e.target.value)})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="3">3 par groupe</option>
+                      <option value="4">4 par groupe</option>
+                      <option value="5">5 par groupe</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Répartition en phase de poules</p>
+                  </div>
+                </div>
+
+                {/* Date & Time */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Date et heure *</label>
+                    <input
+                      type="datetime-local"
+                      value={tournamentFormData.scheduledAt}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, scheduledAt: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Deadline inscriptions</label>
+                    <input
+                      type="datetime-local"
+                      value={tournamentFormData.registrationDeadline}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, registrationDeadline: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Streaming */}
+                <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-white">Tournoi en stream</label>
+                    <button
+                      type="button"
+                      onClick={() => setTournamentFormData({
+                        ...tournamentFormData, 
+                        streaming: {...tournamentFormData.streaming, enabled: !tournamentFormData.streaming.enabled}
+                      })}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        tournamentFormData.streaming.enabled ? 'bg-purple-500' : 'bg-dark-700'
+                      }`}
+                    >
+                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                        tournamentFormData.streaming.enabled ? 'left-7' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+                  
+                  {tournamentFormData.streaming.enabled && (
+                    <input
+                      type="url"
+                      value={tournamentFormData.streaming.twitchUrl}
+                      onChange={(e) => setTournamentFormData({
+                        ...tournamentFormData, 
+                        streaming: {...tournamentFormData.streaming, twitchUrl: e.target.value}
+                      })}
+                      className="w-full px-4 py-3 bg-dark-900 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                      placeholder="https://twitch.tv/username"
+                    />
+                  )}
+                </div>
+
+                {/* Gold Prize */}
+                <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-white flex items-center gap-2">
+                      <span className="text-yellow-500">💰</span> Prix en Gold
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTournamentFormData({
+                        ...tournamentFormData, 
+                        prizes: {
+                          ...tournamentFormData.prizes,
+                          gold: {...tournamentFormData.prizes.gold, enabled: !tournamentFormData.prizes.gold.enabled}
+                        }
+                      })}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        tournamentFormData.prizes.gold.enabled ? 'bg-yellow-500' : 'bg-dark-700'
+                      }`}
+                    >
+                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                        tournamentFormData.prizes.gold.enabled ? 'left-7' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+                  
+                  {tournamentFormData.prizes.gold.enabled && (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs text-yellow-400 mb-1">🥇 1ère place</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={tournamentFormData.prizes.gold.first}
+                          onChange={(e) => setTournamentFormData({
+                            ...tournamentFormData, 
+                            prizes: {
+                              ...tournamentFormData.prizes,
+                              gold: {...tournamentFormData.prizes.gold, first: parseInt(e.target.value) || 0}
+                            }
+                          })}
+                          className="w-full px-3 py-2 bg-dark-900 border border-yellow-500/30 rounded-lg text-white focus:outline-none focus:border-yellow-500"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">🥈 2ème place</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={tournamentFormData.prizes.gold.second}
+                          onChange={(e) => setTournamentFormData({
+                            ...tournamentFormData, 
+                            prizes: {
+                              ...tournamentFormData.prizes,
+                              gold: {...tournamentFormData.prizes.gold, second: parseInt(e.target.value) || 0}
+                            }
+                          })}
+                          className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-yellow-500"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-orange-400 mb-1">🥉 3ème place</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={tournamentFormData.prizes.gold.third}
+                          onChange={(e) => setTournamentFormData({
+                            ...tournamentFormData, 
+                            prizes: {
+                              ...tournamentFormData.prizes,
+                              gold: {...tournamentFormData.prizes.gold, third: parseInt(e.target.value) || 0}
+                            }
+                          })}
+                          className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-yellow-500"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cashprize */}
+                <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-white flex items-center gap-2">
+                      <span className="text-green-500">💵</span> Cashprize
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTournamentFormData({
+                        ...tournamentFormData, 
+                        prizes: {
+                          ...tournamentFormData.prizes,
+                          cashprize: {...tournamentFormData.prizes.cashprize, enabled: !tournamentFormData.prizes.cashprize.enabled}
+                        }
+                      })}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        tournamentFormData.prizes.cashprize.enabled ? 'bg-green-500' : 'bg-dark-700'
+                      }`}
+                    >
+                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                        tournamentFormData.prizes.cashprize.enabled ? 'left-7' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+                  
+                  {tournamentFormData.prizes.cashprize.enabled && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-green-400 mb-1">Total Cashprize</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tournamentFormData.prizes.cashprize.total}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              prizes: {
+                                ...tournamentFormData.prizes,
+                                cashprize: {...tournamentFormData.prizes.cashprize, total: parseInt(e.target.value) || 0}
+                              }
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-green-500/30 rounded-lg text-white focus:outline-none focus:border-green-500"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Devise</label>
+                          <select
+                            value={tournamentFormData.prizes.cashprize.currency}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              prizes: {
+                                ...tournamentFormData.prizes,
+                                cashprize: {...tournamentFormData.prizes.cashprize, currency: e.target.value}
+                              }
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-green-500"
+                          >
+                            <option value="EUR">EUR (€)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="GBP">GBP (£)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs text-yellow-400 mb-1">🥇 1ère place</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tournamentFormData.prizes.cashprize.first}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              prizes: {
+                                ...tournamentFormData.prizes,
+                                cashprize: {...tournamentFormData.prizes.cashprize, first: parseInt(e.target.value) || 0}
+                              }
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-green-500/30 rounded-lg text-white focus:outline-none focus:border-green-500"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">🥈 2ème place</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tournamentFormData.prizes.cashprize.second}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              prizes: {
+                                ...tournamentFormData.prizes,
+                                cashprize: {...tournamentFormData.prizes.cashprize, second: parseInt(e.target.value) || 0}
+                              }
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-green-500"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-orange-400 mb-1">🥉 3ème place</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tournamentFormData.prizes.cashprize.third}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              prizes: {
+                                ...tournamentFormData.prizes,
+                                cashprize: {...tournamentFormData.prizes.cashprize, third: parseInt(e.target.value) || 0}
+                              }
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-green-500"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowTournamentModal(false);
+                      setEditingTournament(null);
+                      resetTournamentForm();
+                    }}
+                    className="px-6 py-3 bg-dark-800 text-white rounded-xl hover:bg-dark-700 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingTournament}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {savingTournament && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {editingTournament ? 'Mettre à jour' : 'Créer le tournoi'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -11267,6 +12230,8 @@ Cette action est irréversible!`)) {
         return renderMaps();
       case 'gamerules':
         return renderGameRules();
+      case 'tournaments':
+        return renderTournaments();
       case 'matches':
         return renderMatches();
       case 'application':

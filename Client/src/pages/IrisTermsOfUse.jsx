@@ -5,7 +5,7 @@ import { useMode } from '../ModeContext';
 import { 
   ArrowLeft, Shield, FileText, AlertTriangle, Check, 
   Monitor, Cpu, HardDrive, Wifi, Search, Layers, Bug, 
-  Camera, Zap, Eye, Lock, Cloud, Activity, Users
+  Camera, Zap, Eye, Lock, Cloud, Activity, Users, Brain
 } from 'lucide-react';
 
 const IrisTermsOfUse = () => {
@@ -163,6 +163,21 @@ const IrisTermsOfUse = () => {
           ],
           purpose: 'Vérification visuelle en cas de suspicion.',
           warning: true
+        },
+        {
+          icon: Brain,
+          title: '13. Analyse comportementale (Machine Learning)',
+          content: 'Iris utilise l\'intelligence artificielle pour analyser vos mouvements de souris et vos frappes clavier en temps réel, créant un profil comportemental unique.',
+          details: [
+            'Échantillonnage des mouvements souris/clavier à 60Hz',
+            'Calcul du score de snap (mouvements brusques de visée)',
+            'Analyse de la consistance des mouvements',
+            'Détection des temps de réaction inhumains (<100ms)',
+            'Analyse des micro-corrections naturelles',
+            'Ratio de trajectoires parfaitement droites',
+            'Création d\'une baseline comportementale personnalisée'
+          ],
+          purpose: 'Détecte les comportements inhumains typiques des aimbots et logiciels d\'assistance à la visée grâce au machine learning.'
         }
       ],
       privacy: {
@@ -325,6 +340,21 @@ const IrisTermsOfUse = () => {
           ],
           purpose: 'Visual verification when suspicious activity detected.',
           warning: true
+        },
+        {
+          icon: Brain,
+          title: '13. Behavioral Analysis (Machine Learning)',
+          content: 'Iris uses artificial intelligence to analyze your mouse movements and keystrokes in real-time, creating a unique behavioral profile.',
+          details: [
+            'Mouse/keyboard input sampling at 60Hz',
+            'Aim snap score calculation (sudden aim movements)',
+            'Movement consistency analysis',
+            'Detection of inhuman reaction times (<100ms)',
+            'Natural micro-correction analysis',
+            'Perfectly straight trajectory ratio',
+            'Creation of personalized behavioral baseline'
+          ],
+          purpose: 'Detects inhuman behaviors typical of aimbots and aim-assist software through machine learning.'
         }
       ],
       privacy: {

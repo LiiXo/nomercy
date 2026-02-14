@@ -2297,6 +2297,58 @@ export const sendIrisUpdateNotification = async (updateData) => {
   }
 };
 
+// Channel for tournament notifications
+const TOURNAMENT_CHANNEL_ID = '1472273208169332906';
+
+/**
+ * Send notification when a tournament is launched
+ * @param {Object} tournament - Tournament data
+ */
+export const sendTournamentLaunchNotification = async (tournament) => {
+  if (!client || !isReady) {
+    console.warn('[Discord Bot] Bot not ready, skipping tournament launch notification');
+    return false;
+  }
+
+  try {
+    const tournamentUrl = `https://nomercy.ggsecure.io/${tournament.mode}/tournaments/${tournament._id}`;
+    
+    // Format prizes
+    let prizesText = 'Aucun prix';
+    if (tournament.prizes?.gold || tournament.prizes?.cashPrize) {
+      const prizes = [];
+      if (tournament.prizes.gold) prizes.push(`${tournament.prizes.gold} Gold`);
+      if (tournament.prizes.cashPrize) prizes.push(`${tournament.prizes.cashPrize}€`);
+      prizesText = prizes.join(' + ');
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0x9B59B6) // Purple for tournaments
+      .setTitle(`🏆 TOURNOI LANCÉ - ${tournament.name}`)
+      .setDescription(`@everyone\n\nLe tournoi **${tournament.name}** vient de commencer !`)
+      .addFields(
+        { name: '🎮 Mode', value: tournament.mode === 'hardcore' ? 'Hardcore' : 'CDL', inline: true },
+        { name: '👥 Participants', value: `${tournament.participants?.length || 0}`, inline: true },
+        { name: '📋 Format', value: tournament.format === 'bo3' ? 'BO3' : 'BO1', inline: true },
+        { name: '🏅 Prix', value: prizesText, inline: true },
+        { name: '🔗 Lien', value: `[Voir le tournoi](${tournamentUrl})`, inline: false }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'NoMercy Tournaments' });
+
+    await sendToChannel(TOURNAMENT_CHANNEL_ID, { 
+      content: '@everyone',
+      embeds: [embed] 
+    });
+    
+    console.log(`[Discord Bot] Tournament launch notification sent for ${tournament.name}`);
+    return true;
+  } catch (error) {
+    console.error('[Discord Bot] Error sending tournament launch notification:', error.message);
+    return false;
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -2330,5 +2382,6 @@ export default {
   sendIrisGameMismatchAlert,
   sendIrisLowActivityAlert,
   sendRankedMatchStartDM,
-  sendIrisUpdateNotification
+  sendIrisUpdateNotification,
+  sendTournamentLaunchNotification
 };

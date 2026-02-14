@@ -5,7 +5,7 @@ import { useAuth } from '../AuthContext';
 import { useSocket } from '../SocketContext';
 import { useData } from '../DataContext';
 import { getDefaultAvatar, getAvatarUrl } from '../utils/avatar';
-import { Trophy, Users, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight, Lock, Star } from 'lucide-react';
+import { Trophy, Users, Medal, Target, Crown, Clock, MapPin, Shuffle, Play, X, Coins, Loader2, Shield, Plus, Swords, AlertTriangle, Check, Zap, Eye, UserCheck, Ban, ChevronRight, Lock, Star, Calendar, Radio } from 'lucide-react';
 
 import { API_URL } from '../config';
 
@@ -1437,6 +1437,10 @@ const CDLDashboard = () => {
   const [loadingSquads, setLoadingSquads] = useState(true);
   const [mySquadRank, setMySquadRank] = useState(null);
   const [myPlayerRank, setMyPlayerRank] = useState(null);
+  
+  // Tournaments
+  const [upcomingTournaments, setUpcomingTournaments] = useState([]);
+  const [loadingTournaments, setLoadingTournaments] = useState(true);
 
   useEffect(() => {
     const fetchTopPlayers = async () => {
@@ -1559,6 +1563,25 @@ const CDLDashboard = () => {
     };
     fetchTopSquads();
   }, [mySquad]);
+
+  // Fetch upcoming tournaments
+  useEffect(() => {
+    const fetchTournaments = async () => {
+      setLoadingTournaments(true);
+      try {
+        const response = await fetch(`${API_URL}/tournaments/upcoming?mode=cdl&limit=3`);
+        const data = await response.json();
+        if (data.success) {
+          setUpcomingTournaments(data.tournaments || []);
+        }
+      } catch (err) {
+        console.error('Error fetching tournaments:', err);
+      } finally {
+        setLoadingTournaments(false);
+      }
+    };
+    fetchTournaments();
+  }, []);
 
   return (
     <div className="min-h-screen bg-dark-950 relative">
@@ -1973,7 +1996,7 @@ const CDLDashboard = () => {
             )}
           </div>
 
-          {/* Tournaments - Coming Soon */}
+          {/* Tournaments Section */}
           <section className="mb-12">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
@@ -1982,17 +2005,195 @@ const CDLDashboard = () => {
               <h2 className="text-2xl font-display text-white">{t('tournaments')}</h2>
             </div>
 
-            <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
-              <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500/30 to-blue-500/30 border-2 border-cyan-500/50 flex items-center justify-center animate-bounce-subtle">
-                <Trophy className="w-12 h-12 text-cyan-400" />
+            {loadingTournaments ? (
+              <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
+                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
               </div>
-              <h3 className="text-3xl font-display text-white mb-4">
-                {language === 'fr' ? 'BIENTÔT DISPONIBLE' : 'COMING SOON'}
-              </h3>
-              <p className="text-gray-400 text-lg max-w-xl mx-auto">
-                {language === 'fr' ? 'Les tournois arrivent bientôt ! Préparez-vous à affronter les meilleurs joueurs.' : 'Tournaments are coming soon! Get ready to face the best players.'}
-              </p>
-            </div>
+            ) : upcomingTournaments.length === 0 ? (
+              <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
+                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500/30 to-blue-500/30 border-2 border-cyan-500/50 flex items-center justify-center">
+                  <Trophy className="w-12 h-12 text-cyan-400" />
+                </div>
+                <h3 className="text-2xl font-display text-white mb-4">
+                  {language === 'fr' ? 'AUCUN TOURNOI' : 'NO TOURNAMENTS'}
+                </h3>
+                <p className="text-gray-400 text-lg max-w-xl mx-auto">
+                  {language === 'fr' ? 'Aucun tournoi prévu pour le moment. Revenez bientôt !' : 'No tournaments scheduled at the moment. Check back soon!'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {upcomingTournaments.map((tournament) => (
+                  <Link 
+                    key={tournament._id} 
+                    to={`/tournaments/${tournament._id}`}
+                    className="group relative overflow-hidden rounded-2xl transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl hover:shadow-cyan-500/20"
+                  >
+                    {/* Background with gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-br from-dark-800 via-dark-900 to-dark-950" />
+                    
+                    {/* Animated glow border */}
+                    <div className="absolute inset-0 rounded-2xl border border-cyan-500/30 group-hover:border-cyan-400/60 transition-all duration-500" />
+                    <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ boxShadow: 'inset 0 0 40px rgba(34, 211, 238, 0.1)' }} />
+                    
+                    {/* Top accent line */}
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500" />
+                    
+                    {/* Content */}
+                    <div className="relative p-6">
+                      {/* Status badge - top right corner */}
+                      <div className="absolute top-4 right-4">
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-sm ${
+                          tournament.status === 'registration' ? 'bg-green-500/20 text-green-400 border border-green-500/40 shadow-lg shadow-green-500/20' :
+                          tournament.status === 'in_progress' ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse' :
+                          'bg-gray-500/20 text-gray-400 border border-gray-500/40'
+                        }`}>
+                          {tournament.status === 'registration' ? (language === 'fr' ? '🎮 Ouvert' : '🎮 Open') :
+                           tournament.status === 'in_progress' ? (language === 'fr' ? '🔴 Live' : '🔴 Live') :
+                           tournament.status}
+                        </span>
+                      </div>
+
+                      {/* Tournament Icon & Name */}
+                      <div className="flex items-start gap-4 mb-5">
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-500 p-0.5 shadow-lg shadow-cyan-500/30 group-hover:shadow-cyan-500/50 transition-all">
+                          <div className="w-full h-full rounded-xl bg-dark-900 flex items-center justify-center">
+                            <Trophy className="w-7 h-7 text-cyan-400" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pr-24">
+                          <h3 className="text-white font-bold text-xl group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-cyan-400 group-hover:to-blue-400 transition-all duration-300">
+                            {tournament.name}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-gray-500 text-sm">{tournament.type === 'team' ? (language === 'fr' ? '👥 Équipe' : '👥 Team') : '🎯 Solo'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Prizes Section - Big & Prominent */}
+                      {(tournament.prizes?.gold?.enabled || tournament.prizes?.cashprize?.enabled) && (
+                        <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-yellow-500/10 via-cyan-500/5 to-green-500/10 border border-yellow-500/20">
+                          <div className="text-xs text-gray-500 uppercase tracking-wider mb-3 font-semibold">{language === 'fr' ? '💎 Récompenses' : '💎 Prizes'}</div>
+                          <div className="flex flex-wrap gap-3">
+                            {tournament.prizes?.cashprize?.enabled && tournament.prizes.cashprize.total > 0 && (
+                              <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/40 rounded-xl shadow-lg shadow-green-500/10">
+                                <span className="text-2xl">💵</span>
+                                <div>
+                                  <div className="text-green-400 font-bold text-lg">
+                                    {tournament.prizes.cashprize.total} {tournament.prizes.cashprize.currency}
+                                  </div>
+                                  <div className="text-green-500/60 text-xs">{language === 'fr' ? 'Cash Prize' : 'Cash Prize'}</div>
+                                </div>
+                              </div>
+                            )}
+                            {tournament.prizes?.gold?.enabled && tournament.prizes.gold.first > 0 && (
+                              <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-yellow-500/20 to-amber-500/20 border border-yellow-500/40 rounded-xl shadow-lg shadow-yellow-500/10">
+                                <Coins className="w-6 h-6 text-yellow-500" />
+                                <div>
+                                  <div className="text-yellow-400 font-bold text-lg">
+                                    {tournament.prizes.gold.first.toLocaleString()}
+                                  </div>
+                                  <div className="text-yellow-500/60 text-xs">{language === 'fr' ? '1ère Place' : '1st Place'}</div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tournament Info Grid */}
+                      <div className="grid grid-cols-2 gap-3 mb-5">
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-dark-800/50 border border-white/5">
+                          <Calendar className="w-5 h-5 text-cyan-400" />
+                          <div>
+                            <div className="text-white font-semibold text-sm">
+                              {new Date(tournament.scheduledAt).toLocaleDateString(language, { day: 'numeric', month: 'short' })}
+                            </div>
+                            <div className="text-gray-500 text-xs">
+                              {new Date(tournament.scheduledAt).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-dark-800/50 border border-white/5">
+                          <Users className="w-5 h-5 text-blue-400" />
+                          <div>
+                            <div className="text-white font-semibold text-sm">
+                              {tournament.participantCount || 0}/{tournament.maxParticipants}
+                            </div>
+                            <div className="text-gray-500 text-xs">{language === 'fr' ? 'Inscrits' : 'Registered'}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Format badges */}
+                      <div className="flex items-center gap-2 mb-5">
+                        <span className="px-3 py-1.5 bg-gradient-to-r from-cyan-500/20 to-cyan-500/10 text-cyan-400 rounded-lg text-xs font-bold border border-cyan-500/30">
+                          🎮 {tournament.format.toUpperCase()}
+                        </span>
+                        <span className="px-3 py-1.5 bg-gradient-to-r from-purple-500/20 to-purple-500/10 text-purple-400 rounded-lg text-xs font-bold border border-purple-500/30">
+                          ⚔️ {tournament.teamSize}v{tournament.teamSize}
+                        </span>
+                      </div>
+
+                      {/* Streaming with streamer info */}
+                      {tournament.streaming?.enabled && tournament.streaming?.twitchUrl && (
+                        <div className="mb-5 p-3 bg-gradient-to-r from-purple-500/20 to-purple-900/10 border border-purple-500/30 rounded-xl">
+                          <div className="flex items-center gap-3">
+                            <div className="relative">
+                              <img 
+                                src={tournament.streaming.streamerAvatar || "https://static-cdn.jtvnw.net/user-default-pictures-uv/cdd517fe-def4-11e9-948e-784f43822e80-profile_image-70x70.png"}
+                                alt="Streamer"
+                                className="w-10 h-10 rounded-full border-2 border-purple-500 object-cover"
+                              />
+                              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center">
+                                <svg className="w-2 h-2 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+                                </svg>
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-purple-400 text-[10px] uppercase tracking-wider font-semibold">
+                                {language === 'fr' ? 'Streamé par' : 'Streamed by'}
+                              </div>
+                              <div className="text-white font-bold text-sm truncate">
+                                {tournament.streaming.streamerName || tournament.streaming.twitchUrl.match(/(?:https?:\/\/)?(?:www\.)?twitch\.tv\/([a-zA-Z0-9_]+)/i)?.[1] || 'Twitch'}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                              <span className="text-red-400 text-xs font-bold">LIVE</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Progress bar with glow */}
+                      <div className="relative">
+                        <div className="flex justify-between text-xs mb-2">
+                          <span className="text-gray-500">{language === 'fr' ? 'Places' : 'Slots'}</span>
+                          <span className="text-cyan-400 font-semibold">{Math.round(((tournament.participantCount || 0) / tournament.maxParticipants) * 100)}%</span>
+                        </div>
+                        <div className="h-3 bg-dark-700 rounded-full overflow-hidden shadow-inner">
+                          <div 
+                            className="h-full bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500 transition-all duration-500 relative"
+                            style={{ width: `${((tournament.participantCount || 0) / tournament.maxParticipants) * 100}%` }}
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Hover arrow indicator */}
+                      <div className="mt-5 flex items-center justify-end gap-2 text-gray-600 group-hover:text-cyan-400 transition-all">
+                        <span className="text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity">{language === 'fr' ? 'Voir détails' : 'View details'}</span>
+                        <ChevronRight className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
           </section>
 
           {/* Rankings */}

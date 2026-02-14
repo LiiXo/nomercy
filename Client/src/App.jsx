@@ -48,6 +48,7 @@ const StrickerMode = React.lazy(() => import('./pages/StrickerMode'));
 const StrickerMatchSheet = React.lazy(() => import('./pages/StrickerMatchSheet'));
 const Team = React.lazy(() => import('./pages/Team'));
 const IrisTermsOfUse = React.lazy(() => import('./pages/IrisTermsOfUse'));
+const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
 
 // Loading component
 const LoadingScreen = () => (
@@ -189,9 +190,10 @@ function AppContent() {
   const isTermsPage = location.pathname === '/terms';
   const isPrivacyPage = location.pathname === '/privacy';
   const isIrisTermsPage = location.pathname === '/iris-terms';
+  const isTournamentsPage = location.pathname.startsWith('/tournaments');
 
   // Pages qui n'ont pas besoin d'un mode mais doivent afficher la navbar
-  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isRulesPage || isAnticheatPage || isTermsPage || isPrivacyPage || isIrisTermsPage;
+  const isStandalonePage = isMyProfilePage || isSquadManagementPage || isMySquadPage || isMessagesPage || isRulesPage || isAnticheatPage || isTermsPage || isPrivacyPage || isIrisTermsPage || isTournamentsPage;
 
   // Si on est sur une page standalone sans mode, on sélectionne hardcore par défaut
   React.useEffect(() => {
@@ -452,6 +454,18 @@ function AppContent() {
                   <MatchSheet />
                 </PageTransition>
               </AuthenticatedRoute>
+            } 
+          />
+
+          {/* Tournament Detail */}
+          <Route 
+            path="/tournaments/:tournamentId" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <TournamentDetail />
+                </PageTransition>
+              </ProtectedRoute>
             } 
           />
 

@@ -2,8 +2,8 @@
  * Fix all squads AND users Stricker stats based on actual completed matches.
  * 
  * This script replays all completed Stricker matches chronologically and:
- * 1. Recalculates squad statsStricker (wins, losses, points)
- * 2. Recalculates user statsStricker (wins, losses, points)
+ * 1. Recalculates squad statsStricker/statsStricker3v3 (wins, losses, points) based on match format
+ * 2. Recalculates user statsStricker/statsStricker3v3 (wins, losses, points) based on match format
  * 3. Marks all completed matches as rewardsDistributed=true
  * 
  * Point loss values match the LIVE hardcoded values in strickerMatch.routes.js
@@ -45,6 +45,11 @@ function getRankFromPoints(points) {
   return 'Recrues';
 }
 
+// Get stats field name based on format (3v3 or 5v5)
+function getStatsField(format) {
+  return format === '3v3' ? 'statsStricker3v3' : 'statsStricker';
+}
+
 async function fixAllSquadsStats() {
   try {
     await mongoose.connect(process.env.MONGODB_URI);
@@ -52,93 +57,10 @@ async function fixAllSquadsStats() {
     
     // ========== 1. FIX SQUAD STATS ==========
     console.log('═══════════════════════════════════════════════════════════');
-    console.log('  PHASE 1: FIXING SQUAD STATS');
+    console.log('  PHASE 1: FIXING SQUAD STATS (FORMAT-SPECIFIC)');
     console.log('═══════════════════════════════════════════════════════════\n');
     
-    // Find all squads with Stricker stats
-    const squads = await Squad.find({
-      $or: [
-        { 'statsStricker.points': { $gt: 0 } },
-        { 'statsStricker.wins': { $gt: 0 } },
-        { 'statsStricker.losses': { $gt: 0 } }
-      ]
-    });
-    
-    console.log(`🔍 Found ${squads.length} squads with Stricker stats\n`);
-    
-    let squadsFixed = 0;
-    let squadsOk = 0;
-    
-    for (const squad of squads) {
-      console.log(`\n🦅 Squad: [${squad.tag}] ${squad.name}`);
-      console.log(`Current stats: ${squad.statsStricker?.wins || 0}W - ${squad.statsStricker?.losses || 0}L - ${squad.statsStricker?.points || 0} pts`);
-      
-      // Find all completed matches for this squad
-      const completedMatches = await StrickerMatch.find({
-        $or: [
-          { team1Squad: squad._id },
-          { team2Squad: squad._id }
-        ],
-        status: 'completed',
-        winner: { $exists: true, $ne: null }
-      }).sort({ completedAt: 1 }).lean();
-      
-      console.log(`Found ${completedMatches.length} completed matches`);
-      
-      let actualWins = 0;
-      let actualLosses = 0;
-      let totalPoints = 0;
-      
-      // Recalculate stats match by match
-      completedMatches.forEach((match, index) => {
-        const isTeam1 = match.team1Squad?.toString() === squad._id.toString();
-        const won = (isTeam1 && match.winner === 1) || (!isTeam1 && match.winner === 2);
-        
-        if (won) {
-          actualWins++;
-          totalPoints += POINTS_WIN;
-        } else {
-          actualLosses++;
-          const currentRank = getRankFromPoints(totalPoints);
-          const pointsLoss = POINTS_LOSS_BY_RANK[currentRank];
-          totalPoints = Math.max(0, totalPoints + pointsLoss);
-        }
-      });
-      
-      const recalculatedStats = {
-        wins: actualWins,
-        losses: actualLosses,
-        points: totalPoints
-      };
-      
-      // Check if stats need update
-      const needsUpdate = 
-        (squad.statsStricker?.wins || 0) !== recalculatedStats.wins ||
-        (squad.statsStricker?.losses || 0) !== recalculatedStats.losses ||
-        (squad.statsStricker?.points || 0) !== recalculatedStats.points;
-      
-      if (needsUpdate) {
-        console.log(`  ❌ WRONG: ${squad.statsStricker?.wins || 0}W/${squad.statsStricker?.losses || 0}L/${squad.statsStricker?.points || 0}pts → ✅ CORRECT: ${recalculatedStats.wins}W/${recalculatedStats.losses}L/${recalculatedStats.points}pts`);
-        if (!squad.statsStricker) squad.statsStricker = {};
-        squad.statsStricker.wins = recalculatedStats.wins;
-        squad.statsStricker.losses = recalculatedStats.losses;
-        squad.statsStricker.points = recalculatedStats.points;
-        
-        await squad.save();
-        console.log(`  ✨ Stats UPDATED`);
-        squadsFixed++;
-      } else {
-        console.log(`  ✅ Stats already correct: ${recalculatedStats.wins}W/${recalculatedStats.losses}L/${recalculatedStats.points}pts`);
-        squadsOk++;
-      }
-    }
-    
-    // ========== 2. FIX USER STATS ==========
-    console.log('\n\n═══════════════════════════════════════════════════════════');
-    console.log('  PHASE 2: FIXING USER STATS');
-    console.log('═══════════════════════════════════════════════════════════\n');
-    
-    // Find all completed stricker matches
+    // Find all squads that have participated in Stricker matches
     const allMatches = await StrickerMatch.find({
       status: 'completed',
       winner: { $exists: true, $ne: null }
@@ -146,10 +68,120 @@ async function fixAllSquadsStats() {
     
     console.log(`📊 Found ${allMatches.length} completed Stricker matches\n`);
     
-    // Build user stats from match history
-    const userStats = {}; // { odUserId: { wins, losses, points } }
+    // Build squad stats from match history (format-specific)
+    const squadStats = {}; // { squadId: { '5v5': { wins, losses, points }, '3v3': { wins, losses, points } } }
     
     for (const match of allMatches) {
+      const format = match.format || '5v5'; // Default to 5v5 for old matches
+      
+      // Process team1Squad
+      if (match.team1Squad) {
+        const squadId = match.team1Squad.toString();
+        if (!squadStats[squadId]) squadStats[squadId] = { '5v5': { wins: 0, losses: 0, points: 0 }, '3v3': { wins: 0, losses: 0, points: 0 } };
+        
+        const stats = squadStats[squadId][format];
+        const isWinner = match.winner === 1;
+        
+        if (isWinner) {
+          stats.wins++;
+          stats.points += POINTS_WIN;
+        } else {
+          stats.losses++;
+          const currentRank = getRankFromPoints(stats.points);
+          const pointsLoss = POINTS_LOSS_BY_RANK[currentRank];
+          stats.points = Math.max(0, stats.points + pointsLoss);
+        }
+      }
+      
+      // Process team2Squad
+      if (match.team2Squad) {
+        const squadId = match.team2Squad.toString();
+        if (!squadStats[squadId]) squadStats[squadId] = { '5v5': { wins: 0, losses: 0, points: 0 }, '3v3': { wins: 0, losses: 0, points: 0 } };
+        
+        const stats = squadStats[squadId][format];
+        const isWinner = match.winner === 2;
+        
+        if (isWinner) {
+          stats.wins++;
+          stats.points += POINTS_WIN;
+        } else {
+          stats.losses++;
+          const currentRank = getRankFromPoints(stats.points);
+          const pointsLoss = POINTS_LOSS_BY_RANK[currentRank];
+          stats.points = Math.max(0, stats.points + pointsLoss);
+        }
+      }
+    }
+    
+    const squadIds = Object.keys(squadStats);
+    console.log(`🦅 Found ${squadIds.length} squads in Stricker matches\n`);
+    
+    let squadsFixed = 0;
+    let squadsOk = 0;
+    
+    for (const squadId of squadIds) {
+      const squad = await Squad.findById(squadId);
+      if (!squad) {
+        console.log(`  ⚠️ Squad ${squadId} not found, skipping`);
+        continue;
+      }
+      
+      const expected = squadStats[squadId];
+      let needsUpdate = false;
+      
+      console.log(`\n🦅 Squad: [${squad.tag}] ${squad.name}`);
+      
+      // Check and update 5v5 stats
+      const current5v5 = squad.statsStricker || {};
+      if ((current5v5.wins || 0) !== expected['5v5'].wins ||
+          (current5v5.losses || 0) !== expected['5v5'].losses ||
+          (current5v5.points || 0) !== expected['5v5'].points) {
+        console.log(`  5v5: ${current5v5.wins || 0}W/${current5v5.losses || 0}L/${current5v5.points || 0}pts → ${expected['5v5'].wins}W/${expected['5v5'].losses}L/${expected['5v5'].points}pts`);
+        squad.statsStricker = { 
+          points: expected['5v5'].points, 
+          wins: expected['5v5'].wins, 
+          losses: expected['5v5'].losses,
+          rank: getRankFromPoints(expected['5v5'].points)
+        };
+        needsUpdate = true;
+      }
+      
+      // Check and update 3v3 stats
+      const current3v3 = squad.statsStricker3v3 || {};
+      if ((current3v3.wins || 0) !== expected['3v3'].wins ||
+          (current3v3.losses || 0) !== expected['3v3'].losses ||
+          (current3v3.points || 0) !== expected['3v3'].points) {
+        console.log(`  3v3: ${current3v3.wins || 0}W/${current3v3.losses || 0}L/${current3v3.points || 0}pts → ${expected['3v3'].wins}W/${expected['3v3'].losses}L/${expected['3v3'].points}pts`);
+        squad.statsStricker3v3 = { 
+          points: expected['3v3'].points, 
+          wins: expected['3v3'].wins, 
+          losses: expected['3v3'].losses,
+          rank: getRankFromPoints(expected['3v3'].points)
+        };
+        needsUpdate = true;
+      }
+      
+      if (needsUpdate) {
+        await squad.save();
+        console.log(`  ✨ Stats UPDATED`);
+        squadsFixed++;
+      } else {
+        console.log(`  ✅ Stats already correct`);
+        squadsOk++;
+      }
+    }
+    
+    // ========== 2. FIX USER STATS ==========
+    console.log('\n\n═══════════════════════════════════════════════════════════');
+    console.log('  PHASE 2: FIXING USER STATS (FORMAT-SPECIFIC)');
+    console.log('═══════════════════════════════════════════════════════════\n');
+    
+    // Build user stats from match history (format-specific)
+    const userStats = {}; // { odUserId: { '5v5': { wins, losses, points }, '3v3': { wins, losses, points }, username } }
+    
+    for (const match of allMatches) {
+      const format = match.format || '5v5';
+      
       for (const player of match.players || []) {
         if (player.isFake || !player.user) continue;
         
@@ -157,10 +189,14 @@ async function fixAllSquadsStats() {
         const isWinner = player.team === match.winner;
         
         if (!userStats[odUserId]) {
-          userStats[odUserId] = { wins: 0, losses: 0, points: 0, username: player.username };
+          userStats[odUserId] = { 
+            '5v5': { wins: 0, losses: 0, points: 0 }, 
+            '3v3': { wins: 0, losses: 0, points: 0 },
+            username: player.username 
+          };
         }
         
-        const stats = userStats[odUserId];
+        const stats = userStats[odUserId][format];
         if (isWinner) {
           stats.wins++;
           stats.points += POINTS_WIN;
@@ -187,18 +223,35 @@ async function fixAllSquadsStats() {
         continue;
       }
       
-      const current = user.statsStricker || {};
-      const needsUpdate = 
-        (current.wins || 0) !== expected.wins ||
-        (current.losses || 0) !== expected.losses ||
-        (current.points || 0) !== expected.points;
+      let needsUpdate = false;
+      
+      // Check and update 5v5 stats
+      const current5v5 = user.statsStricker || {};
+      if ((current5v5.wins || 0) !== expected['5v5'].wins ||
+          (current5v5.losses || 0) !== expected['5v5'].losses ||
+          (current5v5.points || 0) !== expected['5v5'].points) {
+        console.log(`  ${user.username} 5v5: ${current5v5.wins || 0}W/${current5v5.losses || 0}L/${current5v5.points || 0}pts → ${expected['5v5'].wins}W/${expected['5v5'].losses}L/${expected['5v5'].points}pts`);
+        if (!user.statsStricker) user.statsStricker = { points: 0, wins: 0, losses: 0, xp: 0 };
+        user.statsStricker.wins = expected['5v5'].wins;
+        user.statsStricker.losses = expected['5v5'].losses;
+        user.statsStricker.points = expected['5v5'].points;
+        needsUpdate = true;
+      }
+      
+      // Check and update 3v3 stats
+      const current3v3 = user.statsStricker3v3 || {};
+      if ((current3v3.wins || 0) !== expected['3v3'].wins ||
+          (current3v3.losses || 0) !== expected['3v3'].losses ||
+          (current3v3.points || 0) !== expected['3v3'].points) {
+        console.log(`  ${user.username} 3v3: ${current3v3.wins || 0}W/${current3v3.losses || 0}L/${current3v3.points || 0}pts → ${expected['3v3'].wins}W/${expected['3v3'].losses}L/${expected['3v3'].points}pts`);
+        if (!user.statsStricker3v3) user.statsStricker3v3 = { points: 0, wins: 0, losses: 0, xp: 0 };
+        user.statsStricker3v3.wins = expected['3v3'].wins;
+        user.statsStricker3v3.losses = expected['3v3'].losses;
+        user.statsStricker3v3.points = expected['3v3'].points;
+        needsUpdate = true;
+      }
       
       if (needsUpdate) {
-        console.log(`  ❌ ${user.username}: ${current.wins || 0}W/${current.losses || 0}L/${current.points || 0}pts → ✅ ${expected.wins}W/${expected.losses}L/${expected.points}pts`);
-        if (!user.statsStricker) user.statsStricker = { points: 0, wins: 0, losses: 0, xp: 0 };
-        user.statsStricker.wins = expected.wins;
-        user.statsStricker.losses = expected.losses;
-        user.statsStricker.points = expected.points;
         await user.save();
         usersFixed++;
       } else {

@@ -57,6 +57,8 @@ export const SocketProvider = ({ children }) => {
           socket.emit('joinRankedMatch', room.replace('ranked-match-', ''));
         } else if (room.startsWith('stricker-match-')) {
           socket.emit('joinStrickerMatch', room.replace('stricker-match-', ''));
+        } else if (room.startsWith('tournament-')) {
+          socket.emit('joinTournament', room.replace('tournament-', ''));
         }
       });
       
@@ -241,6 +243,32 @@ export const SocketProvider = ({ children }) => {
     }
   }, []);
 
+  // Join a tournament room (for real-time tournament updates)
+  const joinTournament = useCallback((tournamentId) => {
+    const socket = socketRef.current;
+    if (!socket || !isConnected) return;
+
+    const tournamentRoom = `tournament-${tournamentId}`;
+    if (!joinedRoomsRef.current.has(tournamentRoom)) {
+      console.log('[Socket] Joining tournament:', tournamentId);
+      socket.emit('joinTournament', tournamentId);
+      joinedRoomsRef.current.add(tournamentRoom);
+    }
+  }, [isConnected]);
+
+  // Leave a tournament room
+  const leaveTournament = useCallback((tournamentId) => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const tournamentRoom = `tournament-${tournamentId}`;
+    if (joinedRoomsRef.current.has(tournamentRoom)) {
+      console.log('[Socket] Leaving tournament:', tournamentId);
+      socket.emit('leaveTournament', tournamentId);
+      joinedRoomsRef.current.delete(tournamentRoom);
+    }
+  }, []);
+
   // Join a mode room (for tracking mode-specific online users)
   const joinMode = useCallback((mode) => {
     const socket = socketRef.current;
@@ -326,6 +354,8 @@ export const SocketProvider = ({ children }) => {
     leaveStrickerMatch,
     joinStrickerMode,
     leaveStrickerMode,
+    joinTournament,
+    leaveTournament,
     joinMode,
     leaveMode,
     on,
