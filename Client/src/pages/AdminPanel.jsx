@@ -70,6 +70,8 @@ const AdminPanel = () => {
   const [irisSearchTerm, setIrisSearchTerm] = useState('');
   const [scanningPlayerId, setScanningPlayerId] = useState(null);
   const [irisDetailsPlayer, setIrisDetailsPlayer] = useState(null);
+  const [resettingIrisPlayer, setResettingIrisPlayer] = useState(null); // For reset confirmation
+  const [confirmIrisReset, setConfirmIrisReset] = useState(false);
   
   // Iris updates state (admin only)
   const [irisSubTab, setIrisSubTab] = useState('players'); // 'players' or 'updates'
@@ -2785,6 +2787,7 @@ const AdminPanel = () => {
                   <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
                   <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Intégrité</th>
                   <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Joueur</th>
+                  <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Jeu</th>
                   <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">TPM</th>
                   <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">Secure Boot</th>
                   <th className="px-4 py-4 text-left text-xs font-medium text-gray-400 uppercase">VT-x</th>
@@ -2799,13 +2802,13 @@ const AdminPanel = () => {
               <tbody className="divide-y divide-white/5">
                 {loadingIrisPlayers ? (
                   <tr>
-                    <td colSpan={userIsAdmin ? "12" : "11"} className="px-6 py-12 text-center">
+                    <td colSpan={userIsAdmin ? "13" : "12"} className="px-6 py-12 text-center">
                       <Loader2 className="w-6 h-6 text-purple-500 animate-spin mx-auto" />
                     </td>
                   </tr>
                 ) : irisPlayers.length === 0 ? (
                   <tr>
-                    <td colSpan={userIsAdmin ? "12" : "11"} className="px-6 py-12 text-center text-gray-400">
+                    <td colSpan={userIsAdmin ? "13" : "12"} className="px-6 py-12 text-center text-gray-400">
                       {irisSearchTerm ? 'Aucun joueur trouvé pour cette recherche.' : 'Aucun joueur PC trouvé.'}
                     </td>
                   </tr>
@@ -2856,6 +2859,26 @@ const AdminPanel = () => {
                             </div>
                           </div>
                         </div>
+                      </td>
+                      <td className="px-4 py-4">
+                        {player.hasIrisData ? (
+                          player.gameDetection?.mismatchCount >= 2 ? (
+                            <div className="flex items-center gap-2" title={`Mismatch: jeu non détecté en match (${player.gameDetection.mismatchCount}x)`}>
+                              <AlertTriangle className="w-4 h-4 text-orange-400" />
+                              <span className="text-xs text-orange-400">ALERTE</span>
+                            </div>
+                          ) : player.gameDetection?.gameRunning ? (
+                            <div className="flex items-center gap-2" title={`${player.gameDetection.gameName || 'CoD'} ${player.gameDetection.gameWindowActive ? '(actif)' : ''}`}>
+                              <CheckCircle className="w-4 h-4 text-green-400" />
+                              <span className="text-xs text-green-400">En jeu</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2" title="Jeu non détecté">
+                              <X className="w-4 h-4 text-gray-500" />
+                              <span className="text-xs text-gray-500">-</span>
+                            </div>
+                          )
+                        ) : <span className="text-gray-600">-</span>}
                       </td>
                       <td className="px-4 py-4">
                         {player.hasIrisData ? (
@@ -2938,7 +2961,7 @@ const AdminPanel = () => {
 
         {/* Iris Details Modal */}
         {irisDetailsPlayer && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setIrisDetailsPlayer(null)}>
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => { setIrisDetailsPlayer(null); setConfirmIrisReset(false); }}>
             <div className="bg-dark-800 border border-white/10 rounded-2xl w-full max-w-6xl max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
               <div className="sticky top-0 bg-dark-800 border-b border-white/10 p-5 flex items-center justify-between z-10">
                 <div className="flex items-center gap-3">
@@ -2954,7 +2977,7 @@ const AdminPanel = () => {
                     <span className="px-3 py-1 text-xs font-medium rounded-full bg-red-500/20 text-red-400 border border-red-500/30">Banni</span>
                   )}
                 </div>
-                <button onClick={() => setIrisDetailsPlayer(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                <button onClick={() => { setIrisDetailsPlayer(null); setConfirmIrisReset(false); }} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                   <X className="w-5 h-5 text-gray-400" />
                 </button>
               </div>
@@ -2971,6 +2994,112 @@ const AdminPanel = () => {
                     <div><span className="text-gray-500">Scan mode:</span> <span className={irisDetailsPlayer.scanMode ? 'text-green-400' : 'text-gray-400'}>{irisDetailsPlayer.scanMode ? 'Actif' : 'Inactif'}</span></div>
                     <div><span className="text-gray-500">Inscrit:</span> <span className="text-white">{irisDetailsPlayer.registeredAt ? new Date(irisDetailsPlayer.registeredAt).toLocaleDateString('fr-FR') : irisDetailsPlayer.createdAt ? new Date(irisDetailsPlayer.createdAt).toLocaleDateString('fr-FR') : 'N/A'}</span></div>
                   </div>
+                </div>
+
+                {/* Game Detection (Anti-Bypass) */}
+                <div className={`bg-dark-900/50 border rounded-xl p-4 ${irisDetailsPlayer.gameDetection?.mismatchCount >= 2 ? 'border-orange-500/30' : 'border-white/10'}`}>
+                  <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                    <Gamepad2 className={`w-4 h-4 ${irisDetailsPlayer.gameDetection?.gameRunning ? 'text-green-400' : irisDetailsPlayer.gameDetection?.mismatchCount >= 2 ? 'text-orange-400' : 'text-gray-400'}`} />
+                    Détection du jeu (Anti-Contournement)
+                    {irisDetailsPlayer.gameDetection?.mismatchCount >= 2 && (
+                      <span className="px-2 py-0.5 text-xs rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 ml-2">
+                        ALERTE
+                      </span>
+                    )}
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${irisDetailsPlayer.gameDetection?.gameRunning ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-gray-500/10 border border-gray-500/20 text-gray-400'}`}>
+                      {irisDetailsPlayer.gameDetection?.gameRunning ? <CheckCircle className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                      Jeu: {irisDetailsPlayer.gameDetection?.gameRunning ? 'En cours' : 'Non détecté'}
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-800 border border-white/5 text-gray-300">
+                      <Gamepad2 className="w-4 h-4 text-cyan-400" />
+                      {irisDetailsPlayer.gameDetection?.gameName || 'N/A'}
+                    </div>
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${irisDetailsPlayer.gameDetection?.gameWindowActive ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-gray-500/10 border border-gray-500/20 text-gray-400'}`}>
+                      <Monitor className="w-4 h-4" />
+                      Fenêtre: {irisDetailsPlayer.gameDetection?.gameWindowActive ? 'Active' : 'Inactive'}
+                    </div>
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${irisDetailsPlayer.gameDetection?.mismatchCount >= 2 ? 'bg-orange-500/10 border border-orange-500/20 text-orange-300' : irisDetailsPlayer.gameDetection?.mismatchCount > 0 ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-300' : 'bg-gray-500/10 border border-gray-500/20 text-gray-400'}`}>
+                      <AlertTriangle className="w-4 h-4" />
+                      Mismatch: {irisDetailsPlayer.gameDetection?.mismatchCount || 0}x
+                    </div>
+                  </div>
+                  
+                  {/* Match Activity Tracking */}
+                  {irisDetailsPlayer.gameDetection?.matchActivityTracking?.matchId && (
+                    <div className={`mt-3 p-3 rounded-lg border ${
+                      irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage < 30 
+                        ? 'bg-orange-500/10 border-orange-500/20' 
+                        : irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage < 60 
+                          ? 'bg-yellow-500/10 border-yellow-500/20' 
+                          : 'bg-green-500/10 border-green-500/20'
+                    }`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-white flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-cyan-400" />
+                          Activité fenêtre (match en cours)
+                        </span>
+                        <span className={`text-lg font-bold ${
+                          irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage < 30 
+                            ? 'text-orange-400' 
+                            : irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage < 60 
+                              ? 'text-yellow-400' 
+                              : 'text-green-400'
+                        }`}>
+                          {irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage}%
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-dark-700 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-500 ${
+                            irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage < 30 
+                              ? 'bg-orange-500' 
+                              : irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage < 60 
+                                ? 'bg-yellow-500' 
+                                : 'bg-green-500'
+                          }`}
+                          style={{ width: `${irisDetailsPlayer.gameDetection.matchActivityTracking.activityPercentage}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-2 text-xs text-gray-400">
+                        <span>
+                          {irisDetailsPlayer.gameDetection.matchActivityTracking.activeSamples}/
+                          {irisDetailsPlayer.gameDetection.matchActivityTracking.totalSamples} échantillons actifs
+                        </span>
+                        <span className="uppercase">
+                          {irisDetailsPlayer.gameDetection.matchActivityTracking.matchType || 'Match'}
+                        </span>
+                      </div>
+                      {irisDetailsPlayer.gameDetection.matchActivityTracking.lowActivityAlertSent && (
+                        <div className="mt-2 flex items-center gap-1 text-orange-400 text-xs">
+                          <AlertTriangle className="w-3 h-3" />
+                          Alerte activité faible envoyée
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {irisDetailsPlayer.gameDetection?.mismatchCount >= 2 && (
+                    <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                      <p className="text-orange-300 text-sm flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>
+                          <strong>Alerte de contournement:</strong> Ce joueur a été détecté en match mais le jeu n'était pas en cours sur sa machine Iris.
+                          Cela peut indiquer qu'Iris tourne sur un PC différent de celui où le jeu est lancé.
+                          {irisDetailsPlayer.gameDetection?.lastMismatchAt && (
+                            <span className="block mt-1 text-xs text-orange-400/70">
+                              Dernière détection: {new Date(irisDetailsPlayer.gameDetection.lastMismatchAt).toLocaleString('fr-FR')}
+                            </span>
+                          )}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                  {irisDetailsPlayer.gameDetection?.lastDetected && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Dernière mise à jour: {new Date(irisDetailsPlayer.gameDetection.lastDetected).toLocaleString('fr-FR')}
+                    </p>
+                  )}
                 </div>
 
                 {/* Session History */}
@@ -3099,11 +3228,14 @@ const AdminPanel = () => {
                     { key: 'secureBoot', label: 'Secure Boot', enabled: irisDetailsPlayer.security.secureBoot, tip: 'Activer Secure Boot dans le BIOS (Boot > Secure Boot > Enabled)' },
                     { key: 'virtualization', label: 'VT-x/AMD-V', enabled: irisDetailsPlayer.security.virtualization, tip: 'Activer la virtualisation dans le BIOS (CPU Configuration > Intel VT-x ou AMD-V)' },
                     { key: 'iommu', label: 'VT-d/IOMMU', enabled: irisDetailsPlayer.security.iommu, tip: 'Activer VT-d/IOMMU dans le BIOS (CPU Configuration > Intel VT-d ou AMD IOMMU)' },
+                    { key: 'kernelDmaProtection', label: 'DMA Protection', enabled: irisDetailsPlayer.security.kernelDmaProtection, tip: 'Protection Kernel DMA - Bloque les attaques DMA. Requiert IOMMU + Windows 10 1803+ + matériel compatible Thunderbolt 3', critical: true },
                     { key: 'hvci', label: 'HVCI', enabled: irisDetailsPlayer.security.hvci, tip: 'Activer dans Windows: Paramètres > Confidentialité et sécurité > Sécurité Windows > Sécurité de l\'appareil > Isolation du noyau > Intégrité de la mémoire' },
                     { key: 'vbs', label: 'VBS', enabled: irisDetailsPlayer.security.vbs, tip: 'Activer Virtualization Based Security: Paramètres > Confidentialité et sécurité > Sécurité Windows > Sécurité de l\'appareil' },
                     { key: 'defender', label: 'Defender', enabled: irisDetailsPlayer.security.defender, tip: 'Activer Windows Defender: Paramètres > Confidentialité et sécurité > Sécurité Windows > Protection contre les virus et menaces' },
                     { key: 'defenderRealtime', label: 'Protection temps réel', enabled: irisDetailsPlayer.security.defenderRealtime, tip: 'Activer la protection en temps réel dans Windows Defender: Paramètres des virus et menaces > Paramètres de protection > Protection en temps réel' },
                   ];
+                  // Special warning: IOMMU on but DMA Protection off = vulnerable to DMA cheats
+                  const dmaVulnerable = irisDetailsPlayer.security.iommu && !irisDetailsPlayer.security.kernelDmaProtection;
                   const enabledCount = securityModules.filter(m => m.enabled).length;
                   const trustScore = Math.round((enabledCount / securityModules.length) * 100);
                   const disabledModules = securityModules.filter(m => !m.enabled);
@@ -3184,20 +3316,47 @@ const AdminPanel = () => {
                 {irisDetailsPlayer.security && (
                   <div className="bg-dark-900/50 border border-white/10 rounded-xl p-4">
                     <h4 className="text-white font-semibold mb-3 flex items-center gap-2"><Shield className="w-4 h-4 text-green-400" /> Modules de sécurité</h4>
+                    
+                    {/* DMA Vulnerability Warning */}
+                    {irisDetailsPlayer.security.iommu && !irisDetailsPlayer.security.kernelDmaProtection && (
+                      <div className="mb-4 p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-orange-400 font-semibold">⚠️ VULNÉRABLE AUX DMA CHEATS!</p>
+                            <p className="text-sm text-orange-300/80 mt-1">
+                              IOMMU est activé mais <strong>Kernel DMA Protection</strong> est désactivé. 
+                              Les attaques DMA peuvent contourner IOMMU sans cette protection Windows.
+                            </p>
+                            <p className="text-xs text-gray-400 mt-2">
+                              Requis: Windows 10 1803+, matériel compatible Thunderbolt 3, IOMMU activé dans BIOS
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {[
                         { label: 'TPM 2.0', value: irisDetailsPlayer.security.tpm?.enabled, extra: irisDetailsPlayer.security.tpm?.version },
                         { label: 'Secure Boot', value: irisDetailsPlayer.security.secureBoot },
                         { label: 'VT-x/AMD-V', value: irisDetailsPlayer.security.virtualization },
                         { label: 'VT-d/IOMMU', value: irisDetailsPlayer.security.iommu },
+                        { label: 'DMA Protection', value: irisDetailsPlayer.security.kernelDmaProtection, critical: true },
                         { label: 'HVCI', value: irisDetailsPlayer.security.hvci },
                         { label: 'VBS', value: irisDetailsPlayer.security.vbs },
                         { label: 'Defender', value: irisDetailsPlayer.security.defender },
                         { label: 'Temps réel', value: irisDetailsPlayer.security.defenderRealtime },
                       ].map(mod => (
-                        <div key={mod.label} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${mod.value ? 'bg-green-500/10 border border-green-500/20' : 'bg-red-500/10 border border-red-500/20'}`}>
-                          {mod.value ? <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" /> : <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
-                          <span className={`text-sm ${mod.value ? 'text-green-300' : 'text-red-300'}`}>{mod.label}</span>
+                        <div key={mod.label} className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                          mod.value ? 'bg-green-500/10 border border-green-500/20' : 
+                          mod.critical ? 'bg-orange-500/10 border border-orange-500/30' :
+                          'bg-red-500/10 border border-red-500/20'
+                        }`}>
+                          {mod.value ? <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" /> : 
+                           mod.critical ? <AlertTriangle className="w-4 h-4 text-orange-400 flex-shrink-0" /> :
+                           <X className="w-4 h-4 text-red-400 flex-shrink-0" />}
+                          <span className={`text-sm ${mod.value ? 'text-green-300' : mod.critical ? 'text-orange-300' : 'text-red-300'}`}>{mod.label}</span>
                           {mod.extra && <span className="text-xs text-gray-500 ml-auto">{mod.extra}</span>}
                         </div>
                       ))}
@@ -3600,6 +3759,89 @@ const AdminPanel = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Admin Actions */}
+                {userIsAdmin && (
+                  <div className="bg-dark-900/50 border border-red-500/20 rounded-xl p-4">
+                    <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
+                      <Wrench className="w-4 h-4 text-red-400" />
+                      Actions administrateur
+                    </h4>
+                    
+                    {!confirmIrisReset ? (
+                      <button
+                        onClick={() => setConfirmIrisReset(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg transition-colors"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        RAZ Iris (comme s'il n'avait jamais téléchargé)
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                          <div className="text-red-300 text-sm flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                            <div>
+                              <strong>Attention:</strong> Cette action va supprimer TOUTES les données Iris de ce joueur:
+                              <ul className="list-disc list-inside mt-1 text-red-400/80 text-xs">
+                                <li>Hardware ID et infos système</li>
+                                <li>Historique des sessions</li>
+                                <li>Historique des détections</li>
+                                <li>Statut de sécurité</li>
+                                <li>Canal de surveillance Discord</li>
+                              </ul>
+                              <span className="mt-1 block">Le joueur devra se reconnecter à Iris.</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={async () => {
+                              try {
+                                setResettingIrisPlayer(irisDetailsPlayer._id);
+                                const response = await fetch(`${API_URL}/iris/reset/${irisDetailsPlayer._id}`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                  }
+                                });
+                                const data = await response.json();
+                                if (data.success) {
+                                  setSuccess(`Iris reset pour ${irisDetailsPlayer.username || irisDetailsPlayer.discordUsername}`);
+                                  setIrisDetailsPlayer(null);
+                                  setConfirmIrisReset(false);
+                                  // Refresh the list
+                                  fetchIrisPlayers();
+                                } else {
+                                  setError(data.message || 'Erreur lors du reset');
+                                }
+                              } catch (err) {
+                                setError('Erreur serveur');
+                              } finally {
+                                setResettingIrisPlayer(null);
+                              }
+                            }}
+                            disabled={resettingIrisPlayer}
+                            className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {resettingIrisPlayer ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                            Confirmer le RAZ
+                          </button>
+                          <button
+                            onClick={() => setConfirmIrisReset(false)}
+                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -3833,24 +4075,33 @@ const AdminPanel = () => {
                     <input
                       type="text"
                       value={irisUpdateFormData.version}
-                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, version: e.target.value })}
+                      onChange={(e) => {
+                        const version = e.target.value;
+                        // Auto-generate download URL when version changes
+                        const autoUrl = version ? `https://api-nomercy.ggsecure.io/iris-downloads/Iris_${version}_x64-setup.exe` : '';
+                        setIrisUpdateFormData({ 
+                          ...irisUpdateFormData, 
+                          version,
+                          downloadUrl: autoUrl
+                        });
+                      }}
                       disabled={!!editingIrisUpdate}
                       className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white disabled:opacity-50"
                       placeholder="1.0.0"
                     />
+                    <p className="text-xs text-gray-500 mt-1">L'URL de téléchargement sera générée automatiquement</p>
                   </div>
 
-                  {/* Download URL */}
+                  {/* Download URL (auto-generated, readonly) */}
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">URL de téléchargement *</label>
+                    <label className="block text-sm text-gray-400 mb-1">URL de téléchargement (auto)</label>
                     <input
                       type="text"
                       value={irisUpdateFormData.downloadUrl}
-                      onChange={(e) => setIrisUpdateFormData({ ...irisUpdateFormData, downloadUrl: e.target.value })}
-                      className="w-full px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white"
-                      placeholder="https://..."
+                      readOnly
+                      className="w-full px-4 py-2 bg-dark-900/50 border border-white/5 rounded-lg text-gray-400 font-mono text-sm cursor-not-allowed"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Lien direct vers le fichier .exe ou .msi</p>
+                    <p className="text-xs text-gray-500 mt-1">Placez le fichier <code className="text-purple-400">Iris_{irisUpdateFormData.version || 'X.X.X'}_x64-setup.exe</code> dans <code className="text-purple-400">Server/iris-downloads/</code></p>
                   </div>
 
                   {/* Changelog */}
@@ -3910,7 +4161,7 @@ const AdminPanel = () => {
                   </button>
                   <button
                     onClick={handleSaveIrisUpdate}
-                    disabled={savingIrisUpdate || !irisUpdateFormData.version || !irisUpdateFormData.downloadUrl}
+                    disabled={savingIrisUpdate || !irisUpdateFormData.version}
                     className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50"
                   >
                     {savingIrisUpdate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

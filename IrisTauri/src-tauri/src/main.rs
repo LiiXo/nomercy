@@ -15,9 +15,14 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus the existing window when another instance is launched
+            println!("[Iris] Second instance detected - focusing existing window");
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_focus();
+                // Show window if hidden (in tray)
+                let _ = window.show();
+                // Unminimize if minimized
                 let _ = window.unminimize();
+                // Bring to front and focus
+                let _ = window.set_focus();
             }
         }))
         .plugin(tauri_plugin_shell::init())

@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import User from '../models/User.js';
+import RankedMatch from '../models/RankedMatch.js';
+import StrickerMatch from '../models/StrickerMatch.js';
 
 // ES Module dirname equivalent
 const __filename = fileURLToPath(import.meta.url);
@@ -13,7 +15,7 @@ const __dirname = path.dirname(__filename);
 import IrisUpdate from '../models/IrisUpdate.js';
 import { verifyToken } from '../middleware/auth.middleware.js';
 import { verifyIrisSignature, decryptIrisPayload } from '../middleware/iris.security.middleware.js';
-import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots, deleteIrisScanModeChannel, sendIrisExtendedAlert } from '../services/discordBot.service.js';
+import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots, deleteIrisScanModeChannel, sendIrisExtendedAlert, sendIrisGameMismatchAlert, sendIrisLowActivityAlert, sendIrisUpdateNotification } from '../services/discordBot.service.js';
 import fetch from 'node-fetch';
 
 const router = express.Router();
@@ -615,14 +617,6 @@ router.post('/exchange-code', async (req, res) => {
       });
     }
 
-    // Check if user is admin
-    if (!user.roles || !user.roles.includes('admin')) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Iris est disponible uniquement pour les administrateurs.' 
-      });
-    }
-
     // Check if user is banned
     if (user.isBanned) {
       return res.status(403).json({ success: false, message: user.banReason || 'Compte banni' });
@@ -726,15 +720,6 @@ router.get('/discord-callback', async (req, res) => {
       return res.status(404).send(renderErrorPage(
         'Aucun compte NoMercy trouvé',
         'Vous devez d\'abord créer un compte sur NoMercy avec ce compte Discord.'
-      ));
-    }
-
-    // Check if user is admin
-    if (!user.roles || !user.roles.includes('admin')) {
-      console.log('[Iris] User is not admin:', user.roles);
-      return res.status(403).send(renderErrorPage(
-        'Accès Refusé',
-        'Iris est actuellement disponible uniquement pour les comptes administrateurs.'
       ));
     }
 
@@ -1025,14 +1010,6 @@ router.get('/verify', verifyIrisSignature, async (req, res) => {
       });
     }
 
-    // Check if user is admin (Iris is admin-only)
-    if (!user.roles || !user.roles.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Iris is currently available for admin accounts only'
-      });
-    }
-
     // Check if banned
     if (user.isBanned) {
       return res.status(403).json({
@@ -1114,14 +1091,6 @@ router.post('/register-hardware', verifyIrisSignature, decryptIrisPayload, async
       });
     }
 
-    // Check if user is admin
-    if (!user.roles || !user.roles.includes('admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Iris is currently available for admin accounts only'
-      });
-    }
-
     // Check if hardware ID is already registered to another user
     const existingUser = await User.findOne({ 
       irisHardwareId: hardwareId,
@@ -1164,30 +1133,6 @@ router.post('/register-hardware', verifyIrisSignature, decryptIrisPayload, async
  */
 router.get('/authorize', verifyToken, async (req, res) => {
   try {
-    // Check if user is admin
-    if (!req.user.roles || !req.user.roles.includes('admin')) {
-      return res.status(403).send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Iris - Accès Refusé</title>
-          <style>
-            body { font-family: system-ui; background: #0a0a0b; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-            .container { text-align: center; padding: 40px; }
-            h1 { color: #ff2d55; margin-bottom: 16px; }
-            p { color: #71717a; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>Accès Refusé</h1>
-            <p>Iris est actuellement disponible uniquement pour les comptes administrateurs.</p>
-          </div>
-        </body>
-        </html>
-      `);
-    }
-
     // Generate Iris-specific token (longer expiry)
     const irisToken = jwt.sign(
       { 
@@ -1425,6 +1370,98 @@ router.delete('/unlink/:userId', verifyToken, async (req, res) => {
 });
 
 /**
+ * Full reset - Clear ALL Iris data as if player never downloaded Iris (admin only)
+ * POST /api/iris/reset/:userId
+ */
+router.post('/reset/:userId', verifyToken, async (req, res) => {
+  try {
+    // Check if requester is admin
+    if (!req.user.roles || !req.user.roles.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
+    const user = await User.findById(req.params.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const username = user.username || user.discordUsername;
+    console.log(`[Iris] Full reset requested for ${username} by admin ${req.user.username}`);
+
+    // Delete the scan channel if it exists
+    if (user.irisScanChannelId) {
+      try {
+        const { deleteIrisChannel } = await import('../services/discordBot.service.js');
+        await deleteIrisChannel(user.irisScanChannelId, username);
+        console.log(`[Iris] Scan channel deleted for ${username}`);
+      } catch (err) {
+        console.error(`[Iris] Failed to delete scan channel: ${err.message}`);
+      }
+    }
+
+    // Clear ALL Iris-related fields
+    await User.findByIdAndUpdate(user._id, {
+      $unset: {
+        irisHardwareId: 1,
+        irisSystemInfo: 1,
+        irisLastSeen: 1,
+        irisRegisteredAt: 1,
+        irisSecurityStatus: 1,
+        irisClientVerified: 1,
+        irisClientVersion: 1,
+        irisClientCodeHash: 1,
+        irisVerifiedAt: 1,
+        irisScanChannelId: 1,
+        irisCurrentSessionId: 1
+      },
+      irisScanMode: false,
+      irisWasConnected: false,
+      irisDetectionHistory: [],
+      irisSessionHistory: [],
+      irisGameDetection: {
+        lastDetected: null,
+        gameRunning: false,
+        gameName: null,
+        gameWindowActive: false,
+        mismatchCount: 0,
+        lastMismatchAt: null,
+        matchActivityTracking: {
+          matchId: null,
+          matchType: null,
+          trackingStartedAt: null,
+          totalSamples: 0,
+          activeSamples: 0,
+          activityPercentage: 0,
+          lastActiveAt: null,
+          consecutiveInactive: 0,
+          lowActivityAlertSent: false
+        }
+      }
+    });
+
+    console.log(`[Iris] Full reset completed for ${username}`);
+
+    res.json({
+      success: true,
+      message: `Iris data for ${username} has been completely reset`
+    });
+  } catch (error) {
+    console.error('[Iris] Full reset error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+/**
  * Get download info for authenticated users
  * GET /api/iris/download
  */
@@ -1438,18 +1475,18 @@ router.get('/download', verifyToken, async (req, res) => {
       });
     }
 
-    // Generate a time-limited download token
-    const downloadToken = jwt.sign(
-      { userId: req.user._id, purpose: 'iris_download' },
-      IRIS_JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
+    // Get latest version from database
+    const latestUpdate = await IrisUpdate.findOne({ isCurrent: true }).sort({ createdAt: -1 });
+    const version = latestUpdate?.version || '1.0.0';
+    
+    // Always use API production URL for downloads (files are on api-nomercy server)
+    const API_PROD_URL = 'https://api-nomercy.ggsecure.io';
+    
     res.json({
       success: true,
-      downloadUrl: `/iris/installer?token=${downloadToken}`,
-      version: '1.0.0',
-      fileName: 'Iris_1.0.0_x64-setup.exe'
+      downloadUrl: `${API_PROD_URL}/iris-downloads/Iris_${version}_x64-setup.exe`,
+      version: version,
+      fileName: `Iris_${version}_x64-setup.exe`
     });
   } catch (error) {
     console.error('[Iris] Download info error:', error);
@@ -1638,9 +1675,19 @@ router.post('/ping', verifyIrisSignature, async (req, res) => {
       // Note: Connection status no longer sent to scan channel - only screenshots go there
     }
 
+    // Check if immediate screenshots were requested (scan mode just enabled by admin)
+    const requestImmediateScreenshots = user.irisScanImmediateRequest || false;
+    
+    // Clear the immediate request flag after checking (will be sent in response)
+    if (requestImmediateScreenshots) {
+      await User.findByIdAndUpdate(user._id, { irisScanImmediateRequest: false });
+      console.log(`[Iris Ping] Requesting immediate screenshots from ${user.username}`);
+    }
+
     res.json({
       success: true,
-      scanModeEnabled: user.irisScanMode || false
+      scanModeEnabled: user.irisScanMode || false,
+      requestImmediateScreenshots: requestImmediateScreenshots
     });
   } catch (error) {
     console.error('[Iris Ping] Error:', error);
@@ -1948,6 +1995,184 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
       // Note: Connection status no longer sent to scan channel - only screenshots go there
     }
 
+    // ====== GAME SESSION MISMATCH DETECTION (Anti-Bypass) ======
+    // Detect if player is in a match but game is NOT running on their Iris machine
+    // This indicates potential bypass attempt (Iris running on a different PC than the game)
+    const gameDetection = systemInfo?.gameDetection;
+    const gameRunning = gameDetection?.gameRunning || false;
+    
+    // Check if user is currently in an active Ranked or Stricker match
+    const activeRankedMatch = await RankedMatch.findOne({
+      $or: [
+        { 'team1.players': user._id },
+        { 'team2.players': user._id }
+      ],
+      status: 'in_progress'
+    });
+    
+    const activeStrickerMatch = await StrickerMatch.findOne({
+      players: user._id,
+      status: 'in_progress'
+    });
+    
+    // Update user's game detection status
+    if (gameDetection) {
+      await User.findByIdAndUpdate(user._id, {
+        'irisGameDetection.lastDetected': new Date(),
+        'irisGameDetection.gameRunning': gameRunning,
+        'irisGameDetection.gameName': gameDetection.gameName || null,
+        'irisGameDetection.gameWindowActive': gameDetection.gameWindowActive || false
+      });
+    }
+    
+    // MISMATCH DETECTION: Player is in match but game not detected on Iris machine
+    if ((activeRankedMatch || activeStrickerMatch) && !gameRunning) {
+      // Increment mismatch count for tracking repeat offenders
+      const currentMismatchCount = user.irisGameDetection?.mismatchCount || 0;
+      const newMismatchCount = currentMismatchCount + 1;
+      
+      await User.findByIdAndUpdate(user._id, {
+        'irisGameDetection.mismatchCount': newMismatchCount,
+        'irisGameDetection.lastMismatchAt': new Date()
+      });
+      
+      // Only alert after 2 consecutive mismatches (avoid false positives during game loading)
+      if (newMismatchCount >= 2) {
+        console.warn('[Iris Heartbeat] GAME MISMATCH DETECTED:', user.username, 
+          '- In match but game NOT detected on Iris machine! (count:', newMismatchCount, ')');
+        
+        const matchType = activeRankedMatch ? 'ranked' : 'stricker';
+        const matchId = activeRankedMatch?._id || activeStrickerMatch?._id;
+        
+        // Send Discord alert
+        sendIrisGameMismatchAlert(
+          { 
+            username: user.username, 
+            discordUsername: user.discordUsername, 
+            discordId: user.discordId 
+          },
+          {
+            matchType,
+            matchId,
+            irisConnected: true,
+            gameDetected: false,
+            hardwareId: hardwareId,
+            mismatchCount: newMismatchCount
+          }
+        ).catch(err => console.error('[Iris Heartbeat] Game mismatch alert error:', err.message));
+      } else {
+        console.log('[Iris Heartbeat] Game mismatch for', user.username, '- count:', newMismatchCount, '(waiting for 2+ to alert)');
+      }
+    } else if (gameRunning) {
+      // Reset mismatch count when game is detected
+      if (user.irisGameDetection?.mismatchCount > 0) {
+        await User.findByIdAndUpdate(user._id, {
+          'irisGameDetection.mismatchCount': 0
+        });
+      }
+    }
+    
+    // ====== WINDOW ACTIVITY TRACKING DURING MATCHES ======
+    // Track % of time the game window is active during an active match
+    // Alerts if activity is suspiciously low (player launched game but isn't actually playing)
+    const gameWindowActive = gameDetection?.gameWindowActive || false;
+    const currentMatchId = activeRankedMatch?._id || activeStrickerMatch?._id;
+    const currentMatchType = activeRankedMatch ? 'ranked' : (activeStrickerMatch ? 'stricker' : null);
+    const trackingData = user.irisGameDetection?.matchActivityTracking || {};
+    
+    if ((activeRankedMatch || activeStrickerMatch) && gameRunning) {
+      // Player is in match AND game is running - track window activity
+      const isNewMatch = !trackingData.matchId || trackingData.matchId.toString() !== currentMatchId.toString();
+      
+      if (isNewMatch) {
+        // Start tracking for new match
+        console.log('[Iris Heartbeat] Starting window activity tracking for', user.username, 'in', currentMatchType, 'match');
+        await User.findByIdAndUpdate(user._id, {
+          'irisGameDetection.matchActivityTracking': {
+            matchId: currentMatchId,
+            matchType: currentMatchType,
+            trackingStartedAt: new Date(),
+            totalSamples: 1,
+            activeSamples: gameWindowActive ? 1 : 0,
+            activityPercentage: gameWindowActive ? 100 : 0,
+            lastActiveAt: gameWindowActive ? new Date() : null,
+            consecutiveInactive: gameWindowActive ? 0 : 1,
+            lowActivityAlertSent: false
+          }
+        });
+      } else {
+        // Update existing tracking
+        const newTotalSamples = (trackingData.totalSamples || 0) + 1;
+        const newActiveSamples = (trackingData.activeSamples || 0) + (gameWindowActive ? 1 : 0);
+        const newActivityPercentage = Math.round((newActiveSamples / newTotalSamples) * 100);
+        const newConsecutiveInactive = gameWindowActive ? 0 : (trackingData.consecutiveInactive || 0) + 1;
+        
+        await User.findByIdAndUpdate(user._id, {
+          'irisGameDetection.matchActivityTracking.totalSamples': newTotalSamples,
+          'irisGameDetection.matchActivityTracking.activeSamples': newActiveSamples,
+          'irisGameDetection.matchActivityTracking.activityPercentage': newActivityPercentage,
+          'irisGameDetection.matchActivityTracking.lastActiveAt': gameWindowActive ? new Date() : trackingData.lastActiveAt,
+          'irisGameDetection.matchActivityTracking.consecutiveInactive': newConsecutiveInactive
+        });
+        
+        // Check for suspicious low activity (< 30% after at least 4 samples = 2+ minutes of match)
+        // This catches the bypass where player launches game but leaves it in menu/background
+        const MIN_SAMPLES_FOR_ALERT = 4; // ~2 minutes (30 sec heartbeat intervals)
+        const LOW_ACTIVITY_THRESHOLD = 30; // Alert if activity < 30%
+        
+        if (newTotalSamples >= MIN_SAMPLES_FOR_ALERT && 
+            newActivityPercentage < LOW_ACTIVITY_THRESHOLD && 
+            !trackingData.lowActivityAlertSent) {
+          
+          console.warn('[Iris Heartbeat] LOW WINDOW ACTIVITY DETECTED:', user.username,
+            '- Activity:', newActivityPercentage + '%, samples:', newTotalSamples,
+            '- Game running but window rarely active!');
+          
+          // Mark alert as sent to prevent spam
+          await User.findByIdAndUpdate(user._id, {
+            'irisGameDetection.matchActivityTracking.lowActivityAlertSent': true
+          });
+          
+          // Send Discord alert for low activity
+          sendIrisLowActivityAlert(
+            {
+              username: user.username,
+              discordUsername: user.discordUsername,
+              discordId: user.discordId
+            },
+            {
+              matchType: currentMatchType,
+              matchId: currentMatchId,
+              activityPercentage: newActivityPercentage,
+              totalSamples: newTotalSamples,
+              activeSamples: newActiveSamples,
+              consecutiveInactive: newConsecutiveInactive,
+              hardwareId: hardwareId
+            }
+          ).catch(err => console.error('[Iris Heartbeat] Low activity alert error:', err.message));
+        }
+        
+        console.log('[Iris Heartbeat] Window activity for', user.username, ':',
+          newActivityPercentage + '%', '(' + newActiveSamples + '/' + newTotalSamples + ' samples)');
+      }
+    } else if (!activeRankedMatch && !activeStrickerMatch && trackingData.matchId) {
+      // Match ended - clear tracking
+      console.log('[Iris Heartbeat] Match ended, clearing activity tracking for', user.username);
+      await User.findByIdAndUpdate(user._id, {
+        'irisGameDetection.matchActivityTracking': {
+          matchId: null,
+          matchType: null,
+          trackingStartedAt: null,
+          totalSamples: 0,
+          activeSamples: 0,
+          activityPercentage: 0,
+          lastActiveAt: null,
+          consecutiveInactive: 0,
+          lowActivityAlertSent: false
+        }
+      });
+    }
+
     // ====== SECURITY STATE CHANGE DETECTION ======
     // Check if client sent security changes (detected between heartbeats)
     // Client sends this in systemInfo.securityChanges
@@ -2051,6 +2276,23 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
           missingModulesOnConnection.push({ name: 'IOMMU', status: 'Désactivé (VT-d/AMD-Vi)' });
         }
         
+        // CRITICAL: Check Kernel DMA Protection (blocks DMA cheats)
+        // IOMMU present doesn't mean DMA is blocked - Kernel DMA Protection enforces it
+        if (!security.kernelDmaProtection) {
+          if (security.iommu) {
+            // WARNING: IOMMU is on but not enforced - DMA cheats CAN work!
+            missingModulesOnConnection.push({ 
+              name: 'Kernel DMA Protection', 
+              status: '⚠️ CRITIQUE: IOMMU présent mais NON APPLIQUÉ - Vulnérable aux DMA cheats!' 
+            });
+          } else {
+            missingModulesOnConnection.push({ 
+              name: 'Kernel DMA Protection', 
+              status: 'Désactivé (Protection DMA)' 
+            });
+          }
+        }
+        
         // Check VBS
         if (!security.vbs) {
           missingModulesOnConnection.push({ name: 'VBS', status: 'Désactivé' });
@@ -2103,13 +2345,24 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
       '| Clean:', antiTamperResult.clean
     );
 
+    // Check if immediate screenshots were requested (scan mode just enabled by admin)
+    const requestImmediateScreenshots = (wasDisconnected && user.irisScanMode) || user.irisScanImmediateRequest;
+    
+    // Clear the immediate request flag if it was set
+    if (user.irisScanImmediateRequest) {
+      User.findByIdAndUpdate(user._id, { irisScanImmediateRequest: false }).catch(err => 
+        console.error('[Iris Heartbeat] Error clearing immediate request flag:', err.message)
+      );
+      console.log(`[Iris Heartbeat] Requesting immediate screenshots from ${user.username}`);
+    }
+
     res.json({
       success: true,
       message: 'Heartbeat received',
       verified: verificationResult.verified,
       tamperDetected: verificationResult.tamperDetected,
       scanModeEnabled: user.irisScanMode || false,
-      requestImmediateScreenshots: wasDisconnected && user.irisScanMode
+      requestImmediateScreenshots: requestImmediateScreenshots
     });
 
     // ====== ASYNC PROCESSING (after response sent) ======
@@ -2675,6 +2928,12 @@ router.post('/updates/:id/set-current', verifyToken, async (req, res) => {
     update.isCurrent = true;
     await update.save();
     
+    // Send Discord notification about the new update
+    await sendIrisUpdateNotification({
+      version: update.version,
+      changelog: update.changelog
+    });
+    
     console.log('[Iris Updates] Set current:', update.version, 'by', user.username);
     
     res.json({
@@ -2807,6 +3066,10 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
     // Toggle scan mode
     const newScanMode = !player.irisScanMode;
     
+    // Check if user is currently connected (for immediate screenshot request)
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    const isCurrentlyConnected = player.irisLastSeen && new Date(player.irisLastSeen) > threeMinutesAgo;
+    
     // If enabling scan mode and no channel exists, create one
     if (newScanMode && !player.irisScanChannelId) {
       // Create Discord channel with player info
@@ -2835,10 +3098,11 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
       // Save the scan channel ID and enable scan mode
       await User.findByIdAndUpdate(userId, {
         irisScanChannelId: result.channelId,
-        irisScanMode: true
+        irisScanMode: true,
+        irisScanImmediateRequest: isCurrentlyConnected // Request immediate screenshots if already connected
       });
 
-      console.log(`[Iris Scan] Mode enabled for ${player.username || player.discordUsername} by ${admin.username}`);
+      console.log(`[Iris Scan] Mode enabled for ${player.username || player.discordUsername} by ${admin.username}${isCurrentlyConnected ? ' (immediate screenshot requested)' : ''}`);
 
       return res.json({
         success: true,
@@ -2871,11 +3135,16 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
     }
 
     // Just toggle the scan mode (channel already exists or disabling)
-    await User.findByIdAndUpdate(userId, {
-      irisScanMode: newScanMode
-    });
+    const updateData = { irisScanMode: newScanMode };
+    
+    // If enabling scan mode and user is connected, request immediate screenshots
+    if (newScanMode && isCurrentlyConnected) {
+      updateData.irisScanImmediateRequest = true;
+    }
+    
+    await User.findByIdAndUpdate(userId, updateData);
 
-    console.log(`[Iris Scan] Mode ${newScanMode ? 'enabled' : 'disabled'} for ${player.username || player.discordUsername} by ${admin.username}`);
+    console.log(`[Iris Scan] Mode ${newScanMode ? 'enabled' : 'disabled'} for ${player.username || player.discordUsername} by ${admin.username}${newScanMode && isCurrentlyConnected ? ' (immediate screenshot requested)' : ''}`);
 
     res.json({
       success: true,

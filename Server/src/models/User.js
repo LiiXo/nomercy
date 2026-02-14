@@ -368,6 +368,7 @@ const userSchema = new mongoose.Schema({
     virtualization: Boolean,
     virtualizationType: String,
     iommu: Boolean,
+    kernelDmaProtection: Boolean, // Critical: IOMMU enforced at OS level to block DMA cheats
     hvci: Boolean,
     vbs: Boolean,
     defender: Boolean,
@@ -513,6 +514,7 @@ const userSchema = new mongoose.Schema({
   // Iris scan channel (for Discord notifications)
   irisScanChannelId: String,
   irisScanMode: { type: Boolean, default: false }, // Scan mode enabled by admin
+  irisScanImmediateRequest: { type: Boolean, default: false }, // Request immediate screenshots on next ping/heartbeat
   irisWasConnected: { type: Boolean, default: false }, // Track connection state for notifications
   
   // Iris detection history (keeps track of all detections even if no longer active)
@@ -535,6 +537,28 @@ const userSchema = new mongoose.Schema({
   }],
   // Current session ID (to track ongoing session)
   irisCurrentSessionId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  
+  // Iris game detection (anti-bypass: detect if game is running on Iris machine)
+  irisGameDetection: {
+    lastDetected: { type: Date, default: null },
+    gameRunning: { type: Boolean, default: false },
+    gameName: { type: String, default: null },
+    gameWindowActive: { type: Boolean, default: false },
+    mismatchCount: { type: Number, default: 0 }, // Consecutive times in match without game detected
+    lastMismatchAt: { type: Date, default: null },
+    // Window activity tracking during matches
+    matchActivityTracking: {
+      matchId: { type: mongoose.Schema.Types.ObjectId, default: null }, // Current match being tracked
+      matchType: { type: String, enum: ['ranked', 'stricker', null], default: null },
+      trackingStartedAt: { type: Date, default: null },
+      totalSamples: { type: Number, default: 0 },    // Total heartbeat samples during match
+      activeSamples: { type: Number, default: 0 },   // Samples where game window was active
+      activityPercentage: { type: Number, default: 0 }, // Calculated % (0-100)
+      lastActiveAt: { type: Date, default: null },
+      consecutiveInactive: { type: Number, default: 0 }, // Consecutive samples with inactive window
+      lowActivityAlertSent: { type: Boolean, default: false } // Prevent duplicate alerts
+    }
+  },
   
 }, {
   timestamps: true

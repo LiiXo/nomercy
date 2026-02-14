@@ -457,7 +457,7 @@ export const joinQueue = async (userId, gameMode, mode) => {
     }
     
     // Récupérer l'utilisateur
-    const user = await User.findById(userId).select('username platform isRankedBanned rankedBanExpiresAt rankedBanReason');
+    const user = await User.findById(userId).select('username platform isRankedBanned rankedBanExpiresAt rankedBanReason irisLastSeen');
     if (!user) {
       return { success: false, message: 'Utilisateur non trouvé.' };
     }
@@ -486,7 +486,19 @@ export const joinQueue = async (userId, gameMode, mode) => {
       }
     }
     
-    // GGSecure verification removed - Iris status shown on match sheet instead
+    // Vérification IRIS obligatoire pour les joueurs PC
+    if (user.platform === 'PC') {
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > threeMinutesAgo;
+      
+      if (!isIrisConnected) {
+        return {
+          success: false,
+          message: 'Vous devez être connecté à IRIS pour rejoindre la file d\'attente en mode classé (joueur PC).',
+          irisRequired: true
+        };
+      }
+    }
     
     // Récupérer ou créer le ranking (avec la saison courante)
     const currentSeason = new Date().getMonth() + 1;

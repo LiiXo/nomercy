@@ -44,6 +44,7 @@ pub struct VirtualizationStatus {
     pub vt_x: bool,
     pub amd_v: bool,
     pub iommu: bool,
+    pub kernel_dma_protection: bool, // Key for blocking DMA cheats - enforces IOMMU at OS level
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -217,6 +218,81 @@ pub struct CheatWindowDetectionResult {
     pub detected_windows: Vec<DetectedCheatWindow>,
     pub risk_score: u32,
 }
+
+// ====== GAME DETECTION (Anti-Bypass) ======
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GameDetectionResult {
+    pub game_running: bool,
+    pub game_name: Option<String>,
+    pub game_pid: Option<u32>,
+    pub game_window_active: bool,  // Is player focused on game window?
+    pub last_detected: u64,        // Timestamp in ms
+}
+
+/// Extended game detection with session-level window activity tracking
+/// Used to detect if player has the game running but isn't actually playing
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GameSessionActivity {
+    pub game_running: bool,
+    pub game_name: Option<String>,
+    pub game_pid: Option<u32>,
+    pub game_window_active: bool,
+    pub last_detected: u64,
+    // Session tracking for window activity percentage
+    pub session_start: u64,              // When tracking started (ms since epoch)
+    pub total_samples: u32,               // Total heartbeat samples in session
+    pub active_samples: u32,              // Samples where game window was active
+    pub activity_percentage: f32,         // Calculated % of time window was active
+    pub last_active_at: u64,              // Last time window was detected active
+    pub consecutive_inactive: u32,        // Consecutive samples with inactive window
+}
+
+// Global tracking for game session activity (persists between detect_game_running calls)
+use std::sync::Mutex;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref GAME_SESSION_TRACKER: Mutex<GameSessionTracker> = Mutex::new(GameSessionTracker::default());
+}
+
+#[derive(Debug, Clone, Default)]
+struct GameSessionTracker {
+    session_start: u64,
+    total_samples: u32,
+    active_samples: u32,
+    last_active_at: u64,
+    consecutive_inactive: u32,
+    last_game_pid: Option<u32>,
+}
+
+// Call of Duty / Black Ops game process names to detect
+const GAME_PROCESSES: &[(&str, &str)] = &[
+    // Black Ops 7 / BO7
+    ("cod.exe", "Call of Duty"),
+    ("blackops7.exe", "Black Ops 7"),
+    ("bo7.exe", "Black Ops 7"),
+    ("cod-bo7.exe", "Black Ops 7"),
+    ("blackops7-cod.exe", "Black Ops 7"),
+    // Black Ops 6 / BO6
+    ("blackops6.exe", "Black Ops 6"),
+    ("bo6.exe", "Black Ops 6"),
+    // Modern Warfare / Warzone
+    ("modernwarfare.exe", "Modern Warfare"),
+    ("cod_mw.exe", "Modern Warfare"),
+    ("codmw.exe", "Modern Warfare"),
+    // Warzone
+    ("warzone.exe", "Warzone"),
+    ("codwarzone.exe", "Warzone"),
+    // Battle.net launcher spawns these
+    ("cod_ship.exe", "Call of Duty"),
+    ("codship.exe", "Call of Duty"),
+    // Generic CoD executables
+    ("callofduty.exe", "Call of Duty"),
+    ("call of duty.exe", "Call of Duty"),
+];
 
 /// Check TPM availability using WMI and Registry
 #[cfg(target_os = "windows")]
@@ -507,8 +583,12 @@ pub fn check_virtualization() -> VirtualizationStatus {
     // Method 4: Check registry for IOMMU
     status.iommu = check_iommu_registry();
     
-    println!("[Hardware] Virtualization check: enabled={}, vt_x={}, amd_v={}, iommu={}", 
-             status.enabled, status.vt_x, status.amd_v, status.iommu);
+    // Method 5: Check Kernel DMA Protection (CRITICAL for blocking DMA cheats)
+    // IOMMU present doesn't mean it's enforced - Kernel DMA Protection does the actual blocking
+    status.kernel_dma_protection = check_kernel_dma_protection();
+    
+    println!("[Hardware] Virtualization check: enabled={}, vt_x={}, amd_v={}, iommu={}, kernel_dma_protection={}", 
+             status.enabled, status.vt_x, status.amd_v, status.iommu, status.kernel_dma_protection);
 
     status
 }
@@ -1014,6 +1094,141 @@ fn check_iommu_pnp_devices() -> bool {
         }
     }
     
+    false
+}
+
+/// Check Kernel DMA Protection (DMA Guard) - CRITICAL for blocking DMA cheats
+/// IOMMU being "present" doesn't mean it's enforced. Kernel DMA Protection actually blocks unauthorized DMA.
+/// Without this, a DMA cheat device can still read game memory even with IOMMU "enabled".
+#[cfg(target_os = "windows")]
+fn check_kernel_dma_protection() -> bool {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    
+    // Method 1: Check DeviceGuard WMI for DmaGuardPolicy (most reliable)
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::with_namespace_path("root\\Microsoft\\Windows\\DeviceGuard", com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32DeviceGuard {
+                AvailableSecurityProperties: Option<Vec<i32>>,
+                SecurityServicesRunning: Option<Vec<i32>>,
+            }
+
+            if let Ok(results) = wmi_con.query::<Win32DeviceGuard>() {
+                if let Some(dg) = results.first() {
+                    // Check AvailableSecurityProperties - value 7 = DmaProtection is available
+                    // Check SecurityServicesRunning - value 7 = DmaProtection is running
+                    if let Some(running) = &dg.SecurityServicesRunning {
+                        if running.contains(&7) {
+                            println!("[Hardware] Kernel DMA Protection ACTIVE via DeviceGuard WMI");
+                            return true;
+                        }
+                    }
+                    if let Some(available) = &dg.AvailableSecurityProperties {
+                        println!("[Hardware] DeviceGuard Available Properties: {:?}", available);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Method 2: Check registry for DMA Guard policy state
+    unsafe {
+        let key_path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\DmaSecurity\0"
+            .encode_utf16()
+            .collect();
+        let value_name: Vec<u16> = "DmaGuardPolicyEnabled\0".encode_utf16().collect();
+
+        let mut hkey: HKEY = HKEY::default();
+        let result = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key_path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        );
+
+        if result.is_ok() {
+            let mut data: u32 = 0;
+            let mut data_size: u32 = 4;
+            let mut data_type: REG_VALUE_TYPE = REG_VALUE_TYPE(0);
+
+            let query_result = RegQueryValueExW(
+                hkey,
+                PCWSTR(value_name.as_ptr()),
+                Some(ptr::null_mut()),
+                Some(&mut data_type),
+                Some(&mut data as *mut u32 as *mut u8),
+                Some(&mut data_size),
+            );
+
+            let _ = RegCloseKey(hkey);
+
+            if query_result.is_ok() && data_type == REG_DWORD && data == 1 {
+                println!("[Hardware] Kernel DMA Protection enabled via DmaGuardPolicyEnabled registry");
+                return true;
+            }
+        }
+    }
+    
+    // Method 3: Check DeviceGuard Scenarios policy for DMA
+    unsafe {
+        let key_path: Vec<u16> = "SYSTEM\\CurrentControlSet\\Control\\DeviceGuard\\Scenarios\\KernelShadowStacks\0"
+            .encode_utf16()
+            .collect();
+
+        let mut hkey: HKEY = HKEY::default();
+        let result = RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(key_path.as_ptr()),
+            0,
+            KEY_READ,
+            &mut hkey,
+        );
+
+        if result.is_ok() {
+            let _ = RegCloseKey(hkey);
+            // Kernel Shadow Stacks requires Kernel DMA Protection
+            println!("[Hardware] Kernel Shadow Stacks present - DMA protection likely enabled");
+        }
+    }
+    
+    // Method 4: PowerShell msinfo32 check for Kernel DMA Protection
+    if let Ok(output) = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", 
+               "(Get-CimInstance -Namespace root/Microsoft/Windows/DeviceGuard -ClassName Win32_DeviceGuard).SecurityServicesRunning -contains 7"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+        if stdout == "true" {
+            println!("[Hardware] Kernel DMA Protection confirmed via PowerShell CIM query");
+            return true;
+        }
+    }
+    
+    // Method 5: Check for Kernel DMA Protection in system info
+    // This is what msinfo32.exe displays as "Kernel DMA Protection: On"
+    if let Ok(output) = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", 
+               "$dma = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\DmaSecurity' -Name 'DmaGuardPolicyEnabled' -ErrorAction SilentlyContinue).DmaGuardPolicyEnabled; if ($dma -eq 1) { 'Enabled' } else { 'Disabled' }"])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_lowercase();
+        if stdout == "enabled" {
+            println!("[Hardware] Kernel DMA Protection enabled via PowerShell registry check");
+            return true;
+        }
+    }
+    
+    println!("[Hardware] Kernel DMA Protection NOT detected - DMA cheats may be possible even with IOMMU!");
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
+fn check_kernel_dma_protection() -> bool {
     false
 }
 
@@ -2907,6 +3122,14 @@ pub fn detect_cloud_pc() -> CloudPcDetectionResult {
 
 // ====== CHEAT WINDOW/PANEL DETECTION (CoD specific) ======
 
+// Whitelist - Our own processes and windows that should never be flagged
+const IRIS_WHITELIST: &[&str] = &[
+    "iris-anticheat",
+    "iris anticheat",
+    "iris - nomercy",
+    "nomercy anticheat",
+];
+
 // Known cheat software window titles and process names
 const CHEAT_WINDOW_KEYWORDS: &[(&str, &str, &str)] = &[
     // Critical - Known CoD cheat providers
@@ -3055,6 +3278,13 @@ pub fn detect_cheat_windows() -> CheatWindowDetectionResult {
             }
         }
         
+        // Skip our own Iris anticheat windows/processes (whitelist)
+        for whitelist_item in IRIS_WHITELIST {
+            if title.contains(whitelist_item) || process_name.contains(whitelist_item) {
+                return BOOL(1); // Skip - it's us!
+            }
+        }
+        
         // Check against known cheat window keywords
         for (keyword, cheat_name, risk) in CHEAT_WINDOW_KEYWORDS {
             if title.contains(keyword) {
@@ -3173,20 +3403,20 @@ pub fn capture_all_screens() -> Vec<ScreenshotData> {
         // For simplicity, capture the entire virtual screen as one image
         // This includes all monitors
         let screen_dc = GetDC(HWND::default());
-        if screen_dc.is_invalid() {
+        if screen_dc.0 == 0 {
             println!("[Screenshot] Failed to get screen DC");
             return screenshots;
         }
         
         let mem_dc = CreateCompatibleDC(screen_dc);
-        if mem_dc.is_invalid() {
+        if mem_dc.0 == 0 {
             ReleaseDC(HWND::default(), screen_dc);
             println!("[Screenshot] Failed to create compatible DC");
             return screenshots;
         }
         
         let bitmap = CreateCompatibleBitmap(screen_dc, virtual_width, virtual_height);
-        if bitmap.is_invalid() {
+        if bitmap.0 == 0 {
             DeleteDC(mem_dc);
             ReleaseDC(HWND::default(), screen_dc);
             println!("[Screenshot] Failed to create bitmap");
@@ -3307,18 +3537,18 @@ pub fn capture_all_screens_medium_quality() -> Vec<ScreenshotData> {
                  num_monitors, virtual_width, virtual_height);
         
         let screen_dc = GetDC(HWND::default());
-        if screen_dc.is_invalid() {
+        if screen_dc.0 == 0 {
             return screenshots;
         }
         
         let mem_dc = CreateCompatibleDC(screen_dc);
-        if mem_dc.is_invalid() {
+        if mem_dc.0 == 0 {
             ReleaseDC(HWND::default(), screen_dc);
             return screenshots;
         }
         
         let bitmap = CreateCompatibleBitmap(screen_dc, virtual_width, virtual_height);
-        if bitmap.is_invalid() {
+        if bitmap.0 == 0 {
             DeleteDC(mem_dc);
             ReleaseDC(HWND::default(), screen_dc);
             return screenshots;
@@ -3512,4 +3742,208 @@ pub fn get_all_usb_devices() -> Vec<UsbDeviceInfo> {
 #[cfg(not(target_os = "windows"))]
 pub fn get_all_usb_devices() -> Vec<UsbDeviceInfo> {
     Vec::new()
+}
+
+// ====== GAME DETECTION IMPLEMENTATION ======
+
+/// Detect if Call of Duty / Black Ops is running on this machine
+/// Used to prevent bypass attempts (running Iris on a different PC than the game)
+#[cfg(target_os = "windows")]
+pub fn detect_game_running() -> GameDetectionResult {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetForegroundWindow, GetWindowThreadProcessId,
+    };
+    use windows::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+    };
+    use windows::Win32::System::ProcessStatus::GetModuleBaseNameW;
+    use windows::Win32::Foundation::CloseHandle;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let mut result = GameDetectionResult::default();
+    let mut detected_game_process: Option<(String, u32)> = None;
+    
+    // Scan all processes for game executables
+    if let Ok(com_con) = COMLibrary::new() {
+        if let Ok(wmi_con) = WMIConnection::new(com_con) {
+            #[derive(Deserialize)]
+            #[allow(non_snake_case)]
+            struct Win32Process {
+                Name: Option<String>,
+                ProcessId: Option<u32>,
+            }
+
+            if let Ok(processes) = wmi_con.raw_query::<Win32Process>(
+                "SELECT Name, ProcessId FROM Win32_Process"
+            ) {
+                for process in processes {
+                    let proc_name = process.Name.clone().unwrap_or_default().to_lowercase();
+                    let proc_pid = process.ProcessId.unwrap_or(0);
+                    
+                    // Check against known game processes
+                    for (game_exe, game_name) in GAME_PROCESSES {
+                        if proc_name == *game_exe || proc_name.contains(game_exe) {
+                            detected_game_process = Some((game_name.to_string(), proc_pid));
+                            result.game_running = true;
+                            result.game_name = Some(game_name.to_string());
+                            result.game_pid = Some(proc_pid);
+                            println!("[Hardware] Game detected: {} (PID: {})", game_name, proc_pid);
+                            break;
+                        }
+                    }
+                    
+                    if result.game_running {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Check if game window is currently focused (active)
+    if result.game_running {
+        unsafe {
+            let foreground_hwnd = GetForegroundWindow();
+            if foreground_hwnd.0 != 0 {
+                let mut foreground_pid: u32 = 0;
+                GetWindowThreadProcessId(foreground_hwnd, Some(&mut foreground_pid));
+                
+                // Check if foreground window belongs to the game process
+                if let Some((_, game_pid)) = &detected_game_process {
+                    if foreground_pid == *game_pid {
+                        result.game_window_active = true;
+                        println!("[Hardware] Game window is active/focused");
+                    } else {
+                        // Also check by process name in case PID changed
+                        if foreground_pid > 0 {
+                            if let Ok(handle) = OpenProcess(
+                                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                                false,
+                                foreground_pid
+                            ) {
+                                let mut name_buf = [0u16; 256];
+                                let name_len = GetModuleBaseNameW(handle, None, &mut name_buf);
+                                if name_len > 0 {
+                                    let fg_name = String::from_utf16_lossy(&name_buf[..name_len as usize]).to_lowercase();
+                                    for (game_exe, _) in GAME_PROCESSES {
+                                        if fg_name == *game_exe || fg_name.contains(game_exe) {
+                                            result.game_window_active = true;
+                                            println!("[Hardware] Game window active (by name): {}", fg_name);
+                                            break;
+                                        }
+                                    }
+                                }
+                                let _ = CloseHandle(handle);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Set timestamp
+    result.last_detected = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    
+    println!("[Hardware] Game Detection: running={}, name={:?}, active={}", 
+             result.game_running, result.game_name, result.game_window_active);
+    
+    result
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn detect_game_running() -> GameDetectionResult {
+    GameDetectionResult::default()
+}
+
+/// Detect game and track window activity over time
+/// Returns extended GameSessionActivity with activity percentage tracking
+#[cfg(target_os = "windows")]
+pub fn detect_game_with_activity() -> GameSessionActivity {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    
+    // Get basic game detection
+    let basic = detect_game_running();
+    
+    // Update session tracker
+    let mut tracker = GAME_SESSION_TRACKER.lock().unwrap();
+    
+    // Check if this is a new game session (game just started or different game)
+    let is_new_session = basic.game_pid != tracker.last_game_pid && basic.game_running;
+    let game_closed = !basic.game_running && tracker.last_game_pid.is_some();
+    
+    if is_new_session {
+        // Reset tracker for new session
+        println!("[Hardware] New game session detected, resetting activity tracker");
+        tracker.session_start = now;
+        tracker.total_samples = 1;
+        tracker.active_samples = if basic.game_window_active { 1 } else { 0 };
+        tracker.last_active_at = if basic.game_window_active { now } else { 0 };
+        tracker.consecutive_inactive = if basic.game_window_active { 0 } else { 1 };
+        tracker.last_game_pid = basic.game_pid;
+    } else if game_closed {
+        // Game closed, reset tracker
+        println!("[Hardware] Game closed, resetting activity tracker");
+        *tracker = GameSessionTracker::default();
+    } else if basic.game_running {
+        // Update existing session
+        tracker.total_samples += 1;
+        
+        if basic.game_window_active {
+            tracker.active_samples += 1;
+            tracker.last_active_at = now;
+            tracker.consecutive_inactive = 0;
+        } else {
+            tracker.consecutive_inactive += 1;
+        }
+    }
+    
+    // Calculate activity percentage
+    let activity_percentage = if tracker.total_samples > 0 {
+        (tracker.active_samples as f32 / tracker.total_samples as f32) * 100.0
+    } else {
+        0.0
+    };
+    
+    let result = GameSessionActivity {
+        game_running: basic.game_running,
+        game_name: basic.game_name,
+        game_pid: basic.game_pid,
+        game_window_active: basic.game_window_active,
+        last_detected: basic.last_detected,
+        session_start: tracker.session_start,
+        total_samples: tracker.total_samples,
+        active_samples: tracker.active_samples,
+        activity_percentage,
+        last_active_at: tracker.last_active_at,
+        consecutive_inactive: tracker.consecutive_inactive,
+    };
+    
+    println!("[Hardware] Game Activity: running={}, active={}, samples={}/{}, activity={:.1}%, consecutive_inactive={}", 
+             result.game_running, result.game_window_active, 
+             result.active_samples, result.total_samples,
+             result.activity_percentage, result.consecutive_inactive);
+    
+    result
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn detect_game_with_activity() -> GameSessionActivity {
+    GameSessionActivity::default()
+}
+
+/// Reset the game activity tracker (call when match ends or user wants to reset)
+pub fn reset_game_activity_tracker() {
+    if let Ok(mut tracker) = GAME_SESSION_TRACKER.lock() {
+        *tracker = GameSessionTracker::default();
+        println!("[Hardware] Game activity tracker reset");
+    }
 }

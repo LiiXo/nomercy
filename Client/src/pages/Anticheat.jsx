@@ -36,6 +36,9 @@ const Anticheat = () => {
       downloading: 'Préparation...',
       loginRequired: 'Connexion requise',
       profileRequired: 'Profil requis',
+      pcOnly: 'Réservé aux joueurs PC',
+      pcOnlyDesc: 'Iris Anti-Cheat est uniquement disponible pour les joueurs ayant sélectionné PC comme plateforme dans leur profil.',
+      changePlatform: 'Modifier mon profil',
       termsLink: 'Conditions d\'utilisation d\'Iris',
       back: 'Retour',
       version: 'Version',
@@ -93,6 +96,9 @@ const Anticheat = () => {
       downloading: 'Preparing...',
       loginRequired: 'Login required',
       profileRequired: 'Profile required',
+      pcOnly: 'PC players only',
+      pcOnlyDesc: 'Iris Anti-Cheat is only available for players who have selected PC as their platform in their profile.',
+      changePlatform: 'Edit my profile',
       termsLink: 'Iris Terms of Use',
       back: 'Back',
       version: 'Version',
@@ -146,9 +152,9 @@ const Anticheat = () => {
 
   const t = texts[language] || texts.en;
 
-  // Fetch download info when authenticated
+  // Fetch download info when authenticated and user has PC platform
   useEffect(() => {
-    if (isAuthenticated && user?.isProfileComplete) {
+    if (isAuthenticated && user?.isProfileComplete && user?.platform === 'PC') {
       fetchDownloadInfo();
     }
   }, [isAuthenticated, user]);
@@ -180,7 +186,8 @@ const Anticheat = () => {
     setShowConsentModal(false);
     
     try {
-      window.open(`${API_URL}${downloadInfo.downloadUrl}`, '_blank');
+      // downloadUrl is already an absolute production URL
+      window.open(downloadInfo.downloadUrl, '_blank');
     } catch (err) {
       setError(language === 'fr' ? 'Échec du téléchargement. Veuillez réessayer.' : 'Download failed. Please try again.');
     } finally {
@@ -256,6 +263,18 @@ const Anticheat = () => {
                     className={`px-8 py-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-bold rounded-xl hover:opacity-90 transition-all text-lg`}
                   >
                     {language === 'fr' ? 'Compléter le profil' : 'Complete Profile'}
+                  </button>
+                </div>
+              ) : user?.platform !== 'PC' ? (
+                <div className="text-center py-6">
+                  <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+                  <p className="text-white text-lg font-bold mb-2">{t.pcOnly}</p>
+                  <p className="text-gray-400 mb-4 max-w-md mx-auto">{t.pcOnlyDesc}</p>
+                  <button
+                    onClick={() => navigate('/profile')}
+                    className={`px-8 py-4 bg-gradient-to-r ${gradientFrom} ${gradientTo} text-white font-bold rounded-xl hover:opacity-90 transition-all text-lg`}
+                  >
+                    {t.changePlatform}
                   </button>
                 </div>
               ) : (

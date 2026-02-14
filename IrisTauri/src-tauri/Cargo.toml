@@ -1,6 +1,6 @@
 [package]
 name = "iris-anticheat"
-version = "1.0.0"
+version = "1.0.3"
 description = "Iris Anticheat - NoMercy Security System"
 authors = ["NoMercy"]
 edition = "2021"

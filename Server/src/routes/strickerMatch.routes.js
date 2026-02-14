@@ -422,28 +422,17 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       });
     }
     
-    // GGSecure check for PC players posting match search
+    // IRIS verification for PC players
     if (user.platform === 'PC') {
-      try {
-        const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${odId}/status`, {
-          headers: {
-            'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
-            'Content-Type': 'application/json'
-          }
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > threeMinutesAgo;
+      
+      if (!isIrisConnected) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous devez être connecté à IRIS pour lancer une recherche de match (joueur PC).',
+          irisRequired: true
         });
-        
-        if (ggsecureResponse.ok) {
-          const ggsecureData = await ggsecureResponse.json();
-          if (!ggsecureData.isOnline && ggsecureData.reason !== 'api_key_missing') {
-            return res.status(400).json({ 
-              success: false, 
-              message: 'Vous devez être connecté à GGSecure pour lancer une recherche de match (joueur PC).'
-            });
-          }
-        }
-      } catch (ggsecureError) {
-        console.error('[STRICKER] GGSecure check error for queue join:', ggsecureError);
-        // Continue anyway if GGSecure API is unavailable
       }
     }
     
@@ -640,28 +629,17 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       });
     }
     
-    // GGSecure check for PC players challenging
+    // IRIS verification for PC players
     if (user.platform === 'PC') {
-      try {
-        const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${odId}/status`, {
-          headers: {
-            'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
-            'Content-Type': 'application/json'
-          }
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > threeMinutesAgo;
+      
+      if (!isIrisConnected) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Vous devez être connecté à IRIS pour lancer un défi (joueur PC).',
+          irisRequired: true
         });
-        
-        if (ggsecureResponse.ok) {
-          const ggsecureData = await ggsecureResponse.json();
-          if (!ggsecureData.isOnline && ggsecureData.reason !== 'api_key_missing') {
-            return res.status(400).json({ 
-              success: false, 
-              message: 'Vous devez être connecté à GGSecure pour lancer un défi (joueur PC).'
-            });
-          }
-        }
-      } catch (ggsecureError) {
-        console.error('[STRICKER] GGSecure check error for challenge:', ggsecureError);
-        // Continue anyway if GGSecure API is unavailable
       }
     }
     
@@ -1417,42 +1395,27 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
             .map(p => p.user?._id?.toString() || p.user?.toString());
           
           // Available members = squad members not yet selected
-          // Include platform and check GGSecure status for PC players
+          // Include platform and check Iris connection status for PC players
           const membersToCheck = mySquad.members
             .filter(m => m.user && !selectedPlayerIds.includes(m.user._id?.toString()));
           
-          // Only check GGSecure for PC players (batch with Promise.all + 3s timeout per call)
-          const pcMembers = membersToCheck.filter(m => m.user.platform === 'PC');
-          const ggsecureStatusMap = new Map(); // userId -> boolean
+          // Get full user data with irisLastSeen for PC players
+          const memberUserIds = membersToCheck.map(m => m.user._id);
+          const usersWithIris = await User.find({ _id: { $in: memberUserIds } })
+            .select('_id platform irisLastSeen')
+            .lean();
           
-          if (pcMembers.length > 0) {
-            const GGSECURE_TIMEOUT = 3000; // 3 seconds max per check
-            const ggsecureChecks = pcMembers.map(async (m) => {
-              try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), GGSECURE_TIMEOUT);
-                const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${m.user._id}/status`, {
-                  headers: {
-                    'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
-                    'Content-Type': 'application/json'
-                  },
-                  signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                if (ggsecureResponse.ok) {
-                  const data = await ggsecureResponse.json();
-                  ggsecureStatusMap.set(m.user._id.toString(), data.isOnline || data.reason === 'api_key_missing');
-                } else {
-                  ggsecureStatusMap.set(m.user._id.toString(), true);
-                }
-              } catch {
-                ggsecureStatusMap.set(m.user._id.toString(), true); // On error, allow selection
-              }
-            });
-            await Promise.all(ggsecureChecks);
-          }
+          // Build a map of userId -> irisConnected (connected if irisLastSeen within 3 minutes)
+          const irisStatusMap = new Map();
+          const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+          usersWithIris.forEach(u => {
+            if (u.platform === 'PC') {
+              const isConnected = u.irisLastSeen && new Date(u.irisLastSeen) > threeMinutesAgo;
+              irisStatusMap.set(u._id.toString(), isConnected);
+            }
+          });
           
-          // Build available members list (fast - no async)
+          // Build available members list
           availableMembers = membersToCheck.map(m => ({
             _id: m.user._id,
             username: m.user.username,
@@ -1463,7 +1426,7 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
             role: m.role,
             equippedTitle: m.user.equippedTitle,
             platform: m.user.platform,
-            ggsecureConnected: m.user.platform === 'PC' ? (ggsecureStatusMap.get(m.user._id.toString()) ?? true) : null
+            irisConnected: m.user.platform === 'PC' ? (irisStatusMap.get(m.user._id.toString()) ?? false) : null
           }));
         }
       }
@@ -1554,7 +1517,7 @@ router.post('/match/:matchId/roster/select', verifyToken, checkStrickerAccess, a
     }
     
     // Get the member to add
-    const memberUser = await User.findById(memberId).select('_id username avatarUrl discordAvatar discordId platform statsStricker activisionId');
+    const memberUser = await User.findById(memberId).select('_id username avatarUrl discordAvatar discordId platform statsStricker activisionId irisLastSeen');
     if (!memberUser) {
       return res.status(404).json({ success: false, message: 'Joueur non trouvé' });
     }
@@ -1578,28 +1541,16 @@ router.post('/match/:matchId/roster/select', verifyToken, checkStrickerAccess, a
       return res.status(400).json({ success: false, message: 'Ce joueur est déjà sélectionné' });
     }
     
-    // GGSecure check for PC players
+    // Iris check for PC players
     if (memberUser.platform === 'PC') {
-      try {
-        const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${memberId}/status`, {
-          headers: {
-            'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
-            'Content-Type': 'application/json'
-          }
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const isIrisConnected = memberUser.irisLastSeen && new Date(memberUser.irisLastSeen) > threeMinutesAgo;
+      
+      if (!isIrisConnected) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `${memberUser.username} n'est pas connecté à Iris. Les joueurs PC doivent être connectés à Iris pour jouer.`
         });
-        
-        if (ggsecureResponse.ok) {
-          const ggsecureData = await ggsecureResponse.json();
-          if (!ggsecureData.isOnline && ggsecureData.reason !== 'api_key_missing') {
-            return res.status(400).json({ 
-              success: false, 
-              message: `${memberUser.username} n'est pas connecté à GGSecure. Les joueurs PC doivent être connectés pour jouer.`
-            });
-          }
-        }
-      } catch (ggsecureError) {
-        console.error('[STRICKER] GGSecure check error:', ggsecureError);
-        // Continue anyway if GGSecure API is unavailable
       }
     }
     
@@ -1790,7 +1741,7 @@ router.get('/match/:matchId/roster/search-helper', verifyToken, checkStrickerAcc
       username: { $regex: query, $options: 'i' },
       isBanned: { $ne: true }
     })
-    .select('_id username avatarUrl discordAvatar discordId platform statsStricker equippedTitle')
+    .select('_id username avatarUrl discordAvatar discordId platform statsStricker equippedTitle irisLastSeen')
     .limit(10)
     .lean();
     
@@ -1811,6 +1762,9 @@ router.get('/match/:matchId/roster/search-helper', verifyToken, checkStrickerAcc
       });
     });
     
+    // Calculate Iris connection status for PC players
+    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    
     res.json({
       success: true,
       users: users.map(u => ({
@@ -1822,7 +1776,8 @@ router.get('/match/:matchId/roster/search-helper', verifyToken, checkStrickerAcc
         platform: u.platform,
         strickerPoints: u.statsStricker?.points || 0,
         equippedTitle: u.equippedTitle,
-        inActiveMatch: usersInActiveMatch.has(u._id.toString())
+        inActiveMatch: usersInActiveMatch.has(u._id.toString()),
+        irisConnected: u.platform === 'PC' ? (u.irisLastSeen && new Date(u.irisLastSeen) > threeMinutesAgo) : null
       }))
     });
   } catch (error) {
@@ -1879,7 +1834,7 @@ router.post('/match/:matchId/roster/select-helper', verifyToken, checkStrickerAc
     }
     
     // Get the helper user
-    const helperUser = await User.findById(helperId).select('_id username avatarUrl discordAvatar discordId platform statsStricker activisionId equippedTitle');
+    const helperUser = await User.findById(helperId).select('_id username avatarUrl discordAvatar discordId platform statsStricker activisionId equippedTitle irisLastSeen');
     if (!helperUser) {
       return res.status(404).json({ success: false, message: 'Joueur non trouvé' });
     }
@@ -1907,28 +1862,16 @@ router.post('/match/:matchId/roster/select-helper', verifyToken, checkStrickerAc
       });
     }
     
-    // GGSecure check for PC players
+    // Iris check for PC players
     if (helperUser.platform === 'PC') {
-      try {
-        const ggsecureResponse = await fetch(`${process.env.GGSECURE_API_URL || 'https://api.ggsecure.io'}/v1/user/${helperId}/status`, {
-          headers: {
-            'Authorization': `Bearer ${process.env.GGSECURE_API_KEY || ''}`,
-            'Content-Type': 'application/json'
-          }
+      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+      const isIrisConnected = helperUser.irisLastSeen && new Date(helperUser.irisLastSeen) > threeMinutesAgo;
+      
+      if (!isIrisConnected) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `${helperUser.username} n'est pas connecté à Iris. Les joueurs PC doivent être connectés à Iris pour jouer.`
         });
-        
-        if (ggsecureResponse.ok) {
-          const ggsecureData = await ggsecureResponse.json();
-          if (!ggsecureData.isOnline && ggsecureData.reason !== 'api_key_missing') {
-            return res.status(400).json({ 
-              success: false, 
-              message: `${helperUser.username} n'est pas connecté à GGSecure. Les joueurs PC doivent être connectés pour jouer.`
-            });
-          }
-        }
-      } catch (ggsecureError) {
-        console.error('[STRICKER] GGSecure check error for helper:', ggsecureError);
-        // Continue anyway if GGSecure API is unavailable
       }
     }
     

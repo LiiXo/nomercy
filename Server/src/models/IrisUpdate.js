@@ -68,7 +68,7 @@ const irisUpdateSchema = new mongoose.Schema({
   publishedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    default: null
   },
   
   // Statistics

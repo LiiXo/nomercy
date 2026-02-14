@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
-import { Shield, CheckCircle, XCircle, Loader, AlertTriangle } from 'lucide-react';
+import { Shield, CheckCircle, XCircle, Loader } from 'lucide-react';
 
 import { API_URL } from '../config';
 
@@ -8,9 +8,6 @@ export default function IrisAuthorize() {
   const { isAuthenticated, user, loading: authLoading } = useAuth();
   const [status, setStatus] = useState('idle'); // idle, loading, success, error
   const [error, setError] = useState('');
-
-  // Check if user is admin
-  const isAdmin = user?.roles?.includes('admin');
 
   const handleAuthorize = async () => {
     setStatus('loading');
@@ -77,18 +74,7 @@ export default function IrisAuthorize() {
           </h1>
           <p className="text-gray-400 text-sm mb-8">NoMercy Security System</p>
 
-          {!isAdmin ? (
-            // Not admin
-            <div className="space-y-4">
-              <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto">
-                <AlertTriangle className="w-8 h-8 text-yellow-500" />
-              </div>
-              <h2 className="text-xl font-semibold text-white">Accès restreint</h2>
-              <p className="text-gray-400">
-                Iris est actuellement disponible uniquement pour les comptes administrateurs.
-              </p>
-            </div>
-          ) : status === 'success' ? (
+          {status === 'success' ? (
             // Success
             <div className="space-y-4">
               <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto">

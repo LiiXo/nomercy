@@ -200,9 +200,9 @@ const translations = {
     matchStartDeadline: 'Le match doit commencer dans les 10 minutes',
     deadlineWarning: 'L\'arbitre peut sanctionner après ce délai',
     deadlineExpired: 'Délai dépassé - Sanction possible',
-    ggsecureRequired: 'GGSecure requis',
-    ggsecureNotConnected: 'Non connecté à GGSecure',
-    ggsecureConnected: 'GGSecure connecté',
+    irisRequired: 'Iris requis',
+    irisNotConnected: 'Non connecté à Iris',
+    irisConnected: 'Connecté à Iris',
     pcPlayer: 'Joueur PC',
     // Admin controls
     adminControls: 'Panneau Admin',
@@ -344,9 +344,9 @@ const translations = {
     matchStartDeadline: 'Match must start within 10 minutes',
     deadlineWarning: 'Arbitrator can sanction after this deadline',
     deadlineExpired: 'Deadline passed - Sanction possible',
-    ggsecureRequired: 'GGSecure required',
-    ggsecureNotConnected: 'Not connected to GGSecure',
-    ggsecureConnected: 'GGSecure connected',
+    irisRequired: 'Iris required',
+    irisNotConnected: 'Not connected to Iris',
+    irisConnected: 'Connected to Iris',
     pcPlayer: 'PC Player',
     // Admin controls
     adminControls: 'Admin Panel',
@@ -1596,10 +1596,10 @@ const StrickerMatchSheet = () => {
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
                   const isSelecting = selectingMember === member._id;
                   
-                  // Check if PC player and not connected to GGSecure
+                  // Check if PC player and not connected to Iris
                   const isPcPlayer = member.platform === 'PC';
-                  const isGGSecureConnected = member.ggsecureConnected !== false; // null means non-PC or API unavailable
-                  const canSelectMember = canSelectPlayers && (isPcPlayer ? isGGSecureConnected : true);
+                  const isIrisConnected = member.irisConnected === true; // PC players must be connected to Iris
+                  const canSelectMember = canSelectPlayers && (isPcPlayer ? isIrisConnected : true);
                   
                   return (
                     <div 
@@ -1609,12 +1609,12 @@ const StrickerMatchSheet = () => {
                           ? 'bg-lime-500/30 border border-lime-500 opacity-70'
                           : canSelectMember && canSelectPlayers
                             ? 'bg-dark-800 border border-lime-500/30 hover:border-lime-500 hover:bg-lime-500/10 cursor-pointer' 
-                            : isPcPlayer && !isGGSecureConnected
+                            : isPcPlayer && !isIrisConnected
                               ? 'bg-red-500/10 border border-red-500/30 opacity-60 cursor-not-allowed'
                               : 'bg-dark-800/50 border border-gray-700 opacity-50'
                       }`}
                       onClick={() => canSelectMember && !isSelecting && handleSelectRosterMember(member._id)}
-                      title={isPcPlayer && !isGGSecureConnected ? t.ggsecureNotConnected : ''}
+                      title={isPcPlayer && !isIrisConnected ? t.irisNotConnected : ''}
                     >
                       <div className="relative">
                         <img 
@@ -1622,13 +1622,13 @@ const StrickerMatchSheet = () => {
                           alt={member.username}
                           className="w-10 h-10 rounded-full object-cover transition-transform"
                         />
-                        {/* GGSecure status indicator for PC players */}
+                        {/* Iris status indicator for PC players */}
                         {isPcPlayer && (
                           <div 
                             className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 border-dark-900 ${
-                              isGGSecureConnected ? 'bg-green-500' : 'bg-red-500'
+                              isIrisConnected ? 'bg-green-500' : 'bg-red-500'
                             }`}
-                            title={isGGSecureConnected ? t.ggsecureConnected : t.ggsecureNotConnected}
+                            title={isIrisConnected ? t.irisConnected : t.irisNotConnected}
                           >
                             <Shield className="w-3 h-3 text-white" />
                           </div>
@@ -1639,7 +1639,7 @@ const StrickerMatchSheet = () => {
                           <span className="text-white font-medium truncate">{member.username}</span>
                           {isPcPlayer && (
                             <span className={`text-xs px-1.5 py-0.5 rounded ${
-                              isGGSecureConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                              isIrisConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
                             }`}>
                               PC
                             </span>
@@ -1653,11 +1653,11 @@ const StrickerMatchSheet = () => {
                             {titleName}
                           </span>
                         )}
-                        {/* GGSecure warning message */}
-                        {isPcPlayer && !isGGSecureConnected && (
+                        {/* Iris warning message */}
+                        {isPcPlayer && !isIrisConnected && (
                           <div className="flex items-center gap-1 mt-1">
                             <AlertTriangle className="w-3 h-3 text-red-400" />
-                            <span className="text-red-400 text-xs">{t.ggsecureNotConnected}</span>
+                            <span className="text-red-400 text-xs">{t.irisNotConnected}</span>
                           </div>
                         )}
                       </div>
@@ -1669,10 +1669,10 @@ const StrickerMatchSheet = () => {
                             t.selectPlayer
                           )}
                         </div>
-                      ) : isPcPlayer && !isGGSecureConnected ? (
+                      ) : isPcPlayer && !isIrisConnected ? (
                         <div className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium flex items-center gap-1">
                           <Shield className="w-3 h-3" />
-                          {t.ggsecureRequired}
+                          {t.irisRequired}
                         </div>
                       ) : null}
                     </div>
@@ -1721,29 +1721,52 @@ const StrickerMatchSheet = () => {
                             const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
                             const isSelectingThis = selectingHelper === user._id;
                             const isInMatch = user.inActiveMatch;
+                            const isPcPlayer = user.platform === 'PC';
+                            const isIrisConnected = user.irisConnected === true;
+                            const canSelect = !isInMatch && !isSelectingThis && (isPcPlayer ? isIrisConnected : true);
                             
                             return (
                               <div 
                                 key={idx}
-                                onClick={() => !isSelectingThis && !isInMatch && handleSelectHelper(user._id)}
+                                onClick={() => canSelect && handleSelectHelper(user._id)}
                                 className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
-                                  isInMatch
+                                  isInMatch || (isPcPlayer && !isIrisConnected)
                                     ? 'bg-dark-800/50 border border-gray-700 opacity-60 cursor-not-allowed'
                                     : isSelectingThis
                                       ? 'bg-purple-500/30 border border-purple-500 opacity-70 cursor-pointer'
                                       : 'bg-dark-800 border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 cursor-pointer'
                                 }`}
-                                title={isInMatch ? (language === 'fr' ? 'Ce joueur est actuellement en match' : 'This player is currently in a match') : ''}
+                                title={isInMatch ? (language === 'fr' ? 'Ce joueur est actuellement en match' : 'This player is currently in a match') : (isPcPlayer && !isIrisConnected ? t.irisNotConnected : '')}
                               >
-                                <img 
-                                  src={getUserAvatar(user)} 
-                                  alt={user.username}
-                                  className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                                />
+                                <div className="relative">
+                                  <img 
+                                    src={getUserAvatar(user)} 
+                                    alt={user.username}
+                                    className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                                  />
+                                  {/* Iris status indicator for PC players */}
+                                  {isPcPlayer && (
+                                    <div 
+                                      className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center border-2 border-dark-900 ${
+                                        isIrisConnected ? 'bg-green-500' : 'bg-red-500'
+                                      }`}
+                                      title={isIrisConnected ? t.irisConnected : t.irisNotConnected}
+                                    >
+                                      <Shield className="w-2.5 h-2.5 text-white" />
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-white font-medium" title={user.username}>{user.username}</span>
                                     <span className="text-purple-400 text-xs flex-shrink-0">{user.strickerPoints || 0} pts</span>
+                                    {isPcPlayer && (
+                                      <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                        isIrisConnected ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                      }`}>
+                                        PC
+                                      </span>
+                                    )}
                                     {isInMatch && (
                                       <span className="text-xs px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded flex-shrink-0">
                                         {language === 'fr' ? 'En match' : 'In match'}
@@ -1758,10 +1781,21 @@ const StrickerMatchSheet = () => {
                                       {titleName}
                                     </span>
                                   )}
+                                  {isPcPlayer && !isIrisConnected && (
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <AlertTriangle className="w-3 h-3 text-red-400" />
+                                      <span className="text-red-400 text-xs">{t.irisNotConnected}</span>
+                                    </div>
+                                  )}
                                 </div>
                                 {isInMatch ? (
                                   <div className="px-3 py-1.5 bg-gray-500/20 text-gray-400 rounded-lg text-xs font-medium flex-shrink-0">
                                     {language === 'fr' ? 'Indisponible' : 'Unavailable'}
+                                  </div>
+                                ) : isPcPlayer && !isIrisConnected ? (
+                                  <div className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium flex items-center gap-1 flex-shrink-0">
+                                    <Shield className="w-3 h-3" />
+                                    {t.irisRequired}
                                   </div>
                                 ) : (
                                   <div className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium flex-shrink-0">

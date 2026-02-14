@@ -1,6 +1,6 @@
 {
   "name": "iris-anticheat",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Iris Anticheat - NoMercy Security System",
   "scripts": {
     "tauri": "tauri",
@@ -8,6 +8,6 @@
     "build": "tauri build"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.5.0"
+    "@tauri-apps/cli": "^2"
   }
 }

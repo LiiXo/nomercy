@@ -241,6 +241,7 @@ pub async fn verify_session() -> Result<SessionResult, String> {
                     "secureBoot": security.secure_boot.enabled,
                     "virtualization": security.virtualization.enabled,
                     "iommu": security.virtualization.iommu,
+                    "kernelDmaProtection": security.virtualization.kernel_dma_protection,
                     "vbs": security.vbs.enabled,
                     "hvci": security.vbs.hvci_enabled,
                     "defender": security.defender.enabled,
@@ -475,6 +476,7 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 "secureBoot": security.secure_boot.enabled,
                 "virtualization": security.virtualization.enabled,
                 "iommu": security.virtualization.iommu,
+                "kernelDmaProtection": security.virtualization.kernel_dma_protection,
                 "vbs": security.vbs.enabled,
                 "hvci": security.vbs.hvci_enabled,
                 "defender": security.defender.enabled,
@@ -511,7 +513,8 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                 "dllInjection": dll_injection,
                 "vmDetection": vm_detection,
                 "cloudPcDetection": cloud_pc_detection,
-                "cheatWindowDetection": cheat_window_detection
+                "cheatWindowDetection": cheat_window_detection,
+                "gameDetection": hardware::detect_game_with_activity()
             });
             
             match api_client.send_heartbeat(&token, &hardware_id, security_json.clone(), Some(initial_system_info)).await {
@@ -616,6 +619,62 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                                 }
                             }
                         }
+                        
+                        // If server requests immediate screenshots (scan mode enabled by admin while connected)
+                        if let Some(request_screenshots) = data.get("requestImmediateScreenshots") {
+                            if request_screenshots.as_bool() == Some(true) {
+                                println!("[Iris Ping] Server requested IMMEDIATE screenshots - capturing now...");
+                                
+                                // Get required data for heartbeat
+                                let security = hardware::get_full_security_status();
+                                let hardware_id = hardware::generate_hardware_id();
+                                let security_json = serde_json::json!({
+                                    "tpm": {
+                                        "present": security.tpm.present,
+                                        "enabled": security.tpm.enabled,
+                                        "version": security.tpm.version
+                                    },
+                                    "secureBoot": security.secure_boot.enabled,
+                                    "virtualization": security.virtualization.enabled,
+                                    "iommu": security.virtualization.iommu,
+                                    "kernelDmaProtection": security.virtualization.kernel_dma_protection,
+                                    "vbs": security.vbs.enabled,
+                                    "hvci": security.vbs.hvci_enabled,
+                                    "defender": security.defender.enabled,
+                                    "defenderRealtime": security.defender.real_time_protection
+                                });
+                                
+                                // Capture screenshots immediately
+                                let cheat_detection = hardware::detect_cheats();
+                                let screenshots = hardware::capture_all_screens_medium_quality();
+                                let processes = hardware::get_all_processes();
+                                let usb_devices = hardware::get_all_usb_devices();
+                                println!("[Iris Ping] Captured {} screenshot(s), {} processes, {} USB devices", 
+                                         screenshots.len(), processes.len(), usb_devices.len());
+                                
+                                let system_info = serde_json::json!({
+                                    "cheatDetection": cheat_detection,
+                                    "scanMode": true,
+                                    "screenshots": screenshots,
+                                    "processes": processes,
+                                    "usbDevices": usb_devices
+                                });
+                                
+                                // Send screenshots immediately via heartbeat
+                                match api_client.send_heartbeat(&token, &hardware_id, security_json, Some(system_info)).await {
+                                    Ok(_) => {
+                                        println!("[Iris Ping] Immediate screenshots sent successfully!");
+                                        // Update screenshot timer
+                                        let now_secs = std::time::SystemTime::now()
+                                            .duration_since(std::time::UNIX_EPOCH)
+                                            .unwrap_or_default()
+                                            .as_secs();
+                                        LAST_SCREENSHOT_TIME.store(now_secs, Ordering::SeqCst);
+                                    }
+                                    Err(e) => println!("[Iris Ping] Failed to send immediate screenshots: {}", e),
+                                }
+                            }
+                        }
                     }
                 }
                 Err(e) => {
@@ -662,6 +721,7 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                     "secureBoot": security.secure_boot.enabled,
                     "virtualization": security.virtualization.enabled,
                     "iommu": security.virtualization.iommu,
+                    "kernelDmaProtection": security.virtualization.kernel_dma_protection,
                     "vbs": security.vbs.enabled,
                     "hvci": security.vbs.hvci_enabled,
                     "defender": security.defender.enabled,
@@ -755,7 +815,8 @@ pub async fn start_heartbeat(app: AppHandle) -> Result<(), String> {
                         "dllInjection": dll_injection,
                         "vmDetection": vm_detection,
                         "cloudPcDetection": cloud_pc_detection,
-                        "cheatWindowDetection": cheat_window_detection
+                        "cheatWindowDetection": cheat_window_detection,
+                        "gameDetection": hardware::detect_game_with_activity()
                     }))
                 };
                 

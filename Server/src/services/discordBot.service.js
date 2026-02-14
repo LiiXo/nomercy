@@ -5,6 +5,7 @@ const ADMIN_LOG_CHANNEL_ID = '1463997106204184690';
 const BAN_LOG_CHANNEL_ID = '1463997518412255488';
 const ARBITRATOR_CHANNEL_ID = '1464005794289815746';
 const IRIS_LOGS_CHANNEL_ID = '1468864868634460202';
+const IRIS_UPDATE_CHANNEL_ID = '1472100045972312076';
 
 // Discord role IDs to mention in ban notifications
 const BAN_MENTION_ROLES = ['1450169699710144644', '1450169557451935784'];
@@ -2122,6 +2123,180 @@ export const sendIrisExtendedAlert = async (player, alertType, data) => {
   }
 };
 
+// Channel for game mismatch alerts (uses same channel as detection alerts)
+const IRIS_GAME_MISMATCH_CHANNEL_ID = '1471469883941195917';
+
+/**
+ * Alert when player is in match but game not detected on Iris machine
+ * This indicates potential bypass attempt (Iris running on a different PC than the game)
+ * @param {Object} player - Player data { username, discordUsername, discordId }
+ * @param {Object} data - Mismatch data { matchType, matchId, irisConnected, gameDetected, hardwareId, mismatchCount }
+ */
+export const sendIrisGameMismatchAlert = async (player, data) => {
+  if (!client || !isReady) return;
+
+  try {
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerInfo = player.discordId ? `<@${player.discordId}>` : player.username;
+    
+    // Build match URL based on match type
+    let matchUrl;
+    if (data.matchType === 'ranked') {
+      matchUrl = `https://nomercy.ggsecure.io/ranked/match/${data.matchId}`;
+    } else {
+      // Stricker - default to hardcore mode
+      matchUrl = `https://nomercy.ggsecure.io/hardcore/stricker/match/${data.matchId}`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFF4500) // Orange-Red (warning)
+      .setTitle('🚨 ALERTE: JEU NON DÉTECTÉ EN MATCH')
+      .setDescription(
+        `**${player.username}** est en match mais le jeu n'est **PAS détecté** sur sa machine Iris!\n\n` +
+        `⚠️ **Possible tentative de contournement** - Iris pourrait tourner sur un PC différent du jeu.`
+      )
+      .addFields(
+        { name: '👤 Joueur', value: playerInfo, inline: true },
+        { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+        { name: '⏰ Détecté à', value: timestamp, inline: true },
+        { name: '🎯 Type de match', value: data.matchType?.toUpperCase() || 'N/A', inline: true },
+        { name: '✅ Iris connecté', value: data.irisConnected ? 'Oui' : 'Non', inline: true },
+        { name: '❌ Jeu détecté', value: data.gameDetected ? 'Oui' : 'Non', inline: true },
+        { name: '🔢 Détections consécutives', value: `${data.mismatchCount || 0}`, inline: true },
+        { name: '🔗 Match', value: `[Voir le match](${matchUrl})`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: true }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Détection de contournement' });
+
+    // Add hardware ID if available (for pattern tracking)
+    if (data.hardwareId) {
+      embed.addFields({
+        name: '🖥️ Hardware ID',
+        value: `\`${data.hardwareId.substring(0, 16)}...\``,
+        inline: false
+      });
+    }
+
+    await sendToChannel(IRIS_GAME_MISMATCH_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Game mismatch alert sent for ${player.username}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending game mismatch alert:', error.message);
+  }
+};
+
+/**
+ * Send alert when a player has suspiciously low window activity during a match
+ * This indicates the game is running but player isn't actually playing (possible bypass)
+ * @param {Object} player - Player data { username, discordUsername, discordId }
+ * @param {Object} data - Activity data { matchType, matchId, activityPercentage, totalSamples, activeSamples, consecutiveInactive, hardwareId }
+ */
+export const sendIrisLowActivityAlert = async (player, data) => {
+  if (!client || !isReady) return;
+
+  try {
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerInfo = player.discordId ? `<@${player.discordId}>` : player.username;
+    
+    // Build match URL based on match type
+    let matchUrl;
+    if (data.matchType === 'ranked') {
+      matchUrl = `https://nomercy.ggsecure.io/ranked/match/${data.matchId}`;
+    } else {
+      // Stricker - default to hardcore mode
+      matchUrl = `https://nomercy.ggsecure.io/hardcore/stricker/match/${data.matchId}`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500) // Orange (warning)
+      .setTitle('⚠️ ALERTE: FAIBLE ACTIVITÉ JEU DÉTECTÉE')
+      .setDescription(
+        `**${player.username}** a le jeu lancé mais la fenêtre est rarement active!\n\n` +
+        `🎮 Le jeu tourne sur la machine Iris mais le joueur ne semble **PAS vraiment jouer**.\n` +
+        `⚠️ **Possible contournement** - Le jeu pourrait être lancé en arrière-plan pendant que le joueur joue sur un autre PC.`
+      )
+      .addFields(
+        { name: '👤 Joueur', value: playerInfo, inline: true },
+        { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+        { name: '⏰ Détecté à', value: timestamp, inline: true },
+        { name: '🎯 Type de match', value: data.matchType?.toUpperCase() || 'N/A', inline: true },
+        { name: '📊 Activité fenêtre', value: `**${data.activityPercentage}%**`, inline: true },
+        { name: '📈 Échantillons', value: `${data.activeSamples}/${data.totalSamples} actifs`, inline: true },
+        { name: '⏸️ Inactivité consécutive', value: `${data.consecutiveInactive} cycles`, inline: true },
+        { name: '🔗 Match', value: `[Voir le match](${matchUrl})`, inline: true },
+        { name: '\u200B', value: '\u200B', inline: true }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Détection d\'activité suspecte' });
+
+    // Add hardware ID if available (for pattern tracking)
+    if (data.hardwareId) {
+      embed.addFields({
+        name: '🖥️ Hardware ID',
+        value: `\`${data.hardwareId.substring(0, 16)}...\``,
+        inline: false
+      });
+    }
+
+    await sendToChannel(IRIS_GAME_MISMATCH_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Low activity alert sent for ${player.username} (${data.activityPercentage}% activity)`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending low activity alert:', error.message);
+  }
+};
+
+/**
+ * Send notification when a new Iris update is published
+ * @param {Object} updateData - { version, changelog }
+ */
+export const sendIrisUpdateNotification = async (updateData) => {
+  if (!client || !isReady) {
+    console.warn('[Discord Bot] Bot not ready, skipping Iris update notification');
+    return false;
+  }
+
+  try {
+    const { version, changelog } = updateData;
+    
+    const embed = new EmbedBuilder()
+      .setColor(0x9B59B6) // Purple for Iris
+      .setTitle('🔄 MISE À JOUR IRIS / IRIS UPDATE')
+      .setDescription(
+        `**🇫🇷 Français:**\n` +
+        `Une nouvelle version d'Iris est disponible ! Veuillez redémarrer Iris pour mettre à jour automatiquement.\n\n` +
+        `**🇬🇧 English:**\n` +
+        `A new Iris version is available! Please restart Iris to update automatically.`
+      )
+      .addFields(
+        { name: '📦 Version', value: `\`${version}\``, inline: true },
+        { name: '🔗 Site', value: '[nomercy.ggsecure.io](https://nomercy.ggsecure.io)', inline: true }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'NoMercy - Iris Anticheat' });
+
+    // Add changelog if available
+    if (changelog && changelog.trim()) {
+      embed.addFields({
+        name: '📝 Notes / Changelog',
+        value: changelog.substring(0, 1024),
+        inline: false
+      });
+    }
+
+    // Send with @everyone mention
+    await sendToChannel(IRIS_UPDATE_CHANNEL_ID, {
+      content: '@everyone',
+      embeds: [embed]
+    });
+    
+    console.log(`[Discord Bot] Iris update notification sent for version ${version}`);
+    return true;
+  } catch (error) {
+    console.error('[Discord Bot] Error sending Iris update notification:', error.message);
+    return false;
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -2152,5 +2327,8 @@ export default {
   sendIrisSecurityChange,
   sendIrisScreenshots,
   sendIrisExtendedAlert,
-  sendRankedMatchStartDM
+  sendIrisGameMismatchAlert,
+  sendIrisLowActivityAlert,
+  sendRankedMatchStartDM,
+  sendIrisUpdateNotification
 };

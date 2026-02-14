@@ -455,7 +455,9 @@
       <div id="connected-view">
         <div class="card">
           <div class="user-section">
-            <img id="user-avatar" class="user-avatar" src="" alt="Avatar">
+            <div id="avatar-container" class="avatar-container">
+              <img id="user-avatar" class="user-avatar" src="" alt="Avatar">
+            </div>
             <div class="user-info">
               <div id="user-name" class="user-name">Username</div>
               <div class="user-status">
@@ -643,13 +645,24 @@
 
     function updateConnectedView(user) {
       const avatarEl = document.getElementById('user-avatar');
-      const avatarUrl = user.avatarUrl || `https://cdn.discordapp.com/embed/avatars/0.png`;
+      const avatarContainer = document.getElementById('avatar-container');
       
-      // Set avatar with fallback
-      avatarEl.src = avatarUrl;
-      avatarEl.onerror = function() {
-        this.src = 'https://cdn.discordapp.com/embed/avatars/0.png';
-      };
+      // Reset avatar container to original state
+      avatarContainer.innerHTML = '<img id="user-avatar" class="user-avatar" src="" alt="Avatar">';
+      const newAvatarEl = document.getElementById('user-avatar');
+      
+      // Use site avatar if available, otherwise show Iris logo
+      if (user.avatarUrl) {
+        newAvatarEl.src = user.avatarUrl;
+        newAvatarEl.style.display = 'block';
+        newAvatarEl.onerror = function() {
+          // Fallback to Iris logo on error
+          avatarContainer.innerHTML = `<div class="iris-avatar-fallback" style="width: 48px; height: 48px; background: linear-gradient(135deg, #ff2d55 0%, #ff6b2c 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+        };
+      } else {
+        // No site avatar - show Iris logo
+        avatarContainer.innerHTML = `<div class="iris-avatar-fallback" style="width: 48px; height: 48px; background: linear-gradient(135deg, #ff2d55 0%, #ff6b2c 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>`;
+      }
       
       document.getElementById('user-name').textContent = user.username;
       showView(connectedView);
