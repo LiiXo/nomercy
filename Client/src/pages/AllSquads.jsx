@@ -163,20 +163,22 @@ const AllSquads = () => {
     fetchSquads();
   };
 
-  // Get mode-specific stats for a squad
-  const getModeStats = (squad) => {
-    // Use mode-specific stats based on current mode selection
-    if (isHardcore) {
-      return squad.statsHardcore || squad.stats || {};
-    } else {
-      return squad.statsCdl || squad.stats || {};
-    }
+  // Get cumulative Stricker stats (3v3 + 5v5) for a squad
+  const getStrickerStats = (squad) => {
+    const stats5v5 = squad.statsStricker || {};
+    const stats3v3 = squad.statsStricker3v3 || {};
+    
+    return {
+      totalPoints: (stats5v5.points || 0) + (stats3v3.points || 0),
+      totalWins: (stats5v5.wins || 0) + (stats3v3.wins || 0),
+      totalLosses: (stats5v5.losses || 0) + (stats3v3.losses || 0)
+    };
   };
 
   const getWinRate = (squad) => {
-    const stats = getModeStats(squad);
-    const wins = stats?.totalWins || 0;
-    const losses = stats?.totalLosses || 0;
+    const stats = getStrickerStats(squad);
+    const wins = stats.totalWins || 0;
+    const losses = stats.totalLosses || 0;
     const total = wins + losses;
     if (total === 0) return '0%';
     return `${Math.round((wins / total) * 100)}%`;
@@ -303,7 +305,7 @@ const AllSquads = () => {
                           </span>
                           <span className="flex items-center gap-1" style={{ color: squad.color === 'transparent' ? '#9ca3af' : squad.color }}>
                             <Trophy className="w-3 h-3" />
-                            {getModeStats(squad)?.totalPoints || 0} {t.points}
+                            {getStrickerStats(squad).totalPoints || 0} {t.points}
                           </span>
                           {squad.statsStricker?.rank && (
                             <span className="flex items-center gap-1 text-lime-400">
@@ -320,11 +322,11 @@ const AllSquads = () => {
                       <div className="flex items-center gap-4 text-xs">
                         <span className="flex items-center gap-1 text-green-400">
                           <Medal className="w-3 h-3" />
-                          {getModeStats(squad)?.totalWins || 0}{t.wins}
+                          {getStrickerStats(squad).totalWins || 0}{t.wins}
                         </span>
                         <span className="flex items-center gap-1 text-red-400">
                           <Target className="w-3 h-3" />
-                          {getModeStats(squad)?.totalLosses || 0}{t.losses}
+                          {getStrickerStats(squad).totalLosses || 0}{t.losses}
                         </span>
                         <span className="flex items-center gap-1 text-yellow-400">
                           <TrendingUp className="w-3 h-3" />

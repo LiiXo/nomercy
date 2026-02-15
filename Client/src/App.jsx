@@ -49,6 +49,7 @@ const StrickerMatchSheet = React.lazy(() => import('./pages/StrickerMatchSheet')
 const Team = React.lazy(() => import('./pages/Team'));
 const IrisTermsOfUse = React.lazy(() => import('./pages/IrisTermsOfUse'));
 const TournamentDetail = React.lazy(() => import('./pages/TournamentDetail'));
+const TournamentMatchDetail = React.lazy(() => import('./pages/TournamentMatchDetail'));
 
 // Loading component
 const LoadingScreen = () => (
@@ -464,6 +465,18 @@ function AppContent() {
               <ProtectedRoute>
                 <PageTransition>
                   <TournamentDetail />
+                </PageTransition>
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* Tournament Match Detail */}
+          <Route 
+            path="/tournaments/:tournamentId/match/:matchId" 
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <TournamentMatchDetail />
                 </PageTransition>
               </ProtectedRoute>
             } 

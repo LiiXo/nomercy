@@ -129,6 +129,50 @@ router.get('/ranked', async (req, res) => {
   }
 });
 
+// Obtenir les maps pour les tournois
+router.get('/tournament', async (req, res) => {
+  try {
+    const { mode, gameMode, format, type } = req.query;
+    
+    // Validate mode
+    if (!mode || !['hardcore', 'cdl'].includes(mode)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Mode requis (hardcore ou cdl)' 
+      });
+    }
+    
+    const configPath = `tournamentConfig.${mode}`;
+    
+    // Build query
+    const query = {
+      isActive: true,
+      [`${configPath}.enabled`]: true
+    };
+    
+    if (gameMode) {
+      query[`${configPath}.gameModes`] = gameMode;
+    }
+    
+    // Filter by format (team size like 2v2, 3v3, etc.)
+    if (format) {
+      query[`${configPath}.formats`] = format;
+    }
+    
+    // Filter by tournament type (solo, switch, squads)
+    if (type) {
+      query[`${configPath}.types`] = type;
+    }
+    
+    const maps = await Map.find(query).sort({ name: 1 });
+    
+    res.json({ success: true, maps, count: maps.length });
+  } catch (error) {
+    console.error('Get tournament maps error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // Admin/Staff: Ajouter une map
 router.post('/', verifyToken, requireStaff, async (req, res) => {
   try {
@@ -304,7 +348,7 @@ router.get('/admin/all', verifyToken, requireStaff, async (req, res) => {
 // Create map (admin)
 router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, hardcoreConfig, cdlConfig, strickerConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, hardcoreConfig, cdlConfig, strickerConfig, tournamentConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     if (!name) {
       return res.status(400).json({ success: false, message: 'Nom requis' });
@@ -327,6 +371,11 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
         ladder: { enabled: false, gameModes: [] },
         ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['5v5'] }
       },
+      // Tournament configuration
+      tournamentConfig: tournamentConfig || {
+        hardcore: { enabled: false, gameModes: [], formats: [], types: [] },
+        cdl: { enabled: false, gameModes: [], formats: [], types: [] }
+      },
       // Legacy fields (kept for backward compatibility)
       ladders: ladders || [],
       gameModes: gameModes || [],
@@ -345,7 +394,7 @@ router.post('/admin/create', verifyToken, requireStaff, async (req, res) => {
 // Update map (admin)
 router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { name, image, mode, hardcoreConfig, cdlConfig, strickerConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
+    const { name, image, mode, hardcoreConfig, cdlConfig, strickerConfig, tournamentConfig, ladders, gameModes, rankedFormats, isActive } = req.body;
     
     const map = await Map.findById(req.params.mapId);
     if (!map) {
@@ -365,6 +414,10 @@ router.put('/admin/:mapId', verifyToken, requireStaff, async (req, res) => {
     }
     if (strickerConfig !== undefined) {
       map.strickerConfig = strickerConfig;
+    }
+    // Tournament configuration
+    if (tournamentConfig !== undefined) {
+      map.tournamentConfig = tournamentConfig;
     }
     
     // Legacy fields (kept for backward compatibility)

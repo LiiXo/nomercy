@@ -3,6 +3,7 @@ import Tournament from '../models/Tournament.js';
 import TournamentMatch from '../models/TournamentMatch.js';
 import Squad from '../models/Squad.js';
 import User from '../models/User.js';
+import Map from '../models/Map.js';
 import { verifyToken, requireAdmin, requireArbitre } from '../middleware/auth.middleware.js';
 import { sendTournamentLaunchNotification } from '../services/discordBot.service.js';
 
@@ -62,7 +63,7 @@ router.get('/upcoming', async (req, res) => {
     
     const tournaments = await Tournament.find(query)
       .populate('createdBy', 'username')
-      .select('name type format mode maxParticipants teamSize scheduledAt status streaming prizes participants')
+      .select('name type format mode maxParticipants teamSize scheduledAt status streaming prizes participants logo banner game customGame entryFee')
       .sort({ scheduledAt: 1 })
       .limit(parseInt(limit));
     
@@ -87,9 +88,9 @@ router.get('/:id', async (req, res) => {
     const tournament = await Tournament.findById(id)
       .populate('createdBy', 'username')
       .populate('participants.squad', 'name tag color logo members')
-      .populate('participants.user', 'username discordId avatar discordAvatar avatarUrl')
+      .populate('participants.user', 'username discordId avatar discordAvatar avatarUrl platform irisConnected ggSecureConnected')
       .populate('winner.squad', 'name tag color logo')
-      .populate('formedTeams.members.user', 'username discordId avatar discordAvatar avatarUrl');
+      .populate('formedTeams.members.user', 'username discordId avatar discordAvatar avatarUrl platform irisConnected ggSecureConnected');
     
     if (!tournament) {
       return res.status(404).json({ success: false, message: 'Tournoi non trouvé' });
@@ -136,7 +137,9 @@ router.post('/:id/register', verifyToken, async (req, res) => {
         return res.status(400).json({ success: false, message: 'ID de l\'escouade requis' });
       }
       
-      const squad = await Squad.findById(squadId).populate('owner', '_id');
+      const squad = await Squad.findById(squadId)
+        .populate('owner', '_id')
+        .populate('members.user', 'username discordId avatar discordAvatar avatarUrl platform irisConnected ggSecureConnected');
       
       if (!squad) {
         return res.status(404).json({ success: false, message: 'Escouade non trouvée' });
@@ -155,14 +158,27 @@ router.post('/:id/register', verifyToken, async (req, res) => {
         return res.status(400).json({ success: false, message: 'L\'escouade est déjà inscrite' });
       }
       
-      // Add squad to participants
+      // Build roster with platform info
+      const roster = squad.members?.map(m => ({
+        odUserId: m.user?._id,
+        username: m.user?.username || 'Unknown',
+        discordId: m.user?.discordId,
+        avatarUrl: m.user?.avatarUrl || m.user?.discordAvatar || m.user?.avatar,
+        platform: m.user?.platform || null,
+        irisConnected: m.user?.irisConnected || false,
+        ggSecureConnected: m.user?.ggSecureConnected || false,
+        role: m.role
+      })) || [];
+      
+      // Add squad to participants with roster
       tournament.participants.push({
         squad: squadId,
         squadInfo: {
           name: squad.name,
           tag: squad.tag,
           color: squad.color,
-          logo: squad.logo
+          logo: squad.logo,
+          members: roster
         },
         isBot: false,
         registeredAt: new Date()
@@ -181,7 +197,10 @@ router.post('/:id/register', verifyToken, async (req, res) => {
           username: user.username,
           discordId: user.discordId,
           avatar: user.avatar || user.discordAvatar,
-          avatarUrl: user.avatarUrl
+          avatarUrl: user.avatarUrl,
+          platform: user.platform || null,
+          irisConnected: user.irisConnected || false,
+          ggSecureConnected: user.ggSecureConnected || false
         },
         isBot: false,
         registeredAt: new Date()
@@ -312,6 +331,10 @@ router.post('/admin/create', verifyToken, requireArbitre, async (req, res) => {
       description,
       type,
       mode,
+      game,
+      customGame,
+      logo,
+      banner,
       format,
       mapSelection,
       maxParticipants,
@@ -320,7 +343,8 @@ router.post('/admin/create', verifyToken, requireArbitre, async (req, res) => {
       scheduledAt,
       registrationDeadline,
       streaming,
-      prizes
+      prizes,
+      entryFee
     } = req.body;
     
     // Validation
@@ -336,6 +360,10 @@ router.post('/admin/create', verifyToken, requireArbitre, async (req, res) => {
       description: description || '',
       type,
       mode,
+      game: game || 'cod_bo7',
+      customGame: customGame || '',
+      logo: logo || '',
+      banner: banner || '',
       format: format || 'bo1',
       mapSelection: mapSelection || 'random',
       maxParticipants: parseInt(maxParticipants),
@@ -365,6 +393,12 @@ router.post('/admin/create', verifyToken, requireArbitre, async (req, res) => {
           second: prizes?.cashprize?.second || 0,
           third: prizes?.cashprize?.third || 0
         }
+      },
+      entryFee: {
+        enabled: entryFee?.enabled || false,
+        type: entryFee?.type || 'gold',
+        amount: entryFee?.amount || 0,
+        currency: entryFee?.currency || 'EUR'
       },
       createdBy: req.user._id
     });
@@ -397,9 +431,9 @@ router.put('/admin/:id', verifyToken, requireArbitre, async (req, res) => {
     
     // Update allowed fields
     const allowedFields = [
-      'name', 'description', 'type', 'mode', 'format', 'mapSelection',
+      'name', 'description', 'type', 'mode', 'game', 'customGame', 'logo', 'banner', 'format', 'mapSelection',
       'maxParticipants', 'teamSize', 'groupSize', 'scheduledAt', 'registrationDeadline',
-      'status', 'streaming', 'prizes'
+      'status', 'streaming', 'prizes', 'entryFee'
     ];
     
     for (const field of allowedFields) {
@@ -477,52 +511,140 @@ router.post('/admin/:id/fill-bots', verifyToken, requireAdmin, async (req, res) 
       return res.status(400).json({ success: false, message: 'Le tournoi est déjà complet' });
     }
     
-    // Generate bot names
-    const botNames = [
-      'Alpha Team', 'Beta Squad', 'Gamma Force', 'Delta Unit', 'Epsilon Corps',
-      'Zeta Brigade', 'Eta Division', 'Theta Legion', 'Iota Battalion', 'Kappa Regiment',
-      'Lambda Crew', 'Mu Warriors', 'Nu Fighters', 'Xi Champions', 'Omicron Elite',
-      'Pi Masters', 'Rho Legends', 'Sigma Heroes', 'Tau Titans', 'Upsilon Victors',
-      'Phi Guardians', 'Chi Strikers', 'Psi Hunters', 'Omega Destroyers', 'Prime Force',
-      'Storm Raiders', 'Night Hawks', 'Thunder Wolves', 'Iron Eagles', 'Steel Panthers',
-      'Fire Dragons', 'Ice Bears', 'Shadow Foxes', 'Golden Lions', 'Silver Sharks'
+    // Realistic bot profiles for team tournaments
+    const botTeamProfiles = [
+      { name: 'Phoenix Rising', tag: 'PHX', color: '#FF4500' },
+      { name: 'Shadow Wolves', tag: 'SWLF', color: '#1E1E1E' },
+      { name: 'Arctic Storm', tag: 'ARCT', color: '#00CED1' },
+      { name: 'Crimson Elite', tag: 'CRMS', color: '#DC143C' },
+      { name: 'Thunder Strike', tag: 'THDR', color: '#FFD700' },
+      { name: 'Midnight Ravens', tag: 'RAVN', color: '#191970' },
+      { name: 'Solar Flare', tag: 'SOLR', color: '#FF8C00' },
+      { name: 'Frost Giants', tag: 'FRST', color: '#87CEEB' },
+      { name: 'Venom Squad', tag: 'VENM', color: '#32CD32' },
+      { name: 'Inferno Legion', tag: 'INFN', color: '#FF6347' },
+      { name: 'Night Stalkers', tag: 'NGHT', color: '#2F4F4F' },
+      { name: 'Dragon Force', tag: 'DRGN', color: '#8B0000' },
+      { name: 'Steel Titans', tag: 'STTL', color: '#708090' },
+      { name: 'Golden Eagles', tag: 'GLDE', color: '#DAA520' },
+      { name: 'Cyber Ninjas', tag: 'CYBR', color: '#00FF7F' },
+      { name: 'Blood Hawks', tag: 'BLHK', color: '#8B0000' },
+      { name: 'Ice Breakers', tag: 'ICEB', color: '#ADD8E6' },
+      { name: 'Dark Knights', tag: 'DKNT', color: '#36454F' },
+      { name: 'Royal Guards', tag: 'ROYL', color: '#4169E1' },
+      { name: 'Savage Beasts', tag: 'SVGE', color: '#8B4513' },
+      { name: 'Neon Vipers', tag: 'NEON', color: '#FF1493' },
+      { name: 'Ghost Protocol', tag: 'GHST', color: '#778899' },
+      { name: 'Apex Predators', tag: 'APEX', color: '#FF4500' },
+      { name: 'Omega Force', tag: 'OMGA', color: '#9400D3' },
+      { name: 'War Machine', tag: 'WRMN', color: '#696969' },
+      { name: 'Lethal Injection', tag: 'LTHL', color: '#00FF00' },
+      { name: 'Death Dealers', tag: 'DETH', color: '#000000' },
+      { name: 'Chaos Theory', tag: 'CAOS', color: '#FF00FF' },
+      { name: 'Silent Assassins', tag: 'SLNT', color: '#2F2F2F' },
+      { name: 'Rogue Squadron', tag: 'ROGUE', color: '#B22222' },
+      { name: 'Zero Gravity', tag: 'ZERO', color: '#7B68EE' },
+      { name: 'Velocity Kings', tag: 'VLCT', color: '#1E90FF' }
     ];
     
-    const soloNames = [
-      'Bot_Alpha', 'Bot_Beta', 'Bot_Gamma', 'Bot_Delta', 'Bot_Epsilon',
-      'Bot_Zeta', 'Bot_Eta', 'Bot_Theta', 'Bot_Iota', 'Bot_Kappa',
-      'Bot_Lambda', 'Bot_Mu', 'Bot_Nu', 'Bot_Xi', 'Bot_Omicron',
-      'Bot_Pi', 'Bot_Rho', 'Bot_Sigma', 'Bot_Tau', 'Bot_Upsilon',
-      'TestPlayer_1', 'TestPlayer_2', 'TestPlayer_3', 'TestPlayer_4', 'TestPlayer_5',
-      'DemoUser_1', 'DemoUser_2', 'DemoUser_3', 'DemoUser_4', 'DemoUser_5'
+    // Realistic bot profiles for solo tournaments (gamer tags style)
+    const botSoloProfiles = [
+      { username: 'xX_DarkLord_Xx', avatar: 1 },
+      { username: 'ShadowHunter99', avatar: 2 },
+      { username: 'NoScope_King', avatar: 3 },
+      { username: 'EliteSniper_FR', avatar: 4 },
+      { username: 'CrypticWolf', avatar: 5 },
+      { username: 'BlazeMaster420', avatar: 6 },
+      { username: 'NightmareFuel', avatar: 7 },
+      { username: 'QuickSilver_', avatar: 8 },
+      { username: 'ToxicRage', avatar: 1 },
+      { username: 'VenomStrike', avatar: 2 },
+      { username: 'GhostRider_X', avatar: 3 },
+      { username: 'DeathWish666', avatar: 4 },
+      { username: 'StormBringer_', avatar: 5 },
+      { username: 'FrostByte', avatar: 6 },
+      { username: 'ChaosMaker', avatar: 7 },
+      { username: 'SilentKiller_', avatar: 8 },
+      { username: 'HellRaiser_FR', avatar: 1 },
+      { username: 'ThunderGod_', avatar: 2 },
+      { username: 'PhantomX', avatar: 3 },
+      { username: 'BloodRaven', avatar: 4 },
+      { username: 'IceKing_22', avatar: 5 },
+      { username: 'FireStorm_', avatar: 6 },
+      { username: 'DarkKnight_X', avatar: 7 },
+      { username: 'ViperAce', avatar: 8 },
+      { username: 'WraithHunter', avatar: 1 },
+      { username: 'CyberPunk_', avatar: 2 },
+      { username: 'NeonSamurai', avatar: 3 },
+      { username: 'ZeroHero', avatar: 4 },
+      { username: 'ApexLegend', avatar: 5 },
+      { username: 'RogueAgent_', avatar: 6 },
+      { username: 'SavageMode', avatar: 7 },
+      { username: 'EliteForce_FR', avatar: 8 },
+      { username: 'xX_Sniper_Xx', avatar: 1 },
+      { username: 'ProGamer_99', avatar: 2 },
+      { username: 'HeadshotKing', avatar: 3 },
+      { username: 'QuickDraw_', avatar: 4 },
+      { username: 'BulletProof', avatar: 5 },
+      { username: 'TriggerHappy_', avatar: 6 },
+      { username: 'AimBot_Pro', avatar: 7 },
+      { username: 'ClutchMaster', avatar: 8 },
+      { username: 'FragHunter', avatar: 1 },
+      { username: 'SprayNPray', avatar: 2 },
+      { username: 'OneShot_', avatar: 3 },
+      { username: 'PredatorX', avatar: 4 },
+      { username: 'WildCard_FR', avatar: 5 },
+      { username: 'NinjaStyle_', avatar: 6 },
+      { username: 'FlashBang_', avatar: 7 },
+      { username: 'SmokeScreen', avatar: 8 }
     ];
+    
+    // Generate random avatar color for team logos
+    const generateTeamLogoUrl = (color) => {
+      // Use a simple SVG data URL for team logo placeholder
+      const cleanColor = color.replace('#', '');
+      return `https://ui-avatars.com/api/?name=T&background=${cleanColor}&color=fff&size=128&bold=true`;
+    };
+    
+    // Generate avatar URL for solo players (using numbered avatars from public folder)
+    const generatePlayerAvatarUrl = (avatarNum) => {
+      return `/${avatarNum}.png`; // Uses the numbered images in public folder
+    };
     
     for (let i = 0; i < botsNeeded; i++) {
       if (tournament.type === 'team') {
-        const botName = botNames[i % botNames.length] + (i >= botNames.length ? ` ${Math.floor(i / botNames.length) + 1}` : '');
+        const profile = botTeamProfiles[i % botTeamProfiles.length];
+        const suffix = i >= botTeamProfiles.length ? ` ${Math.floor(i / botTeamProfiles.length) + 1}` : '';
+        const botName = profile.name + suffix;
+        const botTag = profile.tag + (suffix ? Math.floor(i / botTeamProfiles.length) + 1 : '');
+        
         tournament.participants.push({
           squad: null,
           squadInfo: {
             name: botName,
-            tag: `BOT${i + 1}`,
-            color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
-            logo: null
+            tag: botTag,
+            color: profile.color,
+            logo: generateTeamLogoUrl(profile.color)
           },
           isBot: true,
           botName: botName,
           registeredAt: new Date()
         });
       } else {
-        const botName = soloNames[i % soloNames.length] + (i >= soloNames.length ? `_${Math.floor(i / soloNames.length) + 1}` : '');
+        const profile = botSoloProfiles[i % botSoloProfiles.length];
+        const suffix = i >= botSoloProfiles.length ? `_${Math.floor(i / botSoloProfiles.length) + 1}` : '';
+        const botUsername = profile.username + suffix;
+        
         tournament.participants.push({
           user: null,
           userInfo: {
-            username: botName,
+            username: botUsername,
             discordId: null,
-            avatar: null
+            avatar: null,
+            avatarUrl: generatePlayerAvatarUrl(profile.avatar)
           },
           isBot: true,
-          botName: botName,
+          botName: botUsername,
           registeredAt: new Date()
         });
       }
@@ -593,6 +715,8 @@ router.post('/admin/:id/start', verifyToken, requireArbitre, async (req, res) =>
       return res.status(400).json({ success: false, message: 'Il faut au moins 2 participants' });
     }
     
+    console.log(`[Tournament Start] Type: ${tournament.type}, Participants: ${tournament.participants.length}, TeamSize: ${tournament.teamSize}`);
+    
     // For solo tournaments, form teams first
     if (tournament.type === 'solo') {
       const participants = [...tournament.participants];
@@ -602,15 +726,46 @@ router.post('/admin/:id/start', verifyToken, requireArbitre, async (req, res) =>
         [participants[i], participants[j]] = [participants[j], participants[i]];
       }
       
-      // Form teams
+      // Random team name generator - unique names for each team
+      const teamNamePrefixes = [
+        'Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Ghost', 'Havoc',
+        'Iron', 'Jade', 'Kilo', 'Lima', 'Maverick', 'Nova', 'Omega', 'Phoenix',
+        'Quantum', 'Raven', 'Shadow', 'Titan', 'Ultra', 'Venom', 'Wolf', 'X-Ray',
+        'Yankee', 'Zulu', 'Apex', 'Blitz', 'Cobra', 'Dragon', 'Elite', 'Fury',
+        'Gamma', 'Hunter', 'Inferno', 'Joker', 'Kraken', 'Legion', 'Mystic', 'Nexus',
+        'Onyx', 'Phantom', 'Quicksilver', 'Reaper', 'Storm', 'Thunder', 'Viper', 'Warlock',
+        'Zenith', 'Bolt', 'Cyber', 'Doom', 'Ember', 'Frost', 'Grizzly', 'Hawk',
+        'Ice', 'Jaguar', 'Knight', 'Lynx', 'Meteor', 'Night', 'Oracle', 'Panther'
+      ];
+      
+      const teamNameSuffixes = [
+        'Squad', 'Force', 'Team', 'Crew', 'Pack', 'Unit', 'Gang', 'Clan',
+        'Brigade', 'Legion', 'Corps', 'Division', 'Alliance', 'Order', 'Guild', 'Syndicate'
+      ];
+      
+      // Shuffle prefixes to ensure uniqueness
+      const shuffledPrefixes = [...teamNamePrefixes];
+      for (let i = shuffledPrefixes.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledPrefixes[i], shuffledPrefixes[j]] = [shuffledPrefixes[j], shuffledPrefixes[i]];
+      }
+      
+      // Form teams with unique random names
       tournament.formedTeams = [];
       const teamSize = tournament.teamSize || 4;
-      let teamNumber = 1;
+      const numTeams = Math.ceil(participants.length / teamSize);
       
       for (let i = 0; i < participants.length; i += teamSize) {
         const teamMembers = participants.slice(i, i + teamSize);
+        const teamIndex = Math.floor(i / teamSize);
+        
+        // Generate unique team name
+        const prefix = shuffledPrefixes[teamIndex % shuffledPrefixes.length];
+        const suffix = teamNameSuffixes[Math.floor(Math.random() * teamNameSuffixes.length)];
+        const teamName = `${prefix} ${suffix}`;
+        
         tournament.formedTeams.push({
-          name: `Équipe ${teamNumber}`,
+          name: teamName,
           members: teamMembers.map(p => ({
             user: p.user,
             userInfo: p.userInfo,
@@ -618,12 +773,15 @@ router.post('/admin/:id/start', verifyToken, requireArbitre, async (req, res) =>
             botName: p.botName
           }))
         });
-        teamNumber++;
       }
+      
+      console.log(`[Tournament Start] Formed ${tournament.formedTeams.length} teams for solo tournament`);
     }
     
     // Generate bracket
-    tournament.generateBracket();
+    console.log(`[Tournament Start] Generating bracket...`);
+    const bracketResult = tournament.generateBracket();
+    console.log(`[Tournament Start] Bracket generated: ${tournament.bracket?.length} rounds, hasGroupStage: ${tournament.hasGroupStage}`);
     
     // Update status
     tournament.status = 'in_progress';
@@ -634,22 +792,156 @@ router.post('/admin/:id/start', verifyToken, requireArbitre, async (req, res) =>
     const round1 = tournament.bracket.find(r => r.round === 1);
     const createdMatches = [];
     
+    // Fetch available maps for this tournament
+    const formatString = `${tournament.teamSize}v${tournament.teamSize}`;
+    const availableMaps = await Map.findForTournament(
+      tournament.mode,
+      null, // gameMode - any
+      formatString,
+      tournament.type
+    );
+    console.log(`[Tournament Start] Found ${availableMaps.length} available maps for mode=${tournament.mode}, format=${formatString}, type=${tournament.type}`);
+    
+    // Generate seeded random maps for all rounds (same algorithm as client)
+    // This ensures the maps shown below rounds match the maps assigned to matches
+    const mapCount = tournament.format === 'bo1' ? 1 : 3;
+    const totalRounds = tournament.bracket.length;
+    const totalMapsNeeded = mapCount * totalRounds;
+    
+    // Use seed based on tournament ID for consistency (same as client)
+    const seedString = `${tournament._id}-maps`;
+    let seed = 0;
+    for (let i = 0; i < seedString.length; i++) {
+      seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+      seed = seed & seed;
+    }
+    seed = Math.abs(seed);
+    
+    // Seeded random function
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    
+    // Shuffle all maps with seed
+    const shuffledMaps = [...availableMaps].sort(() => seededRandom() - 0.5);
+    
+    // If we don't have enough maps, duplicate the pool
+    let mapsPool = [...shuffledMaps];
+    if (mapsPool.length < totalMapsNeeded) {
+      while (mapsPool.length < totalMapsNeeded) {
+        mapsPool = [...mapsPool, ...shuffledMaps];
+      }
+    }
+    
+    // Assign maps to each round
+    const roundMapsMap = {};
+    let mapIndex = 0;
+    for (let round = 1; round <= totalRounds; round++) {
+      roundMapsMap[round] = mapsPool.slice(mapIndex, mapIndex + mapCount);
+      mapIndex += mapCount;
+    }
+    console.log(`[Tournament Start] Generated maps for ${totalRounds} rounds (${mapCount} map(s) per round)`);
+    
     if (round1 && round1.matches) {
       for (const match of round1.matches) {
         const p1Index = match.participant1?.index;
         const p2Index = match.participant2?.index;
         
-        // Get participant data
-        const p1Data = p1Index !== null ? tournament.participants[p1Index] : null;
-        const p2Data = p2Index !== null ? tournament.participants[p2Index] : null;
+        // Get participant/team data based on tournament type
+        let p1Data, p2Data;
+        
+        if (tournament.type === 'solo') {
+          // For solo tournaments, get from formedTeams
+          p1Data = p1Index !== null && p1Index !== undefined ? tournament.formedTeams[p1Index] : null;
+          p2Data = p2Index !== null && p2Index !== undefined ? tournament.formedTeams[p2Index] : null;
+        } else {
+          // For team tournaments, get from participants
+          p1Data = p1Index !== null && p1Index !== undefined ? tournament.participants[p1Index] : null;
+          p2Data = p2Index !== null && p2Index !== undefined ? tournament.participants[p2Index] : null;
+        }
         
         // Skip if both are null (shouldn't happen)
         if (!p1Data && !p2Data) continue;
         
         // Check if it's a bye (only one participant)
         const isBye = !p1Data || !p2Data;
-        const isBotMatch = (p1Data?.isBot && p2Data?.isBot);
-        const hasBot = p1Data?.isBot || p2Data?.isBot;
+        
+        // For solo tournaments, check if all members are bots
+        // IMPORTANT: every() on empty array returns true, so we must check length > 0
+        let isBotMatch = false;
+        let hasBot = false;
+        
+        if (tournament.type === 'solo') {
+          const p1AllBots = (p1Data?.members?.length > 0 && p1Data.members.every(m => m.isBot === true)) || false;
+          const p2AllBots = (p2Data?.members?.length > 0 && p2Data.members.every(m => m.isBot === true)) || false;
+          isBotMatch = p1AllBots && p2AllBots;
+          hasBot = p1AllBots || p2AllBots;
+        } else {
+          isBotMatch = (p1Data?.isBot === true && p2Data?.isBot === true);
+          hasBot = p1Data?.isBot === true || p2Data?.isBot === true;
+        }
+        
+        // Build participant data for the match
+        let participant1Data, participant2Data;
+        
+        if (tournament.type === 'solo') {
+          // For solo tournaments, use squadInfo to store formed team info
+          participant1Data = p1Data ? {
+            squad: null,
+            squadInfo: {
+              name: p1Data.name,
+              tag: null,
+              color: '#6366f1', // Indigo color for solo teams
+              logo: null
+            },
+            user: null,
+            userInfo: null,
+            formedTeamIndex: p1Index,
+            formedTeamMembers: p1Data.members,
+            isBot: (p1Data.members?.length > 0 && p1Data.members.every(m => m.isBot === true)) || false,
+            botName: null,
+            participantIndex: p1Index
+          } : { isBot: false, participantIndex: null };
+          
+          participant2Data = p2Data ? {
+            squad: null,
+            squadInfo: {
+              name: p2Data.name,
+              tag: null,
+              color: '#f43f5e', // Rose color for opponent solo teams
+              logo: null
+            },
+            user: null,
+            userInfo: null,
+            formedTeamIndex: p2Index,
+            formedTeamMembers: p2Data.members,
+            isBot: (p2Data.members?.length > 0 && p2Data.members.every(m => m.isBot === true)) || false,
+            botName: null,
+            participantIndex: p2Index
+          } : { isBot: false, participantIndex: null };
+        } else {
+          // For team tournaments, use existing logic
+          participant1Data = p1Data ? {
+            squad: p1Data.squad,
+            squadInfo: p1Data.squadInfo,
+            user: null,
+            userInfo: null,
+            isBot: p1Data.isBot || false,
+            botName: p1Data.botName || null,
+            participantIndex: p1Index
+          } : { isBot: false, participantIndex: null };
+          
+          participant2Data = p2Data ? {
+            squad: p2Data.squad,
+            squadInfo: p2Data.squadInfo,
+            user: null,
+            userInfo: null,
+            isBot: p2Data.isBot || false,
+            botName: p2Data.botName || null,
+            participantIndex: p2Index
+          } : { isBot: false, participantIndex: null };
+        }
         
         const tournamentMatch = new TournamentMatch({
           tournament: tournament._id,
@@ -659,35 +951,42 @@ router.post('/admin/:id/start', verifyToken, requireArbitre, async (req, res) =>
           format: tournament.format,
           mode: tournament.mode,
           teamSize: tournament.teamSize,
-          participant1: p1Data ? {
-            squad: tournament.type === 'team' ? p1Data.squad : null,
-            squadInfo: tournament.type === 'team' ? p1Data.squadInfo : null,
-            user: tournament.type === 'solo' ? p1Data.user : null,
-            userInfo: tournament.type === 'solo' ? p1Data.userInfo : null,
-            isBot: p1Data.isBot || false,
-            botName: p1Data.botName || null,
-            participantIndex: p1Index
-          } : {
-            isBot: false,
-            participantIndex: null
-          },
-          participant2: p2Data ? {
-            squad: tournament.type === 'team' ? p2Data.squad : null,
-            squadInfo: tournament.type === 'team' ? p2Data.squadInfo : null,
-            user: tournament.type === 'solo' ? p2Data.user : null,
-            userInfo: tournament.type === 'solo' ? p2Data.userInfo : null,
-            isBot: p2Data.isBot || false,
-            botName: p2Data.botName || null,
-            participantIndex: p2Index
-          } : {
-            isBot: false,
-            participantIndex: null
-          },
-          status: isBye ? 'completed' : (isBotMatch ? 'completed' : 'ready'),
-          scheduledAt: tournament.scheduledAt
+          participant1: participant1Data,
+          participant2: participant2Data,
+          // All matches start as in_progress (except byes) - even bot matches need manual validation
+          status: isBye ? 'completed' : 'in_progress',
+          scheduledAt: tournament.scheduledAt,
+          startedAt: isBye ? null : new Date()
         });
         
-        // Auto-complete bye matches
+        // Assign the round's map to this match (using seeded maps for consistency with UI)
+        if (!isBye && roundMapsMap[1] && roundMapsMap[1].length > 0) {
+          // For round 1, use the first map from round 1's assigned maps
+          const roundMap = roundMapsMap[1][0];
+          tournamentMatch.selectedMap = {
+            name: roundMap.name,
+            image: roundMap.image
+          };
+        }
+        
+        // For solo tournaments, assign random referent from each team (for all matches, not just non-bot)
+        if (tournament.type === 'solo' && !isBye) {
+          // Get real (non-bot) members from each team, or use bot members if no real members
+          const realMembers1 = p1Data?.members?.filter(m => !m.isBot && m.user) || [];
+          const realMembers2 = p2Data?.members?.filter(m => !m.isBot && m.user) || [];
+          
+          // Assign random referent from real members, or first member if all bots
+          if (realMembers1.length > 0) {
+            const randomIndex = Math.floor(Math.random() * realMembers1.length);
+            tournamentMatch.referent1 = realMembers1[randomIndex].user;
+          }
+          if (realMembers2.length > 0) {
+            const randomIndex = Math.floor(Math.random() * realMembers2.length);
+            tournamentMatch.referent2 = realMembers2[randomIndex].user;
+          }
+        }
+        
+        // Auto-complete ONLY bye matches (one participant missing)
         if (isBye) {
           if (p1Data && !p2Data) {
             tournamentMatch.winner = 'participant1';
@@ -702,27 +1001,8 @@ router.post('/admin/:id/start', verifyToken, requireArbitre, async (req, res) =>
           }
         }
         
-        // Auto-complete bot vs bot matches (random winner)
-        if (isBotMatch) {
-          const randomWinner = Math.random() < 0.5 ? 'participant1' : 'participant2';
-          tournamentMatch.winner = randomWinner;
-          tournamentMatch.winnerIndex = randomWinner === 'participant1' ? p1Index : p2Index;
-          tournamentMatch[randomWinner].score = 2;
-          tournamentMatch[randomWinner === 'participant1' ? 'participant2' : 'participant1'].score = Math.floor(Math.random() * 2);
-          tournamentMatch.completedAt = new Date();
-        }
-        
-        // Auto-complete matches with one bot (bot loses)
-        if (hasBot && !isBotMatch && !isBye) {
-          const botIsP1 = p1Data?.isBot;
-          const realWinner = botIsP1 ? 'participant2' : 'participant1';
-          tournamentMatch.winner = realWinner;
-          tournamentMatch.winnerIndex = realWinner === 'participant1' ? p1Index : p2Index;
-          tournamentMatch[realWinner].score = 2;
-          tournamentMatch[realWinner === 'participant1' ? 'participant2' : 'participant1'].score = 0;
-          tournamentMatch.status = 'completed';
-          tournamentMatch.completedAt = new Date();
-        }
+        // NOTE: Bot matches are NO LONGER auto-completed
+        // All matches (including bot vs bot or bot vs real) require manual validation
         
         await tournamentMatch.save();
         createdMatches.push(tournamentMatch);
@@ -812,6 +1092,59 @@ router.post('/admin/:id/cancel', verifyToken, requireArbitre, async (req, res) =
     res.json({ success: true, message: 'Tournoi annulé', tournament });
   } catch (error) {
     console.error('Cancel tournament error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Reset tournament to a specific status (draft or registration)
+router.post('/admin/:id/reset', verifyToken, requireArbitre, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { targetStatus } = req.body;
+    
+    // Validate target status
+    if (!['draft', 'registration'].includes(targetStatus)) {
+      return res.status(400).json({ success: false, message: 'Statut cible invalide' });
+    }
+    
+    const tournament = await Tournament.findById(id);
+    
+    if (!tournament) {
+      return res.status(404).json({ success: false, message: 'Tournoi non trouvé' });
+    }
+    
+    // Delete all tournament matches
+    await TournamentMatch.deleteMany({ tournament: id });
+    
+    // Reset bracket
+    tournament.bracket = [];
+    tournament.hasGroupStage = false;
+    tournament.groups = [];
+    tournament.winner = null;
+    
+    // For solo tournaments, clear formed teams
+    if (tournament.type === 'solo') {
+      tournament.formedTeams = [];
+    }
+    
+    // Set the new status
+    tournament.status = targetStatus;
+    
+    await tournament.save();
+    
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`tournament-${id}`).emit('tournamentReset', { 
+        tournamentId: id, 
+        status: targetStatus 
+      });
+    }
+    
+    const statusLabel = targetStatus === 'draft' ? 'brouillon' : 'inscriptions ouvertes';
+    res.json({ success: true, message: `Tournoi réinitialisé au statut "${statusLabel}"`, tournament });
+  } catch (error) {
+    console.error('Reset tournament error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
   }
 });
@@ -917,8 +1250,12 @@ router.get('/:id/matches', async (req, res) => {
     const matches = await TournamentMatch.find(query)
       .populate('participant1.squad', 'name tag color logo')
       .populate('participant2.squad', 'name tag color logo')
-      .populate('participant1.user', 'username discordId avatar avatarUrl')
-      .populate('participant2.user', 'username discordId avatar avatarUrl')
+      .populate('participant1.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('participant2.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('participant1.formedTeamMembers.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('participant2.formedTeamMembers.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('referent1', 'username')
+      .populate('referent2', 'username')
       .sort({ round: 1, matchNumber: 1 });
     
     res.json({ success: true, matches });
@@ -933,18 +1270,104 @@ router.get('/:id/matches/:matchId', async (req, res) => {
   try {
     const { id, matchId } = req.params;
     
+    const tournament = await Tournament.findById(id).select('name type teamSize format mode');
+    if (!tournament) {
+      return res.status(404).json({ success: false, message: 'Tournoi non trouvé' });
+    }
+    
     const match = await TournamentMatch.findOne({ _id: matchId, tournament: id })
-      .populate('participant1.squad', 'name tag color logo members')
-      .populate('participant2.squad', 'name tag color logo members')
-      .populate('participant1.user', 'username discordId avatar avatarUrl')
-      .populate('participant2.user', 'username discordId avatar avatarUrl')
+      .populate('participant1.squad', 'name tag color logo logoData members')
+      .populate('participant2.squad', 'name tag color logo logoData members')
+      .populate('participant1.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('participant2.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('participant1.formedTeamMembers.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('participant2.formedTeamMembers.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected')
+      .populate('referent1', 'username')
+      .populate('referent2', 'username')
       .populate('chat.sender', 'username avatar');
     
     if (!match) {
       return res.status(404).json({ success: false, message: 'Match non trouvé' });
     }
     
-    res.json({ success: true, match });
+    // Build p1Info and p2Info with roster members for client
+    const matchObj = match.toObject();
+    
+    // Helper to build participant info with members
+    const buildParticipantInfo = async (participant, participantKey) => {
+      const info = {
+        name: null,
+        logo: null,
+        logoData: null,
+        members: []
+      };
+      
+      if (tournament.type === 'team' && participant.squad) {
+        // Team tournament - use squad info
+        info.name = participant.squad.name;
+        info.logo = participant.squad.logo;
+        info.logoData = participant.squad.logoData;
+        
+        // Get squad members with user info populated
+        const squad = await Squad.findById(participant.squad._id)
+          .populate('members.user', 'username discordId avatar avatarUrl platform irisConnected ggSecureConnected');
+        
+        if (squad && squad.members) {
+          info.members = squad.members.map(m => ({
+            user: m.user,
+            userInfo: m.user,
+            role: m.role,
+            isBot: false
+          }));
+        }
+      } else if (tournament.type === 'solo') {
+        // Solo tournament - use squadInfo (which contains formed team name) or formedTeams
+        if (participant.squadInfo?.name) {
+          info.name = participant.squadInfo.name;
+        } else if (participant.formedTeamIndex !== null && participant.formedTeamIndex !== undefined) {
+          // Get name from tournament's formedTeams
+          const fullTournament = await Tournament.findById(id).select('formedTeams');
+          if (fullTournament?.formedTeams?.[participant.formedTeamIndex]) {
+            const formedTeam = fullTournament.formedTeams[participant.formedTeamIndex];
+            info.name = formedTeam.name;
+            info.logoData = formedTeam.logo;
+          }
+        } else if (participant.user) {
+          info.name = participant.user.username;
+        }
+        
+        // Get logoData from tournament's formedTeams if not already set
+        if (!info.logoData && participant.formedTeamIndex !== null && participant.formedTeamIndex !== undefined) {
+          const fullTournament = await Tournament.findById(id).select('formedTeams');
+          if (fullTournament?.formedTeams?.[participant.formedTeamIndex]?.logo) {
+            info.logoData = fullTournament.formedTeams[participant.formedTeamIndex].logo;
+          }
+        }
+        
+        // Use formedTeamMembers for roster
+        if (participant.formedTeamMembers && participant.formedTeamMembers.length > 0) {
+          info.members = participant.formedTeamMembers.map(m => ({
+            user: m.user,
+            userInfo: m.user || m.userInfo,
+            isBot: m.isBot || false,
+            botName: m.botName
+          }));
+        } else if (participant.user) {
+          info.members = [{
+            user: participant.user,
+            userInfo: participant.user,
+            isBot: false
+          }];
+        }
+      }
+      
+      return info;
+    };
+    
+    matchObj.p1Info = await buildParticipantInfo(match.participant1, 'participant1');
+    matchObj.p2Info = await buildParticipantInfo(match.participant2, 'participant2');
+    
+    res.json({ success: true, match: matchObj, tournament });
   } catch (error) {
     console.error('Get tournament match error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -1209,6 +1632,53 @@ async function advanceWinnerToNextRound(tournamentId, completedMatch, tournament
     const nextRoundData = tournament.bracket.find(r => r.round === nextRound);
     
     if (nextRoundData) {
+      // Calculate the round's map ONCE before the loop (same for all matches in the round)
+      let roundMapForAllMatches = null;
+      try {
+        const formatString = `${tournament.teamSize}v${tournament.teamSize}`;
+        const availableMaps = await Map.findForTournament(
+          tournament.mode,
+          null,
+          formatString,
+          tournament.type
+        );
+        
+        if (availableMaps.length > 0) {
+          // Generate seeded maps (same algorithm as client)
+          const mapCount = tournament.format === 'bo1' ? 1 : 3;
+          const totalRounds = tournament.bracket.length;
+          
+          // Use seed based on tournament ID (same as client)
+          const seedString = `${tournament._id}-maps`;
+          let seed = 0;
+          for (let i = 0; i < seedString.length; i++) {
+            seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+            seed = seed & seed;
+          }
+          seed = Math.abs(seed);
+          
+          const seededRandom = () => {
+            seed = (seed * 9301 + 49297) % 233280;
+            return seed / 233280;
+          };
+          
+          const shuffledMaps = [...availableMaps].sort(() => seededRandom() - 0.5);
+          let mapsPool = [...shuffledMaps];
+          const totalMapsNeeded = mapCount * totalRounds;
+          if (mapsPool.length < totalMapsNeeded) {
+            while (mapsPool.length < totalMapsNeeded) {
+              mapsPool = [...mapsPool, ...shuffledMaps];
+            }
+          }
+          
+          // Get the map for this specific round
+          const mapIndex = (nextRound - 1) * mapCount;
+          roundMapForAllMatches = mapsPool[mapIndex];
+        }
+      } catch (mapError) {
+        console.error('Error fetching maps for next round:', mapError);
+      }
+
       // Create next round matches
       for (const bracketMatch of nextRoundData.matches) {
         // Find the two matches from previous round that feed into this match
@@ -1224,11 +1694,77 @@ async function advanceWinnerToNextRound(tournamentId, completedMatch, tournament
         const p1Index = prevMatch1?.winnerIndex;
         const p2Index = prevMatch2?.winnerIndex;
         
-        const p1Data = p1Index !== null && p1Index !== undefined ? tournament.participants[p1Index] : null;
-        const p2Data = p2Index !== null && p2Index !== undefined ? tournament.participants[p2Index] : null;
+        // For solo tournaments, get data from formedTeams, for team tournaments from participants
+        let p1Data, p2Data;
+        if (tournament.type === 'solo') {
+          p1Data = p1Index !== null && p1Index !== undefined ? tournament.formedTeams[p1Index] : null;
+          p2Data = p2Index !== null && p2Index !== undefined ? tournament.formedTeams[p2Index] : null;
+        } else {
+          p1Data = p1Index !== null && p1Index !== undefined ? tournament.participants[p1Index] : null;
+          p2Data = p2Index !== null && p2Index !== undefined ? tournament.participants[p2Index] : null;
+        }
         
-        const isBotMatch = (p1Data?.isBot && p2Data?.isBot);
-        const hasBot = p1Data?.isBot || p2Data?.isBot;
+        // For solo tournaments, check if all members are bots
+        // IMPORTANT: every() on empty array returns true, so we must check length > 0
+        let isBotMatch = false;
+        let hasBot = false;
+        if (tournament.type === 'solo') {
+          const p1AllBots = (p1Data?.members?.length > 0 && p1Data.members.every(m => m.isBot === true)) || false;
+          const p2AllBots = (p2Data?.members?.length > 0 && p2Data.members.every(m => m.isBot === true)) || false;
+          isBotMatch = p1AllBots && p2AllBots;
+          hasBot = p1AllBots || p2AllBots;
+        } else {
+          isBotMatch = (p1Data?.isBot === true && p2Data?.isBot === true);
+          hasBot = p1Data?.isBot === true || p2Data?.isBot === true;
+        }
+        
+        // Build participant data based on tournament type
+        let participant1Data, participant2Data;
+        if (tournament.type === 'solo') {
+          participant1Data = p1Data ? {
+            squad: null,
+            squadInfo: { name: p1Data.name, tag: null, color: '#6366f1', logo: null },
+            user: null,
+            userInfo: null,
+            formedTeamIndex: p1Index,
+            formedTeamMembers: p1Data.members,
+            isBot: (p1Data.members?.length > 0 && p1Data.members.every(m => m.isBot === true)) || false,
+            botName: null,
+            participantIndex: p1Index
+          } : { isBot: false, participantIndex: null };
+          
+          participant2Data = p2Data ? {
+            squad: null,
+            squadInfo: { name: p2Data.name, tag: null, color: '#f43f5e', logo: null },
+            user: null,
+            userInfo: null,
+            formedTeamIndex: p2Index,
+            formedTeamMembers: p2Data.members,
+            isBot: (p2Data.members?.length > 0 && p2Data.members.every(m => m.isBot === true)) || false,
+            botName: null,
+            participantIndex: p2Index
+          } : { isBot: false, participantIndex: null };
+        } else {
+          participant1Data = p1Data ? {
+            squad: p1Data.squad,
+            squadInfo: p1Data.squadInfo,
+            user: null,
+            userInfo: null,
+            isBot: p1Data.isBot || false,
+            botName: p1Data.botName || null,
+            participantIndex: p1Index
+          } : { isBot: false, participantIndex: null };
+          
+          participant2Data = p2Data ? {
+            squad: p2Data.squad,
+            squadInfo: p2Data.squadInfo,
+            user: null,
+            userInfo: null,
+            isBot: p2Data.isBot || false,
+            botName: p2Data.botName || null,
+            participantIndex: p2Index
+          } : { isBot: false, participantIndex: null };
+        }
         
         const newMatch = new TournamentMatch({
           tournament: tournamentId,
@@ -1238,47 +1774,35 @@ async function advanceWinnerToNextRound(tournamentId, completedMatch, tournament
           format: tournament.format,
           mode: tournament.mode,
           teamSize: tournament.teamSize,
-          participant1: p1Data ? {
-            squad: tournament.type === 'team' ? p1Data.squad : null,
-            squadInfo: tournament.type === 'team' ? p1Data.squadInfo : null,
-            user: tournament.type === 'solo' ? p1Data.user : null,
-            userInfo: tournament.type === 'solo' ? p1Data.userInfo : null,
-            isBot: p1Data.isBot || false,
-            botName: p1Data.botName || null,
-            participantIndex: p1Index
-          } : { isBot: false, participantIndex: null },
-          participant2: p2Data ? {
-            squad: tournament.type === 'team' ? p2Data.squad : null,
-            squadInfo: tournament.type === 'team' ? p2Data.squadInfo : null,
-            user: tournament.type === 'solo' ? p2Data.user : null,
-            userInfo: tournament.type === 'solo' ? p2Data.userInfo : null,
-            isBot: p2Data.isBot || false,
-            botName: p2Data.botName || null,
-            participantIndex: p2Index
-          } : { isBot: false, participantIndex: null },
-          status: isBotMatch ? 'completed' : 'ready',
-          scheduledAt: tournament.scheduledAt
+          participant1: participant1Data,
+          participant2: participant2Data,
+          // All matches start as in_progress - even bot matches need manual validation
+          status: 'in_progress',
+          scheduledAt: tournament.scheduledAt,
+          startedAt: new Date()
         });
         
-        // Auto-complete bot vs bot matches
-        if (isBotMatch) {
-          const randomWinner = Math.random() < 0.5 ? 'participant1' : 'participant2';
-          newMatch.winner = randomWinner;
-          newMatch.winnerIndex = randomWinner === 'participant1' ? p1Index : p2Index;
-          newMatch[randomWinner].score = 2;
-          newMatch.completedAt = new Date();
+        // For solo tournaments, assign referents for all matches
+        if (tournament.type === 'solo') {
+          const realMembers1 = p1Data?.members?.filter(m => !m.isBot && m.user) || [];
+          const realMembers2 = p2Data?.members?.filter(m => !m.isBot && m.user) || [];
+          
+          if (realMembers1.length > 0) {
+            const randomIndex = Math.floor(Math.random() * realMembers1.length);
+            newMatch.referent1 = realMembers1[randomIndex].user;
+          }
+          if (realMembers2.length > 0) {
+            const randomIndex = Math.floor(Math.random() * realMembers2.length);
+            newMatch.referent2 = realMembers2[randomIndex].user;
+          }
         }
         
-        // Auto-complete matches with one bot (bot loses)
-        if (hasBot && !isBotMatch) {
-          const botIsP1 = p1Data?.isBot;
-          const realWinner = botIsP1 ? 'participant2' : 'participant1';
-          newMatch.winner = realWinner;
-          newMatch.winnerIndex = realWinner === 'participant1' ? p1Index : p2Index;
-          newMatch[realWinner].score = 2;
-          newMatch.status = 'completed';
-          newMatch.completedAt = new Date();
+        // Assign the round's map to this match (same map for ALL matches in the round)
+        if (roundMapForAllMatches) {
+          newMatch.selectedMap = { name: roundMapForAllMatches.name, image: roundMapForAllMatches.image };
         }
+        
+        // NOTE: No auto-completion for bot matches - all matches require manual validation
         
         // Update bracket
         bracketMatch.participant1.index = p1Index;
@@ -1307,6 +1831,228 @@ async function advanceWinnerToNextRound(tournamentId, completedMatch, tournament
   }
   
   await tournament.save();
+}
+
+// ==================== REFERENT VALIDATION ROUTES ====================
+
+// Validate match result (referent only - solo tournaments)
+router.post('/:tournamentId/matches/:matchId/validate', verifyToken, async (req, res) => {
+  try {
+    const { tournamentId, matchId } = req.params;
+    const { winner } = req.body;
+    const userId = req.user._id;
+    
+    const match = await TournamentMatch.findOne({ _id: matchId, tournament: tournamentId });
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    const tournament = await Tournament.findById(tournamentId);
+    if (!tournament) {
+      return res.status(404).json({ success: false, message: 'Tournoi non trouvé' });
+    }
+    
+    // Only for solo tournaments
+    if (tournament.type !== 'solo') {
+      return res.status(400).json({ success: false, message: 'Cette validation n\'est disponible que pour les tournois solo' });
+    }
+    
+    // Check if user is a referent
+    const isReferent1 = match.referent1 && String(match.referent1) === String(userId);
+    const isReferent2 = match.referent2 && String(match.referent2) === String(userId);
+    
+    if (!isReferent1 && !isReferent2) {
+      return res.status(403).json({ success: false, message: 'Seul le référent peut valider le résultat' });
+    }
+    
+    // Validate winner value
+    if (!['participant1', 'participant2'].includes(winner)) {
+      return res.status(400).json({ success: false, message: 'Winner invalide' });
+    }
+    
+    // Check match status
+    if (match.status === 'completed') {
+      return res.status(400).json({ success: false, message: 'Le match est déjà terminé' });
+    }
+    
+    // Set result
+    match.winner = winner;
+    match.winnerIndex = match[winner].participantIndex;
+    match.participant1.score = winner === 'participant1' ? 2 : 0;
+    match.participant2.score = winner === 'participant2' ? 2 : 0;
+    match.status = 'completed';
+    match.completedAt = new Date();
+    
+    await match.save();
+    
+    // Advance winner to next round
+    await advanceWinnerToNextRound(tournamentId, match, tournament);
+    
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`tournament-match-${matchId}`).emit('matchCompleted', { match });
+      io.to(`tournament-${tournamentId}`).emit('bracketUpdated', { tournamentId });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Résultat validé',
+      match
+    });
+  } catch (error) {
+    console.error('Validate match result error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// ==================== MATCH CHAT ROUTES ====================
+
+// Get chat messages for a tournament match
+router.get('/:tournamentId/matches/:matchId/chat', verifyToken, async (req, res) => {
+  try {
+    const { tournamentId, matchId } = req.params;
+    const userId = req.user._id;
+    
+    const match = await TournamentMatch.findOne({
+      _id: matchId,
+      tournament: tournamentId
+    });
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    // Check access: staff can see all chats, players only their own match
+    const isStaff = req.user.roles?.includes('admin') || req.user.roles?.includes('arbitre') || req.user.roles?.includes('staff');
+    const isParticipant = await isUserParticipantInMatch(match, userId);
+    
+    if (!isStaff && !isParticipant) {
+      return res.status(403).json({ success: false, message: 'Vous n\'avez pas accès à ce chat' });
+    }
+    
+    // Format messages for frontend
+    const messages = (match.chat || []).map(msg => ({
+      _id: msg._id,
+      userId: msg.sender,
+      username: msg.senderUsername,
+      message: msg.message,
+      isSystem: msg.isSystem,
+      isStaff: msg.isStaff,
+      isAdmin: msg.isAdmin,
+      avatarUrl: msg.avatarUrl,
+      createdAt: msg.timestamp
+    }));
+    
+    res.json({ success: true, messages });
+  } catch (error) {
+    console.error('Get match chat error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Post chat message to tournament match
+router.post('/:tournamentId/matches/:matchId/chat', verifyToken, async (req, res) => {
+  try {
+    const { tournamentId, matchId } = req.params;
+    const { message } = req.body;
+    const userId = req.user._id;
+    
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Message requis' });
+    }
+    
+    const match = await TournamentMatch.findOne({
+      _id: matchId,
+      tournament: tournamentId
+    });
+    
+    if (!match) {
+      return res.status(404).json({ success: false, message: 'Match non trouvé' });
+    }
+    
+    // Check if user is participant in the match
+    const isParticipant = await isUserParticipantInMatch(match, userId);
+    const isStaff = req.user.roles?.includes('admin') || req.user.roles?.includes('arbitre') || req.user.roles?.includes('staff');
+    
+    if (!isParticipant && !isStaff) {
+      return res.status(403).json({ success: false, message: 'Vous n\'êtes pas participant de ce match' });
+    }
+    
+    // Add message to chat
+    const newMessage = {
+      sender: userId,
+      senderUsername: req.user.username,
+      message: message.trim(),
+      isSystem: false,
+      isStaff: isStaff,
+      isAdmin: req.user.roles?.includes('admin'),
+      avatarUrl: req.user.avatarUrl || req.user.avatar,
+      timestamp: new Date()
+    };
+    
+    match.chat.push(newMessage);
+    await match.save();
+    
+    // Emit socket event for real-time update
+    const io = req.app.get('io');
+    if (io) {
+      const messageToEmit = {
+        _id: match.chat[match.chat.length - 1]._id,
+        matchId: matchId,
+        userId: userId,
+        username: req.user.username,
+        message: message.trim(),
+        isSystem: false,
+        isStaff: isStaff,
+        isAdmin: req.user.roles?.includes('admin'),
+        avatarUrl: req.user.avatarUrl || req.user.avatar,
+        createdAt: new Date()
+      };
+      io.to(`tournament-match-chat-${matchId}`).emit('tournamentMatchChatMessage', messageToEmit);
+    }
+    
+    res.json({ success: true, message: 'Message envoyé' });
+  } catch (error) {
+    console.error('Post match chat error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+// Helper function to check if user is participant in match
+async function isUserParticipantInMatch(match, userId) {
+  const userIdStr = userId.toString();
+  
+  // Check if user is directly a participant
+  if (match.participant1?.user?.toString() === userIdStr) return true;
+  if (match.participant2?.user?.toString() === userIdStr) return true;
+  
+  // Check in formed team members
+  const checkMembers = (members) => {
+    if (!members) return false;
+    return members.some(m => m.user?.toString() === userIdStr);
+  };
+  
+  if (checkMembers(match.participant1?.formedTeamMembers)) return true;
+  if (checkMembers(match.participant2?.formedTeamMembers)) return true;
+  
+  // Check in squad members if team tournament
+  if (match.participant1?.squad) {
+    const squad1 = await Squad.findById(match.participant1.squad);
+    if (squad1 && squad1.members?.some(m => m.user?.toString() === userIdStr || m.toString() === userIdStr)) {
+      return true;
+    }
+  }
+  
+  if (match.participant2?.squad) {
+    const squad2 = await Squad.findById(match.participant2.squad);
+    if (squad2 && squad2.members?.some(m => m.user?.toString() === userIdStr || m.toString() === userIdStr)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 export default router;

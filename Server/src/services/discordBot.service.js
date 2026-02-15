@@ -27,6 +27,30 @@ let isReady = false;
 // Socket.io instance for emitting events
 let io = null;
 
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Helper to create whitelist button data (base64 encoded)
+function createWhitelistButtonId(type, identifier, displayName, playerContext = null, originalData = null) {
+  const data = {
+    identifier: identifier,
+    displayName: displayName.substring(0, 60),
+    playerContext: playerContext,
+    originalData: originalData
+  };
+  const encoded = Buffer.from(JSON.stringify(data)).toString('base64');
+  // Discord button customId max is 100 chars, truncate if needed
+  const buttonId = `iris_wl_${type}_${encoded}`;
+  if (buttonId.length > 100) {
+    // Use shorter data if too long
+    const shortData = { identifier: identifier, displayName: displayName.substring(0, 30) };
+    return `iris_wl_${type}_${Buffer.from(JSON.stringify(shortData)).toString('base64')}`;
+  }
+  return buttonId;
+}
+
 // Flag to prevent channel deletion during server restart
 let isShuttingDown = false;
 
@@ -146,6 +170,99 @@ export const initDiscordBot = async (socketIo) => {
       } catch (error) {
         console.error('[Discord Bot] Error cancelling stricker match:', error);
         await interaction.reply({ content: '❌ Erreur lors de l\'annulation du match.', ephemeral: true });
+      }
+    }
+    
+    // Handle Iris whitelist buttons
+    if (customId.startsWith('iris_wl_')) {
+      try {
+        // Dynamically import IrisWhitelist model
+        const { default: IrisWhitelist } = await import('../models/IrisWhitelist.js');
+        
+        // Parse the button data: iris_wl_{type}_{base64EncodedData}
+        const parts = customId.split('_');
+        if (parts.length < 4) {
+          await interaction.reply({ content: '❌ Format de bouton invalide.', ephemeral: true });
+          return;
+        }
+        
+        const whitelistType = parts[2];
+        const encodedData = parts.slice(3).join('_');
+        
+        // Decode the data
+        let whitelistData;
+        try {
+          whitelistData = JSON.parse(Buffer.from(encodedData, 'base64').toString('utf8'));
+        } catch (e) {
+          // If decoding fails, use raw identifier
+          whitelistData = { identifier: encodedData, displayName: encodedData };
+        }
+        
+        // Check if already whitelisted
+        const existing = await IrisWhitelist.findOne({
+          type: whitelistType,
+          identifier: { $regex: new RegExp(`^${escapeRegex(whitelistData.identifier)}$`, 'i') },
+          isActive: true
+        });
+        
+        if (existing) {
+          await interaction.reply({ 
+            content: `✅ **${whitelistData.displayName}** est déjà whitelisté !`,
+            ephemeral: true 
+          });
+          return;
+        }
+        
+        // Create whitelist entry
+        const newEntry = new IrisWhitelist({
+          type: whitelistType,
+          identifier: whitelistData.identifier,
+          secondaryIdentifier: whitelistData.secondaryId || undefined,
+          displayName: whitelistData.displayName || whitelistData.identifier,
+          reason: `Whitelisté via Discord par ${interaction.user.tag}`,
+          addedBy: interaction.user.tag,
+          addedByDiscordId: interaction.user.id,
+          originalDetectionData: whitelistData.originalData || undefined,
+          originalPlayerContext: whitelistData.playerContext || undefined
+        });
+        
+        await newEntry.save();
+        
+        // Update the message to show the item was whitelisted
+        const originalEmbed = interaction.message.embeds[0];
+        const updatedEmbed = EmbedBuilder.from(originalEmbed)
+          .setFooter({ text: `${originalEmbed.footer?.text || 'Iris Anticheat'} | ✅ ${whitelistData.displayName} whitelisté par ${interaction.user.tag}` });
+        
+        // Remove the clicked button from the components
+        const updatedComponents = interaction.message.components.map(row => {
+          const newRow = new ActionRowBuilder();
+          row.components.forEach(button => {
+            if (button.customId !== customId) {
+              newRow.addComponents(ButtonBuilder.from(button));
+            } else {
+              // Replace with disabled "Whitelisté" button
+              newRow.addComponents(
+                new ButtonBuilder()
+                  .setCustomId(`whitelisted_${Date.now()}`)
+                  .setLabel(`✅ ${whitelistData.displayName.substring(0, 50)}`)
+                  .setStyle(ButtonStyle.Success)
+                  .setDisabled(true)
+              );
+            }
+          });
+          return newRow.components.length > 0 ? newRow : null;
+        }).filter(Boolean);
+        
+        await interaction.update({ embeds: [updatedEmbed], components: updatedComponents });
+        
+        console.log(`[Discord Bot] Whitelisted ${whitelistType}: ${whitelistData.identifier} by ${interaction.user.tag}`);
+        
+      } catch (error) {
+        console.error('[Discord Bot] Error processing whitelist:', error);
+        await interaction.reply({ 
+          content: `❌ Erreur lors du whitelist: ${error.message}`, 
+          ephemeral: true 
+        }).catch(() => {});
       }
     }
   });
@@ -2116,8 +2233,218 @@ export const sendIrisExtendedAlert = async (player, alertType, data) => {
     embed.setTimestamp()
       .setFooter({ text: 'Iris Anticheat - Détection étendue' });
 
-    await sendToChannel(IRIS_EXTENDED_ALERTS_CHANNEL_ID, { embeds: [embed] });
-    console.log(`[Discord Bot] Extended alert (${alertType}) sent for ${player.username}`);
+    // Create whitelist buttons based on alert type
+    const components = [];
+    const playerContext = {
+      username: player.username,
+      discordUsername: player.discordUsername,
+      discordId: player.discordId
+    };
+
+    // Build whitelist buttons for detected items (max 5 per row, max 5 rows = 25 buttons)
+    let buttonsCreated = 0;
+    const maxButtons = 10; // Limit to 10 buttons to keep the message clean
+
+    switch (alertType) {
+      case 'driver': {
+        const drivers = data.suspiciousDrivers?.slice(0, maxButtons) || [];
+        for (let i = 0; i < drivers.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, drivers.length) && buttonsCreated < maxButtons; j++) {
+            const driver = drivers[j];
+            const displayName = driver.displayName || driver.name;
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('driver', driver.name, displayName, playerContext, driver))
+                .setLabel(`✅ WL: ${displayName.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'macro': {
+        const macros = data.detectedSoftware?.slice(0, maxButtons) || [];
+        for (let i = 0; i < macros.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, macros.length) && buttonsCreated < maxButtons; j++) {
+            const macro = macros[j];
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('macro', macro.name, macro.name, playerContext, macro))
+                .setLabel(`✅ WL: ${macro.name.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'network': {
+        // Whitelist VPN adapters
+        const adapters = data.vpnAdapters?.slice(0, 5) || [];
+        if (adapters.length > 0) {
+          const row = new ActionRowBuilder();
+          for (const adapter of adapters.slice(0, 5)) {
+            if (buttonsCreated >= maxButtons) break;
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('vpn_adapter', adapter, adapter, playerContext))
+                .setLabel(`✅ WL: ${adapter.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        // Whitelist VPN processes
+        const processes = data.vpnProcesses?.slice(0, 5) || [];
+        if (processes.length > 0 && buttonsCreated < maxButtons) {
+          const row = new ActionRowBuilder();
+          for (const proc of processes.slice(0, 5)) {
+            if (buttonsCreated >= maxButtons) break;
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('vpn_process', proc, proc, playerContext))
+                .setLabel(`✅ WL: ${proc.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'registry': {
+        const traces = data.traces?.slice(0, maxButtons) || [];
+        for (let i = 0; i < traces.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, traces.length) && buttonsCreated < maxButtons; j++) {
+            const trace = traces[j];
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('registry', trace.cheatName, trace.cheatName, playerContext, trace))
+                .setLabel(`✅ WL: ${trace.cheatName.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'overlay': {
+        const overlays = data.suspiciousOverlays?.slice(0, maxButtons) || [];
+        for (let i = 0; i < overlays.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, overlays.length) && buttonsCreated < maxButtons; j++) {
+            const overlay = overlays[j];
+            const displayName = overlay.processName || overlay.windowTitle || 'Unknown';
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('overlay', displayName, displayName, playerContext, overlay))
+                .setLabel(`✅ WL: ${displayName.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'dll_injection': {
+        const dlls = data.suspiciousDlls?.slice(0, maxButtons) || [];
+        for (let i = 0; i < dlls.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, dlls.length) && buttonsCreated < maxButtons; j++) {
+            const dll = dlls[j];
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('dll', dll.name, dll.name, playerContext, dll))
+                .setLabel(`✅ WL: ${dll.name.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'cheat': {
+        // Whitelist cheat processes
+        const processes = data.processes?.slice(0, maxButtons) || [];
+        for (let i = 0; i < processes.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, processes.length) && buttonsCreated < maxButtons; j++) {
+            const proc = processes[j];
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('process', proc.name, proc.name, playerContext, proc))
+                .setLabel(`✅ WL: ${proc.name.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        // Whitelist USB devices
+        const devices = data.devices?.slice(0, 5) || [];
+        if (devices.length > 0 && buttonsCreated < maxButtons) {
+          const row = new ActionRowBuilder();
+          for (const device of devices) {
+            if (buttonsCreated >= maxButtons) break;
+            const identifier = device.vid && device.pid ? `${device.vid}:${device.pid}` : device.name;
+            const displayName = device.deviceType || device.name;
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('usb_device', identifier, displayName, playerContext, device))
+                .setLabel(`✅ WL: ${displayName.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+
+      case 'cheat_window': {
+        const windows = data.detectedWindows?.slice(0, maxButtons) || [];
+        for (let i = 0; i < windows.length && buttonsCreated < maxButtons; i += 5) {
+          const row = new ActionRowBuilder();
+          for (let j = i; j < Math.min(i + 5, windows.length) && buttonsCreated < maxButtons; j++) {
+            const win = windows[j];
+            row.addComponents(
+              new ButtonBuilder()
+                .setCustomId(createWhitelistButtonId('cheat_window', win.matchedCheat, win.matchedCheat, playerContext, win))
+                .setLabel(`✅ WL: ${win.matchedCheat.substring(0, 40)}`)
+                .setStyle(ButtonStyle.Secondary)
+            );
+            buttonsCreated++;
+          }
+          if (row.components.length > 0) components.push(row);
+        }
+        break;
+      }
+    }
+
+    // Send message with embed and buttons
+    const messagePayload = { embeds: [embed] };
+    if (components.length > 0) {
+      messagePayload.components = components;
+    }
+
+    await sendToChannel(IRIS_EXTENDED_ALERTS_CHANNEL_ID, messagePayload);
+    console.log(`[Discord Bot] Extended alert (${alertType}) sent for ${player.username}${components.length > 0 ? ` with ${buttonsCreated} whitelist buttons` : ''}`);
   } catch (error) {
     console.error(`[Discord Bot] Error sending extended alert (${alertType}):`, error.message);
   }
@@ -2311,15 +2638,35 @@ export const sendTournamentLaunchNotification = async (tournament) => {
   }
 
   try {
-    const tournamentUrl = `https://nomercy.ggsecure.io/${tournament.mode}/tournaments/${tournament._id}`;
+    // URL without mode prefix - tournaments are accessible at /tournaments/:id
+    const tournamentUrl = `https://nomercy.ggsecure.io/tournaments/${tournament._id}`;
     
-    // Format prizes
+    // Format prizes properly
     let prizesText = 'Aucun prix';
-    if (tournament.prizes?.gold || tournament.prizes?.cashPrize) {
-      const prizes = [];
-      if (tournament.prizes.gold) prizes.push(`${tournament.prizes.gold} Gold`);
-      if (tournament.prizes.cashPrize) prizes.push(`${tournament.prizes.cashPrize}€`);
-      prizesText = prizes.join(' + ');
+    const prizesParts = [];
+    
+    // Check gold prizes
+    if (tournament.prizes?.gold?.enabled) {
+      const goldTotal = (tournament.prizes.gold.first || 0) + 
+                        (tournament.prizes.gold.second || 0) + 
+                        (tournament.prizes.gold.third || 0);
+      if (goldTotal > 0) {
+        prizesParts.push(`${goldTotal.toLocaleString('fr-FR')} Gold`);
+      }
+    }
+    
+    // Check cashprize
+    if (tournament.prizes?.cashprize?.enabled) {
+      const total = tournament.prizes.cashprize.total || 0;
+      const currency = tournament.prizes.cashprize.currency || 'EUR';
+      if (total > 0) {
+        const symbol = currency === 'EUR' ? '€' : currency === 'USD' ? '$' : currency === 'GBP' ? '£' : currency;
+        prizesParts.push(`${total.toLocaleString('fr-FR')}${symbol}`);
+      }
+    }
+    
+    if (prizesParts.length > 0) {
+      prizesText = prizesParts.join(' + ');
     }
 
     const embed = new EmbedBuilder()

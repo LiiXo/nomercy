@@ -79,7 +79,7 @@ router.get('/all', async (req, res) => {
     const statsField = mode === 'cdl' ? 'statsCdl' : (mode === 'hardcore' ? 'statsHardcore' : 'stats');
     
     const squads = await Squad.find(query)
-      .select('name tag color logo description members mode stats statsHardcore statsCdl createdAt isPublic')
+      .select('name tag color logo description members mode stats statsHardcore statsCdl statsStricker statsStricker3v3 createdAt isPublic')
       .sort({ [`${statsField}.totalPoints`]: -1, [`${statsField}.totalWins`]: -1, createdAt: -1 })
       .limit(parseInt(limit))
       .skip((parseInt(page) - 1) * parseInt(limit));

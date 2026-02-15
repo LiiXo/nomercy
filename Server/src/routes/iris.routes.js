@@ -13,6 +13,7 @@ import StrickerMatch from '../models/StrickerMatch.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import IrisUpdate from '../models/IrisUpdate.js';
+import IrisWhitelist from '../models/IrisWhitelist.js';
 import { verifyToken } from '../middleware/auth.middleware.js';
 import { verifyIrisSignature, decryptIrisPayload } from '../middleware/iris.security.middleware.js';
 import { createIrisScanChannel, sendIrisConnectionStatus, logIrisConnectionStatus, alertIrisMatchDisconnected, sendIrisShadowBan, sendIrisSecurityWarning, sendIrisSecurityChange, sendIrisScreenshots, deleteIrisScanModeChannel, sendIrisExtendedAlert, sendIrisGameMismatchAlert, sendIrisLowActivityAlert, sendIrisUpdateNotification } from '../services/discordBot.service.js';
@@ -2412,48 +2413,112 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
       console.log(`[Iris Heartbeat] Scan mode active for ${user.username} but NO CHANNEL ID`);
     }
 
-    // Log cheat detection and send alert (no shadow ban) - ASYNC
+    // ====== WHITELIST FILTERING HELPER (defined early for all detections) ======
+    // Filter out whitelisted items from detection arrays
+    const filterWhitelisted = async (type, items, identifierField = 'name') => {
+      if (!items || items.length === 0) return items;
+      try {
+        const whitelist = await IrisWhitelist.find({ type, isActive: true }).lean();
+        if (whitelist.length === 0) return items;
+        const whitelistSet = new Set(whitelist.map(w => w.identifier.toLowerCase()));
+        return items.filter(item => {
+          const identifier = item[identifierField]?.toLowerCase();
+          if (!identifier) return true; // Keep items without identifier
+          return !whitelistSet.has(identifier);
+        });
+      } catch (err) {
+        console.error(`[Iris Whitelist] Filter error for ${type}:`, err.message);
+        return items; // On error, don't filter
+      }
+    };
+    
+    // Filter string arrays (for VPN adapters, processes, etc.)
+    const filterWhitelistedStrings = async (type, items) => {
+      if (!items || items.length === 0) return items;
+      try {
+        const whitelist = await IrisWhitelist.find({ type, isActive: true }).lean();
+        if (whitelist.length === 0) return items;
+        const whitelistSet = new Set(whitelist.map(w => w.identifier.toLowerCase()));
+        return items.filter(item => !whitelistSet.has(item.toLowerCase()));
+      } catch (err) {
+        console.error(`[Iris Whitelist] String filter error for ${type}:`, err.message);
+        return items;
+      }
+    };
+    
+    // Filter USB devices by VID:PID or device name
+    const filterWhitelistedDevices = async (devices) => {
+      if (!devices || devices.length === 0) return devices;
+      try {
+        const whitelist = await IrisWhitelist.find({ type: 'usb_device', isActive: true }).lean();
+        if (whitelist.length === 0) return devices;
+        const whitelistSet = new Set(whitelist.map(w => w.identifier.toLowerCase()));
+        return devices.filter(device => {
+          // Check VID:PID format
+          if (device.vid && device.pid) {
+            const vidPid = `${device.vid}:${device.pid}`.toLowerCase();
+            if (whitelistSet.has(vidPid)) return false;
+          }
+          // Check device name
+          const deviceName = (device.deviceType || device.name || '').toLowerCase();
+          if (deviceName && whitelistSet.has(deviceName)) return false;
+          return true;
+        });
+      } catch (err) {
+        console.error(`[Iris Whitelist] Device filter error:`, err.message);
+        return devices;
+      }
+    };
+
+    // Log cheat detection and send alert (no shadow ban) - ASYNC with whitelist filtering
     if (systemInfo?.cheatDetection?.found) {
-      console.warn('[Iris Heartbeat] CHEAT DEVICE DETECTED for', user.username);
+      // Filter whitelisted processes and devices
+      const filteredProcesses = await filterWhitelisted('process', systemInfo.cheatDetection.processes, 'name');
+      const filteredDevices = await filterWhitelistedDevices(systemInfo.cheatDetection.devices);
       
-      // Save to detection history (async, no await needed)
-      const detections = [];
-      if (systemInfo.cheatDetection.devices?.length > 0) {
-        for (const device of systemInfo.cheatDetection.devices) {
-          detections.push({
-            detectedAt: new Date(),
-            type: 'cheat_device',
-            name: device.deviceType || device.name,
-            details: `VID: ${device.vid || 'N/A'}, PID: ${device.pid || 'N/A'}`,
-            riskLevel: systemInfo.cheatDetection.riskLevel || 'high',
-            riskScore: 100
-          });
+      // Only proceed if there are non-whitelisted detections
+      if (filteredProcesses.length > 0 || filteredDevices.length > 0) {
+        console.warn('[Iris Heartbeat] CHEAT DEVICE DETECTED for', user.username);
+        
+        // Save to detection history (async, no await needed)
+        const detections = [];
+        if (filteredDevices?.length > 0) {
+          for (const device of filteredDevices) {
+            detections.push({
+              detectedAt: new Date(),
+              type: 'cheat_device',
+              name: device.deviceType || device.name,
+              details: `VID: ${device.vid || 'N/A'}, PID: ${device.pid || 'N/A'}`,
+              riskLevel: systemInfo.cheatDetection.riskLevel || 'high',
+              riskScore: 100
+            });
+          }
         }
-      }
-      if (systemInfo.cheatDetection.processes?.length > 0) {
-        for (const proc of systemInfo.cheatDetection.processes) {
-          detections.push({
-            detectedAt: new Date(),
-            type: 'cheat_process',
-            name: proc.matchedCheat || proc.name,
-            details: `Process: ${proc.name}, PID: ${proc.pid}`,
-            riskLevel: systemInfo.cheatDetection.riskLevel || 'high',
-            riskScore: 75
-          });
+        if (filteredProcesses?.length > 0) {
+          for (const proc of filteredProcesses) {
+            detections.push({
+              detectedAt: new Date(),
+              type: 'cheat_process',
+              name: proc.matchedCheat || proc.name,
+              details: `Process: ${proc.name}, PID: ${proc.pid}`,
+              riskLevel: systemInfo.cheatDetection.riskLevel || 'high',
+              riskScore: 75
+            });
+          }
         }
+        if (detections.length > 0) {
+          User.findByIdAndUpdate(user._id, {
+            $push: { irisDetectionHistory: { $each: detections, $slice: -100 } }
+          }).catch(err => console.error('[Iris] Detection history save error:', err.message));
+        }
+        
+        // Send detection alert - ASYNC (no await)
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'cheat',
+          { ...systemInfo.cheatDetection, processes: filteredProcesses, devices: filteredDevices, found: true }
+        ).catch(err => console.error('[Iris Heartbeat] Cheat detection alert error:', err.message));
       }
-      if (detections.length > 0) {
-        User.findByIdAndUpdate(user._id, {
-          $push: { irisDetectionHistory: { $each: detections, $slice: -100 } }
-        }).catch(err => console.error('[Iris] Detection history save error:', err.message));
-      }
-      
-      // Send detection alert - ASYNC (no await)
-      sendIrisExtendedAlert(
-        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
-        'cheat',
-        systemInfo.cheatDetection
-      ).catch(err => console.error('[Iris Heartbeat] Cheat detection alert error:', err.message));
     }
 
     // ====== NEW DETECTION MODULES PROCESSING (ALL ASYNC) ======
@@ -2461,46 +2526,64 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
     // 1. Network Monitor (VPN/Proxy detection)
     const networkMonitor = systemInfo?.networkMonitor;
     if (networkMonitor && (networkMonitor.vpnDetected || networkMonitor.proxyDetected)) {
-      console.warn('[Iris Heartbeat] NETWORK ALERT for', user.username);
-      sendIrisExtendedAlert(
-        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
-        'network',
-        networkMonitor
-      ).catch(err => console.error('[Iris Heartbeat] Network alert error:', err.message));
+      // Filter whitelisted VPN adapters and processes
+      const filteredAdapters = await filterWhitelistedStrings('vpn_adapter', networkMonitor.vpnAdapters);
+      const filteredProcesses = await filterWhitelistedStrings('vpn_process', networkMonitor.vpnProcesses);
+      
+      // Only alert if there are non-whitelisted items remaining
+      if (filteredAdapters.length > 0 || filteredProcesses.length > 0) {
+        console.warn('[Iris Heartbeat] NETWORK ALERT for', user.username);
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'network',
+          { ...networkMonitor, vpnAdapters: filteredAdapters, vpnProcesses: filteredProcesses }
+        ).catch(err => console.error('[Iris Heartbeat] Network alert error:', err.message));
+      }
     }
     
     // 2. Registry Scan (cheat traces)
     const registryScan = systemInfo?.registryScan;
     if (registryScan && registryScan.tracesFound) {
-      console.warn('[Iris Heartbeat] REGISTRY TRACES for', user.username);
-      sendIrisExtendedAlert(
-        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
-        'registry',
-        registryScan
-      ).catch(err => console.error('[Iris Heartbeat] Registry alert error:', err.message));
+      const filteredTraces = await filterWhitelisted('registry', registryScan.traces, 'cheatName');
+      
+      if (filteredTraces.length > 0) {
+        console.warn('[Iris Heartbeat] REGISTRY TRACES for', user.username);
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'registry',
+          { ...registryScan, traces: filteredTraces, tracesFound: filteredTraces.length > 0 }
+        ).catch(err => console.error('[Iris Heartbeat] Registry alert error:', err.message));
+      }
     }
     
     // 3. Driver Integrity (suspicious drivers)
     const driverIntegrity = systemInfo?.driverIntegrity;
     if (driverIntegrity && driverIntegrity.suspiciousFound) {
-      console.warn('[Iris Heartbeat] SUSPICIOUS DRIVERS for', user.username);
-      sendIrisExtendedAlert(
-        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
-        'driver',
-        driverIntegrity
-      ).catch(err => console.error('[Iris Heartbeat] Driver alert error:', err.message));
+      const filteredDrivers = await filterWhitelisted('driver', driverIntegrity.suspiciousDrivers, 'name');
+      
+      if (filteredDrivers.length > 0) {
+        console.warn('[Iris Heartbeat] SUSPICIOUS DRIVERS for', user.username);
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'driver',
+          { ...driverIntegrity, suspiciousDrivers: filteredDrivers, suspiciousFound: filteredDrivers.length > 0 }
+        ).catch(err => console.error('[Iris Heartbeat] Driver alert error:', err.message));
+      }
     }
     
     // 4. Macro Detection
     const macroDetection = systemInfo?.macroDetection;
     if (macroDetection && macroDetection.macrosDetected) {
-      const highRiskMacros = macroDetection.detectedSoftware?.filter(
+      // Filter whitelisted macros
+      const filteredMacros = await filterWhitelisted('macro', macroDetection.detectedSoftware, 'name');
+      
+      const highRiskMacros = filteredMacros?.filter(
         m => m.macroType === 'ahk' || m.macroType === 'generic'
       ) || [];
       
-      // Save ALL detected macros to history
-      if (macroDetection.detectedSoftware?.length > 0) {
-        const macroDetections = macroDetection.detectedSoftware.map(m => ({
+      // Save ALL detected macros to history (non-whitelisted only)
+      if (filteredMacros?.length > 0) {
+        const macroDetections = filteredMacros.map(m => ({
           detectedAt: new Date(),
           type: 'macro',
           name: m.name,
@@ -2518,7 +2601,7 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
         sendIrisExtendedAlert(
           { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
           'macro',
-          { ...macroDetection, highRiskMacros }
+          { ...macroDetection, detectedSoftware: filteredMacros, highRiskMacros }
         ).catch(err => console.error('[Iris Heartbeat] Macro alert error:', err.message));
       }
     }
@@ -2526,7 +2609,10 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
     // 5. Overlay Detection
     const overlayDetection = systemInfo?.overlayDetection;
     if (overlayDetection && overlayDetection.overlaysFound) {
-      const highRiskOverlays = overlayDetection.suspiciousOverlays?.filter(
+      // Filter whitelisted overlays
+      const filteredOverlays = await filterWhitelisted('overlay', overlayDetection.suspiciousOverlays, 'processName');
+      
+      const highRiskOverlays = filteredOverlays?.filter(
         o => o.reason === 'cheat_process' || o.reason === 'suspicious_class'
       ) || [];
       
@@ -2535,7 +2621,7 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
         sendIrisExtendedAlert(
           { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
           'overlay',
-          { ...overlayDetection, highRiskOverlays }
+          { ...overlayDetection, suspiciousOverlays: filteredOverlays, highRiskOverlays }
         ).catch(err => console.error('[Iris Heartbeat] Overlay alert error:', err.message));
       }
     }
@@ -2543,15 +2629,20 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
     // 6. DLL Injection Detection
     const dllInjection = systemInfo?.dllInjection;
     if (dllInjection && dllInjection.injectionDetected) {
-      console.warn('[Iris Heartbeat] DLL INJECTION for', user.username);
-      sendIrisExtendedAlert(
-        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
-        'dll_injection',
-        dllInjection
-      ).catch(err => console.error('[Iris Heartbeat] DLL injection alert error:', err.message));
+      // Filter whitelisted DLLs
+      const filteredDlls = await filterWhitelisted('dll', dllInjection.suspiciousDlls, 'name');
+      
+      if (filteredDlls.length > 0) {
+        console.warn('[Iris Heartbeat] DLL INJECTION for', user.username);
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'dll_injection',
+          { ...dllInjection, suspiciousDlls: filteredDlls, injectionDetected: filteredDlls.length > 0 }
+        ).catch(err => console.error('[Iris Heartbeat] DLL injection alert error:', err.message));
+      }
     }
     
-    // 7. VM Detection
+    // 7. VM Detection (no whitelist - VM detection is binary)
     const vmDetection = systemInfo?.vmDetection;
     if (vmDetection && vmDetection.vmDetected) {
       console.warn('[Iris Heartbeat] VM DETECTED for', user.username);
@@ -2562,7 +2653,7 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
       ).catch(err => console.error('[Iris Heartbeat] VM detection alert error:', err.message));
     }
     
-    // 8. Cloud PC Detection
+    // 8. Cloud PC Detection (no whitelist - Cloud PC detection is binary)
     const cloudPcDetection = systemInfo?.cloudPcDetection;
     if (cloudPcDetection && cloudPcDetection.cloudPcDetected) {
       console.warn('[Iris Heartbeat] CLOUD PC DETECTED for', user.username);
@@ -2576,11 +2667,14 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
     // 9. Cheat Window/Panel Detection (CoD specific)
     const cheatWindowDetection = systemInfo?.cheatWindowDetection;
     if (cheatWindowDetection && cheatWindowDetection.cheatsFound) {
-      console.warn('[Iris Heartbeat] CHEAT WINDOW DETECTED for', user.username);
+      // Filter whitelisted cheat windows
+      const filteredWindows = await filterWhitelisted('cheat_window', cheatWindowDetection.detectedWindows, 'matchedCheat');
       
-      // Save to detection history (async)
-      if (cheatWindowDetection.detectedWindows?.length > 0) {
-        const windowDetections = cheatWindowDetection.detectedWindows.map(w => ({
+      if (filteredWindows.length > 0) {
+        console.warn('[Iris Heartbeat] CHEAT WINDOW DETECTED for', user.username);
+        
+        // Save to detection history (async) - filtered only
+        const windowDetections = filteredWindows.map(w => ({
           detectedAt: new Date(),
           type: 'cheat_window',
           name: w.matchedCheat,
@@ -2591,13 +2685,13 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
         User.findByIdAndUpdate(user._id, {
           $push: { irisDetectionHistory: { $each: windowDetections, $slice: -100 } }
         }).catch(err => console.error('[Iris] Cheat window history save error:', err.message));
+        
+        sendIrisExtendedAlert(
+          { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
+          'cheat_window',
+          { ...cheatWindowDetection, detectedWindows: filteredWindows, cheatsFound: filteredWindows.length > 0 }
+        ).catch(err => console.error('[Iris Heartbeat] Cheat window alert error:', err.message));
       }
-      
-      sendIrisExtendedAlert(
-        { username: user.username, discordUsername: user.discordUsername, discordId: user.discordId },
-        'cheat_window',
-        cheatWindowDetection
-      ).catch(err => console.error('[Iris Heartbeat] Cheat window alert error:', err.message));
     }
 
     // Response already sent above
@@ -3572,6 +3666,244 @@ router.post('/behavioral/review/:anomalyId', verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error('[Iris Behavioral] Review error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// ====== IRIS WHITELIST MANAGEMENT ======
+
+/**
+ * Get all whitelist entries (Admin only)
+ * GET /api/iris/whitelist
+ */
+router.get('/whitelist', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { type, search, active } = req.query;
+
+    // Build query
+    const query = {};
+    if (type) query.type = type;
+    if (active !== undefined) query.isActive = active === 'true';
+    if (search) {
+      query.$or = [
+        { identifier: { $regex: search, $options: 'i' } },
+        { displayName: { $regex: search, $options: 'i' } },
+        { reason: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const entries = await IrisWhitelist.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Get stats by type
+    const statsByType = await IrisWhitelist.aggregate([
+      { $match: { isActive: true } },
+      { $group: { _id: '$type', count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+      success: true,
+      entries,
+      total: entries.length,
+      stats: statsByType.reduce((acc, s) => ({ ...acc, [s._id]: s.count }), {})
+    });
+
+  } catch (error) {
+    console.error('[Iris Whitelist] Get entries error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Add a whitelist entry manually (Admin only)
+ * POST /api/iris/whitelist
+ */
+router.post('/whitelist', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { type, identifier, displayName, reason, secondaryIdentifier } = req.body;
+
+    if (!type || !identifier) {
+      return res.status(400).json({ success: false, message: 'Type and identifier required' });
+    }
+
+    // Check if already exists
+    const existing = await IrisWhitelist.findOne({
+      type,
+      identifier: { $regex: new RegExp(`^${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+      isActive: true
+    });
+
+    if (existing) {
+      return res.status(409).json({ 
+        success: false, 
+        message: 'This item is already whitelisted',
+        existingEntry: existing
+      });
+    }
+
+    const newEntry = new IrisWhitelist({
+      type,
+      identifier,
+      secondaryIdentifier: secondaryIdentifier || undefined,
+      displayName: displayName || identifier,
+      reason: reason || `Ajouté manuellement par ${admin.username}`,
+      addedBy: admin.username,
+      addedByDiscordId: admin.discordId
+    });
+
+    await newEntry.save();
+
+    console.log(`[Iris Whitelist] ${admin.username} added whitelist: ${type}/${identifier}`);
+
+    res.json({
+      success: true,
+      message: 'Whitelist entry added',
+      entry: newEntry
+    });
+
+  } catch (error) {
+    console.error('[Iris Whitelist] Add entry error:', error);
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: 'This item is already whitelisted' });
+    }
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Delete/deactivate a whitelist entry (Admin only)
+ * DELETE /api/iris/whitelist/:id
+ */
+router.delete('/whitelist/:id', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { id } = req.params;
+    const { permanent } = req.query;
+
+    const entry = await IrisWhitelist.findById(id);
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Whitelist entry not found' });
+    }
+
+    if (permanent === 'true') {
+      // Permanently delete
+      await IrisWhitelist.findByIdAndDelete(id);
+      console.log(`[Iris Whitelist] ${admin.username} permanently deleted whitelist: ${entry.type}/${entry.identifier}`);
+    } else {
+      // Soft delete (deactivate)
+      entry.isActive = false;
+      await entry.save();
+      console.log(`[Iris Whitelist] ${admin.username} deactivated whitelist: ${entry.type}/${entry.identifier}`);
+    }
+
+    res.json({
+      success: true,
+      message: permanent === 'true' ? 'Whitelist entry deleted' : 'Whitelist entry deactivated'
+    });
+
+  } catch (error) {
+    console.error('[Iris Whitelist] Delete entry error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Reactivate a whitelist entry (Admin only)
+ * POST /api/iris/whitelist/:id/reactivate
+ */
+router.post('/whitelist/:id/reactivate', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { id } = req.params;
+
+    const entry = await IrisWhitelist.findById(id);
+    if (!entry) {
+      return res.status(404).json({ success: false, message: 'Whitelist entry not found' });
+    }
+
+    entry.isActive = true;
+    await entry.save();
+
+    console.log(`[Iris Whitelist] ${admin.username} reactivated whitelist: ${entry.type}/${entry.identifier}`);
+
+    res.json({
+      success: true,
+      message: 'Whitelist entry reactivated',
+      entry
+    });
+
+  } catch (error) {
+    console.error('[Iris Whitelist] Reactivate entry error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+/**
+ * Get whitelist types and their counts (Admin only)
+ * GET /api/iris/whitelist/stats
+ */
+router.get('/whitelist/stats', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const stats = await IrisWhitelist.aggregate([
+      {
+        $group: {
+          _id: { type: '$type', isActive: '$isActive' },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.type',
+          active: {
+            $sum: { $cond: [{ $eq: ['$_id.isActive', true] }, '$count', 0] }
+          },
+          inactive: {
+            $sum: { $cond: [{ $eq: ['$_id.isActive', false] }, '$count', 0] }
+          },
+          total: { $sum: '$count' }
+        }
+      }
+    ]);
+
+    const totalActive = await IrisWhitelist.countDocuments({ isActive: true });
+    const totalInactive = await IrisWhitelist.countDocuments({ isActive: false });
+
+    res.json({
+      success: true,
+      byType: stats.reduce((acc, s) => ({ ...acc, [s._id]: { active: s.active, inactive: s.inactive, total: s.total } }), {}),
+      total: {
+        active: totalActive,
+        inactive: totalInactive,
+        all: totalActive + totalInactive
+      }
+    });
+
+  } catch (error) {
+    console.error('[Iris Whitelist] Get stats error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });

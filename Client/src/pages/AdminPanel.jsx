@@ -197,6 +197,10 @@ const AdminPanel = () => {
     description: '',
     type: 'team',
     mode: 'cdl',
+    game: 'cod_bo7',
+    customGame: '',
+    logo: '',
+    banner: '',
     format: 'bo1',
     mapSelection: 'random',
     maxParticipants: 12,
@@ -223,6 +227,12 @@ const AdminPanel = () => {
         second: 0,
         third: 0
       }
+    },
+    entryFee: {
+      enabled: false,
+      type: 'gold',
+      amount: 0,
+      currency: 'EUR'
     }
   });
   const [savingTournament, setSavingTournament] = useState(false);
@@ -1335,11 +1345,18 @@ const AdminPanel = () => {
         ? `${API_URL}/tournaments/admin/${editingTournament._id}`
         : `${API_URL}/tournaments/admin/create`;
       
+      // Pour les tournois solo, convertir le nombre d'escouades en nombre de joueurs
+      const dataToSend = { ...tournamentFormData };
+      if (dataToSend.type === 'solo') {
+        // maxParticipants = nombre d'escouades × taille équipe
+        dataToSend.maxParticipants = dataToSend.maxParticipants * dataToSend.teamSize;
+      }
+      
       const response = await fetch(endpoint, {
         method: editingTournament ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(tournamentFormData)
+        body: JSON.stringify(dataToSend)
       });
       
       const data = await response.json();
@@ -1450,6 +1467,35 @@ const AdminPanel = () => {
     }
   };
 
+  // Reset tournament to registration status
+  const handleResetTournament = async (tournamentId, targetStatus) => {
+    const statusLabels = {
+      draft: 'brouillon',
+      registration: 'inscriptions ouvertes'
+    };
+    if (!window.confirm(`Réinitialiser ce tournoi au statut "${statusLabels[targetStatus] || targetStatus}" ? Le bracket et les matchs seront supprimés.`)) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ targetStatus })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccess(data.message || 'Tournoi réinitialisé');
+        fetchTournaments();
+      } else {
+        setError(data.message || 'Erreur');
+      }
+    } catch (err) {
+      setError('Erreur lors de la réinitialisation');
+    }
+  };
+
   // Fill with bots (admin only)
   const handleFillTournamentWithBots = async (tournamentId) => {
     setFillingBots(true);
@@ -1502,6 +1548,10 @@ const AdminPanel = () => {
       description: '',
       type: 'team',
       mode: 'cdl',
+      game: 'cod_bo7',
+      customGame: '',
+      logo: '',
+      banner: '',
       format: 'bo1',
       mapSelection: 'random',
       maxParticipants: 12,
@@ -1528,6 +1578,12 @@ const AdminPanel = () => {
           second: 0,
           third: 0
         }
+      },
+      entryFee: {
+        enabled: false,
+        type: 'gold',
+        amount: 0,
+        currency: 'EUR'
       }
     });
   };
@@ -1535,14 +1591,25 @@ const AdminPanel = () => {
   // Open edit tournament modal
   const openEditTournament = (tournament) => {
     setEditingTournament(tournament);
+    
+    // Pour les tournois solo, convertir le nombre de joueurs en nombre d'escouades
+    let maxParticipantsForForm = tournament.maxParticipants || 12;
+    if (tournament.type === 'solo' && tournament.teamSize) {
+      maxParticipantsForForm = Math.round(tournament.maxParticipants / tournament.teamSize);
+    }
+    
     setTournamentFormData({
       name: tournament.name || '',
       description: tournament.description || '',
       type: tournament.type || 'team',
       mode: tournament.mode || 'cdl',
+      game: tournament.game || 'cod_bo7',
+      customGame: tournament.customGame || '',
+      logo: tournament.logo || '',
+      banner: tournament.banner || '',
       format: tournament.format || 'bo1',
       mapSelection: tournament.mapSelection || 'random',
-      maxParticipants: tournament.maxParticipants || 12,
+      maxParticipants: maxParticipantsForForm,
       teamSize: tournament.teamSize || 4,
       groupSize: tournament.groupSize || 4,
       scheduledAt: tournament.scheduledAt ? new Date(tournament.scheduledAt).toISOString().slice(0, 16) : '',
@@ -1566,6 +1633,12 @@ const AdminPanel = () => {
           second: tournament.prizes?.cashprize?.second || 0,
           third: tournament.prizes?.cashprize?.third || 0
         }
+      },
+      entryFee: {
+        enabled: tournament.entryFee?.enabled || false,
+        type: tournament.entryFee?.type || 'gold',
+        amount: tournament.entryFee?.amount || 0,
+        currency: tournament.entryFee?.currency || 'EUR'
       }
     });
     setShowTournamentModal(true);
@@ -1962,6 +2035,23 @@ const AdminPanel = () => {
         }
       };
     }
+    // Deep copy tournament config
+    if (item.tournamentConfig) {
+      formDataCopy.tournamentConfig = {
+        hardcore: {
+          enabled: item.tournamentConfig?.hardcore?.enabled || false,
+          gameModes: [...(item.tournamentConfig?.hardcore?.gameModes || [])],
+          formats: [...(item.tournamentConfig?.hardcore?.formats || [])],
+          types: [...(item.tournamentConfig?.hardcore?.types || [])]
+        },
+        cdl: {
+          enabled: item.tournamentConfig?.cdl?.enabled || false,
+          gameModes: [...(item.tournamentConfig?.cdl?.gameModes || [])],
+          formats: [...(item.tournamentConfig?.cdl?.formats || [])],
+          types: [...(item.tournamentConfig?.cdl?.types || [])]
+        }
+      };
+    }
     
     // For users, fetch complete data including ranked points
     if (type === 'user' && item._id) {
@@ -2059,6 +2149,10 @@ const AdminPanel = () => {
           strickerConfig: {
             ladder: { enabled: false, gameModes: [] },
             ranked: { enabled: false, gameModes: ['Search & Destroy'], formats: ['5v5'] }
+          },
+          tournamentConfig: {
+            hardcore: { enabled: false, gameModes: [], formats: [], types: [] },
+            cdl: { enabled: false, gameModes: [], formats: [], types: [] }
           },
           isActive: true
         };
@@ -6396,9 +6490,17 @@ const AdminPanel = () => {
                       )}
                       <button
                         onClick={() => handleCancelTournament(tournament._id)}
-                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                        className="py-2 px-3 bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors"
+                        title="Annuler le tournoi"
                       >
                         <X className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTournament(tournament._id)}
+                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors"
+                        title="Supprimer définitivement"
+                      >
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </>
                   )}
@@ -6406,10 +6508,39 @@ const AdminPanel = () => {
                   {tournament.status === 'in_progress' && (
                     <>
                       <button
+                        onClick={() => handleResetTournament(tournament._id, 'registration')}
+                        className="flex-1 py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors text-sm flex items-center justify-center gap-2"
+                        title="Réinitialiser aux inscriptions"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Réinitialiser
+                      </button>
+                      <button
                         onClick={() => handleCancelTournament(tournament._id)}
-                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors text-sm"
+                        className="py-2 px-3 bg-orange-500/20 text-orange-400 rounded-lg hover:bg-orange-500/30 transition-colors text-sm"
                       >
                         Annuler
+                      </button>
+                    </>
+                  )}
+                  
+                  {(tournament.status === 'completed' || tournament.status === 'cancelled') && (
+                    <>
+                      <button
+                        onClick={() => handleResetTournament(tournament._id, 'registration')}
+                        className="py-2 px-3 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-colors flex items-center gap-2"
+                        title="Réouvrir les inscriptions"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span className="text-sm">Réouvrir</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTournament(tournament._id)}
+                        className="py-2 px-3 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500/30 transition-colors flex items-center gap-2"
+                        title="Supprimer définitivement"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="text-sm">Supprimer</span>
                       </button>
                     </>
                   )}
@@ -6455,13 +6586,56 @@ const AdminPanel = () => {
                   />
                 </div>
 
+                {/* Logo & Banner */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Logo du tournoi (URL)</label>
+                    <input
+                      type="url"
+                      value={tournamentFormData.logo}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, logo: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                      placeholder="https://exemple.com/logo.png"
+                    />
+                    {tournamentFormData.logo && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <img src={tournamentFormData.logo} alt="Logo prévisualisation" className="w-12 h-12 object-contain rounded-lg bg-dark-700" />
+                        <span className="text-xs text-gray-500">Prévisualisation</span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Bannière (URL)</label>
+                    <input
+                      type="url"
+                      value={tournamentFormData.banner}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, banner: e.target.value})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                      placeholder="https://exemple.com/banner.jpg"
+                    />
+                    {tournamentFormData.banner && (
+                      <div className="mt-2">
+                        <img src={tournamentFormData.banner} alt="Bannière prévisualisation" className="w-full h-16 object-cover rounded-lg" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Type & Mode */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Type de tournoi *</label>
                     <select
                       value={tournamentFormData.type}
-                      onChange={(e) => setTournamentFormData({...tournamentFormData, type: e.target.value})}
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        let maxP = tournamentFormData.maxParticipants;
+                        // Si on passe en solo, s'assurer que le nombre est pair
+                        if (newType === 'solo' && maxP % 2 !== 0) {
+                          maxP = maxP + 1;
+                        }
+                        setTournamentFormData({...tournamentFormData, type: newType, maxParticipants: maxP});
+                      }}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
                     >
                       <option value="team">Équipe (Escouades)</option>
@@ -6479,6 +6653,34 @@ const AdminPanel = () => {
                       <option value="hardcore">Hardcore</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Game Selection */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Jeu *</label>
+                    <select
+                      value={tournamentFormData.game}
+                      onChange={(e) => setTournamentFormData({...tournamentFormData, game: e.target.value, customGame: ''})}
+                      className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="cod_bo7">Call Of Duty : Black Ops 7</option>
+                      <option value="free">Choix libre</option>
+                    </select>
+                  </div>
+                  {tournamentFormData.game === 'free' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-400 mb-2">Nom du jeu *</label>
+                      <input
+                        type="text"
+                        value={tournamentFormData.customGame}
+                        onChange={(e) => setTournamentFormData({...tournamentFormData, customGame: e.target.value})}
+                        className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                        placeholder="Ex: Fortnite, Valorant..."
+                        required
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Format & Map Selection */}
@@ -6511,17 +6713,35 @@ const AdminPanel = () => {
                 <div className="grid grid-cols-3 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">
-                      {tournamentFormData.type === 'team' ? 'Nombre d\'escouades *' : 'Nombre de joueurs *'}
+                      {tournamentFormData.type === 'team' ? 'Nombre d\'escouades *' : 'Nombre d\'escouades à former *'}
                     </label>
                     <input
                       type="number"
                       min="2"
                       max="256"
+                      step={tournamentFormData.type === 'solo' ? '2' : '1'}
                       value={tournamentFormData.maxParticipants}
-                      onChange={(e) => setTournamentFormData({...tournamentFormData, maxParticipants: parseInt(e.target.value) || 2})}
+                      onChange={(e) => {
+                        let value = parseInt(e.target.value) || 2;
+                        // Pour les tournois solo, forcer un nombre pair
+                        if (tournamentFormData.type === 'solo' && value % 2 !== 0) {
+                          value = value + 1;
+                        }
+                        setTournamentFormData({...tournamentFormData, maxParticipants: value});
+                      }}
                       className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:outline-none focus:border-purple-500"
-                      placeholder="Ex: 12, 24, 32..."
+                      placeholder={tournamentFormData.type === 'solo' ? 'Ex: 8, 12, 16...' : 'Ex: 8, 12, 16, 24...'}
                     />
+                    {tournamentFormData.type === 'solo' && (
+                      <p className="text-xs text-purple-400 mt-1">
+                        = {tournamentFormData.maxParticipants * tournamentFormData.teamSize} joueurs nécessaires
+                      </p>
+                    )}
+                    {tournamentFormData.type === 'solo' && tournamentFormData.maxParticipants % 2 !== 0 && (
+                      <p className="text-xs text-yellow-400 mt-1">
+                        ⚠️ Le nombre doit être pair pour le bracket
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-400 mb-2">Taille des équipes *</label>
@@ -6818,6 +7038,89 @@ const AdminPanel = () => {
                   )}
                 </div>
 
+                {/* Entry Fee (Registration Cost) */}
+                <div className="p-4 bg-dark-800/50 border border-white/10 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-white flex items-center gap-2">
+                      <span className="text-cyan-500">🎫</span> Inscription payante
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setTournamentFormData({
+                        ...tournamentFormData, 
+                        entryFee: {...tournamentFormData.entryFee, enabled: !tournamentFormData.entryFee.enabled}
+                      })}
+                      className={`relative w-12 h-6 rounded-full transition-colors ${
+                        tournamentFormData.entryFee.enabled ? 'bg-cyan-500' : 'bg-dark-700'
+                      }`}
+                    >
+                      <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                        tournamentFormData.entryFee.enabled ? 'left-7' : 'left-1'
+                      }`} />
+                    </button>
+                  </div>
+                  
+                  {tournamentFormData.entryFee.enabled && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Type de paiement</label>
+                          <select
+                            value={tournamentFormData.entryFee.type}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              entryFee: {...tournamentFormData.entryFee, type: e.target.value}
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                          >
+                            <option value="gold">💰 Gold</option>
+                            <option value="munitions">💣 Munitions</option>
+                            <option value="cashprize">💵 Argent réel</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-cyan-400 mb-1">Montant</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tournamentFormData.entryFee.amount}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              entryFee: {...tournamentFormData.entryFee, amount: parseInt(e.target.value) || 0}
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-cyan-500/30 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                      
+                      {tournamentFormData.entryFee.type === 'cashprize' && (
+                        <div>
+                          <label className="block text-xs text-gray-400 mb-1">Devise</label>
+                          <select
+                            value={tournamentFormData.entryFee.currency}
+                            onChange={(e) => setTournamentFormData({
+                              ...tournamentFormData, 
+                              entryFee: {...tournamentFormData.entryFee, currency: e.target.value}
+                            })}
+                            className="w-full px-3 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-cyan-500"
+                          >
+                            <option value="EUR">EUR (€)</option>
+                            <option value="USD">USD ($)</option>
+                            <option value="GBP">GBP (£)</option>
+                          </select>
+                        </div>
+                      )}
+                      
+                      <p className="text-xs text-gray-500">
+                        {tournamentFormData.entryFee.type === 'gold' && '💰 Les joueurs devront payer en Gold pour s\'inscrire'}
+                        {tournamentFormData.entryFee.type === 'munitions' && '💣 Les joueurs devront payer en Munitions pour s\'inscrire'}
+                        {tournamentFormData.entryFee.type === 'cashprize' && '💵 Les joueurs devront payer en argent réel pour s\'inscrire'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 {/* Actions */}
                 <div className="flex justify-end gap-3 pt-4">
                   <button
@@ -7110,6 +7413,24 @@ const AdminPanel = () => {
                           {map.strickerConfig?.ranked?.enabled && map.strickerConfig?.ranked?.gameModes?.length > 0 && (
                             <span className="px-2 py-0.5 bg-lime-500/30 text-lime-300 rounded text-xs">
                               Ranked: {map.strickerConfig.ranked.gameModes.length} mode(s) • {(map.strickerConfig.ranked.formats || []).join('/')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {/* Tournament Config */}
+                    {(map.tournamentConfig?.hardcore?.enabled || map.tournamentConfig?.cdl?.enabled) && (
+                      <div className="flex flex-col gap-1">
+                        <span className="text-purple-400 text-xs font-medium">TOURNOIS</span>
+                        <div className="flex flex-wrap gap-1">
+                          {map.tournamentConfig?.hardcore?.enabled && (
+                            <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 rounded text-xs">
+                              HC: {(map.tournamentConfig.hardcore.formats || []).join('/')} • {(map.tournamentConfig.hardcore.types || []).map(t => t === 'solo' ? 'Solo' : t === 'switch' ? 'Switch' : 'Squads').join('/')}
+                            </span>
+                          )}
+                          {map.tournamentConfig?.cdl?.enabled && (
+                            <span className="px-2 py-0.5 bg-purple-500/30 text-purple-300 rounded text-xs">
+                              CDL: {(map.tournamentConfig.cdl.formats || []).join('/')} • {(map.tournamentConfig.cdl.types || []).map(t => t === 'solo' ? 'Solo' : t === 'switch' ? 'Switch' : 'Squads').join('/')}
                             </span>
                           )}
                         </div>
@@ -12118,6 +12439,298 @@ Cette action est irréversible!`)) {
                       >
                         5v5
                       </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* TOURNAMENT Section */}
+            <div className="p-4 bg-purple-500/5 border border-purple-500/20 rounded-xl space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                <h4 className="text-lg font-bold text-purple-400">TOURNOIS</h4>
+              </div>
+
+              {/* Tournament Hardcore */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-purple-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-orange-400">Hardcore</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.tournamentConfig?.hardcore?.enabled || false}
+                      onChange={() => {
+                        const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                        setFormData({
+                          ...formData,
+                          tournamentConfig: {
+                            ...currentConfig,
+                            hardcore: {
+                              ...currentConfig.hardcore,
+                              enabled: !currentConfig.hardcore?.enabled
+                            }
+                          }
+                        });
+                      }}
+                      className="w-4 h-4 accent-orange-500"
+                    />
+                    <span className="text-xs text-gray-400">Activer</span>
+                  </label>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Modes de jeu</span>
+                    <div className="flex flex-wrap gap-2">
+                      {['Search & Destroy', 'Team Deathmatch', 'Duel'].map((mode) => {
+                        const isSelected = formData.tournamentConfig?.hardcore?.gameModes?.includes(mode);
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                              const currentModes = currentConfig.hardcore?.gameModes || [];
+                              const newModes = isSelected ? currentModes.filter(m => m !== mode) : [...currentModes, mode];
+                              setFormData({
+                                ...formData,
+                                tournamentConfig: {
+                                  ...currentConfig,
+                                  hardcore: {
+                                    ...currentConfig.hardcore,
+                                    enabled: newModes.length > 0 || (currentConfig.hardcore?.formats?.length || 0) > 0,
+                                    gameModes: newModes
+                                  }
+                                }
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              isSelected
+                                ? 'bg-orange-500 text-white border-orange-500'
+                                : 'bg-dark-900 text-gray-400 border-white/10 hover:border-orange-500/50'
+                            }`}
+                          >
+                            {mode}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Formats (taille d'équipe)</span>
+                    <div className="flex flex-wrap gap-2">
+                      {['1v1', '2v2', '3v3', '4v4', '5v5', '6v6'].map((format) => {
+                        const isSelected = formData.tournamentConfig?.hardcore?.formats?.includes(format);
+                        return (
+                          <button
+                            key={format}
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                              const currentFormats = currentConfig.hardcore?.formats || [];
+                              const newFormats = isSelected ? currentFormats.filter(f => f !== format) : [...currentFormats, format];
+                              setFormData({
+                                ...formData,
+                                tournamentConfig: {
+                                  ...currentConfig,
+                                  hardcore: {
+                                    ...currentConfig.hardcore,
+                                    enabled: newFormats.length > 0 || (currentConfig.hardcore?.gameModes?.length || 0) > 0,
+                                    formats: newFormats
+                                  }
+                                }
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              isSelected
+                                ? 'bg-orange-600 text-white border-orange-600'
+                                : 'bg-dark-900 text-gray-400 border-white/10 hover:border-orange-500/50'
+                            }`}
+                          >
+                            {format}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Types de tournoi</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[{ key: 'solo', label: 'Solo' }, { key: 'switch', label: 'Switch' }, { key: 'squads', label: 'Squads' }].map(({ key, label }) => {
+                        const isSelected = formData.tournamentConfig?.hardcore?.types?.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                              const currentTypes = currentConfig.hardcore?.types || [];
+                              const newTypes = isSelected ? currentTypes.filter(t => t !== key) : [...currentTypes, key];
+                              setFormData({
+                                ...formData,
+                                tournamentConfig: {
+                                  ...currentConfig,
+                                  hardcore: {
+                                    ...currentConfig.hardcore,
+                                    types: newTypes
+                                  }
+                                }
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              isSelected
+                                ? 'bg-orange-700 text-white border-orange-700'
+                                : 'bg-dark-900 text-gray-400 border-white/10 hover:border-orange-500/50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tournament CDL */}
+              <div className="p-3 bg-dark-800/50 rounded-lg border border-purple-500/10">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-cyan-400">CDL</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.tournamentConfig?.cdl?.enabled || false}
+                      onChange={() => {
+                        const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                        setFormData({
+                          ...formData,
+                          tournamentConfig: {
+                            ...currentConfig,
+                            cdl: {
+                              ...currentConfig.cdl,
+                              enabled: !currentConfig.cdl?.enabled
+                            }
+                          }
+                        });
+                      }}
+                      className="w-4 h-4 accent-cyan-500"
+                    />
+                    <span className="text-xs text-gray-400">Activer</span>
+                  </label>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Modes de jeu</span>
+                    <div className="flex flex-wrap gap-2">
+                      {['Hardpoint', 'Search & Destroy', 'Control'].map((mode) => {
+                        const isSelected = formData.tournamentConfig?.cdl?.gameModes?.includes(mode);
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                              const currentModes = currentConfig.cdl?.gameModes || [];
+                              const newModes = isSelected ? currentModes.filter(m => m !== mode) : [...currentModes, mode];
+                              setFormData({
+                                ...formData,
+                                tournamentConfig: {
+                                  ...currentConfig,
+                                  cdl: {
+                                    ...currentConfig.cdl,
+                                    enabled: newModes.length > 0 || (currentConfig.cdl?.formats?.length || 0) > 0,
+                                    gameModes: newModes
+                                  }
+                                }
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              isSelected
+                                ? 'bg-cyan-500 text-white border-cyan-500'
+                                : 'bg-dark-900 text-gray-400 border-white/10 hover:border-cyan-500/50'
+                            }`}
+                          >
+                            {mode}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Formats (taille d'équipe)</span>
+                    <div className="flex flex-wrap gap-2">
+                      {['1v1', '2v2', '3v3', '4v4', '5v5', '6v6'].map((format) => {
+                        const isSelected = formData.tournamentConfig?.cdl?.formats?.includes(format);
+                        return (
+                          <button
+                            key={format}
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                              const currentFormats = currentConfig.cdl?.formats || [];
+                              const newFormats = isSelected ? currentFormats.filter(f => f !== format) : [...currentFormats, format];
+                              setFormData({
+                                ...formData,
+                                tournamentConfig: {
+                                  ...currentConfig,
+                                  cdl: {
+                                    ...currentConfig.cdl,
+                                    enabled: newFormats.length > 0 || (currentConfig.cdl?.gameModes?.length || 0) > 0,
+                                    formats: newFormats
+                                  }
+                                }
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              isSelected
+                                ? 'bg-cyan-600 text-white border-cyan-600'
+                                : 'bg-dark-900 text-gray-400 border-white/10 hover:border-cyan-500/50'
+                            }`}
+                          >
+                            {format}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 mb-2 block">Types de tournoi</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[{ key: 'solo', label: 'Solo' }, { key: 'switch', label: 'Switch' }, { key: 'squads', label: 'Squads' }].map(({ key, label }) => {
+                        const isSelected = formData.tournamentConfig?.cdl?.types?.includes(key);
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              const currentConfig = formData.tournamentConfig || { hardcore: { enabled: false, gameModes: [], formats: [], types: [] }, cdl: { enabled: false, gameModes: [], formats: [], types: [] } };
+                              const currentTypes = currentConfig.cdl?.types || [];
+                              const newTypes = isSelected ? currentTypes.filter(t => t !== key) : [...currentTypes, key];
+                              setFormData({
+                                ...formData,
+                                tournamentConfig: {
+                                  ...currentConfig,
+                                  cdl: {
+                                    ...currentConfig.cdl,
+                                    types: newTypes
+                                  }
+                                }
+                              });
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              isSelected
+                                ? 'bg-cyan-700 text-white border-cyan-700'
+                                : 'bg-dark-900 text-gray-400 border-white/10 hover:border-cyan-500/50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

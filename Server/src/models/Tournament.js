@@ -27,6 +27,32 @@ const tournamentSchema = new mongoose.Schema({
     required: true
   },
   
+  // Game selection
+  game: {
+    type: String,
+    enum: ['cod_bo7', 'free'],
+    default: 'cod_bo7'
+  },
+  
+  // Custom game name (when game is 'free')
+  customGame: {
+    type: String,
+    maxlength: 100,
+    default: ''
+  },
+  
+  // Tournament logo (displayed on cards)
+  logo: {
+    type: String,
+    default: ''
+  },
+  
+  // Tournament banner (displayed on detail page)
+  banner: {
+    type: String,
+    default: ''
+  },
+  
   // Match format
   format: {
     type: String,
@@ -127,6 +153,31 @@ const tournamentSchema = new mongoose.Schema({
     }
   },
   
+  // Entry fee configuration (registration cost)
+  entryFee: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    // Fee type: 'gold', 'munitions', 'cashprize'
+    type: {
+      type: String,
+      enum: ['gold', 'munitions', 'cashprize'],
+      default: 'gold'
+    },
+    // Amount to pay
+    amount: {
+      type: Number,
+      default: 0
+    },
+    // Currency (only for cashprize type)
+    currency: {
+      type: String,
+      enum: ['EUR', 'USD', 'GBP'],
+      default: 'EUR'
+    }
+  },
+  
   // Participants - for team tournaments: squads, for solo: users
   participants: [{
     // For team tournaments
@@ -140,7 +191,17 @@ const tournamentSchema = new mongoose.Schema({
       name: String,
       tag: String,
       color: String,
-      logo: String
+      logo: String,
+      members: [{
+        odUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        username: String,
+        discordId: String,
+        avatarUrl: String,
+        platform: String,
+        irisConnected: { type: Boolean, default: false },
+        ggSecureConnected: { type: Boolean, default: false },
+        role: String
+      }]
     },
     // For solo tournaments
     user: {
@@ -153,7 +214,10 @@ const tournamentSchema = new mongoose.Schema({
       username: String,
       discordId: String,
       avatar: String,
-      avatarUrl: String
+      avatarUrl: String,
+      platform: String,
+      irisConnected: { type: Boolean, default: false },
+      ggSecureConnected: { type: Boolean, default: false }
     },
     // Is this a bot participant (for testing)
     isBot: {
@@ -193,7 +257,10 @@ const tournamentSchema = new mongoose.Schema({
         username: String,
         discordId: String,
         avatar: String,
-        avatarUrl: String
+        avatarUrl: String,
+        platform: String,
+        irisConnected: { type: Boolean, default: false },
+        ggSecureConnected: { type: Boolean, default: false }
       },
       isBot: {
         type: Boolean,
@@ -344,11 +411,12 @@ tournamentSchema.index({ 'participants.user': 1 });
 
 // Virtual for participant count
 tournamentSchema.virtual('participantCount').get(function() {
-  return this.participants.length;
+  return this.participants?.length || 0;
 });
 
 // Virtual for checking if registration is full
 tournamentSchema.virtual('isFull').get(function() {
+  if (!this.participants) return false;
   return this.participants.length >= this.maxParticipants;
 });
 
@@ -376,164 +444,115 @@ tournamentSchema.methods.generateBracket = function() {
     throw new Error('Not enough participants to generate bracket');
   }
   
-  // Shuffle participants for seeding
-  const shuffled = [...Array(participantCount).keys()];
-  for (let i = shuffled.length - 1; i > 0; i--) {
+  // Shuffle participants for random seeding
+  const indices = [...Array(participantCount).keys()];
+  for (let i = indices.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    [indices[i], indices[j]] = [indices[j], indices[i]];
   }
   
-  // Assign seeds
+  // After shuffle: indices[0] is seed 1, indices[1] is seed 2, etc.
+  // Assign seeds (1-based) to participants/teams
   if (this.type === 'solo') {
-    shuffled.forEach((originalIdx, newIdx) => {
+    indices.forEach((originalIdx, seedPosition) => {
       if (this.formedTeams[originalIdx]) {
-        this.formedTeams[originalIdx].seed = newIdx + 1;
+        this.formedTeams[originalIdx].seed = seedPosition + 1;
       }
     });
   } else {
-    shuffled.forEach((originalIdx, newIdx) => {
+    indices.forEach((originalIdx, seedPosition) => {
       if (this.participants[originalIdx]) {
-        this.participants[originalIdx].seed = newIdx + 1;
+        this.participants[originalIdx].seed = seedPosition + 1;
       }
     });
   }
   
-  // Determine group size based on teamSize (3v3 = groups of 3, 4v4 = groups of 4, etc.)
-  // Default to 4 if teamSize is not 3, 4, or 5
-  let groupSize = this.teamSize;
-  if (groupSize < 3) groupSize = 3;
-  if (groupSize > 5) groupSize = 5;
-  this.groupSize = groupSize;
+  // Calculate bracket size (next power of 2)
+  const bracketSize = Math.pow(2, Math.ceil(Math.log2(participantCount)));
+  const rounds = Math.ceil(Math.log2(bracketSize));
   
-  // Calculate number of groups needed
-  const numGroups = Math.ceil(participantCount / groupSize);
+  this.hasGroupStage = false;
+  this.groups = [];
+  this.bracket = [];
   
-  // If we have enough participants for groups and not a power of 2, use group stage
-  const isPowerOf2 = participantCount > 0 && (participantCount & (participantCount - 1)) === 0;
-  
-  if (participantCount >= 6 && !isPowerOf2) {
-    // Use group stage
-    this.hasGroupStage = true;
-    this.groups = [];
-    
-    const groupNames = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'];
-    
-    // Distribute participants to groups (snake draft for fairness)
-    const groupParticipants = Array.from({ length: numGroups }, () => []);
-    let groupIdx = 0;
-    let direction = 1;
-    
-    shuffled.forEach(pIdx => {
-      groupParticipants[groupIdx].push(pIdx);
-      groupIdx += direction;
-      if (groupIdx >= numGroups) {
-        groupIdx = numGroups - 1;
-        direction = -1;
-      } else if (groupIdx < 0) {
-        groupIdx = 0;
-        direction = 1;
-      }
-    });
-    
-    // Create groups with round-robin matches
-    groupParticipants.forEach((participants, gIdx) => {
-      const groupMatches = [];
-      let matchNum = 1;
-      
-      // Generate round-robin matches
-      for (let i = 0; i < participants.length; i++) {
-        for (let j = i + 1; j < participants.length; j++) {
-          groupMatches.push({
-            matchNumber: matchNum++,
-            participant1: { index: participants[i], score: 0 },
-            participant2: { index: participants[j], score: 0 },
-            winner: null,
-            status: 'pending',
-            maps: []
-          });
-        }
-      }
-      
-      // Initialize standings
-      const standings = participants.map(pIdx => ({
-        participantIndex: pIdx,
-        wins: 0,
-        losses: 0,
-        mapWins: 0,
-        mapLosses: 0,
-        points: 0
-      }));
-      
-      this.groups.push({
-        groupName: `Groupe ${groupNames[gIdx] || (gIdx + 1)}`,
-        participants,
-        standings,
-        matches: groupMatches
-      });
-    });
-    
-    // Bracket will be generated later when group stage completes
-    // For now, create empty bracket placeholder for finals
-    this.bracket = [];
-  } else {
-    // Standard single elimination bracket (power of 2 or small tournament)
-    this.hasGroupStage = false;
-    this.groups = [];
-    
-    // Calculate number of rounds needed
-    const rounds = Math.ceil(Math.log2(participantCount));
-    
-    // Generate bracket structure
-    this.bracket = [];
-    
-    const roundNames = ['Finals', 'Semi-Finals', 'Quarter-Finals', 'Round of 16', 'Round of 32', 'Round of 64', 'Round of 128'];
-    
-    for (let round = 1; round <= rounds; round++) {
-      const matchesInRound = Math.pow(2, rounds - round);
-      const roundMatches = [];
-      
-      for (let match = 0; match < matchesInRound; match++) {
-        const matchData = {
-          matchNumber: match + 1,
-          participant1: { index: null, score: 0 },
-          participant2: { index: null, score: 0 },
-          winner: null,
-          status: 'pending',
-          maps: []
-        };
-        
-        // For first round, assign seeded participants
-        if (round === 1) {
-          const idx1 = match * 2;
-          const idx2 = match * 2 + 1;
-          
-          if (idx1 < participantCount) {
-            matchData.participant1.index = shuffled[idx1];
-          }
-          if (idx2 < participantCount) {
-            matchData.participant2.index = shuffled[idx2];
-          }
-          
-          // If only one participant in match, auto-advance (bye)
-          if (matchData.participant1.index !== null && matchData.participant2.index === null) {
-            matchData.winner = matchData.participant1.index;
-            matchData.status = 'completed';
-          } else if (matchData.participant2.index !== null && matchData.participant1.index === null) {
-            matchData.winner = matchData.participant2.index;
-            matchData.status = 'completed';
-          }
-        }
-        
-        roundMatches.push(matchData);
-      }
-      
-      this.bracket.push({
-        round,
-        roundName: roundNames[rounds - round] || `Round ${round}`,
-        matches: roundMatches
-      });
+  // Generate proper tournament seeding order
+  // This ensures top seeds (1,2) only meet in finals
+  // For 8 teams: matches are 1v8, 4v5, 3v6, 2v7
+  // So seeds 1,4,3,2 are on top half, seeds 8,5,6,7 on bottom half
+  const generateBracketPositions = (size) => {
+    if (size === 1) return [0];
+    const half = generateBracketPositions(size / 2);
+    const result = [];
+    for (let i = 0; i < half.length; i++) {
+      result.push(half[i]);
+      result.push(size - 1 - half[i]);
     }
+    return result;
+  };
+  
+  const bracketPositions = generateBracketPositions(bracketSize);
+  
+  // bracketPositions tells us: for each match slot, which seed number should go there
+  // bracketPositions[0] and bracketPositions[1] are paired in match 1
+  // For 8 teams: [0,7,3,4,1,6,2,5] means:
+  //   Match 1: seed 1 (pos 0) vs seed 8 (pos 7)
+  //   Match 2: seed 4 (pos 3) vs seed 5 (pos 4)
+  //   Match 3: seed 2 (pos 1) vs seed 7 (pos 6)
+  //   Match 4: seed 3 (pos 2) vs seed 6 (pos 5)
+  
+  // Map: seed position -> participant index
+  // indices[seedPos] gives the original participant index for that seed
+  const getParticipantForSeed = (seedPos) => {
+    if (seedPos >= participantCount) return null;
+    return indices[seedPos];
+  };
+  
+  const roundNames = ['Finals', 'Semi-Finals', 'Quarter-Finals', 'Round of 16', 'Round of 32', 'Round of 64', 'Round of 128'];
+  
+  for (let round = 1; round <= rounds; round++) {
+    const matchesInRound = Math.pow(2, rounds - round);
+    const roundMatches = [];
+    
+    for (let match = 0; match < matchesInRound; match++) {
+      const matchData = {
+        matchNumber: match + 1,
+        participant1: { index: null, score: 0 },
+        participant2: { index: null, score: 0 },
+        winner: null,
+        status: 'pending',
+        maps: []
+      };
+      
+      // For first round, assign participants using proper tournament seeding
+      if (round === 1) {
+        const seedPos1 = bracketPositions[match * 2];     // e.g., seed 1 (position 0)
+        const seedPos2 = bracketPositions[match * 2 + 1]; // e.g., seed 8 (position 7)
+        
+        matchData.participant1.index = getParticipantForSeed(seedPos1);
+        matchData.participant2.index = getParticipantForSeed(seedPos2);
+        
+        // Handle byes (when a slot has no participant)
+        if (matchData.participant1.index !== null && matchData.participant2.index === null) {
+          matchData.winner = matchData.participant1.index;
+          matchData.status = 'completed';
+        } else if (matchData.participant2.index !== null && matchData.participant1.index === null) {
+          matchData.winner = matchData.participant2.index;
+          matchData.status = 'completed';
+        }
+      }
+      
+      roundMatches.push(matchData);
+    }
+    
+    this.bracket.push({
+      round,
+      roundName: roundNames[rounds - round] || `Round ${round}`,
+      matches: roundMatches
+    });
   }
+  
+  console.log(`[generateBracket] Created bracket with ${this.bracket.length} rounds for ${participantCount} participants (bracket size: ${bracketSize})`);
+  console.log(`[generateBracket] Seed assignments:`, indices.map((idx, seed) => `Seed ${seed+1} = participant ${idx}`));
   
   return { groups: this.groups, bracket: this.bracket };
 };

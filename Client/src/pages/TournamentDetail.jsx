@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useLanguage } from '../LanguageContext';
 import { useAuth } from '../AuthContext';
 import { useMode } from '../ModeContext';
+import { useSocket } from '../SocketContext';
 import { API_URL } from '../config';
 import { 
   Trophy, Calendar, Users, Clock, Medal, Crown, Zap, ArrowLeft,
   MapPin, Radio, Play, CheckCircle, XCircle, Loader2,
-  Swords, Target, User, UsersRound, ExternalLink, Coins, ChevronRight,
-  Shield, Star, Gift, Edit3, Save, X, Trash2, Bot
+  Swords, Target, User, UsersRound, ExternalLink, Coins, ChevronRight, ChevronDown,
+  Shield, Star, Gift, Edit3, Save, X, Trash2, Bot, Sparkles, Eye, MessageCircle, Send
 } from 'lucide-react';
 
 const TournamentDetail = () => {
@@ -17,11 +18,18 @@ const TournamentDetail = () => {
   const { t, language } = useLanguage();
   const { user, squad, hasAdminAccess } = useAuth();
   const { selectedMode } = useMode();
+  const { joinTournament, leaveTournament, on, emit } = useSocket();
   
   const [tournament, setTournament] = useState(null);
+  const [tournamentMatches, setTournamentMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState(null);
+  const [showBracketIndicator, setShowBracketIndicator] = useState(false);
+  const [showAllParticipants, setShowAllParticipants] = useState(false);
+  const [viewerCount, setViewerCount] = useState(0);
+  const [tournamentMaps, setTournamentMaps] = useState([]);
+  const bracketRef = useRef(null);
   
   // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
@@ -50,11 +58,52 @@ const TournamentDetail = () => {
   useEffect(() => {
     if (tournamentId) {
       fetchTournament();
+      fetchTournamentMaps();
     }
   }, [tournamentId]);
 
+  // Join tournament room for real-time updates and viewer count
+  useEffect(() => {
+    if (tournamentId) {
+      joinTournament(tournamentId);
+      
+      // Listen for viewer count updates
+      const unsubscribe = on('tournamentViewers', ({ tournamentId: tId, count }) => {
+        if (tId === tournamentId) {
+          setViewerCount(count);
+        }
+      });
+      
+      return () => {
+        leaveTournament(tournamentId);
+        unsubscribe();
+      };
+    }
+  }, [tournamentId, joinTournament, leaveTournament, on]);
+
+  // Show bracket indicator when bracket exists
+  useEffect(() => {
+    if (tournament?.bracket && tournament.bracket.length > 0) {
+      setShowBracketIndicator(true);
+      // Auto-hide after 8 seconds
+      const timer = setTimeout(() => setShowBracketIndicator(false), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [tournament?.bracket]);
+
+  const scrollToBracket = () => {
+    bracketRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setShowBracketIndicator(false);
+  };
+
   useEffect(() => {
     if (tournament) {
+      // Pour les tournois solo, convertir le nombre de joueurs en nombre d'équipes
+      let maxParticipantsForForm = tournament.maxParticipants || 12;
+      if (tournament.type === 'solo' && tournament.teamSize) {
+        maxParticipantsForForm = Math.round(tournament.maxParticipants / tournament.teamSize);
+      }
+      
       setEditForm({
         name: tournament.name || '',
         description: tournament.description || '',
@@ -63,7 +112,7 @@ const TournamentDetail = () => {
         mode: tournament.mode || 'hardcore',
         teamSize: tournament.teamSize || 4,
         groupSize: tournament.groupSize || 4,
-        maxParticipants: tournament.maxParticipants || 12,
+        maxParticipants: maxParticipantsForForm,
         mapSelection: tournament.mapSelection || 'random',
         scheduledAt: tournament.scheduledAt ? new Date(tournament.scheduledAt).toISOString().slice(0, 16) : '',
         streaming: {
@@ -95,11 +144,18 @@ const TournamentDetail = () => {
   const handleSaveEdit = async () => {
     try {
       setSaving(true);
+      
+      // Préparer les données - convertir le nombre d'équipes en joueurs pour les tournois solo
+      const dataToSend = { ...editForm };
+      if (dataToSend.type === 'solo') {
+        dataToSend.maxParticipants = dataToSend.maxParticipants * dataToSend.teamSize;
+      }
+      
       const response = await fetch(`${API_URL}/tournaments/admin/${tournamentId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(editForm)
+        body: JSON.stringify(dataToSend)
       });
       const data = await response.json();
       if (!data.success) {
@@ -166,6 +222,11 @@ const TournamentDetail = () => {
       const data = await response.json();
       if (data.success && data.tournament) {
         setTournament(data.tournament);
+        
+        // Also fetch tournament matches if tournament is in progress or completed
+        if (['in_progress', 'completed'].includes(data.tournament.status)) {
+          await fetchTournamentMatches();
+        }
       } else {
         setError(language === 'fr' ? 'Tournoi non trouvé' : 'Tournament not found');
       }
@@ -175,6 +236,107 @@ const TournamentDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchTournamentMatches = async () => {
+    try {
+      const response = await fetch(`${API_URL}/tournaments/${tournamentId}/matches`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        console.log('[TournamentDetail] Fetched matches:', data.matches?.length || 0);
+        setTournamentMatches(data.matches || []);
+      }
+    } catch (err) {
+      console.error('Error fetching tournament matches:', err);
+    }
+  };
+
+  const fetchTournamentMaps = async () => {
+    try {
+      const response = await fetch(`${API_URL}/maps/tournament?mode=${tournament?.mode || 'hardcore'}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setTournamentMaps(data.maps || []);
+      }
+    } catch (err) {
+      console.error('Error fetching tournament maps:', err);
+    }
+  };
+
+  // Fetch maps when tournament mode is known
+  useEffect(() => {
+    if (tournament?.mode) {
+      fetchTournamentMaps();
+    }
+  }, [tournament?.mode]);
+
+  // Generate consistent random maps for all rounds (no duplicates across rounds)
+  const getAllRoundMaps = () => {
+    if (!tournamentMaps || tournamentMaps.length === 0) return {};
+    if (!tournament || !tournament.bracket) return {};
+    
+    const mapCount = tournament.format === 'bo1' ? 1 : 3;
+    const totalRounds = tournament.bracket.length;
+    const totalMapsNeeded = mapCount * totalRounds;
+    
+    // Use seed based on tournament ID for consistency
+    const seedString = `${tournamentId}-maps`;
+    let seed = 0;
+    for (let i = 0; i < seedString.length; i++) {
+      seed = ((seed << 5) - seed) + seedString.charCodeAt(i);
+      seed = seed & seed;
+    }
+    seed = Math.abs(seed);
+    
+    // Seeded random function
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    
+    // Shuffle all maps with seed
+    const shuffled = [...tournamentMaps].sort(() => seededRandom() - 0.5);
+    
+    // If we don't have enough maps, we'll need to reuse some
+    // But try to avoid duplicates as much as possible
+    let availableMaps = [...shuffled];
+    if (availableMaps.length < totalMapsNeeded) {
+      // Duplicate the pool if needed
+      while (availableMaps.length < totalMapsNeeded) {
+        availableMaps = [...availableMaps, ...shuffled];
+      }
+    }
+    
+    // Assign maps to each round
+    const roundMapsMap = {};
+    let mapIndex = 0;
+    
+    for (let round = 1; round <= totalRounds; round++) {
+      roundMapsMap[round] = availableMaps.slice(mapIndex, mapIndex + mapCount);
+      mapIndex += mapCount;
+    }
+    
+    return roundMapsMap;
+  };
+  
+  // Memoize the round maps calculation
+  const roundMapsData = React.useMemo(() => getAllRoundMaps(), [tournamentMaps, tournament?.bracket?.length, tournament?.format, tournamentId]);
+  
+  // Get maps for a specific round
+  const getRoundMaps = (roundNumber) => {
+    return roundMapsData[roundNumber] || [];
+  };
+
+  // Find the TournamentMatch document for a bracket match
+  const findMatchDocument = (round, matchNumber) => {
+    const match = tournamentMatches.find(
+      m => Number(m.round) === Number(round) && Number(m.matchNumber) === Number(matchNumber)
+    );
+    return match;
   };
 
   const handleRegister = async () => {
@@ -355,6 +517,15 @@ const TournamentDetail = () => {
       
       {/* Hero Header */}
       <div className={`relative bg-gradient-to-br ${getModeColor(mode)} overflow-hidden`}>
+        {/* Custom Banner Background */}
+        {tournament.banner && (
+          <>
+            <div className="absolute inset-0">
+              <img src={tournament.banner} alt="" className="w-full h-full object-cover" />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/60 to-black/80" />
+          </>
+        )}
         <div className="absolute inset-0 bg-black/30" />
         <div className="absolute inset-0 bg-gradient-to-t from-dark-950 via-transparent to-transparent" />
         
@@ -373,9 +544,13 @@ const TournamentDetail = () => {
           </button>
 
           <div className="flex flex-col md:flex-row md:items-start gap-6">
-            {/* Tournament Icon */}
-            <div className="w-24 h-24 md:w-32 md:h-32 bg-white/10 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 shadow-2xl">
-              <Trophy className="w-12 h-12 md:w-16 md:h-16 text-white" />
+            {/* Tournament Icon/Logo */}
+            <div className="w-24 h-24 md:w-32 md:h-32 bg-white/10 backdrop-blur-xl rounded-2xl flex items-center justify-center border border-white/20 shadow-2xl overflow-hidden">
+              {tournament.logo ? (
+                <img src={tournament.logo} alt="" className="w-full h-full object-contain p-2" />
+              ) : (
+                <Trophy className="w-12 h-12 md:w-16 md:h-16 text-white" />
+              )}
             </div>
             
             <div className="flex-1">
@@ -406,6 +581,13 @@ const TournamentDetail = () => {
                 <div className="flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-lg">
                   <span className="text-white font-bold uppercase">{mode}</span>
                 </div>
+                {/* Viewer Count */}
+                {viewerCount > 0 && (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-green-500/20 backdrop-blur-sm rounded-lg border border-green-500/30">
+                    <Eye className="w-4 h-4 text-green-400" />
+                    <span className="text-green-400 font-semibold text-sm">{viewerCount}</span>
+                  </div>
+                )}
               </div>
 
               {/* Admin Actions */}
@@ -580,16 +762,31 @@ const TournamentDetail = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-2">Max Participants</label>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">
+                    {language === 'fr' ? "Nombre d'équipes" : 'Number of teams'}
+                  </label>
                   <input
                     type="number"
                     min="2"
                     max="256"
+                    step="2"
                     value={editForm.maxParticipants}
-                    onChange={(e) => setEditForm({ ...editForm, maxParticipants: parseInt(e.target.value) || 2 })}
+                    onChange={(e) => {
+                      let val = parseInt(e.target.value) || 2;
+                      // Pour les tournois solo, forcer un nombre pair
+                      if (editForm.type === 'solo' && val % 2 !== 0) {
+                        val = val + 1;
+                      }
+                      setEditForm({ ...editForm, maxParticipants: val });
+                    }}
                     className="w-full px-4 py-3 bg-dark-800 border border-white/10 rounded-xl text-white focus:border-cyan-500 focus:outline-none"
-                    placeholder="Ex: 12, 24, 32..."
+                    placeholder="Ex: 8, 12, 16, 32..."
                   />
+                  {editForm.type === 'solo' && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      = {editForm.maxParticipants * editForm.teamSize} {language === 'fr' ? 'joueurs' : 'players'}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -848,9 +1045,85 @@ const TournamentDetail = () => {
       <div className="relative z-10 px-4 sm:px-6 lg:px-8 py-8 md:py-12">
         {/* Top Section: Info Grid */}
         <div className="max-w-7xl mx-auto mb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+          <div className="grid grid-cols-1 gap-6 lg:gap-8 lg:pr-[340px] xl:pr-[420px]">
             {/* Left Column - Main Info */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="space-y-6">
+              {/* Mobile Sidebar - Visible only on small screens */}
+              <div className="lg:hidden space-y-4">
+                {/* Registration Card - Mobile */}
+                <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${getModeBorder(mode)} overflow-hidden`}>
+                  <div className={`px-4 py-3 bg-gradient-to-r ${getModeColor(mode)}`}>
+                    <h2 className="text-lg font-bold text-white flex items-center gap-3">
+                      <Play className="w-5 h-5" />
+                      {language === 'fr' ? 'Inscription' : 'Registration'}
+                    </h2>
+                  </div>
+                  <div className="p-4">
+                    {tournament.status === 'registration' ? (
+                      <>
+                        {registered ? (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-xl">
+                              <CheckCircle className="w-5 h-5 text-green-400" />
+                              <div>
+                                <div className="text-green-400 font-semibold text-sm">{language === 'fr' ? 'Vous êtes inscrit !' : "You're registered!"}</div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={handleUnregister}
+                              disabled={registering}
+                              className="w-full py-2.5 bg-red-500/20 border border-red-500/50 text-red-400 rounded-xl font-semibold hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2 text-sm"
+                            >
+                              {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                              {language === 'fr' ? 'Se désinscrire' : 'Unregister'}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={handleRegister}
+                            disabled={registering || (tournament.type === 'team' && !squad)}
+                            className={`w-full py-3 bg-gradient-to-r ${getModeColor(mode)} text-dark-950 rounded-xl font-bold text-base hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+                          >
+                            {registering ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                            {language === 'fr' ? "S'inscrire" : 'Register Now'}
+                          </button>
+                        )}
+                      </>
+                    ) : tournament.status === 'in_progress' ? (
+                      <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-center">
+                        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mx-auto mb-2" />
+                        <div className="text-red-400 font-semibold text-sm">{language === 'fr' ? 'Tournoi en cours' : 'Tournament in progress'}</div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-gray-500/10 border border-gray-500/30 rounded-xl text-center">
+                        <div className="text-gray-400 text-sm">{language === 'fr' ? 'Inscriptions fermées' : 'Registration closed'}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tournament Info Card - Mobile (Compact horizontal) */}
+                <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${getModeBorder(mode)} p-4`}>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="text-center p-2 bg-dark-800 rounded-lg">
+                      <p className="text-[10px] text-gray-500 uppercase">Format</p>
+                      <p className="text-white font-bold text-sm">{tournament.format?.toUpperCase() || 'BO1'}</p>
+                    </div>
+                    <div className="text-center p-2 bg-dark-800 rounded-lg">
+                      <p className="text-[10px] text-gray-500 uppercase">{language === 'fr' ? 'Équipe' : 'Team'}</p>
+                      <p className="text-white font-bold text-sm">{tournament.teamSize}v{tournament.teamSize}</p>
+                    </div>
+                    <div className="text-center p-2 bg-dark-800 rounded-lg">
+                      <p className="text-[10px] text-gray-500 uppercase">Type</p>
+                      <p className="text-white font-bold text-sm">{tournament.type === 'team' ? (language === 'fr' ? 'Équipe' : 'Team') : 'Solo'}</p>
+                    </div>
+                    <div className="text-center p-2 bg-dark-800 rounded-lg">
+                      <p className="text-[10px] text-gray-500 uppercase">Maps</p>
+                      <p className="text-white font-bold text-sm">{tournament.mapSelection === 'random' ? (language === 'fr' ? 'Aléat.' : 'Rand.') : (language === 'fr' ? 'Libre' : 'Free')}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
               {/* Prizes Section */}
               {(tournament.prizes?.gold?.enabled || tournament.prizes?.cashprize?.enabled) && (
                 <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${getModeBorder(mode)} overflow-hidden`}>
@@ -947,85 +1220,145 @@ const TournamentDetail = () => {
                   <div className="mb-4 sm:mb-6">
                     <div className="flex justify-between text-xs sm:text-sm mb-2">
                       <span className="text-gray-400">{language === 'fr' ? 'Places occupées' : 'Slots filled'}</span>
-                      <span className={getModeAccent(mode)}>{Math.round((participantCount / tournament.maxParticipants) * 100)}%</span>
+                      <span className={getModeAccent(mode)}>
+                        {tournament.participants?.length || 0}/{tournament.maxParticipants}
+                        {botCount > 0 && <span className="text-gray-500 ml-1">({botCount} bots)</span>}
+                      </span>
                     </div>
                     <div className="h-2 sm:h-3 bg-dark-700 rounded-full overflow-hidden">
                       <div 
                         className={`h-full bg-gradient-to-r ${getModeColor(mode)} transition-all duration-500`}
-                        style={{ width: `${(participantCount / tournament.maxParticipants) * 100}%` }}
+                        style={{ width: `${((tournament.participants?.length || 0) / tournament.maxParticipants) * 100}%` }}
                       />
                     </div>
                   </div>
                   
-                  {/* Participants grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
-                    {tournament.participants?.filter(p => !p.isBot).map((participant, idx) => {
-                      // Get avatar URL based on tournament type
-                      let avatarUrl = null;
-                      let displayName = '';
-                      
-                      if (tournament.type === 'team') {
-                        avatarUrl = participant.squad?.logo || participant.squadInfo?.logo;
-                        displayName = participant.squad?.name || participant.squadInfo?.name || 'Unknown Squad';
-                      } else {
-                        // Solo tournament - get user avatar
-                        const userData = participant.user || participant.userInfo || participant;
-                        const discordId = userData?.discordId;
-                        const discordAvatar = userData?.discordAvatar || userData?.avatar;
-                        const siteAvatar = userData?.avatarUrl; // Site uploaded avatar
-                        
-                        // Priority: site avatar > Discord avatar
-                        if (siteAvatar && siteAvatar.startsWith('http')) {
-                          avatarUrl = siteAvatar;
-                        } else if (discordAvatar && discordId) {
-                          // Build Discord CDN URL
-                          if (discordAvatar.startsWith('http')) {
-                            avatarUrl = discordAvatar;
-                          } else {
-                            avatarUrl = `https://cdn.discordapp.com/avatars/${discordId}/${discordAvatar}.png`;
-                          }
-                        }
-                        displayName = userData?.username || 'Unknown Player';
-                      }
-                      
-                      return (
-                        <div key={idx} className="flex items-center gap-3 p-2 sm:p-3 bg-dark-800 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-                          {avatarUrl ? (
-                            <img 
-                              src={avatarUrl} 
-                              alt={displayName}
-                              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border-2 border-white/10"
-                              onError={(e) => {
-                                e.target.onerror = null;
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
-                              }}
-                            />
-                          ) : null}
-                          <div 
-                            className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br ${getModeColor(mode)} flex items-center justify-center`}
-                            style={{ display: avatarUrl ? 'none' : 'flex' }}
-                          >
-                            {tournament.type === 'team' ? (
-                              <UsersRound className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                            ) : (
-                              <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-white font-medium truncate text-sm sm:text-base">
-                              {displayName}
-                            </div>
-                            <div className="text-gray-500 text-xs">
-                              #{idx + 1}
-                            </div>
-                          </div>
+                  {/* Participants grid - Show limited participants with expand option */}
+                  {(() => {
+                    const INITIAL_DISPLAY_COUNT = 9; // Show 9 initially (3x3 grid)
+                    const allParticipants = tournament.participants || [];
+                    const displayedParticipants = showAllParticipants 
+                      ? allParticipants 
+                      : allParticipants.slice(0, INITIAL_DISPLAY_COUNT);
+                    const hasMore = allParticipants.length > INITIAL_DISPLAY_COUNT;
+                    
+                    return (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-3">
+                          {displayedParticipants.map((participant, idx) => {
+                            // Get avatar URL based on tournament type
+                            let avatarUrl = null;
+                            let displayName = '';
+                            const isBot = participant.isBot;
+                            
+                            if (tournament.type === 'team') {
+                              avatarUrl = participant.squad?.logo || participant.squadInfo?.logo;
+                              displayName = participant.squad?.name || participant.squadInfo?.name || 'Unknown Squad';
+                            } else {
+                              // Solo tournament - get user avatar
+                              const userData = participant.user || participant.userInfo || participant;
+                              const discordId = userData?.discordId;
+                              const discordAvatar = userData?.discordAvatar || userData?.avatar;
+                              const siteAvatar = userData?.avatarUrl; // Site uploaded avatar
+                              
+                              // Priority: site avatar > Discord avatar
+                              if (siteAvatar) {
+                                // Check if it's an absolute URL or relative path
+                                avatarUrl = siteAvatar.startsWith('http') ? siteAvatar : siteAvatar;
+                              } else if (discordAvatar && discordId) {
+                                // Build Discord CDN URL
+                                if (discordAvatar.startsWith('http')) {
+                                  avatarUrl = discordAvatar;
+                                } else {
+                                  avatarUrl = `https://cdn.discordapp.com/avatars/${discordId}/${discordAvatar}.png`;
+                                }
+                              }
+                              displayName = userData?.username || 'Unknown Player';
+                            }
+                            
+                            return (
+                              <div key={idx} className={`flex items-center gap-3 p-2 sm:p-3 bg-dark-800 rounded-xl border transition-colors ${
+                                isBot ? 'border-purple-500/20 hover:border-purple-500/30' : 'border-white/5 hover:border-white/10'
+                              }`}>
+                                {avatarUrl ? (
+                                  <img 
+                                    src={avatarUrl} 
+                                    alt={displayName}
+                                    className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border-2 ${
+                                      isBot ? 'border-purple-500/30' : 'border-white/10'
+                                    }`}
+                                    onError={(e) => {
+                                      e.target.onerror = null;
+                                      e.target.style.display = 'none';
+                                      e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                ) : null}
+                                <div 
+                                  className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${
+                                    isBot ? 'bg-gradient-to-br from-purple-600 to-violet-600' : `bg-gradient-to-br ${getModeColor(mode)}`
+                                  }`}
+                                  style={{ display: avatarUrl ? 'none' : 'flex' }}
+                                >
+                                  {isBot ? (
+                                    <Bot className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                                  ) : tournament.type === 'team' ? (
+                                    <UsersRound className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                                  ) : (
+                                    <User className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-white font-medium truncate text-sm sm:text-base">
+                                      {displayName}
+                                    </span>
+                                    {isBot && (
+                                      <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-500/20 text-purple-400 rounded">
+                                        BOT
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-gray-500 text-xs">
+                                    #{idx + 1}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
+                        
+                        {/* Show more/less button */}
+                        {hasMore && (
+                          <button
+                            onClick={() => setShowAllParticipants(!showAllParticipants)}
+                            className={`w-full mt-4 py-3 rounded-xl border transition-all flex items-center justify-center gap-2 ${
+                              showAllParticipants 
+                                ? 'bg-dark-800 border-white/10 text-gray-400 hover:text-white hover:border-white/20'
+                                : `bg-gradient-to-r ${getModeColor(mode)} text-dark-950 font-semibold hover:shadow-lg`
+                            }`}
+                          >
+                            {showAllParticipants ? (
+                              <>
+                                <ChevronDown className="w-4 h-4 rotate-180" />
+                                {language === 'fr' ? 'Voir moins' : 'Show less'}
+                              </>
+                            ) : (
+                              <>
+                                <Users className="w-4 h-4" />
+                                {language === 'fr' 
+                                  ? `Voir tous les participants (+${allParticipants.length - INITIAL_DISPLAY_COUNT})` 
+                                  : `Show all participants (+${allParticipants.length - INITIAL_DISPLAY_COUNT})`
+                                }
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                   
-                  {participantCount === 0 && (
+                  {(!tournament.participants || tournament.participants.length === 0) && (
                     <div className="text-center py-8 sm:py-12 text-gray-500">
                       <Users className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 opacity-50" />
                       <p className="text-sm sm:text-base">{language === 'fr' ? 'Aucun participant inscrit pour le moment' : 'No participants registered yet'}</p>
@@ -1035,207 +1368,508 @@ const TournamentDetail = () => {
                 </div>
               </div>
             </div>
-
-            {/* Right Column - Sidebar */}
-            <div className="space-y-6 lg:sticky lg:top-4 lg:self-start">
-              {/* Registration Card */}
-              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${getModeBorder(mode)} overflow-hidden`}>
-                <div className={`px-4 sm:px-6 py-4 bg-gradient-to-r ${getModeColor(mode)}`}>
-                  <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-3">
-                    <Play className="w-5 h-5 sm:w-6 sm:h-6" />
-                    {language === 'fr' ? 'Inscription' : 'Registration'}
-                  </h2>
-                </div>
-                <div className="p-4 sm:p-6">
-                  {tournament.status === 'registration' ? (
-                    <>
-                      {registered ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3 p-3 sm:p-4 bg-green-500/10 border border-green-500/30 rounded-xl">
-                            <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-400" />
-                            <div>
-                              <div className="text-green-400 font-semibold text-sm sm:text-base">{language === 'fr' ? 'Vous êtes inscrit !' : "You're registered!"}</div>
-                              <div className="text-green-400/60 text-xs sm:text-sm">{language === 'fr' ? 'Bonne chance !' : 'Good luck!'}</div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={handleUnregister}
-                            disabled={registering}
-                            className="w-full py-2.5 sm:py-3 bg-red-500/20 border border-red-500/50 text-red-400 rounded-xl font-semibold hover:bg-red-500/30 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
-                          >
-                            {registering ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <XCircle className="w-4 h-4 sm:w-5 sm:h-5" />}
-                            {language === 'fr' ? 'Se désinscrire' : 'Unregister'}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {tournament.type === 'team' && !squad && (
-                            <div className="p-3 sm:p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl">
-                              <div className="text-yellow-400 text-xs sm:text-sm">
-                                {language === 'fr' ? 'Vous devez avoir une escouade pour vous inscrire à ce tournoi' : 'You need a squad to register for this tournament'}
-                              </div>
-                            </div>
-                          )}
-                          <button
-                            onClick={handleRegister}
-                            disabled={registering || (tournament.type === 'team' && !squad)}
-                            className={`w-full py-3 sm:py-4 bg-gradient-to-r ${getModeColor(mode)} text-dark-950 rounded-xl font-bold text-base sm:text-lg hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
-                          >
-                            {registering ? <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" /> : <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />}
-                            {language === 'fr' ? "S'inscrire" : 'Register Now'}
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  ) : tournament.status === 'in_progress' ? (
-                    <div className="p-3 sm:p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-center">
-                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse mx-auto mb-2" />
-                      <div className="text-red-400 font-semibold text-sm sm:text-base">{language === 'fr' ? 'Tournoi en cours' : 'Tournament in progress'}</div>
-                    </div>
-                  ) : (
-                    <div className="p-3 sm:p-4 bg-gray-500/10 border border-gray-500/30 rounded-xl text-center">
-                      <div className="text-gray-400 text-sm sm:text-base">{language === 'fr' ? 'Inscriptions fermées' : 'Registration closed'}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tournament Info Card */}
-              <div className={`bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${getModeBorder(mode)} overflow-hidden`}>
-                <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
-                  <div className="flex items-center justify-between py-2 sm:py-3 border-b border-white/5">
-                    <div className="flex items-center gap-2 sm:gap-3 text-gray-400">
-                      <Swords className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span className="text-sm sm:text-base">Format</span>
-                    </div>
-                    <span className="text-white font-semibold text-sm sm:text-base">{tournament.format?.toUpperCase() || 'BO1'}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 sm:py-3 border-b border-white/5">
-                    <div className="flex items-center gap-2 sm:gap-3 text-gray-400">
-                      <Users className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span className="text-sm sm:text-base">{language === 'fr' ? 'Taille équipe' : 'Team Size'}</span>
-                    </div>
-                    <span className="text-white font-semibold text-sm sm:text-base">{tournament.teamSize}v{tournament.teamSize}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 sm:py-3 border-b border-white/5">
-                    <div className="flex items-center gap-2 sm:gap-3 text-gray-400">
-                      <Target className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span className="text-sm sm:text-base">Type</span>
-                    </div>
-                    <span className="text-white font-semibold text-sm sm:text-base">{tournament.type === 'team' ? (language === 'fr' ? 'Équipe' : 'Team') : 'Solo'}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 sm:py-3">
-                    <div className="flex items-center gap-2 sm:gap-3 text-gray-400">
-                      <MapPin className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span className="text-sm sm:text-base">Maps</span>
-                    </div>
-                    <span className="text-white font-semibold text-sm sm:text-base">{tournament.mapSelection === 'random' ? (language === 'fr' ? 'Aléatoire' : 'Random') : (language === 'fr' ? 'Libre' : 'Free')}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Full Width Bracket Section */}
-        {tournament.bracket && tournament.bracket.length > 0 && (
-          <div className={`mt-8 bg-dark-900/80 backdrop-blur-xl rounded-2xl border ${getModeBorder(mode)} overflow-hidden`}>
-            <div className={`px-4 sm:px-6 py-4 bg-gradient-to-r ${getModeColor(mode)}`}>
-              <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-3">
-                <Target className="w-5 h-5 sm:w-6 sm:h-6" />
-                {language === 'fr' ? 'Bracket du tournoi' : 'Tournament Bracket'}
-              </h2>
+        {/* Animated Scroll Indicator for Bracket */}
+        {showBracketIndicator && tournament.bracket && tournament.bracket.length > 0 && (
+          <button
+            onClick={scrollToBracket}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-2 group cursor-pointer animate-fade-in"
+          >
+            <div className={`px-6 py-3 rounded-2xl bg-gradient-to-r ${getModeColor(mode)} shadow-2xl backdrop-blur-xl border border-white/20 flex items-center gap-3 group-hover:scale-105 transition-all duration-300`}>
+              <Sparkles className="w-5 h-5 text-white animate-pulse" />
+              <span className="text-white font-bold text-sm">
+                {language === 'fr' ? 'Voir le bracket' : 'View Bracket'}
+              </span>
+              <ChevronDown className="w-5 h-5 text-white animate-bounce" />
             </div>
-            <div className="p-4 sm:p-6 overflow-x-auto bg-dark-950">
-              {/* Round Headers Row */}
-              <div className="flex mb-4 min-w-max">
-                {tournament.bracket.map((round, roundIndex) => (
-                  <div key={roundIndex} className="min-w-[200px] sm:min-w-[240px] px-1 sm:px-2">
-                    <div className="bg-dark-800 border border-white/10 rounded-lg px-2 sm:px-4 py-2 text-center">
-                      <span className="text-white font-semibold text-xs sm:text-sm uppercase tracking-wide">
-                        {round.roundName || `Round ${round.round}`} - ({tournament.format?.toUpperCase() || 'BO1'})
-                      </span>
-                    </div>
+            <div className="flex flex-col items-center">
+              <div className={`w-1 h-8 bg-gradient-to-b ${getModeColor(mode)} rounded-full animate-pulse`} />
+              <ChevronDown className={`w-8 h-8 text-white animate-bounce`} style={{ animationDelay: '0.2s' }} />
+            </div>
+          </button>
+        )}
+
+        {/* Full Width Bracket Section - Compact Design */}
+        {tournament.bracket && tournament.bracket.length > 0 && (
+          <div ref={bracketRef} className="mt-8 w-full">
+            {/* Bracket Header */}
+            <div className={`relative overflow-hidden rounded-t-2xl bg-gradient-to-r ${getModeColor(mode)}`}>
+              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-50" />
+              <div className="relative px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-white/10 backdrop-blur-xl flex items-center justify-center border border-white/20 shadow-xl">
+                    <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                   </div>
-                ))}
+                  <div>
+                    <h2 className="text-lg sm:text-xl font-black text-white tracking-tight">
+                      {language === 'fr' ? 'Bracket du Tournoi' : 'Tournament Bracket'}
+                    </h2>
+                    <p className="text-white/70 text-xs sm:text-sm font-medium">
+                      {tournament.bracket.length} {language === 'fr' ? 'rounds' : 'rounds'} • {tournament.format?.toUpperCase() || 'BO1'}
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:flex items-center gap-2">
+                  <div className="px-3 py-1.5 rounded-lg bg-white/10 backdrop-blur-sm border border-white/20">
+                    <span className="text-white font-semibold text-xs">
+                      {tournament.type === 'solo' 
+                        ? (tournament.formedTeams?.length || 0)
+                        : (tournament.participants?.filter(p => !p.isBot).length || 0)
+                      } {language === 'fr' ? 'équipes' : 'teams'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Bracket Content Container - Full Width */}
+            <div className="relative bg-gradient-to-b from-dark-900 via-dark-950 to-dark-950 rounded-b-2xl border-x border-b border-white/5 overflow-hidden">
+              {/* Background decorative elements */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <div className={`absolute -top-32 -right-32 w-64 h-64 bg-gradient-to-br ${getModeColor(mode)} rounded-full blur-[100px] opacity-10`} />
+                <div className={`absolute -bottom-32 -left-32 w-64 h-64 bg-gradient-to-tr ${getModeColor(mode)} rounded-full blur-[100px] opacity-10`} />
               </div>
               
-              {/* Bracket Content */}
-              <div className="flex min-w-max relative">
-                {tournament.bracket.map((round, roundIndex) => {
-                  const isLastRound = roundIndex === tournament.bracket.length - 1;
-                  const matchSpacing = Math.pow(2, roundIndex) * 60;
-                  
-                  return (
-                    <div key={roundIndex} className="flex">
-                      <div className="min-w-[200px] sm:min-w-[240px] px-1 sm:px-2 relative">
-                        <div 
-                          className="flex flex-col justify-around"
-                          style={{ 
-                            gap: `${matchSpacing}px`,
-                            paddingTop: roundIndex > 0 ? `${matchSpacing / 2}px` : '0'
-                          }}
-                        >
-                          {round.matches?.map((match, matchIndex) => {
-                            const getParticipantInfo = (pIndex) => {
-                              if (pIndex === null || pIndex === undefined) return null;
-                              const participant = tournament.type === 'solo' 
-                                ? tournament.formedTeams?.[pIndex] 
-                                : tournament.participants?.[pIndex];
-                              if (!participant) return null;
+              <div className="relative p-4 sm:p-8">
+                {/* Round Headers - Flex Layout matching bracket */}
+                <div className="flex w-full mb-6">
+                  {tournament.bracket.map((round, roundIndex) => {
+                    const isLastRound = roundIndex === tournament.bracket.length - 1;
+                    const isSemiFinal = roundIndex === tournament.bracket.length - 2;
+                    return (
+                      <React.Fragment key={roundIndex}>
+                        <div className="flex-1 min-w-0 px-1">
+                          <div className={`relative overflow-hidden rounded-xl border text-center py-3 ${
+                            isLastRound 
+                              ? 'bg-gradient-to-br from-amber-500/20 via-yellow-500/10 to-orange-500/20 border-amber-500/30' 
+                              : isSemiFinal
+                                ? 'bg-gradient-to-br from-purple-500/20 via-violet-500/10 to-indigo-500/20 border-purple-500/30'
+                                : 'bg-dark-800/80 border-white/10'
+                          }`}>
+                            <div className="flex items-center justify-center gap-2">
+                              {isLastRound && <Crown className="w-4 h-4 text-amber-400" />}
+                              {isSemiFinal && <Medal className="w-4 h-4 text-purple-400" />}
+                              <span className={`font-bold text-sm uppercase tracking-wider ${
+                                isLastRound ? 'text-amber-300' : isSemiFinal ? 'text-purple-300' : 'text-white'
+                              }`}>
+                                {round.roundName || (isLastRound ? (language === 'fr' ? 'Finale' : 'Final') : `Round ${round.round}`)}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {round.matches?.length || 0} {language === 'fr' ? 'matchs' : 'matches'}
+                            </div>
+                            
+                            {/* Round Maps Display */}
+                            {(() => {
+                              const roundMaps = getRoundMaps(round.round);
+                              if (!roundMaps || roundMaps.length === 0) return null;
                               
-                              if (tournament.type === 'team') {
-                                return {
-                                  name: participant.squadInfo?.name || participant.squad?.name || 'TBD',
-                                  isBot: participant.isBot
-                                };
-                              }
-                              return {
-                                name: participant.name || participant.members?.[0]?.userInfo?.username || participant.members?.[0]?.username || 'TBD',
-                                isBot: participant.members?.every(m => m.isBot)
-                              };
-                            };
-                            
-                            const p1 = getParticipantInfo(match.participant1?.index);
-                            const p2 = getParticipantInfo(match.participant2?.index);
-                            const p1Won = match.winner === match.participant1?.index && match.winner !== null;
-                            const p2Won = match.winner === match.participant2?.index && match.winner !== null;
-                            
-                            return (
-                              <div key={matchIndex} className="relative">
-                                <div className="absolute -left-1 -top-1 z-10">
-                                  <span className="inline-flex items-center justify-center w-4 h-4 sm:w-5 sm:h-5 text-[8px] sm:text-[10px] font-bold text-orange-400 bg-dark-900 border border-orange-500/50 rounded">
-                                    {match.matchNumber || matchIndex + 1}
-                                  </span>
+                              return (
+                                <div className={`mt-3 flex items-center gap-2 flex-wrap ${roundMaps.length === 1 ? 'justify-center' : 'justify-center'}`}>
+                                  {roundMaps.map((map, mapIdx) => (
+                                    <div 
+                                      key={mapIdx} 
+                                      className="flex items-center gap-1.5 bg-dark-900/80 rounded-lg px-2.5 py-1.5 border border-white/10"
+                                      title={map.name}
+                                    >
+                                      {map.image ? (
+                                        <img 
+                                          src={map.image} 
+                                          alt={map.name} 
+                                          className="w-7 h-7 rounded object-cover"
+                                        />
+                                      ) : (
+                                        <MapPin className="w-5 h-5 text-gray-500" />
+                                      )}
+                                      <span className="text-xs text-gray-300 font-medium">
+                                        {roundMaps.length === 3 ? `M${mapIdx + 1}:` : ''} {map.name}
+                                      </span>
+                                    </div>
+                                  ))}
                                 </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                        {/* Spacer to match connector column */}
+                        {!isLastRound && <div className="w-10 flex-shrink-0" />}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+                
+                {/* Bracket Content - Full Width Flex Layout */}
+                <div className="flex w-full" style={{ minHeight: 'fit-content' }}>
+                  {tournament.bracket.map((round, roundIndex) => {
+                    const isLastRound = roundIndex === tournament.bracket.length - 1;
+                    const isSemiFinal = roundIndex === tournament.bracket.length - 2;
+                    
+                    // Match card height (2 rows * py-2.5 padding * 2 + h-6 content = ~88px)
+                    const matchHeight = 88;
+                    const baseGap = 12;
+                    const matchSpacing = roundIndex === 0 
+                      ? baseGap 
+                      : Math.pow(2, roundIndex) * (matchHeight + baseGap) - matchHeight;
+                    const paddingTop = roundIndex === 0 
+                      ? 0 
+                      : (Math.pow(2, roundIndex) - 1) * (matchHeight + baseGap) / 2;
+                    
+                    return (
+                      <div key={roundIndex} className="flex flex-1 min-w-0">
+                        {/* Round Column */}
+                        <div className="flex-1 min-w-0 px-1">
+                          <div 
+                            className="flex flex-col"
+                            style={{ 
+                              gap: `${matchSpacing}px`,
+                              paddingTop: `${paddingTop}px`
+                            }}
+                          >
+                            {round.matches?.map((match, matchIndex) => {
+                              // Generate team logo color from name (consistent hash)
+                              const getTeamLogoData = (name) => {
+                                if (!name || name === 'TBD') return null;
                                 
-                                <div className="bg-dark-800 border border-white/10 rounded-lg overflow-hidden">
-                                  <div className={`flex items-center px-2 sm:px-3 py-1.5 sm:py-2 border-b border-white/5 ${p1Won ? 'bg-green-500/10' : ''}`}>
-                                    <span className={`flex-1 text-xs sm:text-sm truncate ${p1Won ? 'text-green-400 font-semibold' : p1 ? 'text-white' : 'text-gray-500'}`}>
-                                      {p1?.name || (language === 'fr' ? 'À déterminer' : 'TBD')}
-                                    </span>
-                                    {p1Won && <span className="ml-1 sm:ml-2 text-green-400 text-[10px] sm:text-xs">✓</span>}
+                                // Color palette for team logos
+                                const colors = [
+                                  ['#ef4444', '#dc2626'], // Red
+                                  ['#f97316', '#ea580c'], // Orange
+                                  ['#eab308', '#ca8a04'], // Yellow
+                                  ['#22c55e', '#16a34a'], // Green
+                                  ['#14b8a6', '#0d9488'], // Teal
+                                  ['#06b6d4', '#0891b2'], // Cyan
+                                  ['#3b82f6', '#2563eb'], // Blue
+                                  ['#8b5cf6', '#7c3aed'], // Violet
+                                  ['#d946ef', '#c026d3'], // Fuchsia
+                                  ['#ec4899', '#db2777'], // Pink
+                                  ['#f43f5e', '#e11d48'], // Rose
+                                  ['#6366f1', '#4f46e5'], // Indigo
+                                ];
+                                
+                                // Simple hash from name
+                                let hash = 0;
+                                for (let i = 0; i < name.length; i++) {
+                                  hash = ((hash << 5) - hash) + name.charCodeAt(i);
+                                  hash = hash & hash;
+                                }
+                                const colorIndex = Math.abs(hash) % colors.length;
+                                const [color1, color2] = colors[colorIndex];
+                                
+                                // Get first letter of the team name
+                                const initial = name.charAt(0).toUpperCase();
+                                
+                                return { color1, color2, initial };
+                              };
+                              
+                              const getParticipantInfo = (pIndex) => {
+                                if (pIndex === null || pIndex === undefined) return null;
+                                const participant = tournament.type === 'solo' 
+                                  ? tournament.formedTeams?.[pIndex] 
+                                  : tournament.participants?.[pIndex];
+                                if (!participant) return null;
+                                
+                                if (tournament.type === 'team') {
+                                  const name = participant.squadInfo?.name || participant.squad?.name || 'TBD';
+                                  return {
+                                    name,
+                                    isBot: participant.isBot,
+                                    logo: participant.squadInfo?.logo || participant.squad?.logo,
+                                    logoData: null,
+                                    members: participant.squadInfo?.members || participant.roster || []
+                                  };
+                                }
+                                const name = participant.name || participant.members?.[0]?.userInfo?.username || participant.members?.[0]?.username || 'TBD';
+                                return {
+                                  name,
+                                  isBot: participant.members?.every(m => m.isBot),
+                                  logo: null,
+                                  logoData: getTeamLogoData(name),
+                                  members: participant.members || []
+                                };
+                              };
+                              
+                              // Check if current user is in this match
+                              const isUserInMatch = () => {
+                                if (!user) return false;
+                                
+                                const checkMembers = (members) => {
+                                  if (!members || !Array.isArray(members)) return false;
+                                  return members.some(m => {
+                                    // Get user IDs from current user
+                                    const currentUserId = user._id || user.odUserId;
+                                    const currentDiscordId = user.discordId;
+                                    
+                                    if (!currentUserId && !currentDiscordId) return false;
+                                    
+                                    // Check various member ID formats
+                                    // For solo tournaments: member.user._id or member.user (ObjectId string)
+                                    // For team tournaments: member.odUserId or member._id
+                                    const memberUserId = 
+                                      m.user?._id || // populated user object
+                                      m.user || // ObjectId string
+                                      m.odUserId || 
+                                      m.userInfo?.odUserId || 
+                                      m._id;
+                                    
+                                    const memberDiscordId = 
+                                      m.user?.discordId || 
+                                      m.discordId || 
+                                      m.userInfo?.discordId;
+                                    
+                                    // Check by user ID
+                                    if (currentUserId && memberUserId && String(memberUserId) === String(currentUserId)) {
+                                      return true;
+                                    }
+                                    
+                                    // Check by Discord ID
+                                    if (currentDiscordId && memberDiscordId && String(memberDiscordId) === String(currentDiscordId)) {
+                                      return true;
+                                    }
+                                    
+                                    return false;
+                                  });
+                                };
+                                
+                                // Get participant data directly
+                                const getMembers = (pIndex) => {
+                                  if (pIndex === null || pIndex === undefined) return [];
+                                  const participant = tournament.type === 'solo' 
+                                    ? tournament.formedTeams?.[pIndex] 
+                                    : tournament.participants?.[pIndex];
+                                  if (!participant) return [];
+                                  
+                                  if (tournament.type === 'team') {
+                                    // For team tournaments, get squad members
+                                    return participant.squadInfo?.members || participant.squad?.members || participant.roster || [];
+                                  }
+                                  // For solo tournaments, get formed team members
+                                  return participant.members || [];
+                                };
+                                
+                                const p1Members = getMembers(match.participant1?.index);
+                                const p2Members = getMembers(match.participant2?.index);
+                                
+                                return checkMembers(p1Members) || checkMembers(p2Members);
+                              };
+                              const userInMatch = isUserInMatch();
+                              
+                              const p1 = getParticipantInfo(match.participant1?.index);
+                              const p2 = getParticipantInfo(match.participant2?.index);
+                              const p1Won = match.winner !== null && match.winner !== undefined && match.winner === match.participant1?.index;
+                              const p2Won = match.winner !== null && match.winner !== undefined && match.winner === match.participant2?.index;
+                              const matchComplete = match.status === 'completed' || (match.winner !== null && match.winner !== undefined && typeof match.winner === 'number');
+                              
+                              // Find the actual TournamentMatch document
+                              const matchDoc = findMatchDocument(round.round, match.matchNumber);
+                              const hasMatchDoc = !!matchDoc;
+                              const canClickMatch = (p1 && p2); // Everyone can click to view rosters
+                              const isAdmin = hasAdminAccess && hasAdminAccess();
+                              
+                              const handleMatchClick = () => {
+                                if (canClickMatch && matchDoc?._id) {
+                                  // Navigate to match detail page
+                                  navigate(`/tournaments/${tournamentId}/match/${matchDoc._id}`);
+                                }
+                              };
+                              
+                              return (
+                                <div key={matchIndex} className="relative group w-full">
+                                  {/* Match Number Badge */}
+                                  <div className="absolute -left-1.5 -top-1.5 z-20">
+                                    <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center font-bold text-[10px] shadow-md ${
+                                      isLastRound 
+                                        ? 'bg-gradient-to-br from-amber-500 to-orange-500 text-white' 
+                                        : isSemiFinal
+                                          ? 'bg-gradient-to-br from-purple-500 to-violet-500 text-white'
+                                          : 'bg-dark-700 border border-white/20 text-gray-300'
+                                    }`}>
+                                      {match.matchNumber || matchIndex + 1}
+                                    </div>
                                   </div>
                                   
-                                  <div className={`flex items-center px-2 sm:px-3 py-1.5 sm:py-2 ${p2Won ? 'bg-green-500/10' : ''}`}>
-                                    <span className={`flex-1 text-xs sm:text-sm truncate ${p2Won ? 'text-green-400 font-semibold' : p2 ? 'text-white' : 'text-gray-500'}`}>
-                                      {p2?.name || (language === 'fr' ? 'À déterminer' : 'TBD')}
-                                    </span>
-                                    {p2Won && <span className="ml-1 sm:ml-2 text-green-400 text-[10px] sm:text-xs">✓</span>}
+                                  {/* Match Card - Compact & Clickable */}
+                                  <div 
+                                    onClick={handleMatchClick}
+                                    className={`relative overflow-hidden rounded-lg transition-all duration-300 ${
+                                      userInMatch
+                                        ? 'bg-gradient-to-br from-cyan-900/40 via-dark-800 to-cyan-900/20 border-2 border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.2)] ring-2 ring-cyan-500/30'
+                                        : isLastRound 
+                                          ? 'bg-gradient-to-br from-dark-800 via-dark-800 to-amber-900/20 border border-amber-500/30 shadow-[0_0_20px_rgba(245,158,11,0.1)]' 
+                                          : isSemiFinal
+                                            ? 'bg-gradient-to-br from-dark-800 via-dark-800 to-purple-900/20 border border-purple-500/30'
+                                            : 'bg-dark-800/90 border border-white/10 hover:border-white/20'
+                                    } group-hover:scale-[1.02] ${canClickMatch ? 'cursor-pointer' : ''}`}
+                                  >
+                                    {/* User match indicator */}
+                                    {userInMatch && (
+                                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-500 via-cyan-400 to-cyan-500" />
+                                    )}
+                                    
+                                    {/* Click indicator */}
+                                    {canClickMatch && (
+                                      <div className="absolute top-1 right-1 z-20">
+                                        <Eye className={`w-3 h-3 ${userInMatch ? 'text-cyan-400' : 'text-gray-500'} group-hover:text-cyan-400 transition-colors`} />
+                                      </div>
+                                    )}
+                                    
+                                    {/* Participant 1 */}
+                                    <div className={`relative flex items-center gap-2 px-3 py-2.5 border-b ${
+                                      p1Won 
+                                        ? 'bg-gradient-to-r from-emerald-500/20 via-green-500/10 to-transparent border-emerald-500/30' 
+                                        : 'border-white/5'
+                                    } transition-colors`}>
+                                      {/* Team Logo */}
+                                      {p1 ? (
+                                        p1.logoData ? (
+                                          <div 
+                                            className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-sm"
+                                            style={{ background: `linear-gradient(135deg, ${p1.logoData.color1}, ${p1.logoData.color2})` }}
+                                          >
+                                            {p1.logoData.initial}
+                                          </div>
+                                        ) : p1.logo ? (
+                                          <img src={p1.logo} alt="" className="w-6 h-6 rounded object-contain flex-shrink-0" />
+                                        ) : (
+                                          <div className="w-6 h-6 rounded bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-400 flex-shrink-0">
+                                            {p1.name?.charAt(0)?.toUpperCase() || '?'}
+                                          </div>
+                                        )
+                                      ) : (
+                                        <div className="w-6 h-6 rounded bg-gray-800 flex-shrink-0" />
+                                      )}
+                                      <span className={`flex-1 text-sm font-medium truncate ${
+                                        p1Won ? 'text-emerald-400' : p1 ? 'text-white' : 'text-gray-500 italic'
+                                      }`}>
+                                        {p1?.name || (language === 'fr' ? 'À déterminer' : 'TBD')}
+                                      </span>
+                                      {p1?.isBot && <Bot className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />}
+                                      {p1Won && <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                                    </div>
+                                    
+                                    {/* VS divider */}
+                                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+                                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-black ${
+                                        matchComplete 
+                                          ? 'bg-dark-700 text-gray-400 border border-white/10' 
+                                          : 'bg-gradient-to-br ' + getModeColor(mode) + ' text-white shadow-md'
+                                      }`}>
+                                        VS
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Participant 2 */}
+                                    <div className={`relative flex items-center gap-2 px-3 py-2.5 ${
+                                      p2Won 
+                                        ? 'bg-gradient-to-r from-emerald-500/20 via-green-500/10 to-transparent' 
+                                        : ''
+                                    } transition-colors`}>
+                                      {/* Team Logo */}
+                                      {p2 ? (
+                                        p2.logoData ? (
+                                          <div 
+                                            className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-sm"
+                                            style={{ background: `linear-gradient(135deg, ${p2.logoData.color1}, ${p2.logoData.color2})` }}
+                                          >
+                                            {p2.logoData.initial}
+                                          </div>
+                                        ) : p2.logo ? (
+                                          <img src={p2.logo} alt="" className="w-6 h-6 rounded object-contain flex-shrink-0" />
+                                        ) : (
+                                          <div className="w-6 h-6 rounded bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-400 flex-shrink-0">
+                                            {p2.name?.charAt(0)?.toUpperCase() || '?'}
+                                          </div>
+                                        )
+                                      ) : (
+                                        <div className="w-6 h-6 rounded bg-gray-800 flex-shrink-0" />
+                                      )}
+                                      <span className={`flex-1 text-sm font-medium truncate ${
+                                        p2Won ? 'text-emerald-400' : p2 ? 'text-white' : 'text-gray-500 italic'
+                                      }`}>
+                                        {p2?.name || (language === 'fr' ? 'À déterminer' : 'TBD')}
+                                      </span>
+                                      {p2?.isBot && <Bot className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />}
+                                      {p2Won && <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+                                    </div>
                                   </div>
+                                  
+                                  {/* Connector lines handled separately */}
                                 </div>
-                                
-                                {!isLastRound && (
-                                  <div className="absolute right-0 top-1/2 w-4 sm:w-6 h-0.5 bg-white/20 translate-x-full" />
-                                )}
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
+                          </div>
                         </div>
+                        
+                        {/* Connector Column - Between rounds */}
+                        {!isLastRound && (
+                          <div className="w-10 flex-shrink-0 relative">
+                            {round.matches?.map((match, matchIndex) => {
+                              // Only draw connectors for even-indexed matches (pairs)
+                              if (matchIndex % 2 !== 0) return null;
+                              
+                              // Calculate positions for current round matches (absolute from top)
+                              const match1Y = paddingTop + matchIndex * (matchHeight + matchSpacing) + matchHeight / 2;
+                              const match2Y = paddingTop + (matchIndex + 1) * (matchHeight + matchSpacing) + matchHeight / 2;
+                              
+                              // Calculate position for next round match (where the connector should go)
+                              const nextRoundIndex = roundIndex + 1;
+                              const nextMatchSpacing = Math.pow(2, nextRoundIndex) * (matchHeight + baseGap) - matchHeight;
+                              const nextPaddingTop = (Math.pow(2, nextRoundIndex) - 1) * (matchHeight + baseGap) / 2;
+                              const nextMatchIndex = matchIndex / 2;
+                              const targetY = nextPaddingTop + nextMatchIndex * (matchHeight + nextMatchSpacing) + matchHeight / 2;
+                              
+                              return (
+                                <svg 
+                                  key={matchIndex}
+                                  className="absolute left-0 w-full overflow-visible"
+                                  style={{ top: 0, height: '100%' }}
+                                >
+                                  {/* Line from match 1 */}
+                                  <line 
+                                    x1="0" 
+                                    y1={match1Y} 
+                                    x2="50%" 
+                                    y2={match1Y} 
+                                    stroke="rgba(255,255,255,0.3)" 
+                                    strokeWidth="2"
+                                  />
+                                  {/* Line from match 2 */}
+                                  <line 
+                                    x1="0" 
+                                    y1={match2Y} 
+                                    x2="50%" 
+                                    y2={match2Y} 
+                                    stroke="rgba(255,255,255,0.3)" 
+                                    strokeWidth="2"
+                                  />
+                                  {/* Vertical connector */}
+                                  <line 
+                                    x1="50%" 
+                                    y1={match1Y} 
+                                    x2="50%" 
+                                    y2={match2Y} 
+                                    stroke="rgba(255,255,255,0.3)" 
+                                    strokeWidth="2"
+                                  />
+                                  {/* Line to next round match (centered between the two matches) */}
+                                  <line 
+                                    x1="50%" 
+                                    y1={targetY} 
+                                    x2="100%" 
+                                    y2={targetY} 
+                                    stroke="rgba(255,255,255,0.3)" 
+                                    strokeWidth="2"
+                                  />
+                                </svg>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>

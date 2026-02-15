@@ -1402,32 +1402,48 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
           // Get full user data with irisLastSeen for PC players
           const memberUserIds = membersToCheck.map(m => m.user._id);
           const usersWithIris = await User.find({ _id: { $in: memberUserIds } })
-            .select('_id platform irisLastSeen')
+            .select('_id username platform irisLastSeen')
             .lean();
           
-          // Build a map of userId -> irisConnected (connected if irisLastSeen within 3 minutes)
-          const irisStatusMap = new Map();
+          // Build a map of userId -> { platform, irisConnected }
+          // Use data from this query to ensure consistency
+          const userDataMap = new Map();
           const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+          console.log('[DEBUG IRIS] Checking roster members iris status, threeMinutesAgo:', threeMinutesAgo);
           usersWithIris.forEach(u => {
-            if (u.platform === 'PC') {
-              const isConnected = u.irisLastSeen && new Date(u.irisLastSeen) > threeMinutesAgo;
-              irisStatusMap.set(u._id.toString(), isConnected);
+            const platform = u.platform;
+            let irisConnected = null;
+            if (platform === 'PC') {
+              const lastSeen = u.irisLastSeen ? new Date(u.irisLastSeen) : null;
+              irisConnected = !!(lastSeen && lastSeen > threeMinutesAgo);
+              console.log(`[DEBUG IRIS] User ${u.username}: platform=${platform}, irisLastSeen=${u.irisLastSeen}, lastSeen=${lastSeen}, threeMinutesAgo=${threeMinutesAgo}, isConnected=${irisConnected}`);
+            } else {
+              console.log(`[DEBUG IRIS] User ${u.username}: platform=${platform} (not PC, irisConnected=null)`);
             }
+            userDataMap.set(u._id.toString(), { platform, irisConnected });
           });
           
           // Build available members list
-          availableMembers = membersToCheck.map(m => ({
-            _id: m.user._id,
-            username: m.user.username,
-            avatarUrl: m.user.avatarUrl,
-            discordAvatar: m.user.discordAvatar,
-            discordId: m.user.discordId,
-            strickerPoints: m.user.statsStricker?.points || 0,
-            role: m.role,
-            equippedTitle: m.user.equippedTitle,
-            platform: m.user.platform,
-            irisConnected: m.user.platform === 'PC' ? (irisStatusMap.get(m.user._id.toString()) ?? false) : null
-          }));
+          availableMembers = membersToCheck.map(m => {
+            const userId = m.user._id.toString();
+            const userData = userDataMap.get(userId);
+            // Use platform from fresh query, fallback to populated data
+            const platform = userData?.platform || m.user.platform;
+            const irisConnected = userData?.irisConnected ?? (platform === 'PC' ? false : null);
+            
+            return {
+              _id: m.user._id,
+              username: m.user.username,
+              avatarUrl: m.user.avatarUrl,
+              discordAvatar: m.user.discordAvatar,
+              discordId: m.user.discordId,
+              strickerPoints: m.user.statsStricker?.points || 0,
+              role: m.role,
+              equippedTitle: m.user.equippedTitle,
+              platform: platform,
+              irisConnected: irisConnected
+            };
+          });
         }
       }
     }

@@ -285,13 +285,45 @@ const startServer = async () => {
       socket.leave(`match-${matchId}`);
     });
 
-    // Tournament rooms
+    // Tournament rooms with viewer tracking
     socket.on('joinTournament', (tournamentId) => {
-      socket.join(`tournament-${tournamentId}`);
+      const roomName = `tournament-${tournamentId}`;
+      socket.join(roomName);
+      
+      // Track tournament viewers
+      if (!socket.tournaments) socket.tournaments = new Set();
+      socket.tournaments.add(tournamentId);
+      
+      // Count viewers in the room
+      const room = io.sockets.adapter.rooms.get(roomName);
+      const viewerCount = room ? room.size : 1;
+      io.to(roomName).emit('tournamentViewers', { tournamentId, count: viewerCount });
     });
 
     socket.on('leaveTournament', (tournamentId) => {
-      socket.leave(`tournament-${tournamentId}`);
+      const roomName = `tournament-${tournamentId}`;
+      socket.leave(roomName);
+      
+      // Remove from tracking
+      socket.tournaments?.delete(tournamentId);
+      
+      // Update viewer count
+      const room = io.sockets.adapter.rooms.get(roomName);
+      const viewerCount = room ? room.size : 0;
+      io.to(roomName).emit('tournamentViewers', { tournamentId, count: viewerCount });
+    });
+
+    // Tournament match chat rooms
+    socket.on('joinTournamentMatchChat', ({ matchId, tournamentId }) => {
+      const roomName = `tournament-match-chat-${matchId}`;
+      socket.join(roomName);
+      console.log(`[Socket] User joined tournament match chat: ${matchId}`);
+    });
+
+    socket.on('leaveTournamentMatchChat', ({ matchId }) => {
+      const roomName = `tournament-match-chat-${matchId}`;
+      socket.leave(roomName);
+      console.log(`[Socket] User left tournament match chat: ${matchId}`);
     });
 
     socket.on('disconnect', () => {
@@ -304,6 +336,16 @@ const startServer = async () => {
           io.to(page).emit('viewerCount', count);
         });
         socketPages.delete(socket.id);
+      }
+      
+      // Clean up tournament viewer tracking
+      if (socket.tournaments) {
+        socket.tournaments.forEach((tournamentId) => {
+          const roomName = `tournament-${tournamentId}`;
+          const room = io.sockets.adapter.rooms.get(roomName);
+          const viewerCount = room ? room.size : 0;
+          io.to(roomName).emit('tournamentViewers', { tournamentId, count: viewerCount });
+        });
       }
       
       // Clean up mode tracking

@@ -2044,8 +2044,12 @@ const HardcoreDashboard = () => {
                       {/* Tournament Icon & Name */}
                       <div className="flex items-start gap-4 mb-5">
                         <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-neon-red to-neon-orange p-0.5 shadow-lg shadow-neon-red/30 group-hover:shadow-neon-red/50 transition-all">
-                          <div className="w-full h-full rounded-xl bg-dark-900 flex items-center justify-center">
-                            <Trophy className="w-7 h-7 text-neon-red" />
+                          <div className="w-full h-full rounded-xl bg-dark-900 flex items-center justify-center overflow-hidden">
+                            {tournament.logo ? (
+                              <img src={tournament.logo} alt="" className="w-full h-full object-contain p-1" />
+                            ) : (
+                              <Trophy className="w-7 h-7 text-neon-red" />
+                            )}
                           </div>
                         </div>
                         <div className="flex-1 pr-24">
@@ -2122,6 +2126,35 @@ const HardcoreDashboard = () => {
                           ⚔️ {tournament.teamSize}v{tournament.teamSize}
                         </span>
                       </div>
+
+                      {/* Entry Fee */}
+                      {tournament.entryFee?.enabled && tournament.entryFee?.amount > 0 ? (
+                        <div className="mb-5 px-4 py-3 rounded-xl bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-500/30">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">🎟️</span>
+                              <span className="text-gray-400 text-sm">{language === 'fr' ? 'Entrée payante' : 'Entry Fee'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {tournament.entryFee.type === 'gold' ? (
+                                <>
+                                  <Coins className="w-4 h-4 text-yellow-500" />
+                                  <span className="text-yellow-400 font-bold">{tournament.entryFee.amount.toLocaleString()}</span>
+                                </>
+                              ) : (
+                                <span className="text-green-400 font-bold">{tournament.entryFee.amount} {tournament.entryFee.currency || 'EUR'}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mb-5 px-4 py-3 rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">✅</span>
+                            <span className="text-green-400 font-semibold text-sm">{language === 'fr' ? 'Entrée gratuite' : 'Free Entry'}</span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Streaming with streamer info */}
                       {tournament.streaming?.enabled && tournament.streaming?.twitchUrl && (

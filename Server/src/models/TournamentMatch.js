@@ -58,6 +58,23 @@ const tournamentMatchSchema = new mongoose.Schema({
       avatar: String,
       avatarUrl: String
     },
+    // For solo tournaments - formed team info
+    formedTeamIndex: { type: Number, default: null },
+    formedTeamMembers: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+      },
+      userInfo: {
+        username: String,
+        discordId: String,
+        avatar: String,
+        avatarUrl: String
+      },
+      isBot: { type: Boolean, default: false },
+      botName: { type: String, default: null }
+    }],
     // If this is a bot
     isBot: { type: Boolean, default: false },
     botName: { type: String, default: null },
@@ -94,6 +111,23 @@ const tournamentMatchSchema = new mongoose.Schema({
       avatar: String,
       avatarUrl: String
     },
+    // For solo tournaments - formed team info
+    formedTeamIndex: { type: Number, default: null },
+    formedTeamMembers: [{
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+      },
+      userInfo: {
+        username: String,
+        discordId: String,
+        avatar: String,
+        avatarUrl: String
+      },
+      isBot: { type: Boolean, default: false },
+      botName: { type: String, default: null }
+    }],
     isBot: { type: Boolean, default: false },
     botName: { type: String, default: null },
     participantIndex: { type: Number, default: null },
@@ -182,6 +216,9 @@ const tournamentMatchSchema = new mongoose.Schema({
     },
     message: String,
     isSystem: { type: Boolean, default: false },
+    isStaff: { type: Boolean, default: false },
+    isAdmin: { type: Boolean, default: false },
+    avatarUrl: { type: String, default: null },
     timestamp: { type: Date, default: Date.now }
   }],
   
@@ -205,6 +242,24 @@ const tournamentMatchSchema = new mongoose.Schema({
     },
     resolvedAt: Date,
     resolution: String
+  },
+  
+  // Referents for solo tournaments (only these players can validate victory)
+  referent1: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  referent2: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  
+  // Selected map for this match
+  selectedMap: {
+    name: { type: String, default: null },
+    image: { type: String, default: null }
   },
   
   // Timestamps
