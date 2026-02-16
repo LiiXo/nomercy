@@ -730,21 +730,32 @@
       // Update label
       document.getElementById('trust-score-label').textContent = 'Score de confiance';
       
+      // Debug: Log raw security data
+      console.log('[Iris UI] Raw security data:', JSON.stringify(security, null, 2));
+      
       // Define modules with their values (internal only for score calculation)
+      // Must match the admin panel calculation (9 modules total)
       const modules = [
-        { enabled: security.tpm?.enabled || security.tpm?.present },
-        { enabled: security.secure_boot?.enabled },
-        { enabled: security.virtualization?.enabled },
-        { enabled: security.virtualization?.iommu },
-        { enabled: security.vbs?.enabled },
-        { enabled: security.vbs?.hvci_enabled },
-        { enabled: security.defender?.enabled },
-        { enabled: security.defender?.real_time_protection }
+        { name: 'TPM', enabled: security.tpm?.enabled },
+        { name: 'Secure Boot', enabled: security.secureBoot || security.secure_boot?.enabled },
+        { name: 'Virtualization', enabled: security.virtualization || security.virtualization?.enabled },
+        { name: 'IOMMU', enabled: security.iommu || security.virtualization?.iommu },
+        { name: 'DMA Protection', enabled: security.kernelDmaProtection || security.virtualization?.kernel_dma_protection },
+        { name: 'HVCI', enabled: security.hvci || security.vbs?.hvci_enabled },
+        { name: 'VBS', enabled: security.vbs || security.vbs?.enabled },
+        { name: 'Defender', enabled: security.defender || security.defender?.enabled },
+        { name: 'Defender RT', enabled: security.defenderRealtime || security.defender?.real_time_protection }
       ];
+      
+      // Debug: Log each module's status
+      console.log('[Iris UI] Security modules:', modules.map(m => `${m.name}: ${m.enabled}`));
       
       const totalCount = modules.length;
       const enabledCount = modules.filter(m => m.enabled).length;
       const finalScore = Math.round((enabledCount / totalCount) * 100);
+      
+      // Debug: Log final calculation
+      console.log('[Iris UI] Trust score:', { enabled: enabledCount, total: totalCount, score: finalScore });
       
       // Animate score from 0 to final value
       const scoreEl = document.getElementById('trust-score');

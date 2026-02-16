@@ -20,6 +20,29 @@ const RANKED_VOICE_CATEGORY_ID = '1460717958656688271';
 // Support ticket category for summons
 const SUPPORT_TICKET_CATEGORY_ID = '1447349602331398164';
 
+// Category for ranked stats channels (queue status + match count)
+const RANKED_STATS_CATEGORY_ID = '1472875583804407962';
+
+// Category for season timer channels
+const SEASON_TIMER_CATEGORY_ID = '1472878284365889659';
+
+// Stats channel IDs (created dynamically if not exists)
+let rankedQueueChannelId = null;
+let playersCountChannelId = null;
+let squadsCountChannelId = null;
+let rankedMatchCountChannelId = null;
+let strickerMatchCountChannelId = null;
+
+// Season timer channel IDs
+let rankedSeasonTimerChannelId = null;
+let strickerSeasonTimerChannelId = null;
+
+// Interval for updating match count
+let matchCountUpdateInterval = null;
+
+// Interval for updating season timers
+let seasonTimerUpdateInterval = null;
+
 // Discord bot client
 let client = null;
 let isReady = false;
@@ -96,7 +119,7 @@ export const initDiscordBot = async (socketIo) => {
     ]
   });
 
-  client.once(Events.ClientReady, () => {
+  client.once(Events.ClientReady, async () => {
     isReady = true;
     
     // Start summon channel cleanup interval (runs every 24 hours)
@@ -106,6 +129,12 @@ export const initDiscordBot = async (socketIo) => {
     // Run cleanup once at startup, then every 24 hours
     cleanupSummonChannels();
     summonCleanupInterval = setInterval(cleanupSummonChannels, 24 * 60 * 60 * 1000);
+    
+    // Initialize ranked stats channels (queue status + match count)
+    await initRankedStatsChannels();
+    
+    // Initialize season timer channels
+    await initSeasonTimerChannels();
   });
 
   // Handle button interactions
@@ -2696,6 +2725,520 @@ export const sendTournamentLaunchNotification = async (tournament) => {
   }
 };
 
+/**
+ * Initialize ranked stats channels in Discord
+ * Creates two voice channels in the RANKED_STATS_CATEGORY:
+ * - Queue status channel (shows players in queue)
+ * - Match count channel (shows total ranked matches)
+ */
+export const initRankedStatsChannels = async () => {
+  if (!client || !isReady) {
+    console.warn('[Discord Bot] Bot not ready, cannot initialize ranked stats channels');
+    return false;
+  }
+
+  try {
+    const category = await client.channels.fetch(RANKED_STATS_CATEGORY_ID).catch(() => null);
+    if (!category) {
+      console.error(`[Discord Bot] Ranked stats category ${RANKED_STATS_CATEGORY_ID} not found`);
+      return false;
+    }
+
+    const guild = category.guild;
+
+    // Look for existing channels or create new ones
+    const existingChannels = category.children?.cache || [];
+    
+    // Find or create players count channel
+    let playersChannel = existingChannels.find(ch => ch.name.startsWith('Joueurs'));
+    if (!playersChannel) {
+      playersChannel = await guild.channels.create({
+        name: 'Joueurs : 0',
+        type: ChannelType.GuildVoice,
+        parent: RANKED_STATS_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          }
+        ],
+        reason: 'Stats - Players count'
+      });
+      console.log('[Discord Bot] Created players count channel');
+    }
+    playersCountChannelId = playersChannel.id;
+
+    // Find or create squads count channel
+    let squadsChannel = existingChannels.find(ch => ch.name.startsWith('Escouades'));
+    if (!squadsChannel) {
+      squadsChannel = await guild.channels.create({
+        name: 'Escouades : 0',
+        type: ChannelType.GuildVoice,
+        parent: RANKED_STATS_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          }
+        ],
+        reason: 'Stats - Squads count'
+      });
+      console.log('[Discord Bot] Created squads count channel');
+    }
+    squadsCountChannelId = squadsChannel.id;
+
+    // Find or create ranked match count channel (check both old and new name formats)
+    let matchCountChannel = existingChannels.find(ch => ch.name.startsWith('Matchs Ranked') || ch.name.startsWith('Ranked'));
+    if (!matchCountChannel) {
+      matchCountChannel = await guild.channels.create({
+        name: 'Matchs Ranked : 0',
+        type: ChannelType.GuildVoice,
+        parent: RANKED_STATS_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          }
+        ],
+        reason: 'Ranked stats - Match count'
+      });
+      console.log('[Discord Bot] Created ranked match count channel');
+    }
+    rankedMatchCountChannelId = matchCountChannel.id;
+
+    // Find or create stricker match count channel (check both old and new name formats)
+    let strickerCountChannel = existingChannels.find(ch => ch.name.startsWith('Matchs Stricker') || ch.name.startsWith('Stricker'));
+    if (!strickerCountChannel) {
+      strickerCountChannel = await guild.channels.create({
+        name: 'Matchs Stricker : 0',
+        type: ChannelType.GuildVoice,
+        parent: RANKED_STATS_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          }
+        ],
+        reason: 'Stricker stats - Match count'
+      });
+      console.log('[Discord Bot] Created stricker match count channel');
+    }
+    strickerMatchCountChannelId = strickerCountChannel.id;
+
+    console.log('[Discord Bot] Stats channels initialized');
+    
+    // Update all counts immediately
+    await updatePlayersCountChannel();
+    await updateSquadsCountChannel();
+    await updateRankedMatchCountChannel();
+    await updateStrickerMatchCountChannel();
+    
+    // Set up periodic updates (every 30 minutes)
+    if (matchCountUpdateInterval) {
+      clearInterval(matchCountUpdateInterval);
+    }
+    matchCountUpdateInterval = setInterval(async () => {
+      await updatePlayersCountChannel();
+      await updateSquadsCountChannel();
+      await updateRankedMatchCountChannel();
+      await updateStrickerMatchCountChannel();
+    }, 30 * 60 * 1000);
+    
+    return true;
+  } catch (error) {
+    console.error('[Discord Bot] Error initializing stats channels:', error.message);
+    return false;
+  }
+};
+
+/**
+ * Update the players count channel name
+ * Counts total registered players
+ */
+export const updatePlayersCountChannel = async () => {
+  if (!client || !isReady || !playersCountChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(playersCountChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Players count channel not found');
+      return false;
+    }
+
+    // Import User model dynamically to avoid circular dependencies
+    const { default: User } = await import('../models/User.js');
+    
+    // Count total users
+    const playersCount = await User.countDocuments({});
+    
+    const channelName = `Joueurs : ${playersCount}`;
+
+    // Only update if name changed (Discord rate limits)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating players count channel:', error.message);
+    }
+    return false;
+  }
+};
+
+/**
+ * Update the squads count channel name
+ * Counts total squads
+ */
+export const updateSquadsCountChannel = async () => {
+  if (!client || !isReady || !squadsCountChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(squadsCountChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Squads count channel not found');
+      return false;
+    }
+
+    // Import Squad model dynamically to avoid circular dependencies
+    const { default: Squad } = await import('../models/Squad.js');
+    
+    // Count total squads
+    const squadsCount = await Squad.countDocuments({});
+    
+    const channelName = `Escouades : ${squadsCount}`;
+
+    // Only update if name changed (Discord rate limits)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating squads count channel:', error.message);
+    }
+    return false;
+  }
+};
+
+/**
+ * Update the ranked queue status channel name
+ * @param {number} hardcoreCount - Players in hardcore queue
+ * @param {number} cdlCount - Players in CDL queue
+ * @param {Array} hardcorePlayers - Player names in hardcore queue
+ * @param {Array} cdlPlayers - Player names in CDL queue
+ */
+export const updateRankedQueueChannel = async (hardcoreCount = 0, cdlCount = 0, hardcorePlayers = [], cdlPlayers = []) => {
+  if (!client || !isReady || !rankedQueueChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(rankedQueueChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Queue status channel not found');
+      return false;
+    }
+
+    const totalInQueue = hardcoreCount + cdlCount;
+    let channelName = `🔍 En recherche: ${totalInQueue}`;
+    
+    // Add breakdown if both modes have players
+    if (hardcoreCount > 0 && cdlCount > 0) {
+      channelName = `🔍 Recherche: ${hardcoreCount} HC | ${cdlCount} CDL`;
+    } else if (hardcoreCount > 0) {
+      channelName = `🔍 En recherche HC: ${hardcoreCount}`;
+    } else if (cdlCount > 0) {
+      channelName = `🔍 En recherche CDL: ${cdlCount}`;
+    }
+
+    // Only update if name changed (Discord rate limits channel name changes)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors for channel renames
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating queue channel:', error.message);
+    }
+    return false;
+  }
+};
+
+/**
+ * Update the ranked match count channel name
+ * Counts total completed ranked matches
+ */
+export const updateRankedMatchCountChannel = async () => {
+  if (!client || !isReady || !rankedMatchCountChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(rankedMatchCountChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Match count channel not found');
+      return false;
+    }
+
+    // Import RankedMatch model dynamically to avoid circular dependencies
+    const { default: RankedMatch } = await import('../models/RankedMatch.js');
+    
+    // Count completed ranked matches
+    const completedMatchCount = await RankedMatch.countDocuments({ status: 'completed' });
+    
+    const channelName = `Matchs Ranked : ${completedMatchCount}`;
+
+    // Only update if name changed (Discord rate limits)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating match count channel:', error.message);
+    }
+    return false;
+  }
+};
+
+/**
+ * Update the stricker match count channel name
+ * Counts total completed stricker matches
+ */
+export const updateStrickerMatchCountChannel = async () => {
+  if (!client || !isReady || !strickerMatchCountChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(strickerMatchCountChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Stricker match count channel not found');
+      return false;
+    }
+
+    // Import StrickerMatch model dynamically to avoid circular dependencies
+    const { default: StrickerMatch } = await import('../models/StrickerMatch.js');
+    
+    // Count completed stricker matches
+    const completedMatchCount = await StrickerMatch.countDocuments({ status: 'completed' });
+    
+    const channelName = `Matchs Stricker : ${completedMatchCount}`;
+
+    // Only update if name changed (Discord rate limits)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating stricker count channel:', error.message);
+    }
+    return false;
+  }
+};
+
+/**
+ * Initialize season timer channels in Discord
+ * Creates two voice channels in the SEASON_TIMER_CATEGORY:
+ * - Ranked season timer (shows time remaining until 1st of next month)
+ * - Stricker season timer (shows time remaining based on AppSettings)
+ */
+export const initSeasonTimerChannels = async () => {
+  if (!client || !isReady) {
+    console.warn('[Discord Bot] Bot not ready, cannot initialize season timer channels');
+    return false;
+  }
+
+  try {
+    const category = await client.channels.fetch(SEASON_TIMER_CATEGORY_ID).catch(() => null);
+    if (!category) {
+      console.error(`[Discord Bot] Season timer category ${SEASON_TIMER_CATEGORY_ID} not found`);
+      return false;
+    }
+
+    const guild = category.guild;
+
+    // Look for existing channels or create new ones
+    const existingChannels = category.children?.cache || [];
+    
+    // Find or create ranked season timer channel
+    let rankedTimerChannel = existingChannels.find(ch => ch.name.startsWith('⏱️ Ranked'));
+    if (!rankedTimerChannel) {
+      rankedTimerChannel = await guild.channels.create({
+        name: '⏱️ Ranked : --j --h',
+        type: ChannelType.GuildVoice,
+        parent: SEASON_TIMER_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          }
+        ],
+        reason: 'Season timer - Ranked'
+      });
+      console.log('[Discord Bot] Created ranked season timer channel');
+    }
+    rankedSeasonTimerChannelId = rankedTimerChannel.id;
+
+    // Find or create stricker season timer channel
+    let strickerTimerChannel = existingChannels.find(ch => ch.name.startsWith('⏱️ Stricker'));
+    if (!strickerTimerChannel) {
+      strickerTimerChannel = await guild.channels.create({
+        name: '⏱️ Stricker : --j --h',
+        type: ChannelType.GuildVoice,
+        parent: SEASON_TIMER_CATEGORY_ID,
+        permissionOverwrites: [
+          {
+            id: guild.id,
+            deny: [PermissionFlagsBits.Connect]
+          }
+        ],
+        reason: 'Season timer - Stricker'
+      });
+      console.log('[Discord Bot] Created stricker season timer channel');
+    }
+    strickerSeasonTimerChannelId = strickerTimerChannel.id;
+
+    console.log('[Discord Bot] Season timer channels initialized');
+    
+    // Update timers immediately
+    await updateRankedSeasonTimerChannel();
+    await updateStrickerSeasonTimerChannel();
+    
+    // Set up periodic updates (every 30 minutes)
+    if (seasonTimerUpdateInterval) {
+      clearInterval(seasonTimerUpdateInterval);
+    }
+    seasonTimerUpdateInterval = setInterval(async () => {
+      await updateRankedSeasonTimerChannel();
+      await updateStrickerSeasonTimerChannel();
+    }, 30 * 60 * 1000);
+    
+    return true;
+  } catch (error) {
+    console.error('[Discord Bot] Error initializing season timer channels:', error.message);
+    return false;
+  }
+};
+
+/**
+ * Update the ranked season timer channel name
+ * Shows time remaining until 1st of next month (ranked season reset)
+ */
+export const updateRankedSeasonTimerChannel = async () => {
+  if (!client || !isReady || !rankedSeasonTimerChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(rankedSeasonTimerChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Ranked season timer channel not found');
+      return false;
+    }
+
+    // Calculate time remaining until 1st of next month
+    const now = new Date();
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+    const diff = nextMonth.getTime() - now.getTime();
+    
+    let channelName;
+    if (diff <= 0) {
+      channelName = '⏱️ Ranked : Reset !';
+    } else {
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      channelName = `⏱️ Ranked : ${days}j ${hours}h`;
+    }
+
+    // Only update if name changed (Discord rate limits)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating ranked season timer channel:', error.message);
+    }
+    return false;
+  }
+};
+
+/**
+ * Update the stricker season timer channel name
+ * Shows time remaining until stricker season end date (from AppSettings)
+ */
+export const updateStrickerSeasonTimerChannel = async () => {
+  if (!client || !isReady || !strickerSeasonTimerChannelId) {
+    return false;
+  }
+
+  try {
+    const channel = await client.channels.fetch(strickerSeasonTimerChannelId).catch(() => null);
+    if (!channel) {
+      console.warn('[Discord Bot] Stricker season timer channel not found');
+      return false;
+    }
+
+    // Import AppSettings model dynamically to avoid circular dependencies
+    const { default: AppSettings } = await import('../models/AppSettings.js');
+    
+    // Get stricker settings
+    const settings = await AppSettings.getSettings();
+    const strickerSettings = settings?.strickerSettings || {};
+    const seasonDurationMonths = strickerSettings.seasonDurationMonths || 2;
+    const seasonStartDate = strickerSettings.seasonStartDate ? new Date(strickerSettings.seasonStartDate) : new Date();
+    
+    // Calculate season end date
+    const seasonEndDate = new Date(seasonStartDate);
+    seasonEndDate.setMonth(seasonEndDate.getMonth() + seasonDurationMonths);
+    
+    // Calculate time remaining
+    const now = new Date();
+    const diff = seasonEndDate.getTime() - now.getTime();
+    
+    let channelName;
+    if (diff <= 0) {
+      channelName = '⏱️ Stricker : Reset !';
+    } else {
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      channelName = `⏱️ Stricker : ${days}j ${hours}h`;
+    }
+
+    // Only update if name changed (Discord rate limits)
+    if (channel.name !== channelName) {
+      await channel.setName(channelName);
+    }
+
+    return true;
+  } catch (error) {
+    // Silently ignore rate limit errors
+    if (error.code !== 50013 && error.code !== 50035) {
+      console.error('[Discord Bot] Error updating stricker season timer channel:', error.message);
+    }
+    return false;
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -2730,5 +3273,14 @@ export default {
   sendIrisLowActivityAlert,
   sendRankedMatchStartDM,
   sendIrisUpdateNotification,
-  sendTournamentLaunchNotification
+  sendTournamentLaunchNotification,
+  initRankedStatsChannels,
+  updateRankedQueueChannel,
+  updatePlayersCountChannel,
+  updateSquadsCountChannel,
+  updateRankedMatchCountChannel,
+  updateStrickerMatchCountChannel,
+  initSeasonTimerChannels,
+  updateRankedSeasonTimerChannel,
+  updateStrickerSeasonTimerChannel
 };

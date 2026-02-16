@@ -3708,6 +3708,9 @@ const AdminPanel = () => {
 
                 {/* Trust Score Section */}
                 {irisDetailsPlayer.security && (() => {
+                  // Debug: Log raw security data
+                  console.log('[Admin Panel] Raw security data:', JSON.stringify(irisDetailsPlayer.security, null, 2));
+                  
                   const securityModules = [
                     { key: 'tpm', label: 'TPM 2.0', enabled: irisDetailsPlayer.security.tpm?.enabled, tip: 'Activer TPM 2.0 dans le BIOS (Security > Trusted Platform Module)' },
                     { key: 'secureBoot', label: 'Secure Boot', enabled: irisDetailsPlayer.security.secureBoot, tip: 'Activer Secure Boot dans le BIOS (Boot > Secure Boot > Enabled)' },
@@ -3719,11 +3722,18 @@ const AdminPanel = () => {
                     { key: 'defender', label: 'Defender', enabled: irisDetailsPlayer.security.defender, tip: 'Activer Windows Defender: Paramètres > Confidentialité et sécurité > Sécurité Windows > Protection contre les virus et menaces' },
                     { key: 'defenderRealtime', label: 'Protection temps réel', enabled: irisDetailsPlayer.security.defenderRealtime, tip: 'Activer la protection en temps réel dans Windows Defender: Paramètres des virus et menaces > Paramètres de protection > Protection en temps réel' },
                   ];
+                  
+                  // Debug: Log each module's enabled status
+                  console.log('[Admin Panel] Security modules status:', securityModules.map(m => ({ [m.label]: m.enabled })));
+                  
                   // Special warning: IOMMU on but DMA Protection off = vulnerable to DMA cheats
                   const dmaVulnerable = irisDetailsPlayer.security.iommu && !irisDetailsPlayer.security.kernelDmaProtection;
                   const enabledCount = securityModules.filter(m => m.enabled).length;
                   const trustScore = Math.round((enabledCount / securityModules.length) * 100);
                   const disabledModules = securityModules.filter(m => !m.enabled);
+                  
+                  // Debug: Log final calculation
+                  console.log('[Admin Panel] Trust score calculation:', { enabledCount, total: securityModules.length, trustScore });
                   
                   return (
                     <div className={`bg-dark-900/50 border rounded-xl p-4 ${trustScore >= 75 ? 'border-green-500/30' : trustScore >= 50 ? 'border-yellow-500/30' : 'border-red-500/30'}`}>

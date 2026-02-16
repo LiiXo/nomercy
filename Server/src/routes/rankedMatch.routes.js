@@ -8,7 +8,7 @@ import ItemUsage from '../models/ItemUsage.js';
 import { verifyToken, requireStaff, requireArbitre } from '../middleware/auth.middleware.js';
 import { getRankedMatchRewards } from '../utils/configHelper.js';
 import { getQueueStatus, joinQueue, leaveQueue, addFakePlayers, removeFakePlayers, startStaffTestMatch, joinStaffQueue, leaveStaffQueue, getStaffQueueStatus, addBotsToStaffQueue, clearStaffQueueBots, forceStartStaffMatch } from '../services/rankedMatchmaking.service.js';
-import { logArbitratorCall, deleteMatchVoiceChannels, createMatchVoiceChannels } from '../services/discordBot.service.js';
+import { logArbitratorCall, deleteMatchVoiceChannels, createMatchVoiceChannels, updateRankedMatchCountChannel } from '../services/discordBot.service.js';
 
 const router = express.Router();
 
@@ -1043,6 +1043,9 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
         deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
       }
+      
+      // Update Discord match count channel
+      updateRankedMatchCountChannel();
     } else if (votesForTeam2 >= threshold) {
       match.result.winner = 2;
       match.result.confirmed = true;
@@ -1069,6 +1072,9 @@ router.post('/:matchId/result', verifyToken, async (req, res) => {
       if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
         deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
       }
+      
+      // Update Discord match count channel
+      updateRankedMatchCountChannel();
     } else {
       // Pas encore de consensus
       resultMessage = `Vote enregistré. Équipe 1: ${votesForTeam1} votes, Équipe 2: ${votesForTeam2} votes. Il faut ${threshold} votes (60%) pour valider.`;
@@ -2204,6 +2210,9 @@ router.post('/admin/:matchId/force-result', verifyToken, requireArbitre, async (
     
     await match.save();
     
+    // Update Discord match count channel
+    updateRankedMatchCountChannel();
+    
     // Log rewards for verification
     match.players.forEach((p, i) => {
       if (!p.isFake) {
@@ -2282,6 +2291,9 @@ router.post('/admin/:matchId/resolve-dispute', verifyToken, requireArbitre, asyn
     
     await match.save();
     
+    // Update Discord match count channel
+    updateRankedMatchCountChannel();
+    
     // Repopuler le match avec toutes les données
     await match.populate([
       { path: 'players.user', select: 'username avatar discordAvatar discordId activisionId platform' },
@@ -2344,6 +2356,8 @@ router.patch('/admin/:matchId/status', verifyToken, requireArbitre, async (req, 
       if (match.team1VoiceChannel?.channelId || match.team2VoiceChannel?.channelId) {
         deleteMatchVoiceChannels(match.team1VoiceChannel?.channelId, match.team2VoiceChannel?.channelId);
       }
+      // Update Discord match count channel
+      updateRankedMatchCountChannel();
     } else if (status === 'in_progress') {
       match.startedAt = new Date();
     }

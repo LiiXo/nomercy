@@ -422,10 +422,10 @@ router.post('/matchmaking/join', verifyToken, checkStrickerAccess, async (req, r
       });
     }
     
-    // IRIS verification for PC players
+    // IRIS verification for PC players - Use 5 minutes threshold for tolerance
     if (user.platform === 'PC') {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > threeMinutesAgo;
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > fiveMinutesAgo;
       
       if (!isIrisConnected) {
         return res.status(400).json({ 
@@ -629,10 +629,10 @@ router.post('/matchmaking/challenge', verifyToken, checkStrickerAccess, async (r
       });
     }
     
-    // IRIS verification for PC players
+    // IRIS verification for PC players - Use 5 minutes threshold for tolerance
     if (user.platform === 'PC') {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > threeMinutesAgo;
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const isIrisConnected = user.irisLastSeen && new Date(user.irisLastSeen) > fiveMinutesAgo;
       
       if (!isIrisConnected) {
         return res.status(400).json({ 
@@ -1395,7 +1395,7 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
             .map(p => p.user?._id?.toString() || p.user?.toString());
           
           // Available members = squad members not yet selected
-          // Include platform and check Iris connection status for PC players
+          // Include platform and check Iris connection status for PC players (for UI display only)
           const membersToCheck = mySquad.members
             .filter(m => m.user && !selectedPlayerIds.includes(m.user._id?.toString()));
           
@@ -1406,19 +1406,15 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
             .lean();
           
           // Build a map of userId -> { platform, irisConnected }
-          // Use data from this query to ensure consistency
           const userDataMap = new Map();
-          const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-          console.log('[DEBUG IRIS] Checking roster members iris status, threeMinutesAgo:', threeMinutesAgo);
+          const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+          
           usersWithIris.forEach(u => {
             const platform = u.platform;
             let irisConnected = null;
             if (platform === 'PC') {
               const lastSeen = u.irisLastSeen ? new Date(u.irisLastSeen) : null;
-              irisConnected = !!(lastSeen && lastSeen > threeMinutesAgo);
-              console.log(`[DEBUG IRIS] User ${u.username}: platform=${platform}, irisLastSeen=${u.irisLastSeen}, lastSeen=${lastSeen}, threeMinutesAgo=${threeMinutesAgo}, isConnected=${irisConnected}`);
-            } else {
-              console.log(`[DEBUG IRIS] User ${u.username}: platform=${platform} (not PC, irisConnected=null)`);
+              irisConnected = !!(lastSeen && lastSeen > fiveMinutesAgo);
             }
             userDataMap.set(u._id.toString(), { platform, irisConnected });
           });
@@ -1427,7 +1423,6 @@ router.get('/match/:matchId', verifyToken, checkStrickerAccess, async (req, res)
           availableMembers = membersToCheck.map(m => {
             const userId = m.user._id.toString();
             const userData = userDataMap.get(userId);
-            // Use platform from fresh query, fallback to populated data
             const platform = userData?.platform || m.user.platform;
             const irisConnected = userData?.irisConnected ?? (platform === 'PC' ? false : null);
             
@@ -1557,18 +1552,8 @@ router.post('/match/:matchId/roster/select', verifyToken, checkStrickerAccess, a
       return res.status(400).json({ success: false, message: 'Ce joueur est déjà sélectionné' });
     }
     
-    // Iris check for PC players
-    if (memberUser.platform === 'PC') {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-      const isIrisConnected = memberUser.irisLastSeen && new Date(memberUser.irisLastSeen) > threeMinutesAgo;
-      
-      if (!isIrisConnected) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `${memberUser.username} n'est pas connecté à Iris. Les joueurs PC doivent être connectés à Iris pour jouer.`
-        });
-      }
-    }
+    // Note: Iris verification removed - players can be selected regardless of Iris status
+    // Iris status is still shown in the UI for information purposes
     
     // Add player to the match
     const newPlayer = {
@@ -1778,8 +1763,8 @@ router.get('/match/:matchId/roster/search-helper', verifyToken, checkStrickerAcc
       });
     });
     
-    // Calculate Iris connection status for PC players
-    const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+    // Calculate Iris connection status for PC players - Use 5 minutes threshold for tolerance
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     
     res.json({
       success: true,
@@ -1793,7 +1778,7 @@ router.get('/match/:matchId/roster/search-helper', verifyToken, checkStrickerAcc
         strickerPoints: u.statsStricker?.points || 0,
         equippedTitle: u.equippedTitle,
         inActiveMatch: usersInActiveMatch.has(u._id.toString()),
-        irisConnected: u.platform === 'PC' ? (u.irisLastSeen && new Date(u.irisLastSeen) > threeMinutesAgo) : null
+        irisConnected: u.platform === 'PC' ? (u.irisLastSeen && new Date(u.irisLastSeen) > fiveMinutesAgo) : null
       }))
     });
   } catch (error) {
@@ -1878,18 +1863,8 @@ router.post('/match/:matchId/roster/select-helper', verifyToken, checkStrickerAc
       });
     }
     
-    // Iris check for PC players
-    if (helperUser.platform === 'PC') {
-      const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
-      const isIrisConnected = helperUser.irisLastSeen && new Date(helperUser.irisLastSeen) > threeMinutesAgo;
-      
-      if (!isIrisConnected) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `${helperUser.username} n'est pas connecté à Iris. Les joueurs PC doivent être connectés à Iris pour jouer.`
-        });
-      }
-    }
+    // Note: Iris verification removed - helpers can be selected regardless of Iris status
+    // Iris status is still shown in the UI for information purposes
     
     // Add helper to the match
     const mySquad = myTeam === 1 ? match.team1Squad : match.team2Squad;

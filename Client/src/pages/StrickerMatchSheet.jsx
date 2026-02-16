@@ -1596,10 +1596,10 @@ const StrickerMatchSheet = () => {
                   const titleName = equippedTitle?.nameTranslations?.[language] || equippedTitle?.name;
                   const isSelecting = selectingMember === member._id;
                   
-                  // Check if PC player and not connected to Iris
+                  // Check if PC player - Iris status shown but doesn't block selection
                   const isPcPlayer = member.platform === 'PC';
-                  const isIrisConnected = member.irisConnected === true; // PC players must be connected to Iris
-                  const canSelectMember = canSelectPlayers && (isPcPlayer ? isIrisConnected : true);
+                  const isIrisConnected = member.irisConnected === true;
+                  const canSelectMember = canSelectPlayers; // No longer blocking on Iris status
                   
                   return (
                     <div 
@@ -1609,12 +1609,9 @@ const StrickerMatchSheet = () => {
                           ? 'bg-lime-500/30 border border-lime-500 opacity-70'
                           : canSelectMember && canSelectPlayers
                             ? 'bg-dark-800 border border-lime-500/30 hover:border-lime-500 hover:bg-lime-500/10 cursor-pointer' 
-                            : isPcPlayer && !isIrisConnected
-                              ? 'bg-red-500/10 border border-red-500/30 opacity-60 cursor-not-allowed'
-                              : 'bg-dark-800/50 border border-gray-700 opacity-50'
+                            : 'bg-dark-800/50 border border-gray-700 opacity-50'
                       }`}
                       onClick={() => canSelectMember && !isSelecting && handleSelectRosterMember(member._id)}
-                      title={isPcPlayer && !isIrisConnected ? t.irisNotConnected : ''}
                     >
                       <div className="relative">
                         <img 
@@ -1669,11 +1666,6 @@ const StrickerMatchSheet = () => {
                             t.selectPlayer
                           )}
                         </div>
-                      ) : isPcPlayer && !isIrisConnected ? (
-                        <div className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium flex items-center gap-1">
-                          <Shield className="w-3 h-3" />
-                          {t.irisRequired}
-                        </div>
                       ) : null}
                     </div>
                   );
@@ -1723,20 +1715,20 @@ const StrickerMatchSheet = () => {
                             const isInMatch = user.inActiveMatch;
                             const isPcPlayer = user.platform === 'PC';
                             const isIrisConnected = user.irisConnected === true;
-                            const canSelect = !isInMatch && !isSelectingThis && (isPcPlayer ? isIrisConnected : true);
+                            const canSelect = !isInMatch && !isSelectingThis; // No longer blocking on Iris status
                             
                             return (
                               <div 
                                 key={idx}
                                 onClick={() => canSelect && handleSelectHelper(user._id)}
                                 className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
-                                  isInMatch || (isPcPlayer && !isIrisConnected)
+                                  isInMatch
                                     ? 'bg-dark-800/50 border border-gray-700 opacity-60 cursor-not-allowed'
                                     : isSelectingThis
                                       ? 'bg-purple-500/30 border border-purple-500 opacity-70 cursor-pointer'
                                       : 'bg-dark-800 border border-purple-500/30 hover:border-purple-500 hover:bg-purple-500/10 cursor-pointer'
                                 }`}
-                                title={isInMatch ? (language === 'fr' ? 'Ce joueur est actuellement en match' : 'This player is currently in a match') : (isPcPlayer && !isIrisConnected ? t.irisNotConnected : '')}
+                                title={isInMatch ? (language === 'fr' ? 'Ce joueur est actuellement en match' : 'This player is currently in a match') : ''}
                               >
                                 <div className="relative">
                                   <img 
@@ -1791,11 +1783,6 @@ const StrickerMatchSheet = () => {
                                 {isInMatch ? (
                                   <div className="px-3 py-1.5 bg-gray-500/20 text-gray-400 rounded-lg text-xs font-medium flex-shrink-0">
                                     {language === 'fr' ? 'Indisponible' : 'Unavailable'}
-                                  </div>
-                                ) : isPcPlayer && !isIrisConnected ? (
-                                  <div className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-xs font-medium flex items-center gap-1 flex-shrink-0">
-                                    <Shield className="w-3 h-3" />
-                                    {t.irisRequired}
                                   </div>
                                 ) : (
                                   <div className="px-3 py-1.5 bg-purple-500/20 text-purple-400 rounded-lg text-sm font-medium flex-shrink-0">

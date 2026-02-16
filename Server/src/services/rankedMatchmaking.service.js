@@ -13,7 +13,7 @@ import User from '../models/User.js';
 import Ranking from '../models/Ranking.js';
 import AppSettings from '../models/AppSettings.js';
 import GameMap from '../models/Map.js';
-import { createMatchVoiceChannels, sendRankedMatchStartDM } from './discordBot.service.js';
+import { createMatchVoiceChannels, sendRankedMatchStartDM, updateRankedQueueChannel, updateRankedMatchCountChannel } from './discordBot.service.js';
 import { checkRankedMatchGGSecureStatus } from './ggsecureMonitoring.service.js';
 
 // API URL for constructing full avatar URLs
@@ -1151,6 +1151,9 @@ const createMatchFromQueue = async (gameMode, mode) => {
     // Mettre à jour le statut de la file pour les joueurs restants
     broadcastQueueUpdate(gameMode, mode);
     
+    // Update Discord match count channel (new match created)
+    updateRankedMatchCountChannel();
+    
     // Si des joueurs restent dans la file, relancer le processus
     if (newQueue.length >= 4) {
       checkMatchmakingStart(gameMode, mode);
@@ -1225,6 +1228,29 @@ const broadcastGlobalQueueCount = (mode) => {
     count: totalInQueue,
     mode
   });
+  
+  // Also update Discord channel with queue status
+  updateDiscordQueueChannel();
+};
+
+/**
+ * Update Discord queue channel with current queue counts for both modes
+ */
+const updateDiscordQueueChannel = async () => {
+  // Calculate totals for both modes
+  let hardcoreCount = 0;
+  let cdlCount = 0;
+  
+  for (const key in queues) {
+    if (key.endsWith('_hardcore')) {
+      hardcoreCount += queues[key].length;
+    } else if (key.endsWith('_cdl')) {
+      cdlCount += queues[key].length;
+    }
+  }
+  
+  // Update Discord channel
+  updateRankedQueueChannel(hardcoreCount, cdlCount);
 };
 
 /**

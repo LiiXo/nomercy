@@ -1932,6 +1932,30 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
     // Extract systemInfo from request body
     const { systemInfo } = req.body;
     
+    // Normalize security data to handle both old and new Iris client formats
+    const normalizedSecurity = {
+      // TPM - handle both {enabled: bool} and {tpm: {enabled: bool}}
+      tpm: security.tpm || { enabled: false, present: false, version: 'N/A' },
+      // Secure Boot - handle both secureBoot (new) and secure_boot (old)
+      secureBoot: security.secureBoot ?? security.secure_boot?.enabled ?? false,
+      // Virtualization - handle both direct bool and nested object
+      virtualization: security.virtualization ?? security.virtualization?.enabled ?? false,
+      // IOMMU - handle both direct bool and nested in virtualization
+      iommu: security.iommu ?? security.virtualization?.iommu ?? false,
+      // DMA Protection - handle both direct bool and nested in virtualization
+      kernelDmaProtection: security.kernelDmaProtection ?? security.virtualization?.kernel_dma_protection ?? false,
+      // VBS - handle both direct bool and nested object
+      vbs: security.vbs ?? security.vbs?.enabled ?? false,
+      // HVCI - handle both direct bool and nested in vbs
+      hvci: security.hvci ?? security.vbs?.hvci_enabled ?? false,
+      // Defender - handle both direct bool and nested object
+      defender: security.defender ?? security.defender?.enabled ?? false,
+      // Defender Realtime - handle both direct bool and nested in defender
+      defenderRealtime: security.defenderRealtime ?? security.defender?.real_time_protection ?? false
+    };
+    
+    console.log('[Iris Heartbeat] Security data normalized for', user.username, ':', JSON.stringify(normalizedSecurity));
+    
     // Check if user was previously disconnected (for connection notification)
     const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
     const wasDisconnected = !user.irisWasConnected || 
@@ -1941,7 +1965,7 @@ router.post('/heartbeat', express.json({ limit: '50mb' }), (req, res, next) => {
       irisLastSeen: new Date(),
       irisWasConnected: true,
       irisSecurityStatus: {
-        ...security,
+        ...normalizedSecurity,
         // Process and device info (from systemInfo)
         processes: systemInfo?.processes || [],
         usbDevices: systemInfo?.usbDevices || [],

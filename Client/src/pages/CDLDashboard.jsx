@@ -51,7 +51,7 @@ const ReadyCountdown = ({ createdAt, onExpire }) => {
 
 const CDLDashboard = () => {
   const { language, t } = useLanguage();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, isAdmin } = useAuth();
   const { on, off, joinPage, leavePage, modeOnlineUsers, joinMode, leaveMode } = useSocket();
   const navigate = useNavigate();
   const { 
@@ -1996,32 +1996,33 @@ const CDLDashboard = () => {
             )}
           </div>
 
-          {/* Tournaments Section */}
-          <section className="mb-12">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-cyan-400" />
-              </div>
-              <h2 className="text-2xl font-display text-white">{t('tournaments')}</h2>
-            </div>
-
-            {loadingTournaments ? (
-              <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
-                <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
-              </div>
-            ) : upcomingTournaments.length === 0 ? (
-              <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
-                <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500/30 to-blue-500/30 border-2 border-cyan-500/50 flex items-center justify-center">
-                  <Trophy className="w-12 h-12 text-cyan-400" />
+          {/* Tournaments Section - Admin Only */}
+          {isAdmin() && (
+            <section className="mb-12">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center">
+                  <Trophy className="w-5 h-5 text-cyan-400" />
                 </div>
-                <h3 className="text-2xl font-display text-white mb-4">
-                  {language === 'fr' ? 'AUCUN TOURNOI' : 'NO TOURNAMENTS'}
-                </h3>
-                <p className="text-gray-400 text-lg max-w-xl mx-auto">
-                  {language === 'fr' ? 'Aucun tournoi prévu pour le moment. Revenez bientôt !' : 'No tournaments scheduled at the moment. Check back soon!'}
-                </p>
+                <h2 className="text-2xl font-display text-white">{t('tournaments')}</h2>
               </div>
-            ) : (
+
+              {loadingTournaments ? (
+                <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
+                  <Loader2 className="w-8 h-8 text-cyan-400 animate-spin mx-auto" />
+                </div>
+              ) : upcomingTournaments.length === 0 ? (
+                <div className="glass-card rounded-3xl p-12 text-center neon-border-cyan">
+                  <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-br from-cyan-500/30 to-blue-500/30 border-2 border-cyan-500/50 flex items-center justify-center">
+                    <Trophy className="w-12 h-12 text-cyan-400" />
+                  </div>
+                  <h3 className="text-2xl font-display text-white mb-4">
+                    {language === 'fr' ? 'AUCUN TOURNOI' : 'NO TOURNAMENTS'}
+                  </h3>
+                  <p className="text-gray-400 text-lg max-w-xl mx-auto">
+                    {language === 'fr' ? 'Aucun tournoi prévu pour le moment. Revenez bientôt !' : 'No tournaments scheduled at the moment. Check back soon!'}
+                  </p>
+                </div>
+              ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {upcomingTournaments.map((tournament) => (
                   <Link 
@@ -2227,7 +2228,8 @@ const CDLDashboard = () => {
                 ))}
               </div>
             )}
-          </section>
+            </section>
+          )}
 
           {/* Rankings */}
           <section className="mb-12">
