@@ -113,7 +113,7 @@ export const translations = {
     all: 'Tout',
     availableMatches: 'Matchs disponibles',
     tournaments: 'Tournois',
-    ggsecureAntiCheat: 'Protégé par GGSecure Anti-Cheat',
+    irisAntiCheat: 'Protégé par Iris Anti-Cheat',
     authDisclaimer: 'En continuant, tu acceptes nos conditions et la politique de confidentialité.',
     authNoPassword: 'Aucun mot de passe n’est stocké ici.',
     authLoginTitle: 'Connexion via Discord',
@@ -160,6 +160,13 @@ export const translations = {
     // Maintenance
     maintenanceInProgress: 'Maintenance en cours',
     estimatedEnd: 'Fin estimée',
+    // PWA
+    pwaDesktopApp: 'Application Windows',
+    pwaInstallDesc: 'Installez NoMercy sur votre PC pour un acces rapide et une experience optimale.',
+    pwaInstallBtn: 'Installer l\'application',
+    pwaInstallApp: 'Installer l\'application',
+    pwaFallbackChrome: 'Menu (\u22ee) > Caster, enregistrer et partager > Installer la page en tant qu\'application',
+    pwaFallbackEdge: 'Menu (\u22ef) > Applications > Installer ce site en tant qu\'application',
   },
   en: {
     appName: 'NoMercy',
@@ -275,7 +282,7 @@ export const translations = {
     all: 'All',
     availableMatches: 'Available Matches',
     tournaments: 'Tournaments',
-    ggsecureAntiCheat: 'Protected by GGSecure Anti-Cheat',
+    irisAntiCheat: 'Protected by Iris Anti-Cheat',
     authDisclaimer: 'By continuing, you accept our terms and privacy policy.',
     authNoPassword: 'No password is stored here.',
     authLoginTitle: 'Login via Discord',
@@ -322,6 +329,13 @@ export const translations = {
     // Maintenance
     maintenanceInProgress: 'Maintenance in progress',
     estimatedEnd: 'Estimated end',
+    // PWA
+    pwaDesktopApp: 'Windows App',
+    pwaInstallDesc: 'Install NoMercy on your PC for quick access and the best experience.',
+    pwaInstallBtn: 'Install App',
+    pwaInstallApp: 'Install App',
+    pwaFallbackChrome: 'Menu (\u22ee) > Cast, save, and share > Install page as app',
+    pwaFallbackEdge: 'Menu (\u22ef) > Apps > Install this site as an app',
   },
   it: {
     appName: 'NoMercy',
@@ -437,7 +451,7 @@ export const translations = {
     all: 'Tutto',
     availableMatches: 'Partite disponibili',
     tournaments: 'Tornei',
-    ggsecureAntiCheat: 'Protetto da GGSecure Anti-Cheat',
+    irisAntiCheat: 'Protetto da Iris Anti-Cheat',
     authDisclaimer: 'Continuando, accetti i nostri termini e l’informativa sulla privacy.',
     authNoPassword: 'Nessuna password viene memorizzata qui.',
     authLoginTitle: 'Accesso via Discord',
@@ -484,6 +498,13 @@ export const translations = {
     // Maintenance
     maintenanceInProgress: 'Manutenzione in corso',
     estimatedEnd: 'Fine stimata',
+    // PWA
+    pwaDesktopApp: 'App Windows',
+    pwaInstallDesc: 'Installa NoMercy sul tuo PC per un accesso rapido e la migliore esperienza.',
+    pwaInstallBtn: 'Installa l\'app',
+    pwaInstallApp: 'Installa l\'app',
+    pwaFallbackChrome: 'Menu (\u22ee) > Trasmetti, salva e condividi > Installa pagina come app',
+    pwaFallbackEdge: 'Menu (\u22ef) > App > Installa questo sito come app',
   },
   de: {
     appName: 'NoMercy',
@@ -599,7 +620,7 @@ export const translations = {
     all: 'Alle',
     availableMatches: 'Verfügbare Matches',
     tournaments: 'Turniere',
-    ggsecureAntiCheat: 'Geschützt durch GGSecure Anti-Cheat',
+    irisAntiCheat: 'Geschützt durch Iris Anti-Cheat',
     authDisclaimer: 'Durch Fortfahren akzeptierst du unsere Bedingungen und Datenschutzrichtlinie.',
     authNoPassword: 'Hier wird kein Passwort gespeichert.',
     authLoginTitle: 'Anmeldung über Discord',
@@ -646,5 +667,12 @@ export const translations = {
     // Maintenance
     maintenanceInProgress: 'Wartung läuft',
     estimatedEnd: 'Geschätztes Ende',
+    // PWA
+    pwaDesktopApp: 'Windows-App',
+    pwaInstallDesc: 'Installieren Sie NoMercy auf Ihrem PC fuer schnellen Zugriff und das beste Erlebnis.',
+    pwaInstallBtn: 'App installieren',
+    pwaInstallApp: 'App installieren',
+    pwaFallbackChrome: 'Menu (\u22ee) > Streamen, speichern und teilen > Seite als App installieren',
+    pwaFallbackEdge: 'Menu (\u22ef) > Apps > Diese Website als App installieren',
   }
 };

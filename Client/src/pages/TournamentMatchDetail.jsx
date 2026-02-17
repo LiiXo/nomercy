@@ -251,7 +251,7 @@ const TournamentMatchDetail = () => {
     
     const platform = member.user?.platform || member.userInfo?.platform || member.platform;
     const isPc = platform === 'pc' || platform === 'PC';
-    const isGGSecureConnected = member.user?.ggSecureConnected || member.userInfo?.ggSecureConnected || member.ggSecureConnected || member.user?.irisConnected || member.userInfo?.irisConnected || member.irisConnected;
+    const isIrisConnected = member.user?.irisConnected || member.userInfo?.irisConnected || member.irisConnected;
 
     return (
       <div key={idx} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${isCurrentUser ? 'bg-gradient-to-r from-cyan-500/20 to-cyan-500/5 border border-cyan-500/40' : 'bg-dark-700/30 hover:bg-dark-700/50'}`}>
@@ -277,8 +277,8 @@ const TournamentMatchDetail = () => {
           <p className={`font-medium truncate ${isCurrentUser ? 'text-cyan-400' : isBot ? 'text-gray-500' : 'text-white'}`}>{memberName}</p>
         </div>
         {!isBot && isPc && (
-          <div className="flex-shrink-0" title={isGGSecureConnected ? 'Iris connecté' : 'Iris non connecté'}>
-            <Eye className={`w-5 h-5 ${isGGSecureConnected ? 'text-emerald-400' : 'text-red-400'}`} />
+          <div className="flex-shrink-0" title={isIrisConnected ? 'Iris connecté' : 'Iris non connecté'}>
+            <Eye className={`w-5 h-5 ${isIrisConnected ? 'text-emerald-400' : 'text-red-400'}`} />
           </div>
         )}
         {isCurrentUser && (

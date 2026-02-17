@@ -34,7 +34,7 @@ const TermsOfService = () => {
         },
         {
           title: '5. Anti-triche',
-          content: 'L\'utilisation de logiciels de triche, de mods non autorisés ou de toute forme de triche est strictement interdite. Les joueurs PC doivent utiliser GGSecure Anti-Cheat pour participer aux matchs.'
+          content: 'L\'utilisation de logiciels de triche, de mods non autorisés ou de toute forme de triche est strictement interdite. Les joueurs PC doivent utiliser Iris Anti-Cheat pour participer aux matchs.'
         },
         {
           title: '6. Propriété intellectuelle',
@@ -72,7 +72,7 @@ const TermsOfService = () => {
         },
         {
           title: '5. Anti-Cheat',
-          content: 'The use of cheat software, unauthorized mods, or any form of cheating is strictly prohibited. PC players must use GGSecure Anti-Cheat to participate in matches.'
+          content: 'The use of cheat software, unauthorized mods, or any form of cheating is strictly prohibited. PC players must use Iris Anti-Cheat to participate in matches.'
         },
         {
           title: '6. Intellectual Property',
@@ -110,7 +110,7 @@ const TermsOfService = () => {
         },
         {
           title: '5. Anti-Cheat',
-          content: 'Die Verwendung von Cheat-Software, nicht autorisierten Mods oder jeder Form von Betrug ist strengstens untersagt. PC-Spieler müssen GGSecure Anti-Cheat verwenden, um an Matches teilzunehmen.'
+          content: 'Die Verwendung von Cheat-Software, nicht autorisierten Mods oder jeder Form von Betrug ist strengstens untersagt. PC-Spieler müssen Iris Anti-Cheat verwenden, um an Matches teilzunehmen.'
         },
         {
           title: '6. Geistiges Eigentum',
@@ -148,7 +148,7 @@ const TermsOfService = () => {
         },
         {
           title: '5. Anti-Cheat',
-          content: 'L\'uso di software di cheat, mod non autorizzati o qualsiasi forma di cheating è severamente vietato. I giocatori PC devono utilizzare GGSecure Anti-Cheat per partecipare alle partite.'
+          content: 'L\'uso di software di cheat, mod non autorizzati o qualsiasi forma di cheating è severamente vietato. I giocatori PC devono utilizzare Iris Anti-Cheat per partecipare alle partite.'
         },
         {
           title: '6. Proprietà Intellettuale',

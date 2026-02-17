@@ -39,6 +39,7 @@ const startServer = async () => {
   const { default: teamRoutes } = await import('./routes/team.routes.js');
   const { default: irisRoutes } = await import('./routes/iris.routes.js');
   const { default: tournamentRoutes } = await import('./routes/tournament.routes.js');
+  const { default: shadowBanRoutes } = await import('./routes/shadowBan.routes.js');
   await import('./config/passport.js');
   
   // Import Match model for cleanup job
@@ -434,6 +435,7 @@ const startServer = async () => {
   app.use('/api/team', teamRoutes);
   app.use('/api/iris', irisRoutes);
   app.use('/api/tournaments', tournamentRoutes);
+  app.use('/api/shadow-bans', shadowBanRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

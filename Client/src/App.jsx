@@ -14,6 +14,7 @@ import GlobalAlerts from './components/GlobalAlerts';
 import HelperConfirmationDialog from './components/HelperConfirmationDialog';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Lazy-loaded pages for code splitting - dramatically reduces initial bundle size
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
@@ -638,6 +639,8 @@ function AppContent() {
       
       {/* Helper Confirmation Dialog - Shows when someone requests you as helper */}
       <HelperConfirmationDialog />
+      
+      <PWAInstallPrompt />
     </div>
   );
 }

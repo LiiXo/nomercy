@@ -3302,6 +3302,120 @@ router.post('/scan/:userId', verifyToken, async (req, res) => {
   }
 });
 
+// ====== MANUAL DS4 SHADOW BAN (Admin Only) ======
+
+import { sendManualDS4ShadowBan } from '../services/discordBot.service.js';
+
+/**
+ * Search for a user by username (for DS4 ban dialog)
+ * GET /api/iris/admin/search-user?q=username
+ */
+router.get('/admin/search-user', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { q } = req.query;
+    if (!q || q.length < 2) {
+      return res.json({ success: true, users: [] });
+    }
+
+    const users = await User.find({
+      $or: [
+        { username: { $regex: q, $options: 'i' } },
+        { discordUsername: { $regex: q, $options: 'i' } },
+        { activisionId: { $regex: q, $options: 'i' } }
+      ],
+      isProfileComplete: true
+    })
+    .select('_id username discordUsername discordId avatarUrl avatar activisionId')
+    .limit(10);
+
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error('[Iris DS4 Ban] Search error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
+/**
+ * Issue a manual DS4 shadow ban
+ * POST /api/iris/admin/ds4-shadowban
+ * Body: { userId, durationHours }
+ */
+router.post('/admin/ds4-shadowban', verifyToken, async (req, res) => {
+  try {
+    const admin = await User.findById(req.user._id);
+    if (!admin || !admin.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+
+    const { userId, durationHours } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'ID utilisateur requis' });
+    }
+
+    if (!durationHours || durationHours < 1) {
+      return res.status(400).json({ success: false, message: 'Durée invalide (min 1 heure)' });
+    }
+
+    // Find the user to ban
+    const player = await User.findById(userId);
+    if (!player) {
+      return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+    }
+
+    // Can't ban other admins
+    if (player.roles.includes('admin')) {
+      return res.status(403).json({ success: false, message: 'Impossible de bannir un administrateur' });
+    }
+
+    // Calculate ban expiration
+    const now = new Date();
+    const banExpiresAt = new Date(now.getTime() + durationHours * 60 * 60 * 1000);
+
+    // Apply the shadow ban
+    player.isBanned = true;
+    player.banReason = 'Utilisation de DS4Windows (programme interdit) en match';
+    player.bannedAt = now;
+    player.banExpiresAt = banExpiresAt;
+    player.bannedBy = admin._id;
+
+    // Add to ban history
+    if (!player.banHistory) player.banHistory = [];
+    player.banHistory.push({
+      type: 'global',
+      reason: 'Utilisation de DS4Windows (programme interdit) en match',
+      bannedAt: now,
+      expiresAt: banExpiresAt,
+      bannedBy: admin._id,
+      source: 'iris_ds4_manual'
+    });
+
+    await player.save();
+
+    // Send Discord notification
+    await sendManualDS4ShadowBan(player, durationHours, admin);
+
+    console.log(`[Iris DS4 Ban] ${player.username} shadow banned for ${durationHours}h by ${admin.username}`);
+
+    res.json({
+      success: true,
+      message: `${player.username} a été shadow ban pour ${durationHours}h`,
+      player: {
+        username: player.username,
+        banExpiresAt: banExpiresAt
+      }
+    });
+  } catch (error) {
+    console.error('[Iris DS4 Ban] Error:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+});
+
 // ====== TAURI UPDATER ENDPOINT ======
 
 /**

@@ -626,7 +626,7 @@ const StrickerMatchSheet = () => {
       }
     });
 
-    // GGSecure listeners removed - no longer relevant (Iris is used instead)
+    // Iris listeners removed - no longer relevant (Iris is used instead)
 
     return () => {
       unsubRosterUpdate();
@@ -2963,7 +2963,7 @@ const StrickerMatchSheet = () => {
                   <div className="space-y-2">
                     {messages.filter(msg => {
                       // Filter out empty messages
-                      // Exclure les messages GGSecure - plus utilisé (remplacé par Iris)
+                      // Exclure les anciens messages GGSecure - plus utilisés
                       if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') return false;
                       if (msg.isSystem && msg.messageType) return true; // Keep typed system messages
                       if (msg.isSystem && msg.message && msg.message.trim()) return true;

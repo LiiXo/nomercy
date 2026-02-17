@@ -26,7 +26,7 @@ const PrivacyPolicy = () => {
         },
         {
           title: '3. Partage des informations',
-          content: 'Nous ne vendons pas vos informations personnelles. Nous partageons uniquement les informations nécessaires avec GGSecure Anti-Cheat pour la vérification de l\'intégrité des joueurs PC.'
+          content: 'Nous ne vendons pas vos informations personnelles. Nous partageons uniquement les informations nécessaires avec Iris Anti-Cheat pour la vérification de l\'intégrité des joueurs PC.'
         },
         {
           title: '4. Cookies et stockage',
@@ -64,7 +64,7 @@ const PrivacyPolicy = () => {
         },
         {
           title: '3. Information Sharing',
-          content: 'We do not sell your personal information. We only share necessary information with GGSecure Anti-Cheat for PC player integrity verification.'
+          content: 'We do not sell your personal information. We only share necessary information with Iris Anti-Cheat for PC player integrity verification.'
         },
         {
           title: '4. Cookies and Storage',
@@ -102,7 +102,7 @@ const PrivacyPolicy = () => {
         },
         {
           title: '3. Informationsweitergabe',
-          content: 'Wir verkaufen Ihre persönlichen Informationen nicht. Wir teilen nur notwendige Informationen mit GGSecure Anti-Cheat zur Integritätsprüfung von PC-Spielern.'
+          content: 'Wir verkaufen Ihre persönlichen Informationen nicht. Wir teilen nur notwendige Informationen mit Iris Anti-Cheat zur Integritätsprüfung von PC-Spielern.'
         },
         {
           title: '4. Cookies und Speicherung',
@@ -140,7 +140,7 @@ const PrivacyPolicy = () => {
         },
         {
           title: '3. Condivisione delle Informazioni',
-          content: 'Non vendiamo le tue informazioni personali. Condividiamo solo le informazioni necessarie con GGSecure Anti-Cheat per la verifica dell\'integrità dei giocatori PC.'
+          content: 'Non vendiamo le tue informazioni personali. Condividiamo solo le informazioni necessarie con Iris Anti-Cheat per la verifica dell\'integrità dei giocatori PC.'
         },
         {
           title: '4. Cookie e Archiviazione',

@@ -63,7 +63,7 @@ const LandingPage = () => {
       rankedSystem: { fr: 'CLASSEMENT ELO', en: 'ELO RANKING', it: 'CLASSIFICA ELO', de: 'ELO-RANGLISTE' },
       rankedDesc: { fr: 'Système de points compétitif du Bronze au Champion', en: 'Competitive points system from Bronze to Champion', it: 'Sistema di punti competitivo dal Bronzo al Campione', de: 'Wettbewerbsfähiges Punktesystem von Bronze bis Champion' },
       antiCheat: { fr: 'ANTI-CHEAT', en: 'ANTI-CHEAT', it: 'ANTI-CHEAT', de: 'ANTI-CHEAT' },
-      antiCheatDesc: { fr: 'GGSecure protège chaque match', en: 'GGSecure protects every match', it: 'GGSecure protegge ogni partita', de: 'GGSecure schützt jedes Match' },
+      antiCheatDesc: { fr: 'Iris protège chaque match', en: 'Iris protects every match', it: 'Iris protegge ogni partita', de: 'Iris schützt jedes Match' },
       rewards: { fr: 'RÉCOMPENSES', en: 'REWARDS', it: 'RICOMPENSE', de: 'BELOHNUNGEN' },
       rewardsDesc: { fr: 'Gagnez des coins et débloquez des cosmétiques', en: 'Earn coins and unlock cosmetics', it: 'Guadagna monete e sblocca cosmetici', de: 'Verdiene Münzen und schalte Cosmetics frei' },
       squadSystem: { fr: 'ESCOUADES', en: 'SQUADS', it: 'SQUADRE', de: 'SQUADS' },
@@ -382,7 +382,7 @@ const LandingPage = () => {
 
             {/* Anti-cheat Badge */}
             <a 
-              href="https://ggsecure.io" 
+              href="https://nomercy.gg" 
               target="_blank" 
               rel="noopener noreferrer"
               className="flex items-center gap-3 px-5 py-3 rounded-xl glass hover:bg-white/5 transition-all"
@@ -390,7 +390,7 @@ const LandingPage = () => {
               <Shield className="w-5 h-5 text-emerald-400" />
               <span className="text-sm text-gray-300">
                 {language === 'fr' ? 'Protégé par' : language === 'it' ? 'Protetto da' : language === 'de' ? 'Geschützt durch' : 'Protected by'}{' '}
-                <span className="text-emerald-400 font-semibold">GGSecure</span>
+                <span className="text-emerald-400 font-semibold">Iris</span>
               </span>
             </a>
           </div>

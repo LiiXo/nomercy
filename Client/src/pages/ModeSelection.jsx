@@ -337,11 +337,11 @@ const ModeSelection = () => {
               <a href="#" className="text-gray-400 hover:text-white transition-colors">{t('contactUs')}</a>
             </div>
 
-            {/* GGSecure */}
+            {/* Iris */}
             <div className="flex items-center gap-2 px-4 py-2 rounded-xl glass">
               <Shield className="w-4 h-4 text-emerald-400" />
               <span className="text-xs text-gray-300">
-                {language === 'fr' ? 'Protégé par' : 'Protected by'} <span className="text-emerald-400 font-semibold">GGSecure</span>
+                {language === 'fr' ? 'Protégé par' : 'Protected by'} <span className="text-emerald-400 font-semibold">Iris</span>
               </span>
             </div>
           </div>

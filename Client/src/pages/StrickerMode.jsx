@@ -342,7 +342,7 @@ const StrickerMode = () => {
   const [loadingMaps, setLoadingMaps] = useState(false);
   const [rules, setRules] = useState(null);
   const [loadingRules, setLoadingRules] = useState(false);
-  const [ggsecureConnected, setGgsecureConnected] = useState(null); // GGSecure connection status for PC players
+  const [irisConnected, setIrisConnected] = useState(null); // Iris connection status for PC players
   const [currentSeason, setCurrentSeason] = useState(null); // Current Stricker season info
   const [seasonCountdown, setSeasonCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 }); // Countdown to next season
   const [showTop100Modal, setShowTop100Modal] = useState(false); // Top 100 modal
@@ -543,18 +543,18 @@ const StrickerMode = () => {
     }
   }, []);
   
-  // Check GGSecure status for PC players
-  const checkGGSecure = async () => {
+  // Check Iris status for PC players
+  const checkIris = async () => {
     if (user?.platform !== 'PC') return true;
     
     try {
       const response = await fetch(`${API_URL}/users/anticheat-status/${user._id || user.id}`, { credentials: 'include' });
       const data = await response.json();
       const connected = data.isOnline || data.reason === 'not_pc' || data.reason === 'api_key_missing';
-      setGgsecureConnected(connected);
+      setIrisConnected(connected);
       return connected;
     } catch {
-      setGgsecureConnected(true);
+      setIrisConnected(true);
       return true;
     }
   };
@@ -566,7 +566,7 @@ const StrickerMode = () => {
     setJoiningQueue(true);
     setError(null);
     
-    // GGSecure verification removed - Iris status shown on match sheet instead
+    // Iris verification removed - Iris status shown on match sheet instead
     
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/join`, {
@@ -651,7 +651,7 @@ const StrickerMode = () => {
     setChallengingSquad(targetSquadId);
     setError(null);
       
-    // GGSecure verification removed - Iris status shown on match sheet instead
+    // Iris verification removed - Iris status shown on match sheet instead
       
     try {
       const response = await fetch(`${API_URL}/stricker/matchmaking/challenge`, {

@@ -3,13 +3,17 @@
  * 
  * Surveille la connexion GGSecure des joueurs PC dans les matchs actifs
  * et émet des événements socket.io quand le statut change
+ * 
+ * Shadow Ban System: Players in match but not connected to Iris for 10 minutes
+ * get automatically shadow banned for 24 hours.
  */
 
 import Match from '../models/Match.js';
 import RankedMatch from '../models/RankedMatch.js';
 import StrickerMatch from '../models/StrickerMatch.js';
 import User from '../models/User.js';
-import { alertIrisMatchDisconnected } from './discordBot.service.js';
+import ShadowBanTracking from '../models/ShadowBanTracking.js';
+import { alertIrisMatchDisconnected, sendIrisMatchWarning, sendIrisMatchShadowBan } from './discordBot.service.js';
 
 // Stockage du statut de connexion des joueurs par match
 // Structure: { 'matchId-userId': { isConnected: boolean, lastCheck: Date, matchType: 'ladder' | 'ranked' } }
@@ -118,6 +122,7 @@ const checkPlayerInMatch = async (player, match, matchType) => {
 /**
  * Vérifie si un joueur PC est connecté à Iris pendant un match
  * et envoie une alerte Discord si ce n'est pas le cas
+ * Also creates shadow ban tracking if player not connected
  */
 const checkPlayerIrisInMatch = async (player, match, matchType) => {
   try {
@@ -129,20 +134,62 @@ const checkPlayerIrisInMatch = async (player, match, matchType) => {
     const alreadyAlerted = irisAlertSent.get(irisKey);
     
     if (!irisStatus.connected && !alreadyAlerted) {
-      // Joueur PC en match mais pas connecté à Iris - envoyer l'alerte
-      const matchInfo = {
-        matchId: match._id.toString(),
-        matchType: matchType,
-        status: match.status
-      };
+      // Joueur PC en match mais pas connecté à Iris
       
+      // Check if tracking already exists for this player/match
+      const existingTracking = await ShadowBanTracking.findOne({
+        user: player.userId,
+        matchId: match._id,
+        status: 'pending'
+      });
+      
+      if (!existingTracking) {
+        // Create new shadow ban tracking with 10-minute timer
+        const checkAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+        
+        const tracking = new ShadowBanTracking({
+          user: player.userId,
+          username: irisStatus.user?.username || player.username,
+          discordUsername: irisStatus.user?.discordUsername,
+          discordId: irisStatus.user?.discordId,
+          matchId: match._id,
+          matchType: matchType,
+          detectedAt: new Date(),
+          checkAt: checkAt,
+          discordNotificationSent: true,
+          discordNotificationSentAt: new Date()
+        });
+        
+        await tracking.save();
+        
+        // Send initial Discord warning notification
+        await sendIrisMatchWarning(
+          {
+            username: irisStatus.user?.username || player.username,
+            discordUsername: irisStatus.user?.discordUsername,
+            discordId: irisStatus.user?.discordId
+          },
+          {
+            matchId: match._id.toString(),
+            matchType: matchType
+          }
+        );
+        
+        console.log(`[Iris Shadow Ban] Tracking created for ${player.username} in ${matchType} match ${match._id} - will check in 10 minutes`);
+      }
+      
+      // Also send the old alert (for logs channel)
       await alertIrisMatchDisconnected(
         {
           username: irisStatus.user?.username || player.username,
           discordUsername: irisStatus.user?.discordUsername,
           irisScanChannelId: irisStatus.user?.irisScanChannelId
         },
-        matchInfo
+        {
+          matchId: match._id.toString(),
+          matchType: matchType,
+          status: match.status
+        }
       );
       
       // Marquer comme alerté pour éviter le spam
@@ -155,9 +202,140 @@ const checkPlayerIrisInMatch = async (player, match, matchType) => {
     } else if (irisStatus.connected && alreadyAlerted) {
       // Le joueur s'est reconnecté, on peut supprimer l'alerte
       irisAlertSent.delete(irisKey);
+      
+      // Also mark any pending tracking as cleared
+      await ShadowBanTracking.findOneAndUpdate(
+        {
+          user: player.userId,
+          matchId: match._id,
+          status: 'pending'
+        },
+        {
+          status: 'cleared',
+          resolvedAt: new Date(),
+          resolutionReason: 'reconnected'
+        }
+      );
+      
+      console.log(`[Iris Shadow Ban] Player ${player.username} reconnected to Iris - tracking cleared`);
     }
   } catch (error) {
     console.error('[Iris Monitoring] Error checking player Iris status:', error);
+  }
+};
+
+/**
+ * Process pending shadow ban trackings that have reached their 10-minute check time
+ * This function is called periodically to check and apply shadow bans
+ */
+const processPendingShadowBans = async () => {
+  try {
+    const now = new Date();
+    
+    // Find all pending trackings that have reached their check time
+    const pendingTrackings = await ShadowBanTracking.find({
+      status: 'pending',
+      checkAt: { $lte: now }
+    }).populate('user', 'username discordUsername discordId platform irisLastSeen');
+    
+    for (const tracking of pendingTrackings) {
+      try {
+        // Check if the match is still active
+        let matchStillActive = false;
+        let match = null;
+        
+        if (tracking.matchType === 'ranked') {
+          match = await RankedMatch.findOne({
+            _id: tracking.matchId,
+            status: { $in: ['pending', 'ready', 'in_progress'] }
+          });
+          matchStillActive = !!match;
+        } else if (tracking.matchType === 'stricker') {
+          match = await StrickerMatch.findOne({
+            _id: tracking.matchId,
+            status: { $in: ['pending', 'ready', 'in_progress', 'disputed'] }
+          });
+          matchStillActive = !!match;
+        } else if (tracking.matchType === 'ladder') {
+          match = await Match.findOne({
+            _id: tracking.matchId,
+            status: { $in: ['accepted', 'in_progress'] }
+          });
+          matchStillActive = !!match;
+        }
+        
+        if (!matchStillActive) {
+          // Match ended, mark as expired
+          tracking.status = 'expired';
+          tracking.resolvedAt = now;
+          tracking.resolutionReason = 'match_ended';
+          await tracking.save();
+          console.log(`[Iris Shadow Ban] Tracking expired for ${tracking.username} - match ${tracking.matchId} ended`);
+          continue;
+        }
+        
+        // Re-check if user is connected to Iris
+        const irisStatus = await checkIrisStatus(tracking.user._id || tracking.user);
+        
+        if (irisStatus.connected) {
+          // Player reconnected, clear the tracking
+          tracking.status = 'cleared';
+          tracking.resolvedAt = now;
+          tracking.resolutionReason = 'reconnected';
+          await tracking.save();
+          console.log(`[Iris Shadow Ban] Player ${tracking.username} reconnected to Iris - tracking cleared`);
+          continue;
+        }
+        
+        // Player still not connected after 10 minutes - apply 24h shadow ban
+        const banExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+        const banReason = 'Non connecté à Iris pendant un match actif (10 min sans connexion)';
+        
+        // Update user with ban
+        await User.findByIdAndUpdate(tracking.user._id || tracking.user, {
+          isBanned: true,
+          banReason: banReason,
+          bannedAt: now,
+          banExpiresAt: banExpiresAt
+        });
+        
+        // Update tracking record
+        tracking.status = 'banned';
+        tracking.resolvedAt = now;
+        tracking.resolutionReason = 'banned';
+        tracking.banApplied = true;
+        tracking.banExpiresAt = banExpiresAt;
+        tracking.banReason = banReason;
+        await tracking.save();
+        
+        // Send Discord notification
+        await sendIrisMatchShadowBan(
+          {
+            username: tracking.username,
+            discordUsername: tracking.discordUsername,
+            discordId: tracking.discordId
+          },
+          {
+            matchId: tracking.matchId.toString(),
+            matchType: tracking.matchType,
+            reason: banReason,
+            duration: '24h',
+            expiresAt: banExpiresAt
+          }
+        );
+        
+        console.log(`[Iris Shadow Ban] Applied 24h shadow ban to ${tracking.username} for not connecting to Iris in match ${tracking.matchId}`);
+        
+        // Clear the iris alert for this player/match
+        const irisKey = `iris-${tracking.matchId}-${tracking.user._id || tracking.user}`;
+        irisAlertSent.delete(irisKey);
+        
+      } catch (trackingError) {
+        console.error(`[Iris Shadow Ban] Error processing tracking ${tracking._id}:`, trackingError);
+      }
+    }
+  } catch (error) {
+    console.error('[Iris Shadow Ban] Error processing pending shadow bans:', error);
   }
 };
 
@@ -498,12 +676,20 @@ export const startGGSecureMonitoring = () => {
   const monitoringInterval = 30 * 1000;
   setInterval(monitorAllMatches, monitoringInterval);
 
+  // Process pending shadow bans every minute
+  const shadowBanInterval = 60 * 1000;
+  setInterval(processPendingShadowBans, shadowBanInterval);
+  console.log('[Iris Shadow Ban] Shadow ban processing started - checking every minute');
+
   // Nettoyer les anciens statuts toutes les 10 minutes
   setInterval(cleanupOldStatuses, 10 * 60 * 1000);
 
   
   // Première vérification immédiate
   setTimeout(monitorAllMatches, 5000); // Attendre 5 secondes après le démarrage
+  
+  // First shadow ban check after 10 seconds
+  setTimeout(processPendingShadowBans, 10000);
 };
 
 /**

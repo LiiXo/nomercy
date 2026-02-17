@@ -339,7 +339,7 @@ const RankedMode = () => {
   const [joiningQueue, setJoiningQueue] = useState(false);
   const [leavingQueue, setLeavingQueue] = useState(false);
   const [matchmakingError, setMatchmakingError] = useState(null);
-  const [ggsecureConnected, setGgsecureConnected] = useState(null);
+  const [irisConnected, setIrisConnected] = useState(null);
   const [activeMatch, setActiveMatch] = useState(null);
   const [showActiveMatchDialog, setShowActiveMatchDialog] = useState(false);
   const [savedActiveMatch, setSavedActiveMatch] = useState(null); // Save match info for dialog
@@ -1050,20 +1050,20 @@ const RankedMode = () => {
     }
   };
 
-  // Check GGSecure
-  const checkGGSecure = async () => {
+  // Check Iris
+  const checkIris = async () => {
     if (!user || user.platform !== 'PC') {
-      setGgsecureConnected(true);
+      setIrisConnected(true);
       return true;
     }
     try {
       const response = await fetch(`${API_URL}/users/anticheat-status/${user._id || user.id}`, { credentials: 'include' });
       const data = await response.json();
       const connected = data.isOnline || data.reason === 'not_pc' || data.reason === 'api_key_missing';
-      setGgsecureConnected(connected);
+      setIrisConnected(connected);
       return connected;
     } catch {
-      setGgsecureConnected(true);
+      setIrisConnected(true);
       return true;
     }
   };
@@ -1116,7 +1116,7 @@ const RankedMode = () => {
     setJoiningQueue(true); // Disable button IMMEDIATELY before any async work
     
     try {
-      // GGSecure verification removed - Iris status shown on match sheet instead
+      // Iris verification removed - Iris status shown on match sheet instead
       const response = await fetch(`${API_URL}/ranked-matches/matchmaking/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1971,7 +1971,7 @@ const RankedMode = () => {
         fetchQueueStatus(),
         fetchBoosters()
       );
-      if (user?.platform === 'PC') fetches.push(checkGGSecure());
+      if (user?.platform === 'PC') fetches.push(checkIris());
     }
     
     Promise.all(fetches);
@@ -2066,7 +2066,7 @@ const RankedMode = () => {
       minPlayers: 'Minimum 8 joueurs (4v4)',
       activeMatch: 'Match en cours',
       rejoin: 'Rejoindre',
-      ggsecureRequired: 'GGSecure requis pour les joueurs PC',
+      ggsecureRequired: 'Iris requis pour les joueurs PC',
       leaderboard: 'Classement',
       ranks: 'Les rangs',
       soloMode: 'Mode solo uniquement',
@@ -2168,7 +2168,7 @@ const RankedMode = () => {
       minPlayers: 'Minimum 8 players (4v4)',
       activeMatch: 'Active Match',
       rejoin: 'Rejoin',
-      ggsecureRequired: 'GGSecure required for PC players',
+      ggsecureRequired: 'Iris required for PC players',
       leaderboard: 'Leaderboard',
       ranks: 'Ranks',
       soloMode: 'Solo mode only',
@@ -2270,7 +2270,7 @@ const RankedMode = () => {
       minPlayers: 'Minimum 8 Spieler (4v4)',
       activeMatch: 'Aktives Match',
       rejoin: 'Beitreten',
-      ggsecureRequired: 'GGSecure erforderlich für PC-Spieler',
+      ggsecureRequired: 'Iris erforderlich für PC-Spieler',
       leaderboard: 'Bestenliste',
       ranks: 'Ränge',
       soloMode: 'Nur Solomodus',
@@ -2361,7 +2361,7 @@ const RankedMode = () => {
       minPlayers: 'Minimo 8 giocatori (4v4)',
       activeMatch: 'Partita in corso',
       rejoin: 'Rientra',
-      ggsecureRequired: 'GGSecure richiesto per giocatori PC',
+      ggsecureRequired: 'Iris richiesto per giocatori PC',
       leaderboard: 'Classifica',
       ranks: 'Gradi',
       soloMode: 'Solo modalità singola',

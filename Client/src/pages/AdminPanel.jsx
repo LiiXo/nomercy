@@ -18,7 +18,7 @@ import {
   CheckCircle, Database, Settings, List, Filter, Download, Upload, Check,
   MapPin, Flag, Activity, Layers, Power, ToggleLeft, ToggleRight, AlertCircle,
   ShieldAlert, Link, ExternalLink, MessageSquare, Lock, Menu, History, Heart, Cpu,
-  Monitor, Cloud, Syringe, Brain, BarChart2, Play
+  Monitor, Cloud, Syringe, Brain, BarChart2, Play, Ghost
 } from 'lucide-react';
 
 import { API_URL } from '../config';
@@ -96,12 +96,31 @@ const AdminPanel = () => {
   });
   const [savingIrisUpdate, setSavingIrisUpdate] = useState(false);
   
+  // DS4 Shadow Ban modal state (admin only)
+  const [showDS4BanModal, setShowDS4BanModal] = useState(false);
+  const [ds4BanSearchTerm, setDS4BanSearchTerm] = useState('');
+  const [ds4BanSearchResults, setDS4BanSearchResults] = useState([]);
+  const [ds4BanSelectedUser, setDS4BanSelectedUser] = useState(null);
+  const [ds4BanDuration, setDS4BanDuration] = useState({ type: 'hours', value: 24 });
+  const [ds4BanLoading, setDS4BanLoading] = useState(false);
+  const [ds4BanSearching, setDS4BanSearching] = useState(false);
+  
   // Behavioral Analysis state (admin only)
   const [behavioralPlayers, setBehavioralPlayers] = useState([]);
   const [loadingBehavioral, setLoadingBehavioral] = useState(false);
   const [selectedBehavioralPlayer, setSelectedBehavioralPlayer] = useState(null);
   const [behavioralDetails, setBehavioralDetails] = useState(null);
   const [loadingBehavioralDetails, setLoadingBehavioralDetails] = useState(false);
+  
+  // Shadow Bans state (admin/staff)
+  const [shadowBanPending, setShadowBanPending] = useState([]);
+  const [shadowBanHistory, setShadowBanHistory] = useState([]);
+  const [shadowBanStats, setShadowBanStats] = useState(null);
+  const [loadingShadowBans, setLoadingShadowBans] = useState(false);
+  const [shadowBanHistoryPage, setShadowBanHistoryPage] = useState(1);
+  const [shadowBanHistoryTotalPages, setShadowBanHistoryTotalPages] = useState(1);
+  const [shadowBanHistoryFilter, setShadowBanHistoryFilter] = useState('all'); // 'all', 'banned', 'cleared', 'expired'
+  const [shadowBanSubTab, setShadowBanSubTab] = useState('pending'); // 'pending', 'history'
   
   // Filtres et recherche
   const [searchTerm, setSearchTerm] = useState('');
@@ -439,6 +458,7 @@ const AdminPanel = () => {
         { id: 'squads', label: 'Escouades', icon: Shield, adminOnly: false, arbitreAccess: false },
         { id: 'matches', label: 'Matchs', icon: Swords, adminOnly: false, arbitreAccess: true },
         { id: 'iris', label: 'Iris', icon: Cpu, adminOnly: false, arbitreAccess: true },
+        { id: 'shadow-bans', label: 'Shadow Bans', icon: Ghost, adminOnly: false, arbitreAccess: false },
         { id: 'deleted-accounts', label: 'Comptes Supprimés', icon: Trash2, adminOnly: false, arbitreAccess: false },
         { id: 'messages', label: 'Messages', icon: MessageSquare, adminOnly: false, arbitreAccess: false },
       ]
@@ -810,6 +830,9 @@ const AdminPanel = () => {
         case 'system':
           // No fetch needed for system tab
           break;
+        case 'shadow-bans':
+          await fetchShadowBanData();
+          break;
       }
     } catch (err) {
       console.error('Error loading tab data:', err);
@@ -1066,6 +1089,73 @@ const AdminPanel = () => {
     setShowIrisUpdateModal(true);
   };
 
+  // DS4 Shadow Ban - Search user
+  const handleDS4BanSearch = async (searchQuery) => {
+    setDS4BanSearchTerm(searchQuery);
+    if (searchQuery.length < 2) {
+      setDS4BanSearchResults([]);
+      return;
+    }
+    setDS4BanSearching(true);
+    try {
+      const response = await fetch(`${API_URL}/iris/admin/search-user?q=${encodeURIComponent(searchQuery)}`, {
+        credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setDS4BanSearchResults(data.users || []);
+      }
+    } catch (err) {
+      console.error('Error searching users for DS4 ban:', err);
+    } finally {
+      setDS4BanSearching(false);
+    }
+  };
+
+  // DS4 Shadow Ban - Submit
+  const handleDS4BanSubmit = async () => {
+    if (!ds4BanSelectedUser) {
+      setError('Veuillez sélectionner un joueur');
+      return;
+    }
+    
+    // Calculate hours from duration type and value
+    let durationHours = ds4BanDuration.value;
+    if (ds4BanDuration.type === 'days') {
+      durationHours = ds4BanDuration.value * 24;
+    }
+    
+    setDS4BanLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/iris/admin/ds4-shadowban`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          userId: ds4BanSelectedUser._id,
+          durationHours: durationHours
+        })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message);
+        setShowDS4BanModal(false);
+        // Reset form
+        setDS4BanSearchTerm('');
+        setDS4BanSearchResults([]);
+        setDS4BanSelectedUser(null);
+        setDS4BanDuration({ type: 'hours', value: 24 });
+      } else {
+        setError(data.message || 'Erreur lors du ban');
+      }
+    } catch (err) {
+      setError('Erreur lors du ban DS4');
+    } finally {
+      setDS4BanLoading(false);
+    }
+  };
+
   // Fetch behavioral anomalies (admin only)
   const fetchBehavioralAnomalies = async () => {
     setLoadingBehavioral(true);
@@ -1125,6 +1215,90 @@ const AdminPanel = () => {
       }
     } catch (err) {
       setError('Erreur lors de la review');
+    }
+  };
+
+  // ==================== SHADOW BAN FUNCTIONS ====================
+  
+  // Fetch all shadow ban data (pending, history, stats)
+  const fetchShadowBanData = async () => {
+    setLoadingShadowBans(true);
+    try {
+      // Fetch all data in parallel
+      const [pendingRes, historyRes, statsRes] = await Promise.all([
+        fetch(`${API_URL}/shadow-bans/pending`, { credentials: 'include' }),
+        fetch(`${API_URL}/shadow-bans/history?page=${shadowBanHistoryPage}&limit=20${shadowBanHistoryFilter !== 'all' ? `&status=${shadowBanHistoryFilter}` : ''}`, { credentials: 'include' }),
+        fetch(`${API_URL}/shadow-bans/stats`, { credentials: 'include' })
+      ]);
+      
+      const [pendingData, historyData, statsData] = await Promise.all([
+        pendingRes.json(),
+        historyRes.json(),
+        statsRes.json()
+      ]);
+      
+      if (pendingData.success) {
+        setShadowBanPending(pendingData.trackings || []);
+      }
+      
+      if (historyData.success) {
+        setShadowBanHistory(historyData.trackings || []);
+        setShadowBanHistoryTotalPages(historyData.pagination?.totalPages || 1);
+      }
+      
+      if (statsData.success) {
+        setShadowBanStats(statsData.stats || null);
+      }
+    } catch (err) {
+      console.error('Error fetching shadow ban data:', err);
+    } finally {
+      setLoadingShadowBans(false);
+    }
+  };
+  
+  // Clear a pending shadow ban tracking manually
+  const handleClearShadowBan = async (trackingId) => {
+    try {
+      const response = await fetch(`${API_URL}/shadow-bans/${trackingId}/clear`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ reason: 'manual_clear' })
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Shadow ban annulé avec succès');
+        fetchShadowBanData();
+      } else {
+        setError(data.message || 'Erreur lors de l\'annulation');
+      }
+    } catch (err) {
+      setError('Erreur lors de l\'annulation du shadow ban');
+    }
+  };
+  
+  // Unban a user who was shadow banned
+  const handleUnbanShadowBan = async (userId, username) => {
+    if (!window.confirm(`Voulez-vous vraiment débannir ${username} ?`)) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${API_URL}/shadow-bans/unban/${userId}`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setSuccess(data.message || `${username} a été débanni`);
+        fetchShadowBanData();
+      } else {
+        setError(data.message || 'Erreur lors du débannissement');
+      }
+    } catch (err) {
+      setError('Erreur lors du débannissement');
     }
   };
 
@@ -4073,10 +4247,17 @@ const AdminPanel = () => {
                     ) : (
                       <div className="space-y-1">
                         {irisDetailsPlayer.security.macroDetection.detectedSoftware?.map((m, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm bg-yellow-500/5 px-3 py-1.5 rounded-lg">
-                            <span className="text-yellow-400 font-medium">{m.name}</span>
+                          <div key={i} className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg ${m.source === 'process' ? 'bg-red-500/10 border border-red-500/30' : 'bg-yellow-500/5'}`}>
+                            {m.source === 'process' ? (
+                              <span className="text-red-400 font-bold animate-pulse">🔴 ACTIF</span>
+                            ) : (
+                              <span className="text-gray-500">⚪</span>
+                            )}
+                            <span className={`font-medium ${m.source === 'process' ? 'text-red-400' : 'text-yellow-400'}`}>{m.name}</span>
                             <span className={`px-1.5 py-0.5 text-xs rounded ${m.macroType === 'ahk' || m.macroType === 'generic' ? 'bg-red-500/20 text-red-400' : 'bg-gray-500/20 text-gray-400'}`}>{m.macroType}</span>
-                            <span className="text-xs text-gray-500">via {m.source}</span>
+                            <span className={`text-xs ${m.source === 'process' ? 'text-red-300 font-medium' : 'text-gray-500'}`}>
+                              {m.source === 'process' ? '⚠️ EN COURS' : m.source === 'registry' ? 'trace registre' : 'fenêtre'}
+                            </span>
                           </div>
                         ))}
                       </div>
@@ -4098,13 +4279,30 @@ const AdminPanel = () => {
                       <p className="text-gray-400 text-sm">Aucun overlay suspect détecté.</p>
                     ) : (
                       <div className="space-y-1">
-                        {irisDetailsPlayer.security.overlayDetection.suspiciousOverlays?.map((o, i) => (
-                          <div key={i} className="flex items-center gap-2 text-sm bg-pink-500/5 px-3 py-1.5 rounded-lg">
-                            <span className="text-pink-400 font-medium">{o.processName || o.windowTitle || 'Inconnu'}</span>
-                            <span className={`px-1.5 py-0.5 text-xs rounded ${o.reason === 'cheat_process' || o.reason === 'suspicious_class' ? 'bg-red-500/20 text-red-400' : 'bg-orange-500/20 text-orange-400'}`}>{o.reason}</span>
-                            {o.className && <span className="text-xs text-gray-500">Class: {o.className}</span>}
-                          </div>
-                        ))}
+                        {irisDetailsPlayer.security.overlayDetection.suspiciousOverlays?.map((o, i) => {
+                          // Translate reason to more understandable text
+                          const reasonLabels = {
+                            'cheat_process': 'mot-clé suspect',
+                            'suspicious_class': 'classe suspecte',
+                            'transparent_topmost': 'fenêtre transparente',
+                            'layered_topmost': 'fenêtre superposée'
+                          };
+                          const reasonLabel = reasonLabels[o.reason] || o.reason;
+                          const isKeywordMatch = o.reason === 'cheat_process' || o.reason === 'suspicious_class';
+                          
+                          return (
+                            <div key={i} className="flex items-center gap-2 text-sm bg-pink-500/5 px-3 py-1.5 rounded-lg">
+                              <span className="text-pink-400 font-medium">{o.processName || o.windowTitle || 'Inconnu'}</span>
+                              <span className={`px-1.5 py-0.5 text-xs rounded ${isKeywordMatch ? 'bg-orange-500/20 text-orange-400' : 'bg-gray-500/20 text-gray-400'}`} title={isKeywordMatch ? 'Détecté par correspondance de mot-clé, pas nécessairement actif' : ''}>
+                                {reasonLabel}
+                              </span>
+                              {o.className && <span className="text-xs text-gray-500">Class: {o.className}</span>}
+                            </div>
+                          );
+                        })}
+                        <p className="text-xs text-gray-500 mt-2 italic">
+                          💡 "mot-clé suspect" = le nom du processus contient un mot-clé (d3d, overlay, etc.), ce n'est pas forcément actif
+                        </p>
                       </div>
                     )}
                   </div>
@@ -4747,6 +4945,16 @@ const AdminPanel = () => {
             Iris Anticheat
           </h2>
           <div className="flex items-center gap-4">
+            {/* DS4 Shadow Ban Button - Admin only */}
+            {userIsAdmin && (
+              <button
+                onClick={() => setShowDS4BanModal(true)}
+                className="px-4 py-2 bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-white rounded-lg transition-all flex items-center gap-2 font-medium shadow-lg"
+              >
+                <Swords className="w-4 h-4" />
+                Ban DS4
+              </button>
+            )}
             {irisSubTab === 'players' && (
               <>
                 <button
@@ -4873,7 +5081,7 @@ const AdminPanel = () => {
                       onChange={(e) => {
                         const version = e.target.value;
                         // Auto-generate download URL when version changes
-                        const autoUrl = version ? `https://api-nomercy.ggsecure.io/iris-downloads/Iris_${version}_x64-setup.exe` : '';
+                        const autoUrl = version ? `https://api.nomercy.gg/iris-downloads/Iris_${version}_x64-setup.exe` : '';
                         setIrisUpdateFormData({ 
                           ...irisUpdateFormData, 
                           version,
@@ -4961,6 +5169,178 @@ const AdminPanel = () => {
                   >
                     {savingIrisUpdate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     {editingIrisUpdate ? 'Enregistrer' : 'Créer'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* DS4 Shadow Ban Modal - Admin only */}
+        {showDS4BanModal && userIsAdmin && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-dark-800 border border-red-500/20 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                    <Swords className="w-6 h-6 text-red-400" />
+                    Shadow Ban DS4
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowDS4BanModal(false);
+                      setDS4BanSearchTerm('');
+                      setDS4BanSearchResults([]);
+                      setDS4BanSelectedUser(null);
+                    }}
+                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-gray-400" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* User Search */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">Rechercher un joueur *</label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                      <input
+                        type="text"
+                        value={ds4BanSearchTerm}
+                        onChange={(e) => handleDS4BanSearch(e.target.value)}
+                        placeholder="Nom d'utilisateur, Discord, Activision ID..."
+                        className="w-full pl-10 pr-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-red-500/50"
+                      />
+                      {ds4BanSearching && (
+                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-purple-400 animate-spin" />
+                      )}
+                    </div>
+                    
+                    {/* Search Results */}
+                    {ds4BanSearchResults.length > 0 && !ds4BanSelectedUser && (
+                      <div className="mt-2 bg-dark-900 border border-white/10 rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                        {ds4BanSearchResults.map(u => (
+                          <button
+                            key={u._id}
+                            onClick={() => {
+                              setDS4BanSelectedUser(u);
+                              setDS4BanSearchResults([]);
+                            }}
+                            className="w-full px-4 py-3 flex items-center gap-3 hover:bg-white/5 transition-colors text-left"
+                          >
+                            <img 
+                              src={getAvatarUrl(u.avatarUrl || u.avatar) || '/avatar.jpg'} 
+                              alt="" 
+                              className="w-8 h-8 rounded-full"
+                            />
+                            <div>
+                              <div className="text-white font-medium">{u.username}</div>
+                              <div className="text-xs text-gray-500">{u.discordUsername} • {u.activisionId || 'N/A'}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Selected User */}
+                  {ds4BanSelectedUser && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={getAvatarUrl(ds4BanSelectedUser.avatarUrl || ds4BanSelectedUser.avatar) || '/avatar.jpg'} 
+                            alt="" 
+                            className="w-10 h-10 rounded-full border-2 border-red-500/50"
+                          />
+                          <div>
+                            <div className="text-white font-bold">{ds4BanSelectedUser.username}</div>
+                            <div className="text-sm text-gray-400">{ds4BanSelectedUser.discordUsername}</div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setDS4BanSelectedUser(null);
+                            setDS4BanSearchTerm('');
+                          }}
+                          className="p-1 hover:bg-white/10 rounded-lg"
+                        >
+                          <X className="w-4 h-4 text-gray-400" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Duration */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Durée du ban *</label>
+                    <div className="flex gap-3">
+                      <input
+                        type="number"
+                        min="1"
+                        value={ds4BanDuration.value}
+                        onChange={(e) => setDS4BanDuration({ ...ds4BanDuration, value: parseInt(e.target.value) || 1 })}
+                        className="flex-1 px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-red-500/50"
+                      />
+                      <select
+                        value={ds4BanDuration.type}
+                        onChange={(e) => setDS4BanDuration({ ...ds4BanDuration, type: e.target.value })}
+                        className="px-4 py-2 bg-dark-900 border border-white/10 rounded-lg text-white focus:outline-none focus:border-red-500/50"
+                      >
+                        <option value="hours">Heure(s)</option>
+                        <option value="days">Jour(s)</option>
+                      </select>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      {[{ label: '24h', type: 'hours', value: 24 }, { label: '48h', type: 'hours', value: 48 }, { label: '7j', type: 'days', value: 7 }, { label: '30j', type: 'days', value: 30 }].map(preset => (
+                        <button
+                          key={preset.label}
+                          onClick={() => setDS4BanDuration({ type: preset.type, value: preset.value })}
+                          className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                            ds4BanDuration.type === preset.type && ds4BanDuration.value === preset.value
+                              ? 'bg-red-500 text-white'
+                              : 'bg-dark-700 text-gray-400 hover:bg-dark-600'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Info */}
+                  <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-orange-300">
+                        <p className="font-medium mb-1">Raison automatique:</p>
+                        <p className="text-gray-400">Utilisation de DS4Windows (programme interdit) en match</p>
+                        <p className="mt-2 text-xs text-gray-500">Une notification Discord sera envoyée automatiquement.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowDS4BanModal(false);
+                      setDS4BanSearchTerm('');
+                      setDS4BanSearchResults([]);
+                      setDS4BanSelectedUser(null);
+                    }}
+                    className="px-4 py-2 bg-dark-700 hover:bg-dark-600 text-white rounded-lg transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleDS4BanSubmit}
+                    disabled={ds4BanLoading || !ds4BanSelectedUser}
+                    className="px-4 py-2 bg-gradient-to-r from-red-600 to-orange-500 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50 hover:from-red-700 hover:to-orange-600"
+                  >
+                    {ds4BanLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Swords className="w-4 h-4" />}
+                    Appliquer le Ban
                   </button>
                 </div>
               </div>
@@ -10679,6 +11059,374 @@ Cette action est irréversible!`)) {
     );
   };
 
+  // ==================== SHADOW BANS RENDER ====================
+  const renderShadowBans = () => {
+    // Format time remaining for pending bans
+    const formatTimeRemaining = (minutes) => {
+      if (minutes <= 0) return 'En cours de vérification...';
+      if (minutes < 1) return 'Moins d\'une minute';
+      return `${minutes} min restante${minutes > 1 ? 's' : ''}`;
+    };
+    
+    // Format date
+    const formatDateTime = (date) => {
+      if (!date) return 'N/A';
+      return new Date(date).toLocaleString('fr-FR', {
+        dateStyle: 'short',
+        timeStyle: 'short'
+      });
+    };
+    
+    // Get status color and label
+    const getStatusInfo = (status) => {
+      switch (status) {
+        case 'pending':
+          return { color: 'yellow', label: 'En attente', icon: Clock };
+        case 'banned':
+          return { color: 'red', label: 'Banni', icon: Ban };
+        case 'cleared':
+          return { color: 'green', label: 'Annulé', icon: CheckCircle };
+        case 'expired':
+          return { color: 'gray', label: 'Expiré', icon: X };
+        default:
+          return { color: 'gray', label: status, icon: AlertTriangle };
+      }
+    };
+    
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              <Ghost className="w-7 h-7 text-purple-400" />
+              Shadow Bans
+            </h2>
+            <p className="text-gray-400 text-sm mt-1">
+              Joueurs PC en match mais non connectés à Iris
+            </p>
+          </div>
+          
+          <button
+            onClick={fetchShadowBanData}
+            disabled={loadingShadowBans}
+            className="px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loadingShadowBans ? 'animate-spin' : ''}`} />
+            Actualiser
+          </button>
+        </div>
+        
+        {/* Stats Cards */}
+        {shadowBanStats && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-yellow-400">{shadowBanStats.pending}</div>
+              <div className="text-sm text-gray-400">En attente</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-red-400">{shadowBanStats.banned}</div>
+              <div className="text-sm text-gray-400">Bannis</div>
+            </div>
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-green-400">{shadowBanStats.cleared}</div>
+              <div className="text-sm text-gray-400">Annulés</div>
+            </div>
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 text-center">
+              <div className="text-2xl font-bold text-orange-400">{shadowBanStats.recentBans}</div>
+              <div className="text-sm text-gray-400">Bans (24h)</div>
+            </div>
+          </div>
+        )}
+        
+        {/* Sub-tabs */}
+        <div className="flex gap-2 bg-dark-800/50 p-1 rounded-xl w-fit">
+          <button
+            onClick={() => setShadowBanSubTab('pending')}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              shadowBanSubTab === 'pending'
+                ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <Clock className="w-4 h-4" />
+            En attente
+            {shadowBanPending.length > 0 && (
+              <span className={`px-2 py-0.5 text-xs rounded-full ${
+                shadowBanSubTab === 'pending' ? 'bg-white/20 text-white' : 'bg-yellow-500/20 text-yellow-400'
+              }`}>
+                {shadowBanPending.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setShadowBanSubTab('history');
+              setShadowBanHistoryPage(1);
+            }}
+            className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+              shadowBanSubTab === 'history'
+                ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <History className="w-4 h-4" />
+            Historique
+          </button>
+        </div>
+        
+        {/* Pending Shadow Bans */}
+        {shadowBanSubTab === 'pending' && (
+          <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+            {loadingShadowBans ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+              </div>
+            ) : shadowBanPending.length === 0 ? (
+              <div className="text-center py-12 text-gray-400">
+                <Ghost className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                <p>Aucun shadow ban en attente</p>
+                <p className="text-sm text-gray-500 mt-1">Tous les joueurs PC sont connectés à Iris</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {shadowBanPending.map((tracking) => (
+                  <div key={tracking._id} className="p-4 hover:bg-white/5 transition-colors">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        {/* Avatar */}
+                        <div className="relative">
+                          <img
+                            src={getAvatarUrl(tracking.user?.avatarUrl || tracking.user?.avatar) || '/avatar.jpg'}
+                            alt={tracking.username}
+                            className="w-12 h-12 rounded-full border-2 border-yellow-500/50"
+                          />
+                          <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-yellow-500 rounded-full flex items-center justify-center">
+                            <Clock className="w-3 h-3 text-white" />
+                          </div>
+                        </div>
+                        
+                        {/* Info */}
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-white font-medium">{tracking.username}</span>
+                            <span className="text-xs text-gray-500">({tracking.discordUsername || 'N/A'})</span>
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-gray-400">
+                            <span className="flex items-center gap-1">
+                              <Swords className="w-3.5 h-3.5" />
+                              {tracking.matchType?.toUpperCase()}
+                            </span>
+                            <span className="text-xs">•</span>
+                            <span>Détecté: {formatDateTime(tracking.detectedAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        {/* Time remaining */}
+                        <div className="text-right">
+                          <div className={`text-lg font-bold ${
+                            tracking.timeRemainingMinutes <= 2 ? 'text-red-400' : 'text-yellow-400'
+                          }`}>
+                            {formatTimeRemaining(tracking.timeRemainingMinutes)}
+                          </div>
+                          <div className="text-xs text-gray-500">avant ban automatique</div>
+                        </div>
+                        
+                        {/* Clear button */}
+                        <button
+                          onClick={() => handleClearShadowBan(tracking._id)}
+                          className="px-3 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors flex items-center gap-2 text-sm"
+                          title="Annuler le shadow ban"
+                        >
+                          <X className="w-4 h-4" />
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Progress bar */}
+                    <div className="mt-3 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all ${
+                          tracking.timeRemainingMinutes <= 2 ? 'bg-red-500' : 'bg-yellow-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.max(0, Math.min(100, ((10 - tracking.timeRemainingMinutes) / 10) * 100))}%`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        
+        {/* History */}
+        {shadowBanSubTab === 'history' && (
+          <>
+            {/* Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Filtrer:</span>
+              {['all', 'banned', 'cleared', 'expired'].map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => {
+                    setShadowBanHistoryFilter(filter);
+                    setShadowBanHistoryPage(1);
+                    // Trigger refetch
+                    setTimeout(() => fetchShadowBanData(), 100);
+                  }}
+                  className={`px-3 py-1 text-sm rounded-lg transition-colors ${
+                    shadowBanHistoryFilter === filter
+                      ? 'bg-purple-500 text-white'
+                      : 'bg-dark-800 text-gray-400 hover:text-white hover:bg-dark-700'
+                  }`}
+                >
+                  {filter === 'all' ? 'Tous' : 
+                   filter === 'banned' ? 'Bannis' : 
+                   filter === 'cleared' ? 'Annulés' : 'Expirés'}
+                </button>
+              ))}
+            </div>
+            
+            <div className="bg-dark-800/50 border border-white/10 rounded-xl overflow-hidden">
+              {loadingShadowBans ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-purple-500 animate-spin" />
+                </div>
+              ) : shadowBanHistory.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <History className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                  <p>Aucun historique</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-dark-900/50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Joueur</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Match</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Détecté</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Résolu</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Statut</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {shadowBanHistory.map((tracking) => {
+                        const statusInfo = getStatusInfo(tracking.status);
+                        const StatusIcon = statusInfo.icon;
+                        
+                        return (
+                          <tr key={tracking._id} className="hover:bg-white/5">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <img
+                                  src={getAvatarUrl(tracking.user?.avatarUrl || tracking.user?.avatar) || '/avatar.jpg'}
+                                  alt={tracking.username}
+                                  className="w-8 h-8 rounded-full"
+                                />
+                                <div>
+                                  <div className="text-white text-sm font-medium">{tracking.username}</div>
+                                  <div className="text-gray-500 text-xs">{tracking.discordUsername || 'N/A'}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                tracking.matchType === 'ranked' 
+                                  ? 'bg-purple-500/20 text-purple-400' 
+                                  : tracking.matchType === 'stricker'
+                                    ? 'bg-lime-500/20 text-lime-400'
+                                    : 'bg-blue-500/20 text-blue-400'
+                              }`}>
+                                {tracking.matchType?.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 text-sm">
+                              {formatDateTime(tracking.detectedAt)}
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 text-sm">
+                              {formatDateTime(tracking.resolvedAt)}
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-${statusInfo.color}-500/20 text-${statusInfo.color}-400`}>
+                                <StatusIcon className="w-3 h-3" />
+                                {statusInfo.label}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {tracking.status === 'banned' && tracking.banApplied && (
+                                <button
+                                  onClick={() => handleUnbanShadowBan(tracking.user?._id || tracking.user, tracking.username)}
+                                  className="px-2 py-1 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-colors"
+                                >
+                                  Débannir
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            
+            {/* Pagination */}
+            {shadowBanHistoryTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={() => {
+                    setShadowBanHistoryPage(p => Math.max(1, p - 1));
+                    setTimeout(() => fetchShadowBanData(), 100);
+                  }}
+                  disabled={shadowBanHistoryPage === 1}
+                  className="px-3 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Précédent
+                </button>
+                <span className="text-gray-400 text-sm">
+                  Page {shadowBanHistoryPage} / {shadowBanHistoryTotalPages}
+                </span>
+                <button
+                  onClick={() => {
+                    setShadowBanHistoryPage(p => Math.min(shadowBanHistoryTotalPages, p + 1));
+                    setTimeout(() => fetchShadowBanData(), 100);
+                  }}
+                  disabled={shadowBanHistoryPage === shadowBanHistoryTotalPages}
+                  className="px-3 py-2 bg-dark-800 text-white rounded-lg hover:bg-dark-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Suivant
+                </button>
+              </div>
+            )}
+          </>
+        )}
+        
+        {/* Info Box */}
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-purple-300">
+              <p className="font-medium mb-1">Fonctionnement du système Shadow Ban:</p>
+              <ul className="list-disc list-inside text-purple-200/80 space-y-1">
+                <li>Quand un joueur PC est détecté en match sans être connecté à Iris, une notification Discord est envoyée</li>
+                <li>Un compte à rebours de 10 minutes démarre</li>
+                <li>Si après 10 minutes le joueur n'est toujours pas connecté à Iris et est encore en match, il est automatiquement banni 24h</li>
+                <li>Une notification est envoyée dans le salon Discord dédié</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderSystem = () => {
     const handleFullReset = async () => {
       if (confirmText !== 'RESET ALL') {
@@ -11422,6 +12170,75 @@ Cette action est irréversible!`)) {
                 max={20}
               />
                   </div>
+            
+            {/* Transfer Leadership - Admin/Staff Only */}
+            {editingItem?.members && editingItem.members.length > 1 && (
+              <div className="border-t border-white/10 pt-4 mt-4">
+                <h4 className="text-sm font-medium text-yellow-400 mb-3 flex items-center gap-2">
+                  <Crown className="w-4 h-4" />
+                  Transférer le leadership
+                </h4>
+                <div className="space-y-3">
+                  <select
+                    value={formData.newLeaderId || ''}
+                    onChange={(e) => setFormData({ ...formData, newLeaderId: e.target.value })}
+                    className="w-full px-4 py-3 bg-dark-800 border border-yellow-500/30 rounded-xl text-white focus:outline-none focus:border-yellow-500/50"
+                  >
+                    <option value="">-- Sélectionner un nouveau leader --</option>
+                    {editingItem.members
+                      .filter(m => {
+                        const memberId = m.user?._id || m.user;
+                        const leaderId = editingItem.leader?._id || editingItem.leader;
+                        return memberId?.toString() !== leaderId?.toString();
+                      })
+                      .map((member) => {
+                        const memberId = member.user?._id || member.user;
+                        const memberName = member.user?.username || member.user?.discordUsername || 'Inconnu';
+                        return (
+                          <option key={memberId} value={memberId}>
+                            {memberName} {member.role === 'officer' ? '(Officier)' : '(Membre)'}
+                          </option>
+                        );
+                      })}
+                  </select>
+                  {formData.newLeaderId && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSaving(true);
+                        try {
+                          const response = await fetch(`${API_URL}/squads/admin/${editingItem._id}/transfer-leader/${formData.newLeaderId}`, {
+                            method: 'POST',
+                            credentials: 'include'
+                          });
+                          const data = await response.json();
+                          if (data.success) {
+                            setSuccess(data.message || 'Leadership transféré');
+                            setFormData({ ...formData, newLeaderId: '' });
+                            // Update the editing item with new data
+                            if (data.squad) {
+                              setEditingItem(data.squad);
+                            }
+                            loadTabData();
+                          } else {
+                            setError(data.message || 'Erreur lors du transfert');
+                          }
+                        } catch (err) {
+                          setError('Erreur lors du transfert');
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      disabled={saving}
+                      className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/30 rounded-xl text-yellow-400 font-medium transition-colors disabled:opacity-50"
+                    >
+                      <Crown className="w-4 h-4" />
+                      Transférer le leadership
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             
             {/* Stats Top Escouade - Admin Only */}
             {userIsAdmin && (
@@ -12875,6 +13692,8 @@ Cette action est irréversible!`)) {
         return renderSeasons();
       case 'system':
         return renderSystem();
+      case 'shadow-bans':
+        return renderShadowBans();
       default:
         return <div className="text-center text-gray-400 py-20">Section non trouvée</div>;
     }

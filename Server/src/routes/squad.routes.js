@@ -2442,6 +2442,86 @@ router.post('/admin/:squadId/kick/:memberId', verifyToken, requireStaff, async (
   }
 });
 
+// Transfer leadership (admin/staff)
+router.post('/admin/:squadId/transfer-leader/:newLeaderId', verifyToken, requireStaff, async (req, res) => {
+  try {
+    const { squadId, newLeaderId } = req.params;
+    
+    const squad = await Squad.findById(squadId)
+      .populate('leader', 'username')
+      .populate('members.user', 'username');
+    
+    if (!squad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Escouade non trouvée'
+      });
+    }
+
+    // Check if new leader is a member of the squad
+    const newLeader = squad.members.find(m => {
+      const memberUserId = m.user?._id?.toString() || m.user?.toString();
+      return memberUserId === newLeaderId;
+    });
+
+    if (!newLeader) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ce membre n\'appartient pas à l\'escouade'
+      });
+    }
+
+    // Check if already leader
+    if (squad.leader._id?.toString() === newLeaderId || squad.leader.toString() === newLeaderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ce membre est déjà le leader'
+      });
+    }
+
+    // Get old leader username for logging
+    const oldLeaderUsername = squad.leader?.username || 'Inconnu';
+    const newLeaderUsername = newLeader.user?.username || 'Inconnu';
+
+    // Update old leader to officer
+    const oldLeader = squad.members.find(m => {
+      const memberUserId = m.user?._id?.toString() || m.user?.toString();
+      return memberUserId === squad.leader._id?.toString() || memberUserId === squad.leader.toString();
+    });
+    if (oldLeader) oldLeader.role = 'officer';
+
+    // Update new leader
+    newLeader.role = 'leader';
+    squad.leader = newLeaderId;
+
+    await squad.save();
+
+    // Re-populate for response
+    await squad.populate('members.user', 'username avatar avatarUrl discordAvatar discordId');
+    await squad.populate('leader', 'username avatar avatarUrl discordAvatar discordId');
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Transfer Leadership', squad.name, {
+      fields: [
+        { name: 'Ancien leader', value: oldLeaderUsername },
+        { name: 'Nouveau leader', value: newLeaderUsername }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: `Leadership transféré à ${newLeaderUsername}`,
+      squad
+    });
+  } catch (error) {
+    console.error('Admin transfer leadership error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur serveur'
+    });
+  }
+});
+
 export default router;
 
 

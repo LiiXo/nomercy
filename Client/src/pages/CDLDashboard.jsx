@@ -1006,7 +1006,7 @@ const CDLDashboard = () => {
           if (!isOnline) disconnectedPlayers.push(player.username);
         }
         if (disconnectedPlayers.length > 0) {
-          setRosterError(`GGSecure non connecté : ${disconnectedPlayers.join(', ')}`);
+          setRosterError(`Iris non connecté : ${disconnectedPlayers.join(', ')}`);
           setCheckingAnticheat(false);
           return;
         }

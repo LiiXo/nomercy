@@ -1636,6 +1636,55 @@ export const sendIrisShadowBan = async (player, reason, durationHours = 24, dete
 };
 
 /**
+ * Send notification when a player is manually shadow banned for DS4 usage
+ * @param {Object} player - Player data
+ * @param {number} durationHours - Ban duration in hours
+ * @param {Object} admin - Admin who issued the ban
+ */
+export const sendManualDS4ShadowBan = async (player, durationHours, admin) => {
+  if (!client || !isReady) return;
+
+  try {
+    const expiresAt = new Date(Date.now() + durationHours * 60 * 60 * 1000);
+    const playerInfo = player.discordId ? `<@${player.discordId}>` : player.username;
+    
+    // Format duration text
+    let durationText;
+    if (durationHours < 24) {
+      durationText = `${durationHours} heure${durationHours > 1 ? 's' : ''}`;
+    } else {
+      const days = Math.floor(durationHours / 24);
+      durationText = `${days} jour${days > 1 ? 's' : ''}`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xDC143C) // Crimson Red - epic color
+      .setTitle('⚔️ L\'ÉPÉE A FRAPPÉ ! ⚔️')
+      .setDescription(
+        `**La justice NoMercy s'est abattue !**\n\n` +
+        `🔍 **Iris** a rapporté de **source sûre** que le programme interdit a bien été utilisé en match sur NoMercy.\n\n` +
+        `Le joueur a été **shadow ban** pour cette infraction.`
+      )
+      .addFields(
+        { name: '👤 Joueur sanctionné', value: playerInfo, inline: true },
+        { name: '🎮 Pseudo', value: player.username || 'N/A', inline: true },
+        { name: '⏱️ Durée du ban', value: durationText, inline: true },
+        { name: '🚫 Infraction', value: '**Utilisation de DS4Windows** (programme interdit)', inline: false },
+        { name: '📅 Expiration', value: expiresAt.toLocaleString('fr-FR', { dateStyle: 'long', timeStyle: 'short' }), inline: true },
+        { name: '👮 Sanctionné par', value: 'Système', inline: true }
+      )
+      .setThumbnail('https://i.imgur.com/QWj9jLg.png') // Sword icon
+      .setTimestamp()
+      .setFooter({ text: 'NoMercy - La triche ne paie pas' });
+
+    await sendToChannel(IRIS_SHADOW_BAN_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Manual DS4 shadow ban notification sent for ${player.username}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending manual DS4 shadow ban notification:', error.message);
+  }
+};
+
+/**
  * Send warning notification when a player has missing security modules on connection
  * @param {Object} player - Player data
  * @param {Array} missingModules - List of missing/disabled security modules
@@ -2058,31 +2107,77 @@ export const sendIrisExtendedAlert = async (player, alertType, data) => {
       }
 
       case 'macro': {
+        // Check for ACTIVE PROCESSES (software currently running, not just traces)
+        const activeProcesses = data.detectedSoftware?.filter(m => m.source === 'process') || [];
+        const hasActiveProcess = activeProcesses.length > 0;
+        
         const highRiskList = data.highRiskMacros?.slice(0, 10).map(m => {
           const typeIcons = { ahk: '⌨️', generic: '🖱️', logitech: '🎮', razer: '🐍', corsair: '🏴' };
-          return `${typeIcons[m.macroType] || '❓'} **${m.name}** (${m.macroType}) - Source: ${m.source}`;
+          const sourceIcon = m.source === 'process' ? '🔴 ACTIF' : (m.source === 'registry' ? '📁' : '🪟');
+          return `${typeIcons[m.macroType] || '❓'} **${m.name}** (${m.macroType}) - ${sourceIcon}`;
         }).join('\n') || 'Aucun';
 
         const allMacrosList = data.detectedSoftware?.slice(0, 10).map(m => {
-          return `• ${m.name} (${m.macroType})`;
+          const sourceIcon = m.source === 'process' ? '🔴' : '⚪';
+          return `${sourceIcon} ${m.name} (${m.macroType}) - ${m.source}`;
         }).join('\n') || 'Aucun';
 
-        embed = new EmbedBuilder()
-          .setColor(0x8B5CF6) // Purple
-          .setTitle('⌨️ DÉTECTION MACROS - LOGICIELS SUSPECTS')
-          .setDescription(`Des logiciels de macros/scripts ont été détectés sur le système de **${player.username}**.`)
-          .addFields(
-            { name: '👤 Joueur', value: playerInfo, inline: true },
-            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
-            { name: '⏰ Détecté à', value: timestamp, inline: true },
-            { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
-            { name: '📊 Total détecté', value: `${data.detectedSoftware?.length || 0}`, inline: true },
-            { name: '\u200B', value: '\u200B', inline: true },
-            { name: '🚨 Macros à haut risque', value: highRiskList.substring(0, 1024), inline: false }
-          );
-        
-        if (data.detectedSoftware?.length > data.highRiskMacros?.length) {
-          embed.addFields({ name: '📋 Tous les logiciels détectés', value: allMacrosList.substring(0, 1024), inline: false });
+        // If there are ACTIVE PROCESSES, create a MUCH more prominent alert
+        if (hasActiveProcess) {
+          const activeProcessList = activeProcesses.map(m => {
+            const typeIcons = { ahk: '⌨️', generic: '🖱️', logitech: '🎮', razer: '🐍', corsair: '🏴' };
+            return `${typeIcons[m.macroType] || '🔴'} **${m.name}**`;
+          }).join('\n');
+
+          embed = new EmbedBuilder()
+            .setColor(0xFF0000) // BRIGHT RED for active process
+            .setTitle('🚨🔴 LOGICIEL INTERDIT EN COURS D\'EXÉCUTION 🔴🚨')
+            .setDescription(`
+## ⚠️ ALERTE CRITIQUE ⚠️
+
+**${player.username}** utilise **ACTIVEMENT** un logiciel interdit !
+
+Le logiciel suivant est **ouvert et en cours d'utilisation** sur son PC :
+
+${activeProcessList}
+
+> 🎮 Cela signifie que le joueur l'utilise **en ce moment même** !
+> Ce n'est PAS une simple trace ou un fichier installé.
+            `.trim())
+            .addFields(
+              { name: '👤 Joueur', value: playerInfo, inline: true },
+              { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+              { name: '⏰ Détecté à', value: timestamp, inline: true },
+              { name: '🔴 PROCESSUS ACTIFS', value: `**${activeProcesses.length}** logiciel(s) en cours d'exécution`, inline: true },
+              { name: '⚠️ Score de risque', value: `**${data.riskScore || 0}** (CRITIQUE)`, inline: true },
+              { name: '📊 Total détecté', value: `${data.detectedSoftware?.length || 0}`, inline: true },
+              { name: '🚨 LOGICIELS ACTIFS (EN COURS D\'UTILISATION)', value: activeProcessList.substring(0, 1024), inline: false }
+            );
+          
+          // If there are other macros detected (not active), show them too
+          const inactiveList = data.detectedSoftware?.filter(m => m.source !== 'process').map(m => `⚪ ${m.name} (${m.source})`).join('\n');
+          if (inactiveList && inactiveList.length > 0) {
+            embed.addFields({ name: '📁 Autres traces (inactifs)', value: inactiveList.substring(0, 1024), inline: false });
+          }
+        } else {
+          // Standard alert for traces/registry entries (not active processes)
+          embed = new EmbedBuilder()
+            .setColor(0x8B5CF6) // Purple for traces
+            .setTitle('⌨️ DÉTECTION MACROS - TRACES DÉTECTÉES')
+            .setDescription(`Des traces de logiciels de macros/scripts ont été détectées sur le système de **${player.username}**.\n\n*Note: Ces logiciels ne sont pas actifs actuellement (traces uniquement).*`)
+            .addFields(
+              { name: '👤 Joueur', value: playerInfo, inline: true },
+              { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+              { name: '⏰ Détecté à', value: timestamp, inline: true },
+              { name: '⚠️ Score de risque', value: `${data.riskScore || 0}`, inline: true },
+              { name: '📊 Total détecté', value: `${data.detectedSoftware?.length || 0}`, inline: true },
+              { name: '\u200B', value: '\u200B', inline: true },
+              { name: '🚨 Macros à haut risque', value: highRiskList.substring(0, 1024), inline: false }
+            );
+          
+          if (data.detectedSoftware?.length > data.highRiskMacros?.length) {
+            embed.addFields({ name: '📋 Tous les logiciels détectés', value: allMacrosList.substring(0, 1024), inline: false });
+          }
         }
         break;
       }
@@ -2186,36 +2281,74 @@ export const sendIrisExtendedAlert = async (player, alertType, data) => {
 
       case 'cheat': {
         // Cheat devices (Cronus, XIM, etc.) and processes (DS4Windows, etc.)
+        // Processes detected means they are ACTIVELY RUNNING
+        const hasActiveProcesses = data.processes && data.processes.length > 0;
+        const hasDevices = data.devices && data.devices.length > 0;
+        
         const devicesList = data.devices?.slice(0, 10).map(d => {
           return `🎮 **${d.deviceType || d.name}** ${d.vid ? `(VID: ${d.vid}${d.pid ? `, PID: ${d.pid}` : ''})` : ''}`;
         }).join('\n') || 'Aucun';
 
         const processesList = data.processes?.slice(0, 10).map(p => {
-          return `💻 **${p.name}** (détecté: ${p.matchedCheat}) - PID: ${p.pid}`;
+          return `🔴 **${p.name}** (détecté: ${p.matchedCheat}) - PID: ${p.pid}`;
         }).join('\n') || 'Aucun';
 
         const riskColors = { critical: 0xFF0000, high: 0xFF6B2C, medium: 0xFFA500, low: 0x10B981 };
         const riskEmojis = { critical: '🚨', high: '⚠️', medium: '⚡', low: 'ℹ️' };
         const riskLevel = data.riskLevel || 'low';
 
-        embed = new EmbedBuilder()
-          .setColor(riskColors[riskLevel] || 0xFF0000)
-          .setTitle(`${riskEmojis[riskLevel] || '🎮'} DÉTECTION CHEAT - ${riskLevel.toUpperCase()}`)
-          .setDescription(`Des périphériques ou logiciels suspects ont été détectés sur le système de **${player.username}**.`)
-          .addFields(
-            { name: '👤 Joueur', value: playerInfo, inline: true },
-            { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
-            { name: '⏰ Détecté à', value: timestamp, inline: true },
-            { name: '⚠️ Niveau de risque', value: riskLevel.toUpperCase(), inline: true },
-            { name: '📊 Score', value: `${data.riskScore || 0}`, inline: true },
-            { name: '\u200B', value: '\u200B', inline: true }
-          );
+        // If there are ACTIVE PROCESSES running (like DS4Windows), create a SUPER PROMINENT alert
+        if (hasActiveProcesses) {
+          const activeProcessNames = data.processes.map(p => `**${p.name}** (${p.matchedCheat})`).join(', ');
+          
+          embed = new EmbedBuilder()
+            .setColor(0xFF0000) // BRIGHT RED
+            .setTitle('🚨🔴 LOGICIEL DE TRICHE EN COURS D\'EXÉCUTION 🔴🚨')
+            .setDescription(`
+## ⚠️ ALERTE CRITIQUE - PROCESSUS ACTIF ⚠️
 
-        if (data.devices?.length > 0) {
-          embed.addFields({ name: '🎮 Périphériques détectés', value: devicesList.substring(0, 1024), inline: false });
-        }
-        if (data.processes?.length > 0) {
-          embed.addFields({ name: '💻 Processus détectés', value: processesList.substring(0, 1024), inline: false });
+Le joueur **${player.username}** a des **logiciels de triche ouverts et en cours d'exécution** !
+
+### 🔴 PROCESSUS ACTIFS DÉTECTÉS :
+${processesList}
+
+> ⚠️ **Ces logiciels tournent EN CE MOMENT sur son PC !**
+> Ce n'est PAS une simple trace - le joueur les utilise ACTIVEMENT.
+            `.trim())
+            .addFields(
+              { name: '👤 Joueur', value: playerInfo, inline: true },
+              { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+              { name: '⏰ Détecté à', value: timestamp, inline: true },
+              { name: '🔴 PROCESSUS ACTIFS', value: `**${data.processes.length}** logiciel(s) en cours`, inline: true },
+              { name: '⚠️ Niveau de risque', value: `**CRITIQUE**`, inline: true },
+              { name: '📊 Score', value: `**${data.riskScore || 0}**`, inline: true }
+            );
+          
+          // Add devices if any
+          if (hasDevices) {
+            embed.addFields({ name: '🎮 Périphériques suspects également détectés', value: devicesList.substring(0, 1024), inline: false });
+          }
+        } else {
+          // Standard alert for devices only (no active processes)
+          embed = new EmbedBuilder()
+            .setColor(riskColors[riskLevel] || 0xFF0000)
+            .setTitle(`${riskEmojis[riskLevel] || '🎮'} DÉTECTION CHEAT - ${riskLevel.toUpperCase()}`)
+            .setDescription(`Des périphériques ou logiciels suspects ont été détectés sur le système de **${player.username}**.`)
+            .addFields(
+              { name: '👤 Joueur', value: playerInfo, inline: true },
+              { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+              { name: '⏰ Détecté à', value: timestamp, inline: true },
+              { name: '⚠️ Niveau de risque', value: riskLevel.toUpperCase(), inline: true },
+              { name: '📊 Score', value: `${data.riskScore || 0}`, inline: true },
+              { name: '\u200B', value: '\u200B', inline: true }
+            );
+
+          if (hasDevices) {
+            embed.addFields({ name: '🎮 Périphériques détectés', value: devicesList.substring(0, 1024), inline: false });
+          }
+          if (hasActiveProcesses) {
+            embed.addFields({ name: '💻 Processus détectés', value: processesList.substring(0, 1024), inline: false });
+          }
         }
         break;
       }
@@ -3239,6 +3372,110 @@ export const updateStrickerSeasonTimerChannel = async () => {
   }
 };
 
+// Channel for shadow ban notifications (same as ban log channel)
+const SHADOW_BAN_MATCH_CHANNEL_ID = '1463997518412255488';
+
+/**
+ * Send notification when a player in a match is detected not connected to Iris
+ * This is the initial warning before the 10-minute countdown
+ * @param {Object} player - Player data { username, discordUsername, discordId }
+ * @param {Object} matchInfo - Match info { matchId, matchType, mode }
+ */
+export const sendIrisMatchWarning = async (player, matchInfo) => {
+  if (!client || !isReady) return;
+
+  try {
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerMention = player.discordId ? `<@${player.discordId}>` : player.username;
+    
+    // Build match URL
+    let matchUrl;
+    if (matchInfo.matchType === 'ranked') {
+      matchUrl = `https://nomercy.ggsecure.io/ranked/match/${matchInfo.matchId}`;
+    } else if (matchInfo.matchType === 'stricker') {
+      matchUrl = `https://nomercy.ggsecure.io/hardcore/stricker/match/${matchInfo.matchId}`;
+    } else {
+      matchUrl = `https://nomercy.ggsecure.io/match/${matchInfo.matchId}`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFFA500) // Orange warning
+      .setTitle('⚠️ ALERTE: Joueur en match sans Iris')
+      .setDescription(
+        `**${player.username}** est en match mais n'est **pas connecté à Iris**!\n\n` +
+        `⏱️ Un compte à rebours de **10 minutes** a démarré.\n` +
+        `Si le joueur ne se reconnecte pas à Iris dans les 10 prochaines minutes, il sera automatiquement **shadow ban 24h**.`
+      )
+      .addFields(
+        { name: '👤 Joueur', value: playerMention, inline: true },
+        { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+        { name: '⏰ Détecté à', value: timestamp, inline: true },
+        { name: '🎯 Type de match', value: matchInfo.matchType?.toUpperCase() || 'N/A', inline: true },
+        { name: '📋 Match ID', value: `\`${matchInfo.matchId}\``, inline: true },
+        { name: '🔗 Lien', value: `[Voir le match](${matchUrl})`, inline: true }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Shadow Ban System' });
+
+    await sendToChannel(SHADOW_BAN_MATCH_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Iris match warning sent for ${player.username}`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending Iris match warning:', error.message);
+  }
+};
+
+/**
+ * Send notification when a player is shadow banned for not being connected to Iris in match
+ * This is sent after the 10-minute timer expires
+ * @param {Object} player - Player data { username, discordUsername, discordId }
+ * @param {Object} banInfo - Ban info { matchId, matchType, reason, duration, expiresAt }
+ */
+export const sendIrisMatchShadowBan = async (player, banInfo) => {
+  if (!client || !isReady) return;
+
+  try {
+    const timestamp = new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+    const playerMention = player.discordId ? `<@${player.discordId}>` : player.username;
+    const expiresAtStr = banInfo.expiresAt 
+      ? new Date(banInfo.expiresAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })
+      : 'N/A';
+
+    // Build match URL
+    let matchUrl;
+    if (banInfo.matchType === 'ranked') {
+      matchUrl = `https://nomercy.ggsecure.io/ranked/match/${banInfo.matchId}`;
+    } else if (banInfo.matchType === 'stricker') {
+      matchUrl = `https://nomercy.ggsecure.io/hardcore/stricker/match/${banInfo.matchId}`;
+    } else {
+      matchUrl = `https://nomercy.ggsecure.io/match/${banInfo.matchId}`;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0xFF0000) // Red
+      .setTitle('🚫 SHADOW BAN - Non connecté à Iris')
+      .setDescription(
+        `**${player.username}** a été automatiquement **shadow ban** pour ne pas avoir été connecté à Iris pendant un match actif.`
+      )
+      .addFields(
+        { name: '👤 Joueur', value: playerMention, inline: true },
+        { name: '🎮 Discord', value: player.discordUsername || 'N/A', inline: true },
+        { name: '⏰ Ban appliqué à', value: timestamp, inline: true },
+        { name: '⏱️ Durée', value: banInfo.duration || '24h', inline: true },
+        { name: '📅 Expiration', value: expiresAtStr, inline: true },
+        { name: '🎯 Type de match', value: banInfo.matchType?.toUpperCase() || 'N/A', inline: true },
+        { name: '📋 Raison', value: banInfo.reason || 'Non connecté à Iris pendant un match actif', inline: false },
+        { name: '🔗 Match', value: `[Voir le match](${matchUrl})`, inline: true }
+      )
+      .setTimestamp()
+      .setFooter({ text: 'Iris Anticheat - Shadow Ban Automatique' });
+
+    await sendToChannel(SHADOW_BAN_MATCH_CHANNEL_ID, { embeds: [embed] });
+    console.log(`[Discord Bot] Shadow ban notification sent for ${player.username} - Not connected to Iris in match`);
+  } catch (error) {
+    console.error('[Discord Bot] Error sending Iris match shadow ban notification:', error.message);
+  }
+};
+
 export default {
   initDiscordBot,
   logPlayerBan,
@@ -3282,5 +3519,7 @@ export default {
   updateStrickerMatchCountChannel,
   initSeasonTimerChannels,
   updateRankedSeasonTimerChannel,
-  updateStrickerSeasonTimerChannel
+  updateStrickerSeasonTimerChannel,
+  sendIrisMatchWarning,
+  sendIrisMatchShadowBan
 };

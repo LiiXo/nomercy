@@ -38,15 +38,15 @@ export const AuthProvider = ({ children }) => {
           setUser(data.user);
           setBanInfo(null);
           
-          // Register with GGSecure
-          if (window.GGSecure && data.user?._id) {
-            window.GGSecure.register(
+          // Register with Iris
+          if (window.Iris && data.user?._id) {
+            window.Iris.register(
               data.user._id,
               '693cef61be96745c4607e233',
               'sk_7fc63c5f8fce797545c878843309f716ca34ab25e721a37ae26efcda73fcd281'
             )
-              .then(result => console.log('GGSecure Success:', result))
-              .catch(error => console.error('GGSecure Error:', error));
+              .then(result => console.log('Iris Success:', result))
+              .catch(error => console.error('Iris Error:', error));
           }
         }
       } else {

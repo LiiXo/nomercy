@@ -292,8 +292,8 @@ const MatchSheet = () => {
       joinVoice: 'Rejoindre',
       yourVoiceChannel: 'Votre salon',
       voiceMandatory: 'Obligatoire',
-      playerDisconnected: 's\'est déconnecté de l\'anti-cheat (GGSecure)',
-      playerReconnected: 's\'est reconnecté à l\'anti-cheat (GGSecure)',
+      playerDisconnected: 's\'est déconnecté de l\'anti-cheat (Iris)',
+      playerReconnected: 's\'est reconnecté à l\'anti-cheat (Iris)',
       requestCancellation: 'Demander l\'annulation',
       cancellationRequest: 'Demande d\'annulation',
       cancellationReason: 'Raison de l\'annulation',
@@ -418,8 +418,8 @@ const MatchSheet = () => {
       joinVoice: 'Join',
       yourVoiceChannel: 'Your channel',
       voiceMandatory: 'Mandatory',
-      playerDisconnected: 'disconnected from anti-cheat (GGSecure)',
-      playerReconnected: 'reconnected to anti-cheat (GGSecure)',
+      playerDisconnected: 'disconnected from anti-cheat (Iris)',
+      playerReconnected: 'reconnected to anti-cheat (Iris)',
       requestCancellation: 'Request cancellation',
       cancellationRequest: 'Cancellation request',
       cancellationReason: 'Cancellation reason',
@@ -539,8 +539,8 @@ const MatchSheet = () => {
       voiceChannelRequired: '🎙️ Sprachkanal empfohlen',
       voiceChannelMessage: 'Alle Spieler im selben Team können einem Sprachkanal auf dem NoMercy Discord-Server beitreten. Dies ist nicht verpflichtend, aber sehr empfohlen.',
       joinDiscord: 'Discord beitreten',
-      playerDisconnected: 'hat sich vom Anti-Cheat (GGSecure) getrennt',
-      playerReconnected: 'hat sich wieder mit dem Anti-Cheat (GGSecure) verbunden',
+      playerDisconnected: 'hat sich vom Anti-Cheat (Iris) getrennt',
+      playerReconnected: 'hat sich wieder mit dem Anti-Cheat (Iris) verbunden',
       requestCancellation: 'Stornierung anfordern',
       cancellationRequest: 'Stornierungsanfrage',
       cancellationReason: 'Grund der Stornierung',
@@ -654,8 +654,8 @@ const MatchSheet = () => {
       voiceChannelRequired: '🎙️ Canale vocale consigliato',
       voiceChannelMessage: 'Tutti i giocatori della stessa squadra possono unirsi a un canale vocale sul server Discord NoMercy. Questo non è obbligatorio ma fortemente consigliato.',
       joinDiscord: 'Unisciti a Discord',
-      playerDisconnected: 'si è disconnesso dall\'anti-cheat (GGSecure)',
-      playerReconnected: 'si è riconnesso all\'anti-cheat (GGSecure)',
+      playerDisconnected: 'si è disconnesso dall\'anti-cheat (Iris)',
+      playerReconnected: 'si è riconnesso all\'anti-cheat (Iris)',
       requestCancellation: 'Richiedi annullamento',
       cancellationRequest: 'Richiesta di annullamento',
       cancellationReason: 'Motivo dell\'annullamento',
@@ -1428,7 +1428,7 @@ const MatchSheet = () => {
     };
   }, [socket, matchId, isRankedMatch, navigate]);
 
-  // GGSecure listeners removed - no longer relevant (Iris is used instead)
+  // Iris listeners removed - no longer relevant (Iris is used instead)
 
   // Chat container ref
   const chatContainerRef = useRef(null);
@@ -3106,7 +3106,7 @@ const MatchSheet = () => {
                     
                     {messages.filter(msg => {
                       // Filtrer les messages vides (sauf messages système avec messageType)
-                      // Exclure les messages GGSecure - plus utilisé (remplacé par Iris)
+                      // Exclure les anciens messages GGSecure - plus utilisés
                       if (msg.messageType === 'ggsecure_disconnect' || msg.messageType === 'ggsecure_reconnect') return false;
                       if (msg.isSystem && msg.messageType) return true;
                       if (msg.isSystem && msg.message && msg.message.trim()) return true;

@@ -875,7 +875,7 @@ const CDLDashboard = () => {
           if (!isOnline) disconnectedPlayers.push(player.username);
         }
         if (disconnectedPlayers.length > 0) {
-          setRosterError(`GGSecure non connecté : ${disconnectedPlayers.join(', ')}`);
+          setRosterError(`Iris non connecté : ${disconnectedPlayers.join(', ')}`);
           setCheckingAnticheat(false);
           return;
         }
@@ -1784,33 +1784,33 @@ const CDLDashboard = () => {
               </div>
             )}
 
-            {/* GGSecure Info for PC Players */}
+            {/* Iris Anti-Cheat Info for PC Players */}
             <div className="mb-6 p-4 glass-card rounded-2xl border border-cyan-500/30 flex items-start gap-4">
               <Shield className="w-6 h-6 text-cyan-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="text-cyan-400 font-medium">
                   {language === 'fr' 
-                    ? 'Anti-Cheat GGSecure requis pour les joueurs PC' 
+                    ? 'Anti-Cheat Iris requis pour les joueurs PC' 
                     : language === 'de' 
-                    ? 'GGSecure Anti-Cheat für PC-Spieler erforderlich'
+                    ? 'Iris Anti-Cheat für PC-Spieler erforderlich'
                     : language === 'it'
-                    ? 'Anti-Cheat GGSecure richiesto per i giocatori PC'
-                    : 'GGSecure Anti-Cheat required for PC players'}
+                    ? 'Anti-Cheat Iris richiesto per i giocatori PC'
+                    : 'Iris Anti-Cheat required for PC players'}
                 </p>
                 <p className="text-cyan-400/70 text-sm mt-1">
                   {language === 'fr' 
-                    ? 'Les joueurs PC non connectés à notre anti-cheat GGSecure ne pourront pas être sélectionnés dans le roster.' 
+                    ? 'Les joueurs PC non connectés à notre anti-cheat Iris ne pourront pas être sélectionnés dans le roster.' 
                     : language === 'de' 
-                    ? 'PC-Spieler, die nicht mit unserem GGSecure Anti-Cheat verbunden sind, können nicht im Roster ausgewählt werden.'
+                    ? 'PC-Spieler, die nicht mit unserem Iris Anti-Cheat verbunden sind, können nicht im Roster ausgewählt werden.'
                     : language === 'it'
-                    ? 'I giocatori PC non connessi al nostro anti-cheat GGSecure non potranno essere selezionati nel roster.'
-                    : 'PC players not connected to our GGSecure anti-cheat cannot be selected in the roster.'}
+                    ? 'I giocatori PC non connessi al nostro anti-cheat Iris non potranno essere selezionati nel roster.'
+                    : 'PC players not connected to our Iris anti-cheat cannot be selected in the roster.'}
                 </p>
                 <Link 
                   to="/anticheat" 
                   className="inline-flex items-center gap-1 text-cyan-400 text-sm font-medium mt-2 hover:text-cyan-300 transition-colors"
                 >
-                  {language === 'fr' ? 'En savoir plus sur GGSecure' : language === 'de' ? 'Mehr über GGSecure' : language === 'it' ? 'Scopri di più su GGSecure' : 'Learn more about GGSecure'}
+                  {language === 'fr' ? 'En savoir plus sur Iris' : language === 'de' ? 'Mehr über Iris' : language === 'it' ? 'Scopri di più su Iris' : 'Learn more about Iris'}
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </Link>
               </div>
