@@ -5,6 +5,7 @@ import Button from '../components/Button'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
 import { API_URL, UPLOADS_BASE_URL } from '../config'
+import { getXPProgress, MAX_LEVEL, getTierColor } from '../utils/xpSystem'
 
 const Profile = () => {
   const { t } = useLanguage()
@@ -69,11 +70,8 @@ const Profile = () => {
   // Calculate total XP
   const totalXP = (user?.statsHardcore?.xp || 0) + (user?.statsCdl?.xp || 0) + (user?.stats?.xp || 0)
 
-  // Calculate level from XP (1000 XP per level)
-  const level = Math.floor(totalXP / 1000) + 1
-  const xpForNextLevel = 1000
-  const currentLevelXP = totalXP % 1000
-  const xpProgress = (currentLevelXP / xpForNextLevel) * 100
+  // Calculate level from XP using unified XP system
+  const { level, currentXP: currentLevelXP, xpForNextLevel, progress: xpProgress } = getXPProgress(totalXP)
 
   // Calculate total stats
   const totalWins = (user?.statsHardcore?.wins || 0) + (user?.statsCdl?.wins || 0)

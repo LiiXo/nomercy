@@ -6,7 +6,45 @@ import { useSocket } from '../contexts/SocketContext'
 import { useAuth } from '../contexts/AuthContext'
 import MatchFoundDialog from './MatchFoundDialog'
 
-const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, teamSize }) => {
+// Local storage key for active match
+const ACTIVE_MATCH_KEY = 'nomercy-active-match'
+
+// Save active match to localStorage
+const saveActiveMatch = (matchData, mode, modeIcon, type) => {
+  if (matchData) {
+    localStorage.setItem(ACTIVE_MATCH_KEY, JSON.stringify({
+      matchData: { ...matchData, inProgress: true },
+      mode,
+      modeIcon,
+      type,
+      savedAt: Date.now()
+    }))
+  }
+}
+
+// Get active match from localStorage
+export const getActiveMatch = () => {
+  try {
+    const stored = localStorage.getItem(ACTIVE_MATCH_KEY)
+    if (!stored) return null
+    const data = JSON.parse(stored)
+    // Match expires after 2 hours
+    if (Date.now() - data.savedAt > 2 * 60 * 60 * 1000) {
+      localStorage.removeItem(ACTIVE_MATCH_KEY)
+      return null
+    }
+    return data
+  } catch {
+    return null
+  }
+}
+
+// Clear active match from localStorage
+export const clearActiveMatch = () => {
+  localStorage.removeItem(ACTIVE_MATCH_KEY)
+}
+
+const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, teamSize, initialMatchData, alreadyInQueue }) => {
   const { t } = useLanguage()
   const { playClick } = useSound()
   const { emit, on, isConnected } = useSocket()
@@ -14,10 +52,10 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
   
   const [searchTime, setSearchTime] = useState(0)
   const [playersInQueue, setPlayersInQueue] = useState(1) // At least 1 (yourself)
-  const [status, setStatus] = useState('connecting') // connecting, searching, found, joining
+  const [status, setStatus] = useState(alreadyInQueue ? 'searching' : 'connecting') // connecting, searching, found, joining
   const [error, setError] = useState(null)
-  const [matchData, setMatchData] = useState(null)
-  const [showMatchFound, setShowMatchFound] = useState(false)
+  const [matchData, setMatchData] = useState(initialMatchData?.matchData || null)
+  const [showMatchFound, setShowMatchFound] = useState(!!initialMatchData?.matchData)
   
   // Store cleanup functions
   const cleanupRef = useRef([])
@@ -25,17 +63,33 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
   // Total players needed for match (2 teams)
   const playersNeeded = (teamSize || 1) * 2
 
-  // Leave queue when dialog closes
+  // If we have initial match data (rejoining), skip search
+  useEffect(() => {
+    if (initialMatchData?.matchData && isOpen) {
+      setMatchData(initialMatchData.matchData)
+      setShowMatchFound(true)
+      setStatus('found')
+    }
+  }, [initialMatchData, isOpen])
+
+  // Leave queue when dialog closes (only if leader)
   const handleClose = useCallback(() => {
-    if (status === 'searching') {
+    if (status === 'searching' && !alreadyInQueue) {
+      // Only leader should emit leave (non-leaders are passive)
       emit('leaveCasualQueue')
     }
     onClose()
-  }, [status, emit, onClose])
+  }, [status, emit, onClose, alreadyInQueue])
 
   // Join queue when dialog opens and socket is connected
   useEffect(() => {
     if (!isOpen || !user?.discordId || !modeId) return
+    
+    // If already in queue (non-leader joined via leader's action), skip joining
+    if (alreadyInQueue) {
+      console.log('[MM] Already in queue (non-leader), skipping join')
+      return
+    }
 
     setSearchTime(0)
     setPlayersInQueue(1) // Start with 1 (yourself)
@@ -52,17 +106,17 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
       
       return () => clearTimeout(joinTimeout)
     }
-  }, [isOpen, user?.discordId, modeId, type, emit, isConnected])
+  }, [isOpen, user?.discordId, modeId, type, emit, isConnected, alreadyInQueue])
 
   // Retry joining if socket connects after dialog opens
   useEffect(() => {
-    if (!isOpen || !user?.discordId || !modeId || status !== 'connecting') return
+    if (!isOpen || !user?.discordId || !modeId || status !== 'connecting' || alreadyInQueue) return
     
     if (isConnected) {
       console.log('[MM] Socket connected, joining queue:', { odId: user.discordId, modeId, type })
       emit('joinCasualQueue', { odId: user.discordId, modeId, type })
     }
-  }, [isConnected, isOpen, user?.discordId, modeId, type, status, emit])
+  }, [isConnected, isOpen, user?.discordId, modeId, type, status, emit, alreadyInQueue])
 
   // Search timer
   useEffect(() => {
@@ -336,14 +390,21 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
 
                 {/* Cancel/Close button */}
                 {status !== 'joining' ? (
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={handleCancel}
-                    className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-mono text-xs uppercase tracking-wider border border-white/10 hover:border-accent-primary/30 transition-all"
-                  >
-                    [ {status === 'error' ? t('close') : t('cancelSearch')} ]
-                  </motion.button>
+                  alreadyInQueue ? (
+                    // Non-leader: can't cancel, waiting for leader
+                    <p className="text-center text-[10px] font-mono text-gray-500 uppercase">
+                      {t('waitingForLeader')}
+                    </p>
+                  ) : (
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleCancel}
+                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-mono text-xs uppercase tracking-wider border border-white/10 hover:border-accent-primary/30 transition-all"
+                    >
+                      [ {status === 'error' ? t('close') : t('cancelSearch')} ]
+                    </motion.button>
+                  )
                 ) : (
                   <p className="text-center text-[10px] font-mono text-gray-500 uppercase">
                     {t('doNotClose')}
@@ -360,13 +421,16 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
     <MatchFoundDialog
       isOpen={showMatchFound}
       matchData={matchData}
-      mode={mode}
-      modeIcon={modeIcon}
-      type={type}
+      mode={mode || initialMatchData?.mode}
+      modeIcon={modeIcon || initialMatchData?.modeIcon}
+      type={type || initialMatchData?.type}
       onCountdownEnd={() => {
         console.log('[MM] Countdown ended, match starting...')
         // Mark match as in progress
-        setMatchData(prev => prev ? { ...prev, inProgress: true } : prev)
+        const updatedMatch = matchData ? { ...matchData, inProgress: true } : null
+        setMatchData(updatedMatch)
+        // Save to localStorage for persistence
+        saveActiveMatch(matchData, mode || initialMatchData?.mode, modeIcon || initialMatchData?.modeIcon, type || initialMatchData?.type)
       }}
       onClose={() => {
         // Just hide the dialog, don't end the match

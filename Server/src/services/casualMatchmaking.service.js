@@ -180,9 +180,16 @@ const tryCreateMatch = async (modeId, type) => {
     team2: team2.map(p => ({ odId: p.odId, username: p.username }))
   };
   
+  // Envoyer à tous les joueurs via leur room user-${odIdMongo}
   for (const player of [...team1, ...team2]) {
-    if (player.socketId && io) {
-      io.to(player.socketId).emit('casualMatchFound', matchData);
+    if (io) {
+      // Utiliser la room utilisateur pour atteindre tous leurs sockets
+      if (player.odIdMongo) {
+        io.to(`user-${player.odIdMongo}`).emit('casualMatchFound', matchData);
+      } else if (player.socketId) {
+        // Fallback au socketId direct
+        io.to(player.socketId).emit('casualMatchFound', matchData);
+      }
     }
   }
   
@@ -291,6 +298,7 @@ export const joinCasualQueue = async (socket, odId, modeId, type) => {
       
       members.push({
         odId: group.leader.discordId,
+        odIdMongo: leaderId, // MongoDB _id pour room notification
         username: group.leader.username,
         socketId: socket.id, // Le leader est le socket actuel
         isLeader: true
@@ -301,8 +309,9 @@ export const joinCasualQueue = async (socket, odId, modeId, type) => {
         if (member.user && member.user._id.toString() !== leaderId) {
           members.push({
             odId: member.user.discordId,
+            odIdMongo: member.user._id.toString(), // MongoDB _id pour room notification
             username: member.user.username,
-            socketId: null, // On ne connaît pas leur socket ici
+            socketId: null, // On utilisera la room à la place
             isLeader: false
           });
         }
@@ -337,6 +346,7 @@ export const joinCasualQueue = async (socket, odId, modeId, type) => {
       groupId = `solo_${user._id}`;
       members.push({
         odId: user.discordId,
+        odIdMongo: user._id.toString(),
         username: user.username,
         socketId: socket.id,
         isLeader: true
@@ -356,14 +366,24 @@ export const joinCasualQueue = async (socket, odId, modeId, type) => {
     
     console.log(`[CasualMM] ${user.username} joined ${modeId}_${type} queue (${members.length} players)`);
     
-    // Confirmer au joueur
-    socket.emit('casualQueueJoined', {
+    // Confirmer à tous les membres du groupe qu'ils sont dans la file
+    const queueData = {
       modeId,
       type,
       modeName: modeConfig.name?.en || modeId,
       playersInQueue: getTotalPlayersInQueue(queue),
-      teamSize: modeConfig.maxPlayers
-    });
+      teamSize: modeConfig.maxPlayers,
+      groupMembers: members.map(m => ({ username: m.username, odId: m.odId }))
+    };
+    
+    // Notifier tous les membres via leur room
+    for (const member of members) {
+      if (member.odIdMongo && io) {
+        io.to(`user-${member.odIdMongo}`).emit('casualQueueJoined', queueData);
+      } else if (member.socketId && io) {
+        io.to(member.socketId).emit('casualQueueJoined', queueData);
+      }
+    }
     
     // Broadcast le statut mis à jour
     broadcastQueueStatus(modeId, type);
@@ -400,9 +420,11 @@ export const leaveCasualQueue = (socket) => {
     queue.splice(entryIndex, 1);
     console.log(`[CasualMM] Group ${groupId} left ${modeId}_${type} queue`);
     
-    // Notifier les autres membres du groupe
+    // Notifier tous les membres du groupe via leur room
     for (const member of entry.members) {
-      if (member.socketId && member.socketId !== socket.id && io) {
+      if (member.odIdMongo && io) {
+        io.to(`user-${member.odIdMongo}`).emit('casualQueueLeft', { modeId, type, reason: 'leader_cancelled' });
+      } else if (member.socketId && member.socketId !== socket.id && io) {
         io.to(member.socketId).emit('casualQueueLeft', { modeId, type, reason: 'leader_cancelled' });
       }
     }

@@ -3,12 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion'
 import GameModeCard from '../components/GameModeCard'
 import Button from '../components/Button'
 import RulesDialog from '../components/RulesDialog'
-import MatchSearchDialog from '../components/MatchSearchDialog'
+import MatchSearchDialog, { getActiveMatch, clearActiveMatch } from '../components/MatchSearchDialog'
 import IrisRequiredDialog from '../components/IrisRequiredDialog'
 import PartyPanel from '../components/PartyPanel'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useGroup } from '../contexts/GroupContext'
+import { useSocket } from '../contexts/SocketContext'
 import { API_URL } from '../config'
 
 // Generate unique visitor ID
@@ -31,9 +32,36 @@ const Lobby = () => {
   const [siteStats, setSiteStats] = useState({ onlineUsers: 0, totalUsers: 0, totalMatches: 0 })
   const [searchingCounts, setSearchingCounts] = useState({ ranked: 0, casual: 0, tournament: 0, custom: 0 })
   const [playerCountError, setPlayerCountError] = useState(null)
+  const [activeMatch, setActiveMatch] = useState(null) // Stored active match
   const { t, language } = useLanguage()
   const { user, isAuthenticated } = useAuth()
   const { group, isLeader, memberCount } = useGroup()
+  const { on } = useSocket()
+  
+  // State to track if search was initiated by group leader (for non-leaders)
+  const [leaderSearchData, setLeaderSearchData] = useState(null)
+
+  // Check for active match on mount
+  useEffect(() => {
+    const saved = getActiveMatch()
+    if (saved) {
+      setActiveMatch(saved)
+    }
+  }, [])
+
+  // Listen for group leader starting a search (for non-leader members)
+  useEffect(() => {
+    if (!on || isLeader) return // Only non-leaders need this
+    
+    const cleanup = on('casualQueueJoined', (data) => {
+      console.log('[Lobby] Leader started search, showing dialog:', data)
+      // Set the search data to show the dialog
+      setLeaderSearchData(data)
+      setShowMatchSearch(true)
+    })
+    
+    return cleanup
+  }, [on, isLeader])
 
   // Check if user can start a match (must be leader if in a group)
   const canStartMatch = !group || isLeader
@@ -246,6 +274,52 @@ const Lobby = () => {
             </h1>
           </motion.div>
 
+          {/* Active Match Banner */}
+          <AnimatePresence>
+            {activeMatch && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: 'auto' }}
+                exit={{ opacity: 0, y: -10, height: 0 }}
+                className="mb-6"
+              >
+                <div className="relative bg-accent-primary/10 border border-accent-primary/50 p-4">
+                  {/* Corner accents */}
+                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-accent-primary" />
+                  <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-accent-primary" />
+                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-accent-primary" />
+                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-accent-primary" />
+                  
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        className="text-2xl"
+                      >
+                        ⚔️
+                      </motion.div>
+                      <div>
+                        <h3 className="text-sm font-mono font-bold text-accent-primary uppercase">
+                          {t('matchInProgress')}
+                        </h3>
+                        <p className="text-[10px] font-mono text-gray-400">
+                          {activeMatch.modeIcon} {activeMatch.mode} • {activeMatch.type === 'hardcore' ? 'Hardcore' : 'Simple'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowMatchSearch(true)}
+                      className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-black font-mono text-xs uppercase tracking-wider font-bold transition-all"
+                    >
+                      [ {t('rejoin')} ]
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Category Tabs */}
           <div className="flex gap-2 mb-4">
             {/* Hardcore Tab */}
@@ -429,12 +503,17 @@ const Lobby = () => {
       {/* Match Search Dialog */}
       <MatchSearchDialog
         isOpen={showMatchSearch}
-        onClose={() => setShowMatchSearch(false)}
-        modeId={selectedMode}
-        mode={gameModes.find(m => m.id === selectedMode)?.mode}
-        modeIcon={gameModes.find(m => m.id === selectedMode)?.icon}
-        type={gameModes.find(m => m.id === selectedMode)?.type || 'simple'}
-        teamSize={serverGameModes?.find(m => m.id === selectedMode)?.maxPlayers || 1}
+        onClose={() => {
+          setShowMatchSearch(false)
+          setLeaderSearchData(null)
+        }}
+        modeId={activeMatch ? activeMatch.matchData?.modeId : (leaderSearchData?.modeId || selectedMode)}
+        mode={activeMatch ? activeMatch.mode : (leaderSearchData?.modeName || gameModes.find(m => m.id === selectedMode)?.mode)}
+        modeIcon={activeMatch ? activeMatch.modeIcon : gameModes.find(m => m.id === (leaderSearchData?.modeId || selectedMode))?.icon}
+        type={activeMatch ? activeMatch.type : (leaderSearchData?.type || gameModes.find(m => m.id === selectedMode)?.type || 'simple')}
+        teamSize={leaderSearchData?.teamSize || serverGameModes?.find(m => m.id === selectedMode)?.maxPlayers || 1}
+        initialMatchData={activeMatch}
+        alreadyInQueue={!!leaderSearchData}
       />
 
       {/* Iris Required Dialog */}

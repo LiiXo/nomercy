@@ -81,6 +81,118 @@ const avatarUpload = multer({
   }
 });
 
+// Leaderboard cache
+let leaderboardCache = null;
+let leaderboardCacheExpiry = 0;
+const LEADERBOARD_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+// Get top 100 players by XP
+router.get('/leaderboard', async (req, res) => {
+  try {
+    const now = Date.now();
+    const { odId } = req.query; // Current user's Discord ID to check their rank
+    
+    let players = leaderboardCache;
+    let cached = true;
+    
+    // Refresh cache if expired
+    if (!leaderboardCache || now >= leaderboardCacheExpiry) {
+      cached = false;
+      // Fetch top 100 players by total XP
+      players = await User.aggregate([
+        // Only include non-banned users
+        { $match: { isBanned: { $ne: true } } },
+        // Calculate total XP
+        {
+          $addFields: {
+            totalXP: {
+              $add: [
+                { $ifNull: ['$stats.xp', 0] },
+                { $ifNull: ['$statsHardcore.xp', 0] },
+                { $ifNull: ['$statsCdl.xp', 0] }
+              ]
+            }
+          }
+        },
+        // Sort by total XP descending
+        { $sort: { totalXP: -1 } },
+        // Limit to 15
+        { $limit: 15 },
+        // Project only needed fields
+        {
+          $project: {
+            _id: 1,
+            username: 1,
+            discordId: 1,
+            discordAvatar: 1,
+            avatar: 1,
+            totalXP: 1,
+            stats: { wins: 1, losses: 1 },
+            statsHardcore: { wins: 1, losses: 1 },
+            statsCdl: { wins: 1, losses: 1 }
+          }
+        }
+      ]);
+      
+      // Cache the result
+      leaderboardCache = players;
+      leaderboardCacheExpiry = now + LEADERBOARD_CACHE_DURATION;
+    }
+    
+    // Check if current user is in top 15
+    let myRank = null;
+    if (odId) {
+      const inTop15 = players.some(p => p.discordId === odId);
+      
+      if (!inTop15) {
+        // Get user's rank by counting players with more XP
+        const user = await User.findOne({ discordId: odId, isBanned: { $ne: true } });
+        if (user) {
+          const userTotalXP = (user.stats?.xp || 0) + (user.statsHardcore?.xp || 0) + (user.statsCdl?.xp || 0);
+          
+          // Count players with more XP
+          const playersAbove = await User.countDocuments({
+            isBanned: { $ne: true },
+            $expr: {
+              $gt: [
+                { $add: [
+                  { $ifNull: ['$stats.xp', 0] },
+                  { $ifNull: ['$statsHardcore.xp', 0] },
+                  { $ifNull: ['$statsCdl.xp', 0] }
+                ]},
+                userTotalXP
+              ]
+            }
+          });
+          
+          myRank = {
+            rank: playersAbove + 1,
+            username: user.username,
+            discordId: user.discordId,
+            discordAvatar: user.discordAvatar,
+            avatar: user.avatar,
+            totalXP: userTotalXP,
+            stats: { wins: user.stats?.wins || 0, losses: user.stats?.losses || 0 },
+            statsHardcore: { wins: user.statsHardcore?.wins || 0, losses: user.statsHardcore?.losses || 0 },
+            statsCdl: { wins: user.statsCdl?.wins || 0, losses: user.statsCdl?.losses || 0 }
+          };
+        }
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      players,
+      myRank,
+      cached,
+      nextUpdate: Math.ceil((leaderboardCacheExpiry - now) / 1000)
+    });
+  } catch (err) {
+    console.error('Error fetching leaderboard:', err);
+    res.status(500).json({ success: false, message: 'Error fetching leaderboard' });
+  }
+});
+
 // Search users (for finding helpers, etc.)
 // Admin/staff/arbitre can also see banned players via includeBanned=true
 router.get('/search', async (req, res) => {

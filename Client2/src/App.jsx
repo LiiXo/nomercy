@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import Navbar from './components/Navbar'
@@ -8,13 +8,14 @@ import LoginDialog from './components/LoginDialog'
 import Preloader from './components/Preloader'
 import FloatingParticles from './components/FloatingParticles'
 import Lobby from './pages/Lobby'
+import Leaderboard from './pages/Leaderboard'
 import Tournaments from './pages/Tournaments'
 import Profile from './pages/Profile'
 import PlayerProfile from './pages/PlayerProfile'
 import Admin from './pages/Admin'
 import { useAuth } from './contexts/AuthContext'
 
-// Page transition variants - Video game style horizontal slide
+// Page transition variants
 const pageVariants = {
   initial: {
     opacity: 0,
@@ -27,7 +28,7 @@ const pageVariants = {
     scale: 1,
     transition: {
       duration: 0.4,
-      ease: [0.25, 0.46, 0.45, 0.94], // Custom easing for smooth game feel
+      ease: [0.25, 0.46, 0.45, 0.94],
     }
   },
   exit: {
@@ -39,20 +40,6 @@ const pageVariants = {
       ease: [0.25, 0.46, 0.45, 0.94],
     }
   }
-}
-
-const PageWrapper = ({ children }) => {
-  return (
-    <motion.div
-      variants={pageVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      className="will-change-transform"
-    >
-      {children}
-    </motion.div>
-  )
 }
 
 function App() {
@@ -148,33 +135,23 @@ function App() {
       {/* === PAGE CONTENT === */}
       <main className="relative z-10 pb-20 md:pb-0">
         <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
-            <Route path="/" element={
-              <PageWrapper>
-                <Lobby />
-              </PageWrapper>
-            } />
-            <Route path="/tournaments" element={
-              <PageWrapper>
-                <Tournaments />
-              </PageWrapper>
-            } />
-            <Route path="/profile" element={
-              <PageWrapper>
-                <Profile />
-              </PageWrapper>
-            } />
-            <Route path="/admin" element={
-              <PageWrapper>
-                <Admin />
-              </PageWrapper>
-            } />
-            <Route path="/player/:username" element={
-              <PageWrapper>
-                <PlayerProfile />
-              </PageWrapper>
-            } />
-          </Routes>
+          <motion.div
+            key={location.pathname}
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="will-change-transform"
+          >
+            <Routes location={location}>
+              <Route path="/" element={<Lobby />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
+              <Route path="/tournaments" element={<Tournaments />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/player/:username" element={<PlayerProfile />} />
+            </Routes>
+          </motion.div>
         </AnimatePresence>
       </main>
 

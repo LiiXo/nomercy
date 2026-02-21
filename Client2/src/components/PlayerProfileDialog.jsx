@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLanguage } from '../contexts/LanguageContext'
 import { API_URL, UPLOADS_BASE_URL } from '../config'
+import { getXPProgress, MAX_LEVEL, getTierColor } from '../utils/xpSystem'
 
 const PlayerProfileDialog = ({ isOpen, onClose, playerId, playerData }) => {
   const { t } = useLanguage()
@@ -52,10 +53,7 @@ const PlayerProfileDialog = ({ isOpen, onClose, playerId, playerData }) => {
 
   // Calculate level from XP
   const totalXP = (player?.statsHardcore?.xp || 0) + (player?.statsCdl?.xp || 0) + (player?.stats?.xp || 0)
-  const level = Math.floor(totalXP / 1000) + 1
-  const currentLevelXP = totalXP % 1000
-  const xpForNextLevel = 1000
-  const xpProgress = (currentLevelXP / xpForNextLevel) * 100
+  const { level, currentXP: currentLevelXP, xpForNextLevel, progress: xpProgress } = getXPProgress(totalXP)
 
   // Calculate stats
   const wins = (player?.statsHardcore?.wins || 0) + (player?.statsCdl?.wins || 0) + (player?.stats?.wins || 0)

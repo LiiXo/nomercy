@@ -101,9 +101,10 @@ const Navbar = () => {
   }
   
   const navItems = [
-    { path: '/', label: t('lobby'), icon: '◆' },
-    { path: '/tournaments', label: t('tournaments'), icon: '◈', badge: 'Soon', disabled: !isAdmin() },
-    ...(isAuthenticated && isAdmin() ? [{ path: '/admin', label: t('admin'), icon: '⚙' }] : []),
+    { path: '/', label: t('lobby'), icon: '🎮' },
+    { path: '/leaderboard', label: t('leaderboard'), icon: '🏆' },
+    { path: '/tournaments', label: t('tournaments'), icon: '⚔️', badge: 'Soon', disabled: !isAdmin() },
+    ...(isAuthenticated && isAdmin() ? [{ path: '/admin', label: t('admin'), icon: '⚙️' }] : []),
   ]
 
   return (

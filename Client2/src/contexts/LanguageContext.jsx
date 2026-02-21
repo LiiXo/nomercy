@@ -4,6 +4,7 @@ const translations = {
   en: {
     // Navbar
     lobby: 'Lobby',
+    leaderboard: 'Rankings',
     tournaments: 'Tournaments',
     profile: 'Profile',
     login: 'Login',
@@ -51,6 +52,7 @@ const translations = {
     searchingMatch: 'Searching for a match...',
     matchFound: 'Match Found',
     matchInProgress: 'Match In Progress',
+    rejoin: 'Rejoin',
     matchFunctionalityComingSoon: 'Match functionality coming soon',
     minimize: 'Minimize',
     startingIn: 'Starting in',
@@ -69,11 +71,20 @@ const translations = {
     lobbySlots: 'Lobby Slots',
     cancelSearch: 'Cancel Search',
     doNotClose: 'Please do not close this window',
+    waitingForLeader: 'Waiting for group leader',
     errorJoiningQueue: 'Error joining queue',
     leaderCancelledSearch: 'The leader cancelled the search',
     errorOccurred: 'An error occurred',
     team: 'Team',
     close: 'Close',
+    
+    // Leaderboard
+    byXP: 'By XP',
+    updatesIn: 'Updates in',
+    player: 'Player',
+    level: 'Level',
+    noPlayersYet: 'No players yet',
+    yourRank: 'Your Rank',
     
     // Iris Required
     irisRequired: 'Iris Anti-Cheat Required',
@@ -233,6 +244,7 @@ const translations = {
   fr: {
     // Navbar
     lobby: 'Lobby',
+    leaderboard: 'Classement',
     tournaments: 'Tournois',
     profile: 'Profil',
     login: 'Connexion',
@@ -280,6 +292,7 @@ const translations = {
     searchingMatch: 'Recherche de match...',
     matchFound: 'Match Trouvé',
     matchInProgress: 'Match En Cours',
+    rejoin: 'Rejoindre',
     matchFunctionalityComingSoon: 'Fonctionnalités du match bientôt disponibles',
     minimize: 'Réduire',
     startingIn: 'Début dans',
@@ -298,10 +311,19 @@ const translations = {
     lobbySlots: 'Places du lobby',
     cancelSearch: 'Annuler la recherche',
     doNotClose: 'Veuillez ne pas fermer cette fenêtre',
+    waitingForLeader: 'En attente du leader',
     errorJoiningQueue: 'Erreur lors de la connexion à la file',
     leaderCancelledSearch: 'Le leader a annulé la recherche',
     errorOccurred: 'Une erreur est survenue',
     team: 'Équipe',
+    
+    // Leaderboard
+    byXP: 'Par XP',
+    updatesIn: 'Mise à jour dans',
+    player: 'Joueur',
+    level: 'Niveau',
+    noPlayersYet: 'Aucun joueur pour le moment',
+    yourRank: 'Votre Position',
     
     // Iris Required
     irisRequired: 'Iris Anti-Cheat Requis',
@@ -461,6 +483,7 @@ const translations = {
   de: {
     // Navbar
     lobby: 'Lobby',
+    leaderboard: 'Rangliste',
     tournaments: 'Turniere',
     profile: 'Profil',
     login: 'Anmelden',
@@ -508,6 +531,7 @@ const translations = {
     searchingMatch: 'Suche nach Match...',
     matchFound: 'Match Gefunden',
     matchInProgress: 'Match Läuft',
+    rejoin: 'Beitreten',
     matchFunctionalityComingSoon: 'Match-Funktionen kommen bald',
     minimize: 'Minimieren',
     startingIn: 'Start in',
@@ -526,10 +550,19 @@ const translations = {
     lobbySlots: 'Lobby-Plätze',
     cancelSearch: 'Suche abbrechen',
     doNotClose: 'Bitte dieses Fenster nicht schließen',
+    waitingForLeader: 'Warte auf Gruppenleiter',
     errorJoiningQueue: 'Fehler beim Beitreten der Warteschlange',
     leaderCancelledSearch: 'Der Leader hat die Suche abgebrochen',
     errorOccurred: 'Ein Fehler ist aufgetreten',
     team: 'Team',
+    
+    // Leaderboard
+    byXP: 'Nach XP',
+    updatesIn: 'Aktualisierung in',
+    player: 'Spieler',
+    level: 'Level',
+    noPlayersYet: 'Noch keine Spieler',
+    yourRank: 'Dein Rang',
     
     // Iris Required
     irisRequired: 'Iris Anti-Cheat Erforderlich',
@@ -689,6 +722,7 @@ const translations = {
   it: {
     // Navbar
     lobby: 'Lobby',
+    leaderboard: 'Classifica',
     tournaments: 'Tornei',
     profile: 'Profilo',
     login: 'Accedi',
@@ -736,6 +770,7 @@ const translations = {
     searchingMatch: 'Ricerca partita...',
     matchFound: 'Partita Trovata',
     matchInProgress: 'Partita In Corso',
+    rejoin: 'Rientra',
     matchFunctionalityComingSoon: 'Funzionalità partita in arrivo',
     minimize: 'Riduci',
     startingIn: 'Inizia tra',
@@ -754,10 +789,19 @@ const translations = {
     lobbySlots: 'Posti lobby',
     cancelSearch: 'Annulla ricerca',
     doNotClose: 'Non chiudere questa finestra',
+    waitingForLeader: 'In attesa del leader del gruppo',
     errorJoiningQueue: 'Errore durante l\'accesso alla coda',
     leaderCancelledSearch: 'Il leader ha annullato la ricerca',
     errorOccurred: 'Si è verificato un errore',
     team: 'Squadra',
+    
+    // Leaderboard
+    byXP: 'Per XP',
+    updatesIn: 'Aggiornamento tra',
+    player: 'Giocatore',
+    level: 'Livello',
+    noPlayersYet: 'Nessun giocatore ancora',
+    yourRank: 'La Tua Posizione',
     
     // Iris Required
     irisRequired: 'Iris Anti-Cheat Richiesto',

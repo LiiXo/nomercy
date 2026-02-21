@@ -94,18 +94,6 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
           <div className="absolute bottom-4 left-4 w-20 h-20 border-b-2 border-l-2 border-accent-primary/50" />
           <div className="absolute bottom-4 right-4 w-20 h-20 border-b-2 border-r-2 border-accent-primary/50" />
 
-          {/* Close button (only in progress phase) */}
-          {phase === 'inProgress' && (
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              onClick={onClose}
-              className="absolute top-6 right-6 z-20 w-12 h-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/20 hover:border-accent-primary/50 transition-all"
-            >
-              <span className="text-2xl text-gray-400 hover:text-white">×</span>
-            </motion.button>
-          )}
-
           {/* Main content */}
           <div className="relative z-10 w-full max-w-6xl px-8">
             {/* Title */}
@@ -285,19 +273,10 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
               transition={{ delay: 1.2 }}
               className="mt-12 text-center"
             >
-              {phase === 'countdown' ? (
+              {phase === 'countdown' && (
                 <p className="text-sm font-mono text-gray-600 uppercase tracking-wider">
                   {t('doNotClose')}
                 </p>
-              ) : (
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={onClose}
-                  className="px-8 py-3 bg-white/5 hover:bg-white/10 text-white font-mono text-sm uppercase tracking-wider border border-white/20 hover:border-accent-primary/50 transition-all"
-                >
-                  [ {t('minimize')} ]
-                </motion.button>
               )}
             </motion.div>
           </div>

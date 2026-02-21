@@ -5,6 +5,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { useSound } from '../contexts/SoundContext'
 import { useGroup } from '../contexts/GroupContext'
 import { UPLOADS_BASE_URL } from '../config'
+import { getLevelFromXP } from '../utils/xpSystem'
 import InvitePlayerDialog from './InvitePlayerDialog'
 import PlayerProfileDialog from './PlayerProfileDialog'
 
@@ -165,9 +166,9 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
 
   const getMemberLevel = (member) => {
     const userData = member?.user || member
-    // Calculate level from XP (same formula as Client V1)
+    // Calculate level from XP using unified XP system
     const totalXP = (userData?.statsHardcore?.xp || 0) + (userData?.statsCdl?.xp || 0) + (userData?.stats?.xp || 0)
-    return Math.floor(totalXP / 1000) + 1
+    return getLevelFromXP(totalXP)
   }
 
   const isCurrentUser = (member) => {
