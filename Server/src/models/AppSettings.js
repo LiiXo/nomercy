@@ -107,6 +107,28 @@ const appSettingsSchema = new mongoose.Schema({
     link: { type: String, default: '' }
   },
   
+  // Lobby game modes configuration
+  lobbyGameModes: [{
+    id: { type: String, required: true },
+    name: {
+      fr: { type: String, default: '' },
+      en: { type: String, default: '' },
+      de: { type: String, default: '' },
+      it: { type: String, default: '' }
+    },
+    icon: { type: String, default: '●' },
+    type: { type: String, enum: ['simple', 'hardcore'], default: 'simple' },
+    enabled: { type: Boolean, default: true },
+    minPlayers: { type: Number, default: 1 },
+    maxPlayers: { type: Number, default: 5 },
+    rules: {
+      fr: { type: String, default: '' },
+      en: { type: String, default: '' },
+      de: { type: String, default: '' },
+      it: { type: String, default: '' }
+    }
+  }],
+  
   // Staff admin panel access control
   staffAdminAccess: {
     overview: { type: Boolean, default: true },

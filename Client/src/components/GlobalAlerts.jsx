@@ -2,13 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { X, AlertCircle, AlertTriangle, CheckCircle, Info, Wrench, ExternalLink } from 'lucide-react';
 import { useLanguage } from '../LanguageContext';
+import { useAuth } from '../AuthContext';
 import { translations } from '../translations';
 
 import { API_URL } from '../config';
 
 const GlobalAlerts = () => {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const t = (key) => translations[language]?.[key] || translations.en[key] || key;
+  
+  // Check if user has admin access (admin, staff, or arbitre)
+  const hasAdminAccess = user?.roles?.includes('admin') || user?.roles?.includes('staff') || user?.roles?.includes('arbitre');
   
   const [settings, setSettings] = useState(null);
   const [dismissedAlerts, setDismissedAlerts] = useState(() => {
@@ -73,23 +78,23 @@ const GlobalAlerts = () => {
 
   if (!settings) return null;
 
-  // Check maintenance mode
-  if (settings.maintenance?.enabled) {
-    return (
-      <div className="fixed inset-0 z-[9999] bg-dark-950 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-dark-900 border border-orange-500/30 rounded-2xl p-8 text-center">
-          <Wrench className="w-16 h-16 text-orange-400 mx-auto mb-6 animate-pulse" />
-          <h1 className="text-2xl font-bold text-white mb-4">{t('maintenanceInProgress')}</h1>
-          <p className="text-gray-400 mb-6">{settings.maintenance.message}</p>
-          {settings.maintenance.estimatedEndTime && (
-            <p className="text-orange-400 text-sm">
-              {t('estimatedEnd')} : {new Date(settings.maintenance.estimatedEndTime).toLocaleString()}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // Maintenance mode check disabled - admin can toggle it from admin panel
+  // if (settings.maintenance?.enabled && !hasAdminAccess) {
+  //   return (
+  //     <div className="fixed inset-0 z-[9999] bg-dark-950 flex items-center justify-center p-4">
+  //       <div className="max-w-md w-full bg-dark-900 border border-orange-500/30 rounded-2xl p-8 text-center">
+  //         <Wrench className="w-16 h-16 text-orange-400 mx-auto mb-6 animate-pulse" />
+  //         <h1 className="text-2xl font-bold text-white mb-4">{t('maintenanceInProgress')}</h1>
+  //         <p className="text-gray-400 mb-6">{settings.maintenance.message}</p>
+  //         {settings.maintenance.estimatedEndTime && (
+  //           <p className="text-orange-400 text-sm">
+  //             {t('estimatedEnd')} : {new Date(settings.maintenance.estimatedEndTime).toLocaleString()}
+  //           </p>
+  //         )}
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // Get active alerts that haven't been dismissed
   const activeAlerts = settings.globalAlerts?.filter(

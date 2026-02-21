@@ -12,7 +12,7 @@ const IRIS_SHARED_SECRET = process.env.IRIS_SHARED_SECRET || 'NM_IRIS_SEC_K3Y_20
 const TIMESTAMP_TOLERANCE_MS = 10 * 60 * 1000;
 
 // Endpoints that can skip signature verification (protected by token auth)
-const SKIP_SIGNATURE_ENDPOINTS = ['/iris/ping'];
+const SKIP_SIGNATURE_ENDPOINTS = ['/iris/ping', '/iris/heartbeat', '/iris/verify'];
 
 // Nonce cache to prevent replay attacks (in production, use Redis)
 const nonceCache = new Map();

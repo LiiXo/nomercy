@@ -12,6 +12,7 @@ import Purchase from '../models/Purchase.js';
 import ItemUsage from '../models/ItemUsage.js';
 import Season from '../models/Season.js';
 import { deleteMatchVoiceChannels } from '../services/discordBot.service.js';
+import { getAllQueueCounts } from '../services/casualMatchmaking.service.js';
 
 const router = express.Router();
 
@@ -111,6 +112,76 @@ let cachedStats = null;
 let lastStatsRefresh = 0;
 const STATS_CACHE_TTL = 30000; // 30 seconds
 
+// Online presence tracking
+const onlineUsers = new Map(); // visitorId -> { lastSeen, authenticated }
+const searchingUsers = new Map(); // visitorId -> { mode, lastSeen }
+const ONLINE_TIMEOUT = 60000; // 60 seconds - consider user offline after this
+
+// Clean up old entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [visitorId, data] of onlineUsers.entries()) {
+    if (now - data.lastSeen > ONLINE_TIMEOUT) {
+      onlineUsers.delete(visitorId);
+    }
+  }
+  for (const [visitorId, data] of searchingUsers.entries()) {
+    if (now - data.lastSeen > ONLINE_TIMEOUT) {
+      searchingUsers.delete(visitorId);
+    }
+  }
+}, 30000);
+
+// Get searching count per mode
+const getSearchingCounts = () => {
+  const counts = { ranked: 0, casual: 0, tournament: 0, custom: 0 };
+  for (const [, data] of searchingUsers.entries()) {
+    if (data.mode && counts.hasOwnProperty(data.mode)) {
+      counts[data.mode]++;
+    }
+  }
+  return counts;
+};
+
+// Heartbeat endpoint for presence tracking
+router.post('/heartbeat', (req, res) => {
+  const { visitorId, searching, mode } = req.body;
+  if (!visitorId) {
+    return res.status(400).json({ success: false });
+  }
+  
+  onlineUsers.set(visitorId, {
+    lastSeen: Date.now(),
+    authenticated: !!req.user
+  });
+
+  // Track if user is searching
+  if (searching && mode) {
+    searchingUsers.set(visitorId, {
+      mode,
+      lastSeen: Date.now()
+    });
+  } else {
+    searchingUsers.delete(visitorId);
+  }
+  
+  // Get casual queue counts and format by modeId
+  const casualQueues = getAllQueueCounts();
+  const queueCounts = {};
+  for (const [key, count] of Object.entries(casualQueues)) {
+    // Key format: "modeId_type" (e.g., "duel-1v1_simple")
+    // Extract modeId and aggregate counts for both types
+    const modeId = key.split('_')[0];
+    queueCounts[modeId] = (queueCounts[modeId] || 0) + count;
+  }
+  
+  res.json({ 
+    success: true, 
+    online: onlineUsers.size,
+    searching: { ...getSearchingCounts(), ...queueCounts }
+  });
+});
+
 // Get site statistics (public) - cached to avoid hammering DB
 router.get('/stats', async (req, res) => {
   try {
@@ -118,31 +189,32 @@ router.get('/stats', async (req, res) => {
     
     // Return cached stats if still fresh
     if (cachedStats && (now - lastStatsRefresh) < STATS_CACHE_TTL) {
-      return res.json({ success: true, stats: cachedStats });
+      return res.json({ 
+        success: true, 
+        stats: { ...cachedStats, onlineUsers: onlineUsers.size } 
+      });
     }
     
     // Run all counts in parallel
-    const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-    tenDaysAgo.setHours(0, 0, 0, 0);
-
-    const [totalUsers, totalSquads, totalLadderMatches, totalRankedMatches, totalStrickerMatches, rankedLast10, strickerLast10] = await Promise.all([
+    const [totalUsers, totalSquads, totalLadderMatches, totalRankedMatches, totalStrickerMatches] = await Promise.all([
       User.countDocuments({ isBanned: { $ne: true }, isDeleted: { $ne: true } }),
       Squad.countDocuments({ isDeleted: { $ne: true } }),
       Match.countDocuments({ status: 'completed' }),
       RankedMatch.countDocuments({ status: 'completed' }),
-      StrickerMatch.countDocuments({ status: 'completed' }),
-      RankedMatch.countDocuments({ status: 'completed', createdAt: { $gte: tenDaysAgo } }),
-      StrickerMatch.countDocuments({ status: 'completed', createdAt: { $gte: tenDaysAgo } })
+      StrickerMatch.countDocuments({ status: 'completed' })
     ]);
 
     const totalMatches = totalLadderMatches + totalRankedMatches + totalStrickerMatches;
-    const avgMatchesPerDay = Math.round((rankedLast10 + strickerLast10) / 10 * 10) / 10;
+    // avgMatchesPerDay: Client v2 casual matches only (no CasualMatch model yet)
+    const avgMatchesPerDay = 0;
 
     cachedStats = { totalUsers, totalSquads, totalMatches, avgMatchesPerDay };
     lastStatsRefresh = now;
 
-    res.json({ success: true, stats: cachedStats });
+    res.json({ 
+      success: true, 
+      stats: { ...cachedStats, onlineUsers: onlineUsers.size } 
+    });
   } catch (error) {
     console.error('Get site stats error:', error);
     res.status(500).json({ success: false, message: 'Erreur serveur' });

@@ -461,6 +461,17 @@
         <div class="card">
           <div class="spinner"></div>
           <p class="loading-text" id="loading-message">Vérification de la session...</p>
+          <p class="loading-hint" id="loading-hint" style="display: none; color: var(--dark-500); font-size: 12px; margin-top: 12px;"></p>
+          <div id="auth-actions" style="display: none; margin-top: 16px;">
+            <button class="discord-btn" id="retry-browser-btn" style="background: var(--dark-700); margin-bottom: 8px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                <path d="M9 12l2 2 4-4"/>
+              </svg>
+              <span>Réouvrir le navigateur</span>
+            </button>
+            <button class="logout-btn" id="cancel-auth-btn">Annuler</button>
+          </div>
         </div>
       </div>
 
@@ -564,6 +575,11 @@
     const connectedView = document.getElementById('connected-view');
     const loginError = document.getElementById('login-error');
     const loadingMessage = document.getElementById('loading-message');
+    const loadingHint = document.getElementById('loading-hint');
+    const authActions = document.getElementById('auth-actions');
+    
+    let authTimeout = null;
+    let currentAuthUrl = null;
 
     // --- Event listeners (no inline handlers for CSP compatibility) ---
     const windowControls = document.getElementById('window-controls');
@@ -586,6 +602,12 @@
     });
     document.getElementById('terms-link').addEventListener('click', function() {
       openExternal(TERMS_URL);
+    });
+    document.getElementById('retry-browser-btn').addEventListener('click', function() {
+      retryOpenBrowser();
+    });
+    document.getElementById('cancel-auth-btn').addEventListener('click', function() {
+      cancelAuth();
     });
 
     // Logo fallback
@@ -629,7 +651,15 @@
       console.log('[UI] Discord button clicked');
       loginError.style.display = 'none';
       loadingMessage.textContent = 'Ouverture de Discord...';
+      loadingHint.style.display = 'none';
+      authActions.style.display = 'none';
       showView(loadingView);
+
+      // Clear any existing timeout
+      if (authTimeout) {
+        clearTimeout(authTimeout);
+        authTimeout = null;
+      }
 
       try {
         console.log('[UI] Invoking start_discord_auth...');
@@ -639,11 +669,63 @@
           showError(result.message, result.message.includes('TPM'));
         } else {
           loadingMessage.textContent = 'En attente de votre autorisation...';
+          
+          // Show hint after 10 seconds
+          authTimeout = setTimeout(() => {
+            loadingHint.textContent = 'Le navigateur ne s\'est pas ouvert ? Vérifiez votre bloqueur de popups.';
+            loadingHint.style.display = 'block';
+            authActions.style.display = 'block';
+          }, 10000);
+          
+          // Show timeout warning after 2 minutes
+          setTimeout(() => {
+            if (loadingView.style.display !== 'none') {
+              loadingHint.textContent = 'La connexion prend du temps... Vérifiez que vous avez autorisé l\'application sur Discord.';
+              loadingHint.style.display = 'block';
+              authActions.style.display = 'block';
+            }
+          }, 120000);
         }
       } catch (e) {
         console.error('[UI] Auth error:', e);
         showError(e.toString());
       }
+    }
+
+    async function retryOpenBrowser() {
+      loadingMessage.textContent = 'Réouverture du navigateur...';
+      loadingHint.style.display = 'none';
+      authActions.style.display = 'none';
+      
+      try {
+        // Start a new auth session
+        const result = await invoke('start_discord_auth');
+        if (!result.success && result.message) {
+          showError(result.message, result.message.includes('TPM'));
+        } else {
+          loadingMessage.textContent = 'En attente de votre autorisation...';
+          
+          // Show hint after 10 seconds
+          authTimeout = setTimeout(() => {
+            loadingHint.textContent = 'Toujours pas de navigateur ? Essayez de redémarrer Iris.';
+            loadingHint.style.display = 'block';
+            authActions.style.display = 'block';
+          }, 10000);
+        }
+      } catch (e) {
+        console.error('[UI] Retry error:', e);
+        showError(e.toString());
+      }
+    }
+
+    function cancelAuth() {
+      if (authTimeout) {
+        clearTimeout(authTimeout);
+        authTimeout = null;
+      }
+      loadingHint.style.display = 'none';
+      authActions.style.display = 'none';
+      showView(loginView);
     }
 
     async function logout() {
@@ -833,10 +915,22 @@
     const listen = window.__TAURI__?.event?.listen;
     if (listen) {
       listen('auth-success', (event) => {
+        // Clear any pending timeout
+        if (authTimeout) {
+          clearTimeout(authTimeout);
+          authTimeout = null;
+        }
+        loadingHint.style.display = 'none';
+        authActions.style.display = 'none';
         updateConnectedView(event.payload.user);
       });
 
       listen('auth-error', (event) => {
+        // Clear any pending timeout
+        if (authTimeout) {
+          clearTimeout(authTimeout);
+          authTimeout = null;
+        }
         showError(event.payload.message, event.payload.type === 'tpm_disabled');
       });
 

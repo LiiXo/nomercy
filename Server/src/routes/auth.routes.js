@@ -15,7 +15,11 @@ const generateToken = (user) => {
 };
 
 // Discord OAuth login
-router.get('/discord', passport.authenticate('discord'));
+router.get('/discord', (req, res, next) => {
+  const redirect = req.query.redirect;
+  const state = redirect ? Buffer.from(JSON.stringify({ redirect })).toString('base64') : undefined;
+  passport.authenticate('discord', { state })(req, res, next);
+});
 
 // Cookie options helper (shared between login and logout)
 const getCookieOptions = () => {
@@ -62,9 +66,23 @@ router.get('/discord/callback',
     // Set HTTP-only cookie with proper cross-origin settings
     res.cookie('token', token, getCookieOptions());
 
-    // Redirect based on profile completion
+    // Check for redirect in OAuth state parameter
+    let redirectPath = null;
+    try {
+      const state = req.query.state;
+      if (state) {
+        const parsed = JSON.parse(Buffer.from(state, 'base64').toString());
+        if (parsed.redirect && parsed.redirect.startsWith('/')) {
+          redirectPath = parsed.redirect;
+        }
+      }
+    } catch (e) {}
+
+    // Redirect based on profile completion, then custom redirect
     if (!req.user.isProfileComplete) {
       res.redirect(`${process.env.CLIENT_URL}/setup-profile`);
+    } else if (redirectPath) {
+      res.redirect(`${process.env.CLIENT_URL}${redirectPath}`);
     } else {
       res.redirect(`${process.env.CLIENT_URL}/`);
     }
@@ -90,6 +108,8 @@ router.get('/me', verifyToken, (req, res) => {
       isProfileComplete: req.user.isProfileComplete,
       goldCoins: req.user.goldCoins,
       stats: req.user.stats,
+      statsHardcore: req.user.statsHardcore,
+      statsCdl: req.user.statsCdl,
       statsResetCount: req.user.statsResetCount || 0,
       squadHardcore: req.user.squadHardcore,
       squadCdl: req.user.squadCdl,
@@ -142,6 +162,8 @@ router.get('/status', async (req, res) => {
         isProfileComplete: user.isProfileComplete,
         goldCoins: user.goldCoins,
         stats: user.stats,
+        statsHardcore: user.statsHardcore,
+        statsCdl: user.statsCdl,
         statsResetCount: user.statsResetCount || 0,
         squadHardcore: user.squadHardcore,
         squadCdl: user.squadCdl,

@@ -40,10 +40,14 @@ const startServer = async () => {
   const { default: irisRoutes } = await import('./routes/iris.routes.js');
   const { default: tournamentRoutes } = await import('./routes/tournament.routes.js');
   const { default: shadowBanRoutes } = await import('./routes/shadowBan.routes.js');
+  const { default: groupRoutes } = await import('./routes/group.routes.js');
   await import('./config/passport.js');
   
   // Import Match model for cleanup job
   const Match = (await import('./models/Match.js')).default;
+  
+  // Import User model for admin checks
+  const User = (await import('./models/User.js')).default;
   
   // Import monthly reset service for ladder season reset
   const { scheduleMonthlyLadderReset } = await import('./services/monthlyReset.service.js');
@@ -56,6 +60,9 @@ const startServer = async () => {
   
   // Import ranked matchmaking service
   const { initMatchmaking, handleMapVote, handleRosterPick, getGlobalQueueCount } = await import('./services/rankedMatchmaking.service.js');
+  
+  // Import casual matchmaking service
+  const { initCasualMatchmaking, joinCasualQueue, leaveCasualQueue, handleDisconnect: handleCasualDisconnect, getQueueCount: getCasualQueueCount, clearAllQueues, getAllQueueCounts } = await import('./services/casualMatchmaking.service.js');
   
   // Import GGSecure monitoring service
   const { initGGSecureMonitoring, startGGSecureMonitoring, checkPlayerGGSecureOnJoin } = await import('./services/ggsecureMonitoring.service.js');
@@ -327,7 +334,73 @@ const startServer = async () => {
       console.log(`[Socket] User left tournament match chat: ${matchId}`);
     });
 
+    // Group rooms for real-time party updates
+    socket.on('joinGroup', (groupId) => {
+      if (groupId) {
+        socket.join(`group-${groupId}`);
+      }
+    });
+
+    socket.on('leaveGroup', (groupId) => {
+      if (groupId) {
+        socket.leave(`group-${groupId}`);
+      }
+    });
+
+    // Casual matchmaking events
+    socket.on('joinCasualQueue', async ({ odId, modeId, type }) => {
+      await joinCasualQueue(socket, odId, modeId, type);
+    });
+
+    socket.on('leaveCasualQueue', () => {
+      leaveCasualQueue(socket);
+    });
+
+    // Admin: Clear all queues
+    socket.on('adminClearAllQueues', async (callback) => {
+      try {
+        // Verify admin status
+        const user = await User.findById(socket.userId);
+        if (!user || !user.roles?.includes('admin')) {
+          if (callback) callback({ success: false, message: 'Unauthorized' });
+          return;
+        }
+        
+        const clearedCount = clearAllQueues();
+        console.log(`[Admin] ${user.username} cleared all queues (${clearedCount} players)`);
+        
+        if (callback) callback({ success: true, clearedCount });
+      } catch (err) {
+        console.error('Error clearing queues:', err);
+        if (callback) callback({ success: false, message: 'Error' });
+      }
+    });
+
+    // Admin: Get queue stats
+    socket.on('adminGetQueueStats', async (callback) => {
+      try {
+        const user = await User.findById(socket.userId);
+        if (!user || !user.roles?.includes('admin')) {
+          if (callback) callback({ success: false, message: 'Unauthorized' });
+          return;
+        }
+        
+        const counts = getAllQueueCounts();
+        let totalPlayers = 0;
+        for (const count of Object.values(counts)) {
+          totalPlayers += count;
+        }
+        
+        if (callback) callback({ success: true, queues: counts, totalPlayers });
+      } catch (err) {
+        if (callback) callback({ success: false, message: 'Error' });
+      }
+    });
+
     socket.on('disconnect', () => {
+      // Handle casual queue disconnect
+      handleCasualDisconnect(socket);
+      
       // Decrement viewer count for all pages this socket was in
       const pages = socketPages.get(socket.id);
       if (pages) {
@@ -375,6 +448,9 @@ const startServer = async () => {
   
   // Initialize ranked matchmaking service with Socket.io
   initMatchmaking(io);
+  
+  // Initialize casual matchmaking service with Socket.io
+  initCasualMatchmaking(io);
   
   // Initialize GGSecure monitoring service with Socket.io
   initGGSecureMonitoring(io);
@@ -436,6 +512,7 @@ const startServer = async () => {
   app.use('/api/iris', irisRoutes);
   app.use('/api/tournaments', tournamentRoutes);
   app.use('/api/shadow-bans', shadowBanRoutes);
+  app.use('/api/groups', groupRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => {

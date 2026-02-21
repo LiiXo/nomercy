@@ -139,10 +139,11 @@ setInterval(async () => {
 // Discord OAuth config
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1447607594351853618';
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-// Default to production URL, only use localhost if explicitly in development
-const DISCORD_REDIRECT_URI = process.env.IRIS_DEV_MODE === 'true'
-  ? 'http://localhost:5000/api/iris/discord-callback'
-  : 'https://nomercy.ggsecure.io/api/iris/discord-callback';
+// Use IRIS_REDIRECT_URI env var if set, otherwise default based on mode
+const DISCORD_REDIRECT_URI = process.env.IRIS_REDIRECT_URI 
+  || (process.env.IRIS_DEV_MODE === 'true'
+    ? 'http://localhost:5000/api/iris/discord-callback'
+    : 'https://nomercy.ggsecure.io/api/iris/discord-callback');
 
 console.log('[Iris] Discord Redirect URI:', DISCORD_REDIRECT_URI);
 console.log('[Iris] Security middleware enabled');
@@ -676,13 +677,25 @@ router.post('/exchange-code', async (req, res) => {
  * GET /api/iris/discord-callback
  */
 router.get('/discord-callback', async (req, res) => {
-  const { code, state } = req.query;
+  const { code, state, error, error_description } = req.query;
   
-  console.log('[Iris] Discord callback received, code:', code ? 'present' : 'missing', 'state:', state ? state.substring(0, 8) + '...' : 'none');
+  console.log('[Iris] Discord callback received');
+  console.log('[Iris] - code:', code ? 'present' : 'missing');
+  console.log('[Iris] - state:', state ? state.substring(0, 8) + '...' : 'none');
+  console.log('[Iris] - error:', error || 'none');
   console.log('[Iris] Redirect URI being used:', DISCORD_REDIRECT_URI);
   
   // Set content type to HTML explicitly
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  
+  // Check for Discord OAuth errors first
+  if (error) {
+    console.error('[Iris] Discord OAuth error:', error, error_description);
+    return res.status(400).send(renderErrorPage(
+      'Autorisation refusée',
+      error_description || 'Vous avez refusé l\'autorisation ou une erreur s\'est produite.'
+    ));
+  }
   
   if (!code) {
     return res.status(400).send(renderErrorPage('Code d\'autorisation manquant'));
@@ -793,25 +806,52 @@ router.get('/discord-callback', async (req, res) => {
     return res.send(renderSuccessPage(discordUser.username, redirectUrl));
 
   } catch (error) {
-    console.error('[Iris] Discord callback error:', error);
-    return res.status(500).send(renderErrorPage('Erreur serveur', error.message));
+    console.error('[Iris] Discord callback error:', error.message || error);
+    console.error('[Iris] Error stack:', error.stack);
+    
+    // Always return a visible error page
+    try {
+      return res.status(500).send(renderErrorPage(
+        'Erreur serveur', 
+        'Une erreur s\'est produite: ' + (error.message || 'Erreur inconnue')
+      ));
+    } catch (e) {
+      // Last resort fallback
+      return res.status(500).send(`
+        <!DOCTYPE html>
+        <html>
+        <head><title>Erreur</title></head>
+        <body style="background:#0a0a0b;color:white;font-family:system-ui;padding:40px;text-align:center;">
+          <h1 style="color:#ef4444;">Erreur</h1>
+          <p>${error.message || 'Erreur serveur'}</p>
+        </body>
+        </html>
+      `);
+    }
   }
 });
 
 // Helper: Render error page
 function renderErrorPage(title, message = '') {
+  console.log('[Iris] Rendering error page:', title, message);
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <title>Iris - Erreur</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
       <style>
-        body { font-family: system-ui; background: #0a0a0b; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .container { text-align: center; padding: 40px; max-width: 400px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0b; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .container { text-align: center; padding: 40px; max-width: 400px; background: rgba(255,255,255,0.05); border-radius: 16px; border: 1px solid rgba(239, 68, 68, 0.3); }
         .logo { width: 80px; height: 80px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
         .logo svg { width: 40px; height: 40px; color: white; }
-        h1 { color: #ef4444; margin-bottom: 16px; }
-        p { color: #71717a; line-height: 1.6; }
+        h1 { color: #ef4444; margin-bottom: 16px; font-size: 24px; }
+        p { color: #a1a1aa; line-height: 1.6; font-size: 14px; }
+        .retry { margin-top: 24px; }
+        .retry a { display: inline-block; padding: 12px 24px; background: #ef4444; color: white; text-decoration: none; border-radius: 8px; font-weight: 500; }
+        .retry a:hover { background: #dc2626; }
       </style>
     </head>
     <body>
@@ -824,7 +864,10 @@ function renderErrorPage(title, message = '') {
           </svg>
         </div>
         <h1>${title}</h1>
-        <p>${message}</p>
+        <p>${message || 'Une erreur s\'est produite lors de l\'autorisation.'}</p>
+        <div class="retry">
+          <a href="javascript:window.close()">Fermer cette fenêtre</a>
+        </div>
       </div>
     </body>
     </html>
@@ -833,23 +876,27 @@ function renderErrorPage(title, message = '') {
 
 // Helper: Render success page
 function renderSuccessPage(username, redirectUrl) {
+  console.log('[Iris] Rendering success page for:', username);
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <title>Iris - Autorisation réussie</title>
       <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0b; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; }
-        .container { text-align: center; padding: 40px; max-width: 400px; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0b; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .container { text-align: center; padding: 40px; max-width: 400px; background: rgba(255,255,255,0.03); border-radius: 16px; border: 1px solid rgba(255, 45, 85, 0.2); }
         .logo { width: 80px; height: 80px; background: linear-gradient(135deg, #ff2d55 0%, #ff6b2c 100%); border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; box-shadow: 0 0 40px rgba(255, 45, 85, 0.4); }
         .logo svg { width: 40px; height: 40px; color: white; }
         h1 { color: #ff2d55; margin-bottom: 8px; font-family: 'Bebas Neue', system-ui; letter-spacing: 4px; font-size: 32px; }
         .welcome { color: #a1a1aa; margin-bottom: 8px; font-size: 14px; }
-        .username { color: white; font-weight: 600; font-size: 18px; margin-bottom: 24px; }
-        .success { color: #22c55e; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-        .success svg { width: 20px; height: 20px; }
+        .username { color: white; font-weight: 600; font-size: 20px; margin-bottom: 24px; }
+        .success { color: #22c55e; margin-bottom: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.2); }
+        .success svg { width: 20px; height: 20px; flex-shrink: 0; }
         .info { color: #71717a; font-size: 14px; margin-top: 24px; }
         .close-hint { color: #52525b; font-size: 12px; margin-top: 16px; }
       </style>
@@ -864,27 +911,30 @@ function renderSuccessPage(username, redirectUrl) {
         <h1>IRIS</h1>
         <p class="welcome">Bienvenue,</p>
         <p class="username">${username}</p>
-        <p class="success">
+        <div class="success">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
             <polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
-          Autorisation réussie
-        </p>
+          <span>Autorisation réussie</span>
+        </div>
         <p class="info">Retournez sur l'application Iris</p>
         <p class="close-hint">Vous pouvez fermer cet onglet</p>
       </div>
       <script>
+        console.log('[Iris Success Page] Loaded');
         // Open Iris only once
         var opened = false;
         function openIris() {
           if (!opened) {
             opened = true;
+            console.log('[Iris Success Page] Attempting to open Iris app');
             window.location.href = "${redirectUrl}";
           }
         }
         // Try after page load
         window.onload = function() {
+          console.log('[Iris Success Page] Window loaded');
           setTimeout(openIris, 100);
         };
       </script>

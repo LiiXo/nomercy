@@ -530,27 +530,7 @@ router.put('/profile', verifyToken, async (req, res) => {
         });
       }
       
-      // Check if platform is actually changing
-      if (platform !== req.user.platform) {
-        // Check 24-hour cooldown (only if platform was previously set)
-        if (req.user.platform && req.user.platformChangedAt) {
-          const cooldownMs = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-          const timeSinceLastChange = Date.now() - new Date(req.user.platformChangedAt).getTime();
-          
-          if (timeSinceLastChange < cooldownMs) {
-            const remainingMs = cooldownMs - timeSinceLastChange;
-            const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
-            return res.status(400).json({
-              success: false,
-              message: `You must wait ${remainingHours} hour(s) before changing your platform again.`,
-              platformCooldownRemaining: remainingMs
-            });
-          }
-        }
-        
-        req.user.platform = platform;
-        req.user.platformChangedAt = new Date();
-      }
+      req.user.platform = platform;
     }
 
     // Validate username if provided
@@ -624,6 +604,75 @@ router.put('/profile', verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'An error occurred while updating your profile.'
+    });
+  }
+});
+
+// Reset own stats (keep XP) - VIP only
+router.post('/reset-stats', verifyToken, async (req, res) => {
+  try {
+    // Check if user has VIP role (admin doesn't count)
+    const isVip = req.user.roles.includes('vip');
+    
+    if (!isVip) {
+      return res.status(403).json({
+        success: false,
+        message: 'This feature is VIP only.',
+        requiresVip: true
+      });
+    }
+
+    // Store current XP values
+    const hardcoreXP = req.user.statsHardcore?.xp || 0;
+    const cdlXP = req.user.statsCdl?.xp || 0;
+    const legacyXP = req.user.stats?.xp || 0;
+
+    // Reset stats but keep XP
+    req.user.statsHardcore = {
+      points: 0,
+      xp: hardcoreXP,
+      wins: 0,
+      losses: 0,
+      rank: 0
+    };
+    
+    req.user.statsCdl = {
+      points: 0,
+      xp: cdlXP,
+      wins: 0,
+      losses: 0,
+      rank: 0
+    };
+    
+    req.user.stats = {
+      points: 0,
+      xp: legacyXP,
+      wins: 0,
+      losses: 0,
+      rank: 0
+    };
+
+    // Track the reset
+    req.user.statsResetCount = (req.user.statsResetCount || 0) + 1;
+    req.user.statsResetAt = new Date();
+
+    await req.user.save();
+
+    res.json({
+      success: true,
+      message: 'Stats reset successfully! Your XP has been preserved.',
+      user: {
+        statsHardcore: req.user.statsHardcore,
+        statsCdl: req.user.statsCdl,
+        stats: req.user.stats,
+        statsResetCount: req.user.statsResetCount
+      }
+    });
+  } catch (error) {
+    console.error('Stats reset error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while resetting your stats.'
     });
   }
 });
@@ -739,6 +788,8 @@ router.get('/profile/:username', async (req, res) => {
         platform: user.platform,
         activisionId: user.activisionId,
         stats: user.stats,
+        statsHardcore: user.statsHardcore,
+        statsCdl: user.statsCdl,
         totalStats: {
           wins: totalWins,
           losses: totalLosses
@@ -1884,6 +1935,61 @@ router.post('/admin/:userId/reset-stats', verifyToken, requireStaff, async (req,
     res.status(500).json({
       success: false,
       message: 'Erreur lors de la r\u00e9initialisation.'
+    });
+  }
+});
+
+// Admin: Update user stats (XP, wins, losses)
+router.put('/admin/:userId/stats', verifyToken, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { xp, wins, losses, isVip } = req.body;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.'
+      });
+    }
+
+    // Update stats
+    user.stats = {
+      ...user.stats,
+      xp: xp ?? user.stats?.xp ?? 0,
+      wins: wins ?? user.stats?.wins ?? 0,
+      losses: losses ?? user.stats?.losses ?? 0
+    };
+
+    // Update VIP role
+    if (typeof isVip === 'boolean') {
+      if (isVip && !user.roles.includes('vip')) {
+        user.roles.push('vip');
+      } else if (!isVip && user.roles.includes('vip')) {
+        user.roles = user.roles.filter(r => r !== 'vip');
+      }
+    }
+
+    await user.save();
+
+    // Log to Discord
+    await logAdminAction(req.user, 'Update Stats', user.username, {
+      description: `Modified stats for ${user.username}${isVip !== undefined ? ` (VIP: ${isVip})` : ''}`
+    });
+
+    res.json({
+      success: true,
+      message: 'Stats updated successfully.',
+      user: {
+        stats: user.stats,
+        roles: user.roles
+      }
+    });
+  } catch (error) {
+    console.error('Update user stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating stats.'
     });
   }
 });

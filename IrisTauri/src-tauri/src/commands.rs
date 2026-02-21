@@ -90,9 +90,16 @@ pub async fn start_discord_auth(window: WebviewWindow) -> Result<AuthResult, Str
     
     println!("[Iris] Auth session created, opening browser...");
     
-    // Open Discord OAuth in browser
-    if let Err(e) = open::that(&auth_url) {
-        return Err(format!("Failed to open browser: {}", e));
+    // Open Discord OAuth in browser - check if it actually opened
+    match open::that(&auth_url) {
+        Ok(_) => {
+            println!("[Iris] Browser opened successfully");
+        }
+        Err(e) => {
+            println!("[Iris] Failed to open browser: {}", e);
+            // Still continue - user might have popup blocker
+            // We'll show a hint in the UI after a timeout
+        }
     }
     
     // Poll for auth completion in background

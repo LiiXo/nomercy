@@ -92,7 +92,9 @@ const getPublicSettings = async (req, res) => {
         },
         pointsLossPerRankDiff: { 0: -15, 1: -12, 2: -9, 3: -6, 4: -3, 5: -1 },
         bonusPointsForUpset: { 0: 0, 1: 5, 2: 10, 3: 15, 4: 20, 5: 30 }
-      }
+      },
+      // Lobby game modes configuration
+      lobbyGameModes: settings.lobbyGameModes || []
     });
   } catch (error) {
     console.error('Error fetching public app settings:', error);
@@ -122,7 +124,7 @@ router.get('/admin', verifyToken, requireStaff, async (req, res) => {
 // Update app settings (admin/staff)
 router.put('/admin', verifyToken, requireStaff, async (req, res) => {
   try {
-    const { features, globalAlerts, maintenance, banner, staffAdminAccess, rankedSettings, ladderSettings, strickerSettings } = req.body;
+    const { features, globalAlerts, maintenance, banner, staffAdminAccess, rankedSettings, ladderSettings, strickerSettings, lobbyGameModes } = req.body;
     
     let settings = await AppSettings.findOne();
     if (!settings) {
@@ -149,6 +151,12 @@ router.put('/admin', verifyToken, requireStaff, async (req, res) => {
     if (staffAdminAccess) {
       settings.staffAdminAccess = { ...settings.staffAdminAccess, ...staffAdminAccess };
       settings.markModified('staffAdminAccess');
+    }
+    
+    // Handle lobbyGameModes updates
+    if (lobbyGameModes !== undefined) {
+      settings.lobbyGameModes = lobbyGameModes;
+      settings.markModified('lobbyGameModes');
     }
     
     // Handle rankedSettings updates (bestOf, rankPointsThresholds, etc.)
