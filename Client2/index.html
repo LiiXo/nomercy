@@ -5,10 +5,29 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#0a0a0b" />
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="/wp.jpg" as="image" />
+    <link rel="preload" href="/logo.png" as="image" />
+    
+    <!-- DNS prefetch for external resources -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    <link rel="dns-prefetch" href="https://fonts.gstatic.com">
+    
+    <!-- Preconnect for fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Optimized font loading with display=swap -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
     <title>NoMercy</title>
+    
+    <!-- Critical CSS for instant load -->
+    <style>
+      html, body { margin: 0; padding: 0; background: #0a0a0b; }
+      #root { min-height: 100vh; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

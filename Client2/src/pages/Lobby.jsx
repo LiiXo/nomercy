@@ -1,7 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import GameModeCard from '../components/GameModeCard'
-import Button from '../components/Button'
 import RulesDialog from '../components/RulesDialog'
 import MatchSearchDialog, { getActiveMatch, clearActiveMatch } from '../components/MatchSearchDialog'
 import IrisRequiredDialog from '../components/IrisRequiredDialog'
@@ -10,6 +8,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useGroup } from '../contexts/GroupContext'
 import { useSocket } from '../contexts/SocketContext'
+import { useSound } from '../contexts/SoundContext'
 import { API_URL } from '../config'
 
 // Generate unique visitor ID
@@ -22,7 +21,25 @@ const getVisitorId = () => {
   return id
 }
 
-const Lobby = () => {
+// Memoized animation variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.03 }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -15 },
+  visible: { 
+    opacity: 1, 
+    x: 0,
+    transition: { duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }
+  }
+}
+
+const Lobby = memo(() => {
   const [selectedMode, setSelectedMode] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('hardcore') // 'hardcore' or 'simple'
   const [rulesMode, setRulesMode] = useState(null)
@@ -37,6 +54,7 @@ const Lobby = () => {
   const { user, isAuthenticated } = useAuth()
   const { group, isLeader, memberCount } = useGroup()
   const { on } = useSocket()
+  const { playHover, playClick, playSelect } = useSound()
   
   // State to track if search was initiated by group leader (for non-leaders)
   const [leaderSearchData, setLeaderSearchData] = useState(null)
@@ -195,23 +213,8 @@ const Lobby = () => {
       return 0
     })
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  }
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0 }
-  }
-
   // Check Iris connection for PC players
-  const checkIrisConnection = async () => {
+  const checkIrisConnection = useCallback(async () => {
     if (!user || user.platform !== 'PC') {
       return true // Not PC, no Iris required
     }
@@ -226,7 +229,7 @@ const Lobby = () => {
     } catch {
       return true // On error, allow through
     }
-  }
+  }, [user])
 
   const handlePlay = async () => {
     if (selectedMode && isAuthenticated && canStartMatch) {
@@ -253,23 +256,24 @@ const Lobby = () => {
   }
 
   return (
-    <div className="min-h-screen pt-16 md:pt-20 pb-24 md:pb-20 px-4 md:px-8 lg:px-16">
-      {/* Main Layout - Two Columns on Desktop */}
-      <div className="flex gap-6 lg:gap-8">
-        {/* Left Column - Game Modes */}
-        <div className="flex-1">
-          {/* Header */}
+    <div className="min-h-screen pt-20 md:pt-24 pb-32 md:pb-24 px-4 md:px-8 lg:px-16">
+      {/* Main Layout - CoD Style */}
+      <div className="flex justify-between gap-6 lg:gap-8">
+        
+        {/* Left Column - Vertical Menu (CoD Style) */}
+        <div className="flex flex-col w-full lg:w-[420px] lg:flex-shrink-0">
+          {/* Header - Military Style */}
           <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
             className="mb-6"
           >
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-1.5 h-1.5 bg-accent-primary" />
-              <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">Game Mode Selection</span>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="w-8 h-[2px] bg-accent-primary" />
+              <span className="text-[10px] font-military font-semibold text-accent-primary/80 uppercase tracking-[0.2em]">Game Modes</span>
             </div>
-            <h1 className="text-xl md:text-2xl font-mono font-bold uppercase tracking-wide text-white">
+            <h1 className="font-display text-3xl md:text-4xl lg:text-5xl text-white cod-accent-line pb-2">
               {t('chooseYourBattle')}
             </h1>
           </motion.div>
@@ -281,15 +285,9 @@ const Lobby = () => {
                 initial={{ opacity: 0, y: -10, height: 0 }}
                 animate={{ opacity: 1, y: 0, height: 'auto' }}
                 exit={{ opacity: 0, y: -10, height: 0 }}
-                className="mb-6"
+                className="mb-4"
               >
-                <div className="relative bg-accent-primary/10 border border-accent-primary/50 p-4">
-                  {/* Corner accents */}
-                  <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-accent-primary" />
-                  <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-accent-primary" />
-                  <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-accent-primary" />
-                  <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-accent-primary" />
-                  
+                <div className="cod-player-card p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <motion.div
@@ -300,19 +298,20 @@ const Lobby = () => {
                         ⚔️
                       </motion.div>
                       <div>
-                        <h3 className="text-sm font-mono font-bold text-accent-primary uppercase">
+                        <h3 className="font-military font-bold text-accent-primary uppercase tracking-wider">
                           {t('matchInProgress')}
                         </h3>
-                        <p className="text-[10px] font-mono text-gray-400">
+                        <p className="text-[10px] font-military text-gray-400">
                           {activeMatch.modeIcon} {activeMatch.mode} • {activeMatch.type === 'hardcore' ? 'Hardcore' : 'Simple'}
                         </p>
                       </div>
                     </div>
                     <button
-                      onClick={() => setShowMatchSearch(true)}
-                      className="px-4 py-2 bg-accent-primary hover:bg-accent-primary/80 text-black font-mono text-xs uppercase tracking-wider font-bold transition-all"
+                      onClick={() => { playClick(); setShowMatchSearch(true); }}
+                      onMouseEnter={playHover}
+                      className="cod-button px-4 py-2 text-white font-military text-sm uppercase tracking-wider"
                     >
-                      [ {t('rejoin')} ]
+                      {t('rejoin')}
                     </button>
                   </div>
                 </div>
@@ -320,99 +319,120 @@ const Lobby = () => {
             )}
           </AnimatePresence>
 
-          {/* Category Tabs */}
-          <div className="flex gap-2 mb-4">
-            {/* Hardcore Tab */}
+          {/* Category Tabs - CoD Style */}
+          <div className="flex gap-1 mb-4">
             <button
-              onClick={() => { setSelectedCategory('hardcore'); setSelectedMode(null); }}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
+              onClick={() => { playClick(); setSelectedCategory('hardcore'); setSelectedMode(null); }}
+              onMouseEnter={playHover}
+              className={`flex items-center gap-2 px-5 py-2.5 font-military font-semibold text-sm uppercase tracking-wider transition-all cod-corner-cut ${
                 selectedCategory === 'hardcore'
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/50'
-                  : 'bg-dark-800/50 text-gray-500 border border-white/10 hover:text-gray-300 hover:border-white/20'
+                  ? 'bg-red-500/20 text-red-400 border-l-2 border-red-500'
+                  : 'bg-dark-800/50 text-gray-500 hover:text-gray-300 hover:bg-dark-700/50'
               }`}
             >
               <span>☠</span>
               <span>Hardcore</span>
-              <span className="text-[10px] opacity-60">({gameModes.filter(m => m.type === 'hardcore').length})</span>
             </button>
             
-            {/* Simple Tab */}
             <button
-              onClick={() => { setSelectedCategory('simple'); setSelectedMode(null); }}
-              className={`flex items-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-wider transition-all ${
+              onClick={() => { playClick(); setSelectedCategory('simple'); setSelectedMode(null); }}
+              onMouseEnter={playHover}
+              className={`flex items-center gap-2 px-5 py-2.5 font-military font-semibold text-sm uppercase tracking-wider transition-all cod-corner-cut ${
                 selectedCategory === 'simple'
-                  ? 'bg-accent-primary/20 text-accent-primary border border-accent-primary/50'
-                  : 'bg-dark-800/50 text-gray-500 border border-white/10 hover:text-gray-300 hover:border-white/20'
+                  ? 'bg-accent-primary/20 text-accent-primary border-l-2 border-accent-primary'
+                  : 'bg-dark-800/50 text-gray-500 hover:text-gray-300 hover:bg-dark-700/50'
               }`}
             >
               <span>◆</span>
               <span>Simple</span>
-              <span className="text-[10px] opacity-60">({gameModes.filter(m => m.type !== 'hardcore').length})</span>
             </button>
           </div>
 
-          {/* Game Modes Grid - Shows selected category only */}
+          {/* Game Modes - Vertical List (CoD Style) */}
           <motion.div
             key={selectedCategory}
             variants={containerVariants}
             initial="hidden"
             animate="visible"
-            className="grid grid-cols-2 gap-2 mb-6"
+            className="space-y-1 mb-6"
           >
             {gameModes
               .filter(m => selectedCategory === 'hardcore' ? m.type === 'hardcore' : m.type !== 'hardcore')
-              .map((mode) => (
-                <motion.div key={mode.id} variants={itemVariants}>
-                  <GameModeCard
-                    mode={mode.mode}
-                    icon={mode.icon}
-                    type={mode.type}
-                    description={mode.description}
-                    searchingCount={searchingCounts[mode.id] || 0}
-                    isSelected={selectedMode === mode.id}
-                    onClick={() => setSelectedMode(mode.id)}
-                    onRulesClick={() => handleRulesClick(mode.id)}
-                  />
-                </motion.div>
-              ))}
+              .map((mode) => {
+                const isSelected = selectedMode === mode.id
+                const isHardcore = mode.type === 'hardcore'
+                return (
+                  <motion.div 
+                    key={mode.id} 
+                    variants={itemVariants}
+                    onClick={() => { playSelect(); setSelectedMode(mode.id); }}
+                    onMouseEnter={playHover}
+                    className={`
+                      cod-menu-item relative cursor-pointer
+                      ${isSelected ? 'active' : ''}
+                      ${isHardcore ? 'hover:border-l-red-500' : ''}
+                      ${isSelected && isHardcore ? '!border-l-red-500 !text-red-400' : ''}
+                    `}
+                  >
+                    <span className="text-xl w-8 text-center">{mode.icon}</span>
+                    <div className="flex-1">
+                      <span className="block">{mode.mode}</span>
+                      {searchingCounts[mode.id] > 0 && (
+                        <span className={`text-[10px] font-military ${isHardcore ? 'text-red-400' : 'text-green-400'}`}>
+                          {searchingCounts[mode.id]} {t('searching')}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); playClick(); setRulesMode(mode.id); }}
+                      onMouseEnter={(e) => { e.stopPropagation(); playHover(); }}
+                      className="text-[10px] font-military text-gray-500 hover:text-accent-primary uppercase"
+                    >
+                      [{t('rules')}]
+                    </button>
+                    {isSelected && (
+                      <motion.div
+                        layoutId="selectedMode"
+                        className={`absolute right-2 w-2 h-2 ${isHardcore ? 'bg-red-500' : 'bg-accent-primary'}`}
+                      />
+                    )}
+                  </motion.div>
+                )
+              })}
           </motion.div>
 
-          {/* Play Button Section */}
+          {/* Play Button Section - CoD Style */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5, duration: 0.5 }}
-            className="flex flex-col items-center md:items-start"
+            className="mt-6 space-y-3"
           >
-            <Button
-              variant="primary"
-              size="lg"
+            <button
               disabled={!selectedMode || !isAuthenticated || !canStartMatch}
-              glow={!!selectedMode && isAuthenticated && canStartMatch}
-              onClick={handlePlay}
-              className="min-w-[200px]"
+              onClick={() => { playClick(); handlePlay(); }}
+              onMouseEnter={playHover}
+              className={`
+                w-full py-4 font-display text-2xl uppercase tracking-wider transition-all
+                ${selectedMode && isAuthenticated && canStartMatch
+                  ? 'cod-button text-white shadow-lg shadow-accent-primary/30'
+                  : 'bg-dark-600 text-gray-500 cursor-not-allowed cod-corner-cut'
+                }
+              `}
             >
               {!canStartMatch ? t('leaderOnly') : selectedMode ? t('playNow') : t('selectMode')}
-            </Button>
+            </button>
 
             {selectedMode && canStartMatch && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-gray-500 text-[10px] font-mono uppercase tracking-wider mt-3"
-              >
-                [ {t('pressToFind')} {gameModes.find(m => m.id === selectedMode)?.mode} ]
-              </motion.p>
+              <p className="text-center text-gray-500 text-[10px] font-military uppercase tracking-wider">
+                {t('pressToFind')} {gameModes.find(m => m.id === selectedMode)?.mode}
+              </p>
             )}
             
             {!canStartMatch && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-red-500/70 text-[10px] font-mono uppercase tracking-wider mt-3"
-              >
-                [ {t('onlyLeaderCanStart')} ]
-              </motion.p>
+              <p className="text-center text-red-500/70 text-[10px] font-military uppercase tracking-wider">
+                {t('onlyLeaderCanStart')}
+              </p>
             )}
             
             {/* Player count error */}
@@ -422,7 +442,7 @@ const Lobby = () => {
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="text-red-500 text-[10px] font-mono uppercase tracking-wider mt-3 bg-red-500/10 px-3 py-2 border border-red-500/30"
+                  className="text-red-500 text-[10px] font-military uppercase tracking-wider bg-red-500/10 px-3 py-2 cod-corner-cut text-center"
                 >
                   {playerCountError}
                 </motion.p>
@@ -436,56 +456,50 @@ const Lobby = () => {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.3, duration: 0.5 }}
-          className="hidden lg:block w-72 xl:w-80"
+          className="hidden lg:block w-80 xl:w-96 flex-shrink-0"
         >
-          <div className="hud-panel p-4 h-fit sticky top-24">
-            {/* Corner accents */}
-            <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-accent-primary/50" />
-            <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-accent-primary/50" />
-            <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-accent-primary/30" />
-            <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-accent-primary/30" />
-            
+          <div className="cod-player-card p-4">
             <PartyPanel maxPlayers={5} />
           </div>
         </motion.div>
       </div>
 
-      {/* Stats Bar - Desktop only - HUD Style */}
+      {/* Stats Bar - Desktop only - Military HUD Style */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.7 }}
-        className="hidden md:block fixed bottom-10 left-4 right-4 md:left-8 md:right-8 lg:left-16 lg:right-16"
+        className="hidden md:block fixed bottom-8 left-8 right-8 lg:left-16 lg:right-16"
       >
-        <div className="hud-panel px-6 py-3 flex items-center justify-between">
+        <div className="cod-player-card px-6 py-3 flex items-center justify-between">
           {/* Left stats */}
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">Online</span>
-              <span className="text-sm font-mono text-white font-bold">{siteStats.onlineUsers.toLocaleString()}</span>
+              <div className="w-2 h-2 bg-green-500 animate-pulse" />
+              <span className="cod-stat">Online</span>
+              <span className="cod-stat-value">{siteStats.onlineUsers.toLocaleString()}</span>
             </div>
-            <div className="w-px h-4 bg-white/10" />
+            <div className="w-px h-6 bg-white/10" />
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">Accounts</span>
-              <span className="text-sm font-mono text-accent-primary">{siteStats.totalUsers.toLocaleString()}</span>
+              <span className="cod-stat">Accounts</span>
+              <span className="cod-stat-value">{siteStats.totalUsers.toLocaleString()}</span>
             </div>
-            <div className="w-px h-4 bg-white/10" />
+            <div className="w-px h-6 bg-white/10" />
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">Matches</span>
-              <span className="text-sm font-mono text-accent-primary">{siteStats.totalMatches.toLocaleString()}</span>
+              <span className="cod-stat">Matches</span>
+              <span className="cod-stat-value">{siteStats.totalMatches.toLocaleString()}</span>
             </div>
           </div>
 
           {/* Center - Game title */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-px bg-gradient-to-r from-transparent to-accent-primary/30" />
-            <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest">Call of Duty: Black Ops 7</span>
-            <div className="w-8 h-px bg-gradient-to-l from-transparent to-accent-primary/30" />
+            <div className="w-12 h-[1px] bg-gradient-to-r from-transparent to-accent-primary/50" />
+            <span className="font-military font-semibold text-sm text-gray-400 uppercase tracking-[0.2em]">Call of Duty: Black Ops 7</span>
+            <div className="w-12 h-[1px] bg-gradient-to-l from-transparent to-accent-primary/50" />
           </div>
 
           {/* Right - Credits */}
-          <div className="flex items-center gap-4 text-[10px] font-mono text-gray-600">
+          <div className="flex items-center gap-4 text-[10px] font-military text-gray-600">
             <span>DEV <span className="text-accent-light">Lixo</span></span>
             <span className="text-red-500">♥</span>
           </div>
@@ -523,6 +537,8 @@ const Lobby = () => {
       />
     </div>
   )
-}
+})
+
+Lobby.displayName = 'Lobby'
 
 export default Lobby

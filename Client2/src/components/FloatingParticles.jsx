@@ -1,84 +1,91 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, memo } from 'react'
 
-const FloatingParticles = ({ count = 50, color = '#ff6b35' }) => {
+const FloatingParticles = memo(({ count = 25, color = '#ff6b35' }) => {
   const canvasRef = useRef(null)
   const particlesRef = useRef([])
   const animationRef = useRef(null)
+  const lastTimeRef = useRef(0)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { alpha: true })
+    let dpr = Math.min(window.devicePixelRatio || 1, 2)
     
-    // Set canvas size
+    // Set canvas size with device pixel ratio for sharpness
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
+      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = window.innerWidth * dpr
+      canvas.height = window.innerHeight * dpr
+      canvas.style.width = `${window.innerWidth}px`
+      canvas.style.height = `${window.innerHeight}px`
+      ctx.scale(dpr, dpr)
     }
     resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
+    
+    // Debounced resize
+    let resizeTimeout
+    const handleResize = () => {
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(resizeCanvas, 100)
+    }
+    window.addEventListener('resize', handleResize, { passive: true })
 
-    // Initialize particles
+    // Initialize particles with simpler properties
     particlesRef.current = Array.from({ length: count }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      size: Math.random() * 2 + 0.5,
-      speedX: (Math.random() - 0.5) * 0.3,
-      speedY: (Math.random() - 0.5) * 0.3 - 0.1, // Slight upward drift
-      opacity: Math.random() * 0.5 + 0.1,
-      pulse: Math.random() * Math.PI * 2,
-      pulseSpeed: Math.random() * 0.02 + 0.01,
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      size: Math.random() * 1.5 + 0.5,
+      speedX: (Math.random() - 0.5) * 0.2,
+      speedY: (Math.random() - 0.5) * 0.2 - 0.08,
+      opacity: Math.random() * 0.4 + 0.1,
     }))
 
-    // Animation loop
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    // Optimized animation loop with frame limiting
+    const animate = (currentTime) => {
+      // Limit to ~30fps for particles (they don't need 60fps)
+      if (currentTime - lastTimeRef.current < 33) {
+        animationRef.current = requestAnimationFrame(animate)
+        return
+      }
+      lastTimeRef.current = currentTime
+
+      const width = window.innerWidth
+      const height = window.innerHeight
+      
+      ctx.clearRect(0, 0, width, height)
+
+      // Batch all particles with same style
+      ctx.fillStyle = color
+      ctx.globalAlpha = 0.6
 
       particlesRef.current.forEach((particle) => {
         // Update position
         particle.x += particle.speedX
         particle.y += particle.speedY
-        particle.pulse += particle.pulseSpeed
 
         // Wrap around edges
-        if (particle.x < 0) particle.x = canvas.width
-        if (particle.x > canvas.width) particle.x = 0
-        if (particle.y < 0) particle.y = canvas.height
-        if (particle.y > canvas.height) particle.y = 0
+        if (particle.x < 0) particle.x = width
+        if (particle.x > width) particle.x = 0
+        if (particle.y < 0) particle.y = height
+        if (particle.y > height) particle.y = 0
 
-        // Calculate pulsing opacity
-        const pulseOpacity = particle.opacity * (0.5 + 0.5 * Math.sin(particle.pulse))
-
-        // Draw particle with glow effect
+        // Simple circle - no gradients for performance
+        ctx.globalAlpha = particle.opacity
         ctx.beginPath()
         ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2)
-        
-        // Glow
-        const gradient = ctx.createRadialGradient(
-          particle.x, particle.y, 0,
-          particle.x, particle.y, particle.size * 3
-        )
-        gradient.addColorStop(0, `${color}${Math.floor(pulseOpacity * 255).toString(16).padStart(2, '0')}`)
-        gradient.addColorStop(1, 'transparent')
-        
-        ctx.fillStyle = gradient
-        ctx.fill()
-
-        // Core
-        ctx.beginPath()
-        ctx.arc(particle.x, particle.y, particle.size * 0.5, 0, Math.PI * 2)
-        ctx.fillStyle = `${color}${Math.floor(pulseOpacity * 1.5 * 255).toString(16).padStart(2, '0')}`
         ctx.fill()
       })
 
       animationRef.current = requestAnimationFrame(animate)
     }
 
-    animate()
+    animationRef.current = requestAnimationFrame(animate)
 
     return () => {
-      window.removeEventListener('resize', resizeCanvas)
+      window.removeEventListener('resize', handleResize)
+      clearTimeout(resizeTimeout)
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current)
       }
@@ -89,9 +96,14 @@ const FloatingParticles = ({ count = 50, color = '#ff6b35' }) => {
     <canvas
       ref={canvasRef}
       className="fixed inset-0 pointer-events-none z-[5]"
-      style={{ opacity: 0.6 }}
+      style={{ 
+        opacity: 0.5,
+        contain: 'strict',
+      }}
     />
   )
-}
+})
+
+FloatingParticles.displayName = 'FloatingParticles'
 
 export default FloatingParticles

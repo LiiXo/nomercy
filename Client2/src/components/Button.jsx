@@ -1,7 +1,8 @@
+import { memo, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { useSound } from '../contexts/SoundContext'
 
-const Button = ({ 
+const Button = memo(({ 
   children, 
   onClick, 
   variant = 'primary', 
@@ -13,10 +14,10 @@ const Button = ({
 }) => {
   const { playClick } = useSound()
   
-  const baseStyles = 'font-mono font-semibold uppercase tracking-wider transition-all duration-300 relative overflow-hidden'
+  const baseStyles = 'font-military font-bold uppercase tracking-wider transition-all duration-150 relative overflow-hidden cod-corner-cut'
   
   const variants = {
-    primary: 'bg-gradient-to-r from-accent-primary to-fire-600 text-white border border-accent-primary/50 hover:border-accent-primary',
+    primary: 'bg-gradient-to-b from-accent-primary to-fire-600 text-white border border-accent-primary/50 hover:border-accent-primary',
     secondary: 'bg-white/5 text-white border border-white/20 hover:border-accent-primary/50 hover:bg-white/10',
     ghost: 'bg-transparent text-gray-400 hover:text-white border border-white/10 hover:border-white/30',
   }
@@ -27,12 +28,12 @@ const Button = ({
     lg: 'px-8 py-3 text-sm',
   }
 
-  const handleClick = (e) => {
+  const handleClick = useCallback((e) => {
     if (!disabled) {
       playClick()
       onClick?.(e)
     }
-  }
+  }, [disabled, onClick, playClick])
 
   // Show pulsing glow on primary buttons when glow prop is true and not disabled
   const showGlow = variant === 'primary' && glow && !disabled
@@ -71,7 +72,7 @@ const Button = ({
       {/* Animated border glow */}
       {showGlow && (
         <motion.span
-          className="absolute inset-0 border-2 border-accent-primary rounded-sm"
+          className="absolute inset-0 border-2 border-accent-primary"
           animate={{
             opacity: [0.5, 1, 0.5],
             boxShadow: [
@@ -88,18 +89,15 @@ const Button = ({
         />
       )}
       
-      {/* Corner accents for primary */}
+      {/* Top accent line for primary */}
       {variant === 'primary' && (
-        <>
-          <span className="absolute top-0 left-0 w-2 h-2 border-t border-l border-white/30" />
-          <span className="absolute top-0 right-0 w-2 h-2 border-t border-r border-white/30" />
-          <span className="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-white/30" />
-          <span className="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-white/30" />
-        </>
+        <span className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
       )}
       <span className="relative z-10">{children}</span>
     </motion.button>
   )
-}
+})
+
+Button.displayName = 'Button'
 
 export default Button

@@ -210,17 +210,17 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200]"
           />
 
           {/* Dialog */}
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ type: 'spring', damping: 25 }}
-              className="hud-panel max-w-md w-full relative overflow-hidden"
+              className="cod-player-card max-w-md w-full relative overflow-hidden"
             >
               {/* Top accent */}
               <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-accent-primary to-transparent" />
@@ -239,15 +239,15 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                       <span className="text-xl">{modeIcon}</span>
                     </div>
                     <div>
-                      <h2 className="text-sm font-mono font-bold text-white uppercase tracking-wide">{mode}</h2>
-                      <span className="text-[10px] font-mono text-gray-500 uppercase">
+                      <h2 className="text-sm font-military font-bold text-white uppercase tracking-wide">{mode}</h2>
+                      <span className="text-[10px] font-military text-gray-500 uppercase">
                         {type === 'hardcore' ? 'Hardcore' : 'Simple'}
                       </span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-mono font-bold text-accent-primary">{formatTime(searchTime)}</div>
-                    <span className="text-[10px] font-mono text-gray-500 uppercase">{t('elapsed')}</span>
+                    <div className="text-lg font-military font-bold text-accent-primary">{formatTime(searchTime)}</div>
+                    <span className="text-[10px] font-military text-gray-500 uppercase">{t('elapsed')}</span>
                   </div>
                 </div>
 
@@ -285,7 +285,7 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                               transition={{ repeat: Infinity, duration: 2, ease: 'linear' }}
                               className="w-8 h-8 border-2 border-accent-primary/20 border-t-accent-primary"
                             />
-                            <span className="text-[10px] font-mono text-accent-primary mt-2 uppercase">
+                            <span className="text-[10px] font-military text-accent-primary mt-2 uppercase">
                               {status === 'connecting' ? t('connecting') : t('scanning')}
                             </span>
                           </>
@@ -293,7 +293,7 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                         {status === 'found' && (
                           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center">
                             <span className="text-3xl text-green-500">✓</span>
-                            <span className="block text-[10px] font-mono text-green-400 mt-1 uppercase">{t('matchFound')}</span>
+                            <span className="block text-[10px] font-military text-green-400 mt-1 uppercase">{t('matchFound')}</span>
                           </motion.div>
                         )}
                         {status === 'joining' && (
@@ -303,13 +303,13 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                               transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
                               className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500"
                             />
-                            <span className="text-[10px] font-mono text-blue-400 mt-2 uppercase">{t('joining')}</span>
+                            <span className="text-[10px] font-military text-blue-400 mt-2 uppercase">{t('joining')}</span>
                           </>
                         )}
                         {status === 'error' && (
                           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="text-center">
                             <span className="text-3xl text-red-500">✕</span>
-                            <span className="block text-[10px] font-mono text-red-400 mt-1 uppercase">{t('error')}</span>
+                            <span className="block text-[10px] font-military text-red-400 mt-1 uppercase">{t('error')}</span>
                           </motion.div>
                         )}
                       </div>
@@ -323,7 +323,7 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                     key={status}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`text-xs font-mono uppercase tracking-wider ${
+                    className={`text-xs font-military uppercase tracking-wider ${
                       status === 'found' ? 'text-green-400' : 
                       status === 'joining' ? 'text-blue-400' : 
                       status === 'error' ? 'text-red-400' :
@@ -341,8 +341,8 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                 {/* Player slots */}
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono text-gray-500 uppercase">{t('playersInQueue')}</span>
-                    <span className="text-xs font-mono">
+                    <span className="text-[10px] font-military text-gray-500 uppercase">{t('playersInQueue')}</span>
+                    <span className="text-xs font-military">
                       <span className={playersInQueue >= playersNeeded ? 'text-green-400' : 'text-accent-primary'}>
                         {playersInQueue}
                       </span>
@@ -373,13 +373,13 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                   >
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <span className="text-[10px] font-mono text-blue-400 uppercase mb-2 block">{t('team')} 1</span>
+                        <span className="text-[10px] font-military text-blue-400 uppercase mb-2 block">{t('team')} 1</span>
                         {matchData.team1.map(p => (
                           <div key={p.odId} className="text-xs text-gray-300">{p.username}</div>
                         ))}
                       </div>
                       <div>
-                        <span className="text-[10px] font-mono text-red-400 uppercase mb-2 block">{t('team')} 2</span>
+                        <span className="text-[10px] font-military text-red-400 uppercase mb-2 block">{t('team')} 2</span>
                         {matchData.team2.map(p => (
                           <div key={p.odId} className="text-xs text-gray-300">{p.username}</div>
                         ))}
@@ -392,7 +392,7 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                 {status !== 'joining' ? (
                   alreadyInQueue ? (
                     // Non-leader: can't cancel, waiting for leader
-                    <p className="text-center text-[10px] font-mono text-gray-500 uppercase">
+                    <p className="text-center text-[10px] font-military text-gray-500 uppercase">
                       {t('waitingForLeader')}
                     </p>
                   ) : (
@@ -400,13 +400,13 @@ const MatchSearchDialog = ({ isOpen, onClose, modeId, mode, modeIcon, type, team
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={handleCancel}
-                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-mono text-xs uppercase tracking-wider border border-white/10 hover:border-accent-primary/30 transition-all"
+                      className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white font-military text-xs uppercase tracking-wider border border-white/10 hover:border-accent-primary/30 transition-all"
                     >
                       [ {status === 'error' ? t('close') : t('cancelSearch')} ]
                     </motion.button>
                   )
                 ) : (
-                  <p className="text-center text-[10px] font-mono text-gray-500 uppercase">
+                  <p className="text-center text-[10px] font-military text-gray-500 uppercase">
                     {t('doNotClose')}
                   </p>
                 )}

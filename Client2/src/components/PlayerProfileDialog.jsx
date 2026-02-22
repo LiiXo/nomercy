@@ -73,7 +73,7 @@ const PlayerProfileDialog = ({ isOpen, onClose, playerId, playerData }) => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/90 backdrop-blur-md z-[200]"
           />
 
           {/* Dialog */}
@@ -81,12 +81,12 @@ const PlayerProfileDialog = ({ isOpen, onClose, playerId, playerData }) => {
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 pointer-events-none"
           >
-            <div className="bg-dark-900/95 border border-white/10 rounded-xl w-full max-w-sm pointer-events-auto shadow-2xl">
+            <div className="cod-player-card w-full max-w-sm pointer-events-auto shadow-2xl overflow-hidden relative">
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b border-white/10">
-                <h2 className="text-sm font-mono text-white uppercase tracking-wider">Player Profile</h2>
+                <h2 className="text-sm font-military text-white uppercase tracking-wider">Player Profile</h2>
                 <button
                   onClick={onClose}
                   className="text-gray-500 hover:text-white transition-colors"
@@ -169,7 +169,7 @@ const PlayerProfileDialog = ({ isOpen, onClose, playerId, playerData }) => {
                       
                       {/* XP Info - compact */}
                       <div className="flex items-center gap-2 mt-2 text-[10px] text-gray-500">
-                        <span className="text-accent-primary font-mono">{currentLevelXP}/{xpForNextLevel} XP</span>
+                        <span className="text-accent-primary font-military">{currentLevelXP}/{xpForNextLevel} XP</span>
                         <span>•</span>
                         <span>{totalXP.toLocaleString()} XP {t('total')}</span>
                       </div>

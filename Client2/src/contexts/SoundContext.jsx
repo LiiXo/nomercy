@@ -2,15 +2,22 @@ import { createContext, useContext, useState, useEffect, useRef, useCallback } f
 
 const SoundContext = createContext()
 
-// Base64 encoded short UI sounds (to avoid external files)
+// CoD-style UI sounds - more tactical/military feel
 const SOUNDS = {
-  click: 'data:audio/wav;base64,UklGRl4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YToAAABkZGRkZmhoaGpsbGxucHBwcnR0dHZ4eHh6fHx8fn5+foB+fnx6eHZ0cnBuamhkYFxYVFBMSERAOjYyLiomIh4aFhIOCgYCAP7',
-  hover: 'data:audio/wav;base64,UklGRkQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YSAAAABQYHCAkKCwwNDg8AAQICAgICAgEBAADw8ODg0MCwoJCAcGBQQDAgEA',
-  success: 'data:audio/wav;base64,UklGRoAAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YVwAAABAPFhkcHyIlKCstLzE0NTg5OTk5OTs8PDw8O/v7u7t7ezs6+vq6uno5+bl5OPi4eDf3t3c29rZ2NfW1dTT0tHQz87NzMvKycjHxsXEw8LBwL++vby7urm4t7a1tLOysbA=',
-  error: 'data:audio/wav;base64,UklGRl4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YToAAACA/4D/gP+A/4D+f/5//X/9f/x//H/7f/t/+n/6f/l/+X/4f/h/93/3f/Z/9n/1f/V/9H/0f/N/838=',
-  navigate: 'data:audio/wav;base64,UklGRlIAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YS4AAABAUGBwgJCgsLDA0ODw//Dw4NDAsKCQgHBgUEAwIBAAECAwQFBgcICQoLDA0ODw',
-  select: 'data:audio/wav;base64,UklGRmYAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YUIAAABgcICQoLDA0ODw+P//+PDw4NDAsKCQgHBgUEAwIBAAECAwQFBgcICQoLDA0ODw+P8A+PDw4NDAsKCQgHBgUA==',
-  toggle: 'data:audio/wav;base64,UklGRkgAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YSQAAAB4iJiovMjU4Ozw9Pj4+Pj08PDo4NjMwLSomJSIeHBkWExAODAkGA=='
+  // Hover - subtle tick sound (CoD menu hover)
+  hover: 'data:audio/wav;base64,UklGRnoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVYAAACAgICAgICBgoOEhYaHiImKi4yNjo+QkZKTlJWVlZWVlJOSkZCPjo2Mi4qJiIeGhYSDgoGAgICAgICAgIB/f39/f39/f39/f39/f4CAgICAgICAgA==',
+  // Click - satisfying tactical click (CoD menu select)
+  click: 'data:audio/wav;base64,UklGRqoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YYYAAACAf39/gIGChIaIio2PkpSXmZudn6GjpKWmp6eoqKmoqKempaSjoaCempmXlJKPjYqIhoSCgX9/f39/gIGChIWHiImLjI2Oj5CRkZGRkZCQj46NjIuJiIaFg4KBf39/f4CAgH9/f39/f39/f39/f39/f4CAgICAgICAgICAgICAgA==',
+  // Select - confirmation beep (CoD selection confirm)
+  select: 'data:audio/wav;base64,UklGRsYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YaIAAACAgICBgoOFh4mLjpCTlZibnqGjpqiqrK6wsrO1tre4ubq6u7u7u7q6ubm4t7a1s7KwrqyqqKajn52amJWTkI6LiYeFg4GAgICAgIGChIaIio2PkpSWmZueoKKkpqiprKytrq6urq6ura2sq6qopaOhoJ2bmJaUkY+NioeGhIKBgICAgICAgICAgICAgICAgICAgICAgA==',
+  // Navigate - page transition swoosh
+  navigate: 'data:audio/wav;base64,UklGRq4AAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YYoAAAB/f4CAgoOFh4mLjY+RkpSVl5iZmpucnZ2enp6enp6dnZycm5qZmJeWlZSTkZCOjYuKiIeGhIOCgYCAf39/f39/f39/gICAgYGCgoODhISFhYaGhoaGhoaGhYWFhISEg4OCgoGBgYCAgH9/f39/f39/f39/f4CAgICAgICAgA==',
+  // Success - positive confirmation
+  success: 'data:audio/wav;base64,UklGRuIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0Yb4AAACAf4CBg4WIi46RlJeaoKOmqayvsrW3ubu9v8DBwsPExcXFxcXFxMTDwsHAvr27ubazsa6rqKWin5yZlpORj42LiYeFg4KBgICAgIGChIaIi42QkpWXmp2foqSnqautr7GytLW2t7i4uLi4uLe3tra1tLOysbCvrq2sq6qpqKempaOioaCfnp2cm5qZmJeWlZSTkpGQj46NjIuKiYiHhoWEg4KBgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==',
+  // Error - negative beep
+  error: 'data:audio/wav;base64,UklGRqoAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YYYAAACAkICQgJCAkICQgJCAj4CQgI+Aj4CPgI+Aj4CPgI6AjoCOgI6AjoCOgI2AjYCNgI2AjYCNgIyAjICMgIyAjICMgIuAi4CLgIuAi4CLgIqAioCKgIqAioCKgImAiYCJgImAiYCJgIiAiICIgIiAiICIgIeAh4CHgIeAh4CHgA==',
+  // Toggle - switch sound
+  toggle: 'data:audio/wav;base64,UklGRoYAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YWIAAACAgIGDhYeJi42PkZOVl5manJ6goqSlp6iqq62ur7CxsbKysrKysbGwsK+uraylpKKgnpyamJaTkY+NioiFg4GAgICAgH+AgICAgICAgICAgICAgICAgICAgICAgICAgA=='
 }
 
 export const SoundProvider = ({ children }) => {
@@ -88,7 +95,8 @@ export const SoundProvider = ({ children }) => {
       const gainNode = audioContextRef.current.createGain()
       
       source.buffer = audioBuffersRef.current[soundName]
-      gainNode.gain.value = volume
+      // Hover sounds should be quieter
+      gainNode.gain.value = soundName === 'hover' ? volume * 0.5 : volume
       
       source.connect(gainNode)
       gainNode.connect(audioContextRef.current.destination)
@@ -101,7 +109,7 @@ export const SoundProvider = ({ children }) => {
 
   // Convenience methods
   const playClick = useCallback(() => playSound('click'), [playSound])
-  const playHover = useCallback(() => playSound('hover', 100), [playSound])
+  const playHover = useCallback(() => playSound('hover', 80), [playSound]) // 80ms debounce for hover
   const playSuccess = useCallback(() => playSound('success'), [playSound])
   const playError = useCallback(() => playSound('error'), [playSound])
   const playNavigate = useCallback(() => playSound('navigate'), [playSound])

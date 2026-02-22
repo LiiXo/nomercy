@@ -145,27 +145,33 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 z-[200] flex items-center justify-center p-4"
         onClick={onClose}
       >
         {/* Backdrop */}
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+        <div className="absolute inset-0 bg-black/90 backdrop-blur-md" />
         
         {/* Dialog */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={{ opacity: 0, scale: 0.9, y: 30 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          exit={{ opacity: 0, scale: 0.9, y: 30 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-md bg-[#0a0a0c] border border-white/10"
+          className="relative w-full max-w-md cod-player-card overflow-hidden"
         >
+          {/* Top accent line */}
+          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-accent-primary to-transparent" />
+          
+          {/* Scanline effect */}
+          <div className="absolute inset-0 cod-scanlines opacity-30 pointer-events-none" />
+
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/5">
+          <div className="relative flex items-center justify-between p-4 border-b border-white/5">
             <div>
-              <h2 className="text-sm font-mono font-bold text-white uppercase tracking-wide">
+              <h2 className="text-sm font-military font-bold text-white uppercase tracking-wide">
                 Invite Player
               </h2>
-              <p className="text-[10px] font-mono text-gray-500 mt-1">
+              <p className="text-[10px] font-military text-gray-500 mt-1">
                 Search for players to invite to your party
               </p>
             </div>
@@ -187,7 +193,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by username..."
-                className="w-full bg-white/5 border border-white/10 px-4 py-2 pl-10 text-sm font-mono text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/30"
+                className="w-full bg-white/5 border border-white/10 px-4 py-2 pl-10 text-sm font-military text-white placeholder-gray-500 focus:outline-none focus:border-accent-primary/30"
                 autoFocus
               />
               <svg 
@@ -215,7 +221,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                 exit={{ opacity: 0, height: 0 }}
                 className="px-4 py-2 bg-red-500/10 border-b border-red-500/20"
               >
-                <p className="text-[10px] font-mono text-red-400">{error}</p>
+                <p className="text-[10px] font-military text-red-400">{error}</p>
               </motion.div>
             )}
             {success && (
@@ -225,7 +231,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                 exit={{ opacity: 0, height: 0 }}
                 className="px-4 py-2 bg-green-500/10 border-b border-green-500/20"
               >
-                <p className="text-[10px] font-mono text-green-400">{success}</p>
+                <p className="text-[10px] font-military text-green-400">{success}</p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -233,7 +239,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
           {/* Pending Invites */}
           {pendingInvites.length > 0 && (
             <div className="p-4 border-b border-white/5">
-              <div className="text-[9px] font-mono text-gray-500 uppercase tracking-wider mb-2">
+              <div className="text-[9px] font-military text-gray-500 uppercase tracking-wider mb-2">
                 Pending Invites ({pendingInvites.length})
               </div>
               <div className="space-y-2 max-h-32 overflow-y-auto">
@@ -248,19 +254,19 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                         {getAvatarUrl(user) ? (
                           <img src={getAvatarUrl(user)} alt={user.username} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-accent-primary font-mono text-xs">
+                          <div className="w-full h-full flex items-center justify-center text-accent-primary font-military text-xs">
                             {user.username?.charAt(0)?.toUpperCase() || '?'}
                           </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <span className="text-xs font-mono text-white truncate block">{user.username}</span>
-                        <span className="text-[9px] font-mono text-accent-primary">Pending...</span>
+                        <span className="text-xs font-military text-white truncate block">{user.username}</span>
+                        <span className="text-[9px] font-military text-accent-primary">Pending...</span>
                       </div>
                       <button
                         onClick={() => handleCancelInvite(user)}
                         disabled={inviting === user._id}
-                        className="text-[9px] font-mono text-red-400 hover:text-red-300 px-2 py-1 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                        className="text-[9px] font-military text-red-400 hover:text-red-300 px-2 py-1 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                       >
                         Cancel
                       </button>
@@ -278,7 +284,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                 <svg className="w-8 h-8 mx-auto text-gray-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
-                <p className="text-[10px] font-mono text-gray-500">
+                <p className="text-[10px] font-military text-gray-500">
                   Type at least 2 characters to search
                 </p>
               </div>
@@ -287,7 +293,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                 <svg className="w-8 h-8 mx-auto text-gray-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p className="text-[10px] font-mono text-gray-500">
+                <p className="text-[10px] font-military text-gray-500">
                   No players found
                 </p>
               </div>
@@ -305,7 +311,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                       {getAvatarUrl(player) ? (
                         <img src={getAvatarUrl(player)} alt={player.username} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-accent-primary font-mono text-sm">
+                        <div className="w-full h-full flex items-center justify-center text-accent-primary font-military text-sm">
                           {player.username?.charAt(0)?.toUpperCase() || '?'}
                         </div>
                       )}
@@ -313,9 +319,9 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-mono text-white truncate block">{player.username}</span>
+                      <span className="text-xs font-military text-white truncate block">{player.username}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-gray-500">
+                        <span className="text-[10px] font-military text-gray-500">
                           LVL {player.level || 1}
                         </span>
                         {/* Platform icon */}
@@ -339,14 +345,14 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
 
                     {/* Action Button */}
                     {player.isInGroup ? (
-                      <span className="text-[10px] font-mono text-gray-500 px-3">
+                      <span className="text-[10px] font-military text-gray-500 px-3">
                         In Party
                       </span>
                     ) : player.hasPendingInvite ? (
                       <button
                         onClick={() => handleCancelInvite(player)}
                         disabled={inviting === player._id}
-                        className="text-[10px] font-mono text-yellow-400 px-3 py-1 border border-yellow-500/30 hover:bg-yellow-500/10 transition-colors disabled:opacity-50"
+                        className="text-[10px] font-military text-yellow-400 px-3 py-1 border border-yellow-500/30 hover:bg-yellow-500/10 transition-colors disabled:opacity-50"
                       >
                         {inviting === player._id ? (
                           <div className="w-4 h-4 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
@@ -355,14 +361,14 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
                         )}
                       </button>
                     ) : isFull ? (
-                      <span className="text-[10px] font-mono text-gray-500 px-3">
+                      <span className="text-[10px] font-military text-gray-500 px-3">
                         Party Full
                       </span>
                     ) : (
                       <button
                         onClick={() => handleInvite(player)}
                         disabled={inviting === player._id}
-                        className="text-[10px] font-mono text-accent-primary px-3 py-1 border border-accent-primary/30 hover:bg-accent-primary/10 transition-colors disabled:opacity-50"
+                        className="text-[10px] font-military text-accent-primary px-3 py-1 border border-accent-primary/30 hover:bg-accent-primary/10 transition-colors disabled:opacity-50"
                       >
                         {inviting === player._id ? (
                           <div className="w-4 h-4 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
@@ -381,7 +387,7 @@ const InvitePlayerDialog = ({ isOpen, onClose }) => {
           <div className="p-4 border-t border-white/5">
             <button
               onClick={onClose}
-              className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-gray-400 hover:text-white uppercase tracking-wider transition-all"
+              className="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-military text-gray-400 hover:text-white uppercase tracking-wider transition-all"
             >
               Close
             </button>

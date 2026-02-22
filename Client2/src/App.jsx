@@ -1,46 +1,52 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense, memo } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, LazyMotion, domAnimation } from 'framer-motion'
 import Navbar from './components/Navbar'
 import MobileHeader from './components/MobileHeader'
 import MobileNav from './components/MobileNav'
 import LoginDialog from './components/LoginDialog'
 import Preloader from './components/Preloader'
 import FloatingParticles from './components/FloatingParticles'
-import Lobby from './pages/Lobby'
-import Leaderboard from './pages/Leaderboard'
-import Tournaments from './pages/Tournaments'
-import Profile from './pages/Profile'
-import PlayerProfile from './pages/PlayerProfile'
-import Admin from './pages/Admin'
 import { useAuth } from './contexts/AuthContext'
 
-// Page transition variants
+// Lazy load pages for better performance
+const Lobby = lazy(() => import('./pages/Lobby'))
+const Leaderboard = lazy(() => import('./pages/Leaderboard'))
+const Tournaments = lazy(() => import('./pages/Tournaments'))
+const Profile = lazy(() => import('./pages/Profile'))
+const PlayerProfile = lazy(() => import('./pages/PlayerProfile'))
+const Admin = lazy(() => import('./pages/Admin'))
+
+// Optimized page transition variants - GPU accelerated
 const pageVariants = {
   initial: {
     opacity: 0,
-    x: 60,
-    scale: 0.98,
+    x: 40,
   },
   animate: {
     opacity: 1,
     x: 0,
-    scale: 1,
     transition: {
-      duration: 0.4,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      duration: 0.25,
+      ease: [0.25, 0.1, 0.25, 1],
     }
   },
   exit: {
     opacity: 0,
-    x: -60,
-    scale: 0.98,
+    x: -40,
     transition: {
-      duration: 0.3,
-      ease: [0.25, 0.46, 0.45, 0.94],
+      duration: 0.2,
+      ease: [0.25, 0.1, 0.25, 1],
     }
   }
 }
+
+// Loading fallback
+const PageLoader = memo(() => (
+  <div className="flex items-center justify-center min-h-[50vh]">
+    <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent animate-spin" />
+  </div>
+))
 
 function App() {
   const location = useLocation()
@@ -68,33 +74,34 @@ function App() {
 
   return (
     <div className="min-h-screen bg-[#050506] overflow-x-hidden">
-      {/* === GAME UI BACKGROUND LAYERS === */}
-      
-      {/* Base gradient */}
-      <div className="fixed inset-0 bg-gradient-to-b from-[#0a0a0c] via-[#050506] to-[#0a0a0c] pointer-events-none" />
+      {/* === CALL OF DUTY STYLE CINEMATIC BACKGROUND === */}
+      <div className="cod-background">
+        {/* Background Image with Ken Burns effect */}
+        <div 
+          className="cod-background-image"
+          style={{
+            backgroundImage: 'url("/wp.jpg")',
+          }}
+        />
+        
+        {/* Vignette overlay */}
+        <div className="cod-vignette" />
+        
+        {/* Top gradient for navbar readability */}
+        <div className="cod-top-gradient" />
+        
+        {/* Bottom gradient for content readability */}
+        <div className="cod-bottom-gradient" />
+        
+        {/* Scanlines effect */}
+        <div className="cod-scanlines" />
+        
+        {/* Noise texture */}
+        <div className="cod-noise" />
+      </div>
       
       {/* Floating particles */}
-      <FloatingParticles count={40} color="#ff6b35" />
-      
-      {/* Ambient glow */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[400px] bg-accent-primary/5 rounded-full blur-[150px] pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-[400px] h-[300px] bg-accent-primary/3 rounded-full blur-[120px] pointer-events-none" />
-      
-      {/* Scanlines overlay */}
-      <div 
-        className="fixed inset-0 pointer-events-none opacity-[0.03] z-[100]"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)',
-        }}
-      />
-      
-      {/* Noise texture */}
-      <div 
-        className="fixed inset-0 pointer-events-none opacity-[0.012] z-[100]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-        }}
-      />
+      <FloatingParticles count={30} color="#ff6b35" />
 
       {/* === HUD CORNER BRACKETS === */}
       <div className="fixed inset-0 pointer-events-none z-[90] hidden md:block">
@@ -141,16 +148,18 @@ function App() {
             initial="initial"
             animate="animate"
             exit="exit"
-            className="will-change-transform"
+            style={{ willChange: 'transform, opacity' }}
           >
-            <Routes location={location}>
-              <Route path="/" element={<Lobby />} />
-              <Route path="/leaderboard" element={<Leaderboard />} />
-              <Route path="/tournaments" element={<Tournaments />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/player/:username" element={<PlayerProfile />} />
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes location={location}>
+                <Route path="/" element={<Lobby />} />
+                <Route path="/leaderboard" element={<Leaderboard />} />
+                <Route path="/tournaments" element={<Tournaments />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/player/:username" element={<PlayerProfile />} />
+              </Routes>
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>

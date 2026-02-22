@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -9,7 +9,7 @@ import { getLevelFromXP } from '../utils/xpSystem'
 import InvitePlayerDialog from './InvitePlayerDialog'
 import PlayerProfileDialog from './PlayerProfileDialog'
 
-const PartyPanel = ({ maxPlayers = 5 }) => {
+const PartyPanel = memo(({ maxPlayers = 5 }) => {
   const { user, isAuthenticated } = useAuth()
   const { t } = useLanguage()
   const { playClick } = useSound()
@@ -184,25 +184,25 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
 
   if (loading) {
     return (
-      <div className="h-full flex flex-col items-center justify-center">
+      <div className="flex flex-col items-center justify-center py-8">
         <div className="w-6 h-6 border-2 border-accent-primary border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex flex-col">
       {/* Header */}
       <div className="mb-4">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-1.5 h-1.5 bg-accent-primary" />
-          <span className="text-[10px] font-mono text-gray-500 uppercase tracking-wider">{t('squad')}</span>
+          <span className="text-[10px] font-military text-gray-500 uppercase tracking-wider">{t('squad')}</span>
         </div>
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-mono font-bold text-white uppercase tracking-wide">
+          <h3 className="text-sm font-military font-bold text-white uppercase tracking-wide">
             {t('party')}
           </h3>
-          <span className="text-[10px] font-mono text-gray-500">
+          <span className="text-[10px] font-military text-gray-500">
             {memberCount}/{maxPlayers}
           </span>
         </div>
@@ -217,7 +217,7 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
             exit={{ opacity: 0, height: 0 }}
             className="mb-3 space-y-2"
           >
-            <div className="text-[9px] font-mono text-accent-primary uppercase tracking-wider mb-1">
+            <div className="text-[9px] font-military text-accent-primary uppercase tracking-wider mb-1">
               {t('pendingInvites')}
             </div>
             {pendingInvites.map((invite) => (
@@ -229,24 +229,24 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
                 className="flex items-center gap-2 p-2 bg-accent-primary/10 border border-accent-primary/30"
               >
                 <div className="flex-1 min-w-0">
-                  <span className="text-[10px] font-mono text-white truncate block">
+                  <span className="text-[10px] font-military text-white truncate block">
                     {invite.invitedBy}{t('groupOf')}
                   </span>
-                  <span className="text-[9px] font-mono text-gray-500">
+                  <span className="text-[9px] font-military text-gray-500">
                     {invite.members?.length || 1} {t('members')}
                   </span>
                 </div>
                 <button
                   onClick={() => handleAcceptInvite(invite.groupId)}
                   disabled={actionLoading}
-                  className="px-2 py-1 text-[9px] font-mono text-green-400 hover:text-green-300 hover:bg-green-500/20 transition-colors disabled:opacity-50"
+                  className="px-2 py-1 text-[9px] font-military text-green-400 hover:text-green-300 hover:bg-green-500/20 transition-colors disabled:opacity-50"
                 >
                   {t('accept')}
                 </button>
                 <button
                   onClick={() => handleDeclineInvite(invite.groupId)}
                   disabled={actionLoading}
-                  className="px-2 py-1 text-[9px] font-mono text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
+                  className="px-2 py-1 text-[9px] font-military text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-colors disabled:opacity-50"
                 >
                   {t('decline')}
                 </button>
@@ -304,7 +304,7 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
                     {getAvatarUrl(member) ? (
                       <img src={getAvatarUrl(member)} alt={getMemberUsername(member)} className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-accent-primary font-mono text-sm">
+                      <div className="w-full h-full flex items-center justify-center text-accent-primary font-military text-sm">
                         {getMemberUsername(member)?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                     )}
@@ -316,18 +316,18 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-white truncate">
+                    <span className="text-xs font-military text-white truncate">
                       {getMemberUsername(member)}
                     </span>
                     {memberIsLeader && (
-                      <span className="text-[8px] font-mono text-accent-primary uppercase">{t('leader')}</span>
+                      <span className="text-[8px] font-military text-accent-primary uppercase">{t('leader')}</span>
                     )}
                     {memberIsCurrentUser && (
-                      <span className="text-[8px] font-mono text-gray-500 uppercase">({t('you')})</span>
+                      <span className="text-[8px] font-military text-gray-500 uppercase">({t('you')})</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-gray-500">
+                    <span className="text-[10px] font-military text-gray-500">
                       {t('lvl')} {getMemberLevel(member)}
                     </span>
                     {/* Platform icon */}
@@ -377,14 +377,14 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
                     <button
                       onClick={() => handleTransferLeader(memberId)}
                       disabled={actionLoading}
-                      className="w-full px-3 py-2 text-left text-[10px] font-mono text-gray-400 hover:text-accent-primary hover:bg-white/5 transition-colors disabled:opacity-50"
+                      className="w-full px-3 py-2 text-left text-[10px] font-military text-gray-400 hover:text-accent-primary hover:bg-white/5 transition-colors disabled:opacity-50"
                     >
                       {t('makeLeader')}
                     </button>
                     <button
                       onClick={() => handleKick(memberId)}
                       disabled={actionLoading}
-                      className="w-full px-3 py-2 text-left text-[10px] font-mono text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                      className="w-full px-3 py-2 text-left text-[10px] font-military text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
                     >
                       {t('kickFromParty')}
                     </button>
@@ -419,7 +419,7 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
 
             {/* Invite text */}
             <div className="flex-1 text-left">
-              <span className={`text-[10px] font-mono text-gray-500 uppercase tracking-wider transition-colors ${
+              <span className={`text-[10px] font-military text-gray-500 uppercase tracking-wider transition-colors ${
                 isLeader ? 'group-hover:text-accent-primary' : ''
               }`}>
                 {isLeader ? `[ ${t('invitePlayer')} ]` : `[ ${t('emptySlot')} ]`}
@@ -438,7 +438,7 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
             whileTap={{ scale: 0.98 }}
             onClick={handleInvite}
             disabled={!isAuthenticated || isFull}
-            className="w-full py-2 bg-white/5 hover:bg-accent-primary/20 border border-white/10 hover:border-accent-primary/30 text-[10px] font-mono text-gray-400 hover:text-accent-primary uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-2 bg-white/5 hover:bg-accent-primary/20 border border-white/10 hover:border-accent-primary/30 text-[10px] font-military text-gray-400 hover:text-accent-primary uppercase tracking-wider transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             [ {t('inviteFriends')} ]
           </motion.button>
@@ -451,7 +451,7 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
             whileTap={{ scale: 0.98 }}
             onClick={handleLeave}
             disabled={actionLoading}
-            className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-[10px] font-mono text-red-400 hover:text-red-300 uppercase tracking-wider transition-all disabled:opacity-50"
+            className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 hover:border-red-500/30 text-[10px] font-military text-red-400 hover:text-red-300 uppercase tracking-wider transition-all disabled:opacity-50"
           >
             [ {t('leaveParty')} ]
           </motion.button>
@@ -459,13 +459,13 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
 
         {/* Leader hint - must transfer leadership to leave */}
         {isAuthenticated && memberCount > 1 && isLeader && (
-          <div className="text-[9px] font-mono text-gray-600 text-center py-1">
+          <div className="text-[9px] font-military text-gray-600 text-center py-1">
             {t('transferToLeave')}
           </div>
         )}
 
         {/* Privacy setting */}
-        <div className="flex items-center justify-between text-[9px] font-mono text-gray-600">
+        <div className="flex items-center justify-between text-[9px] font-military text-gray-600">
           <span>{t('partyPrivacy')}</span>
           <span className="text-accent-primary capitalize">{group?.privacy || t('inviteOnly')}</span>
         </div>
@@ -486,6 +486,8 @@ const PartyPanel = ({ maxPlayers = 5 }) => {
       />
     </div>
   )
-}
+})
+
+PartyPanel.displayName = 'PartyPanel'
 
 export default PartyPanel

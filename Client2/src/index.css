@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ========================================
+   BASE PERFORMANCE OPTIMIZATIONS
+   ======================================== */
+
 * {
   margin: 0;
   padding: 0;
@@ -10,10 +14,12 @@
 
 html {
   scroll-behavior: smooth;
+  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Rajdhani', 'Inter', system-ui, sans-serif;
   background-color: #0a0a0b;
   color: #ffffff;
   min-height: 100vh;
@@ -21,12 +27,17 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Prevent layout shifts */
+  overflow-anchor: none;
+  /* Force GPU compositing for smoother animations */
+  transform: translateZ(0);
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='10' stroke='%23FF6B35' stroke-width='2' fill='none'/%3E%3Ccircle cx='12' cy='12' r='2' fill='%23FF6B35'/%3E%3Cline x1='12' y1='0' x2='12' y2='6' stroke='%23FF6B35' stroke-width='2'/%3E%3Cline x1='12' y1='18' x2='12' y2='24' stroke='%23FF6B35' stroke-width='2'/%3E%3Cline x1='0' y1='12' x2='6' y2='12' stroke='%23FF6B35' stroke-width='2'/%3E%3Cline x1='18' y1='12' x2='24' y2='12' stroke='%23FF6B35' stroke-width='2'/%3E%3C/svg%3E") 12 12, crosshair;
   /* Disable text selection - Video game style */
   -webkit-user-select: none;
   -moz-user-select: none;
   -ms-user-select: none;
   user-select: none;
+  letter-spacing: 0.02em;
 }
 
 /* Allow text selection only in input fields */
@@ -214,4 +225,292 @@ input[type="range"]::-moz-range-thumb {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* ========================================
+   CALL OF DUTY STYLE ENHANCEMENTS
+   ======================================== */
+
+/* ========================================
+   PERFORMANCE OPTIMIZATIONS
+   ======================================== */
+
+/* GPU-accelerated base for all animated elements */
+.gpu-accelerate {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Smooth scrolling with momentum */
+* {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Optimize paint for fixed elements */
+.cod-background,
+.cod-vignette,
+.cod-scanlines,
+.cod-noise,
+.cod-top-gradient,
+.cod-bottom-gradient {
+  will-change: auto;
+  contain: strict;
+}
+
+/* Cinematic Background Container */
+.cod-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  contain: strict;
+}
+
+.cod-background-image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: brightness(0.4) saturate(1.2);
+  transform: translate3d(0, 0, 0) scale(1.05);
+  animation: slowZoom 60s ease-in-out infinite alternate;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@keyframes slowZoom {
+  0% { transform: translate3d(0, 0, 0) scale(1.05); }
+  100% { transform: translate3d(-1%, 0, 0) scale(1.1); }
+}
+
+/* Vignette Effect */
+.cod-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 0%,
+    transparent 40%,
+    rgba(0, 0, 0, 0.4) 70%,
+    rgba(0, 0, 0, 0.8) 100%
+  );
+  pointer-events: none;
+}
+
+/* Scanline Overlay */
+.cod-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Noise Overlay */
+.cod-noise {
+  position: absolute;
+  inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* Top Gradient Fade */
+.cod-top-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Bottom Gradient Fade */
+.cod-bottom-gradient {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 300px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Military Title Style */
+.cod-title {
+  font-family: 'Bebas Neue', Impact, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Military Subtitle */
+.cod-subtitle {
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* CoD Style Button */
+.cod-button {
+  position: relative;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, rgba(255, 107, 53, 0.9) 0%, rgba(232, 90, 42, 1) 100%);
+  border: none;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease, background 0.15s ease;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.cod-button:hover {
+  background: linear-gradient(180deg, rgba(255, 140, 66, 1) 0%, rgba(255, 107, 53, 1) 100%);
+  transform: translate3d(0, 0, 0) scale(1.02);
+  box-shadow: 0 0 30px rgba(255, 107, 53, 0.4);
+}
+
+.cod-button:active {
+  transform: translate3d(0, 0, 0) scale(0.98);
+}
+
+/* CoD Menu Item */
+.cod-menu-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.03) 50%, transparent 100%);
+  border-left: 3px solid transparent;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+  transform: translate3d(0, 0, 0);
+}
+
+.cod-menu-item:hover {
+  color: #ffffff;
+  background: linear-gradient(90deg, rgba(255, 107, 53, 0.15) 0%, rgba(255, 107, 53, 0.05) 50%, transparent 100%);
+  border-left-color: #FF6B35;
+}
+
+.cod-menu-item.active {
+  color: #FF6B35;
+  background: linear-gradient(90deg, rgba(255, 107, 53, 0.2) 0%, rgba(255, 107, 53, 0.05) 50%, transparent 100%);
+  border-left-color: #FF6B35;
+}
+
+.cod-menu-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translate3d(0, -50%, 0) scaleX(0);
+  transform-origin: left;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 107, 53, 0.3) 0%, transparent 100%);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.cod-menu-item:hover::before {
+  transform: translate3d(0, -50%, 0) scaleX(1);
+}
+
+/* Player Card Style */
+.cod-player-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(20, 20, 22, 0.95) 0%, rgba(10, 10, 12, 0.98) 100%);
+  border: 1px solid rgba(255, 107, 53, 0.2);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+
+.cod-player-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #FF6B35, transparent);
+}
+
+/* Corner Cut Style */
+.cod-corner-cut {
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+.cod-corner-cut-lg {
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+}
+
+/* Accent Line */
+.cod-accent-line {
+  position: relative;
+}
+
+.cod-accent-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 60px;
+  height: 2px;
+  background: #FF6B35;
+}
+
+/* Glowing Border Effect */
+.cod-glow-border {
+  position: relative;
+  border: 1px solid rgba(255, 107, 53, 0.3);
+}
+
+.cod-glow-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(135deg, rgba(255, 107, 53, 0.3) 0%, transparent 50%, rgba(255, 107, 53, 0.1) 100%);
+  clip-path: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cod-glow-border:hover::before {
+  opacity: 1;
+}
+
+/* Stats Display */
+.cod-stat {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.cod-stat-value {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.5rem;
+  color: #FF6B35;
 }

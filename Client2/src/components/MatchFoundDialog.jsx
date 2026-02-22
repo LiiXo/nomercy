@@ -118,8 +118,8 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
               </motion.h1>
               <div className="flex items-center justify-center gap-3 mt-4">
                 <span className="text-2xl">{modeIcon}</span>
-                <span className="text-xl font-mono text-gray-400 uppercase tracking-wider">{mode}</span>
-                <span className="text-sm font-mono text-accent-primary/70 uppercase px-2 py-0.5 border border-accent-primary/30">
+                <span className="text-xl font-military text-gray-400 uppercase tracking-wider">{mode}</span>
+                <span className="text-sm font-military text-accent-primary/70 uppercase px-2 py-0.5 border border-accent-primary/30">
                   {type === 'hardcore' ? 'Hardcore' : 'Simple'}
                 </span>
               </div>
@@ -135,7 +135,7 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
                 className="space-y-4"
               >
                 <div className="text-center mb-6">
-                  <span className="text-lg font-mono font-bold text-blue-400 uppercase tracking-wider">
+                  <span className="text-lg font-military font-bold text-blue-400 uppercase tracking-wider">
                     {t('team')} 1
                   </span>
                   <div className="h-1 w-24 mx-auto mt-2 bg-gradient-to-r from-transparent via-blue-500 to-transparent" />
@@ -153,7 +153,7 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
                       <span className="text-xl font-bold text-blue-400">{player.username?.charAt(0).toUpperCase()}</span>
                     </div>
                     <div>
-                      <p className="font-mono font-bold text-white text-lg">{player.username}</p>
+                      <p className="font-military font-bold text-white text-lg">{player.username}</p>
                     </div>
                   </motion.div>
                 ))}
@@ -187,12 +187,12 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
                       transition={{ delay: 1 }}
                       className="mt-8 text-center"
                     >
-                      <p className="text-sm font-mono text-gray-500 uppercase mb-2">{t('startingIn')}</p>
+                      <p className="text-sm font-military text-gray-500 uppercase mb-2">{t('startingIn')}</p>
                       <motion.span
                         key={countdown}
                         initial={{ scale: 1.5, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        className="text-5xl font-mono font-bold text-accent-primary"
+                        className="text-5xl font-military font-bold text-accent-primary"
                       >
                         {countdown}
                       </motion.span>
@@ -225,7 +225,7 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
                       <span className="text-4xl font-black text-accent-primary uppercase tracking-widest">
                         Soon
                       </span>
-                      <p className="text-sm font-mono text-gray-500 mt-4 uppercase">
+                      <p className="text-sm font-military text-gray-500 mt-4 uppercase">
                         {t('matchFunctionalityComingSoon')}
                       </p>
                     </motion.div>
@@ -241,7 +241,7 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
                 className="space-y-4"
               >
                 <div className="text-center mb-6">
-                  <span className="text-lg font-mono font-bold text-red-400 uppercase tracking-wider">
+                  <span className="text-lg font-military font-bold text-red-400 uppercase tracking-wider">
                     {t('team')} 2
                   </span>
                   <div className="h-1 w-24 mx-auto mt-2 bg-gradient-to-r from-transparent via-red-500 to-transparent" />
@@ -259,7 +259,7 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
                       <span className="text-xl font-bold text-red-400">{player.username?.charAt(0).toUpperCase()}</span>
                     </div>
                     <div>
-                      <p className="font-mono font-bold text-white text-lg">{player.username}</p>
+                      <p className="font-military font-bold text-white text-lg">{player.username}</p>
                     </div>
                   </motion.div>
                 ))}
@@ -274,7 +274,7 @@ const MatchFoundDialog = ({ isOpen, matchData, mode, modeIcon, type, onCountdown
               className="mt-12 text-center"
             >
               {phase === 'countdown' && (
-                <p className="text-sm font-mono text-gray-600 uppercase tracking-wider">
+                <p className="text-sm font-military text-gray-600 uppercase tracking-wider">
                   {t('doNotClose')}
                 </p>
               )}
